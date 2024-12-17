@@ -15,22 +15,8 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 
 6.  <pointer> 			 ::= ref
 
-7.  <type>               ::= void
-						 ::= u_int8
-						 ::= s_int8
-						 ::= u_int16
-						 ::= s_int16
-						 ::= u_int32
-						 ::= s_int32
-						 ::= u_int64
-						 ::= s_int64
-						 ::= float32
-						 ::= float64
-						 ::= char
-						 ::= str
-						 ::= <enumeration_spec>
-					 	 ::= <structure_spec>
- 						 ::= <user_defined_spec>
+7.  <type>               ::= void | u_int8 | s_int8 | u_int16 | s_int16 | u_int32 | s_int32 | u_int64 | s_int64
+							 | float32 | float64 | char | str | <enumeration_spec> | <structure_spec> | <user_defined_type>
 
 8.  <jump_statement>     ::= jump <ident>
 						  | continue;
@@ -53,7 +39,6 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 16. <float_const>  		    ::= {-}?[0-9]+.[1-9]*
 17. <str_const>			    ::= "<ASCII CHARACTER 33-127>"
 18. <bool_const>			::= (True | False)
- 
 19. <digit> 				::= [0-9]
 20. <letter>				::= [a-z A-Z]
 
