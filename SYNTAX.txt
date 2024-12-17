@@ -1,0 +1,62 @@
+Syntax of ollie-lang in BNF Form
+Everything surrounded in angle brackets(<>) is a nonterminal
+
+1. <program>            ::= {<decl_part>}*
+
+2. <decl_part>          ::= <func_def>
+                          | <decl>
+
+3. <func_dec>           ::= <storage_spec>? func <func_ident> <param_list> -> <type_spec> <compound_statement>
+
+4. <storage_spec>       ::= static
+	 			          | external
+
+5.  <type_spec> 		 ::= {<pointer>}* <type>
+
+6.  <pointer> 			 ::= ref
+
+7.  <type>               ::= void
+						 ::= u_int8
+						 ::= s_int8
+						 ::= u_int16
+						 ::= s_int16
+						 ::= u_int32
+						 ::= s_int32
+						 ::= u_int64
+						 ::= s_int64
+						 ::= float32
+						 ::= float64
+						 ::= char
+						 ::= str
+						 ::= <enumeration_spec>
+					 	 ::= <structure_spec>
+ 						 ::= <user_defined_spec>
+
+8.  <jump_statement>     ::= jump <ident>
+						  | continue;
+						  | break;
+						  | ret {<expression>}?
+							
+9.  <compound_statement>  ::= {{<declaration>}* {<statement>}*}
+
+10. <iterative_statement> ::= while( <expression> ) do <statement>
+							| do <statement> while( <expression> )
+							| for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
+
+11. <if_statement> 		  ::= if( <expression> ) then <statement> {else <statement>}*
+12. <switch_statement> 	  ::= switch on( <expression> ) <statement>
+
+13. <func_ident> 		::= <letter>{(<letter> | <digit> | _ | $)}*
+14. <ident>				::= (<letter> | <digit> | _ | $){(<letter> | <digit> | _ | $)}*
+
+15. <int_const> 			::= {-}?[1-9][0-9]*
+16. <float_const>  		    ::= {-}?[0-9]+.[1-9]*
+17. <str_const>			    ::= "<ASCII CHARACTER 33-127>"
+18. <bool_const>			::= (True | False)
+ 
+19. <digit> 				::= [0-9]
+20. <letter>				::= [a-z A-Z]
+
+
+
+
