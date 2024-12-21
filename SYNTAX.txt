@@ -10,6 +10,7 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 
 4. <storage_spec>       ::= static
 	 			          | external
+						  | user_type
 
 5.  <type_spec> 		 ::= {<pointer>}* <type>
 
@@ -31,6 +32,22 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 
 11. <if_statement> 		  ::= if( <expression> ) then <statement> {else <statement>}*
 12. <switch_statement> 	  ::= switch on( <expression> ) <statement>
+13. <logical_or_expr> 	  ::= <logical_and_expr> | <logical-or-expression> or <logical-and-expression>
+14. <logical_and_expr> 	  ::= <inclusive_or_expr> | <logical-and-expression> and <inclusive_or_expression>
+15. <inclusive_or_expr>   ::= <exclusive_or_expr> | <inclusive-or-expr> | <exclusive_or_expr>
+16. <exclusive_or_expr>   ::= <and-expr> | <exclusive_or_expr> ^ <and_expr>
+17. <and-expr> 			  ::= <equality_expr> | <and_expr> & <equality_expr>
+18. <equality_expr> 	  ::= <relational_expr> | <equality_expr> == <relational_expr> | <equality_expr> != <relational_expr>
+19. <relational_expr> 	  ::= <shift_expr> | <relational_expr> < <shift_expr> | <relational_expr> > <shift_expr> 
+							| <relational_expr> >= <shift_expr> | <relational_expr> <= <shift_expr>
+
+20. <shift_expr> 		  ::= <additive_expr> | <shift_expr> << <additive_expr> | <shift_expr> >> <additive_expr>
+21. <additive_expr> 	  ::= <mult_expr> | <additive_expr> + <mult_expr> | <additive_expr> - <mult_expr>
+22. <mult_expr> 		  ::= <cast_expr> | <mult_expr> * <cast_expr> | <mult_expr> * <cast_expr>
+23. <cast_expr> 		  ::= <unary_expr> | ( <type_name> ) <unary_expr>
+24. <unary_expr> 		  ::= <postfix_expr> | preinc <unary_expr> | predec <unary_expr> | <unary_op> <cast_expr>
+25. <unary_opt> 		  ::= memaddr | deref | + | - | ~ | ! 
+
 
 13. <func_ident> 		::= <letter>{(<letter> | <digit> | _ | $)}*
 14. <ident>				::= (<letter> | <digit> | _ | $){(<letter> | <digit> | _ | $)}*
@@ -40,7 +57,7 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 17. <str_const>			    ::= "<ASCII CHARACTER 33-127>"
 18. <bool_const>			::= (True | False)
 19. <digit> 				::= [0-9]
-20. <letter>				::= [a-z A-Z]
+20. <letter>				::= [a-zA-Z]
 
 
 
