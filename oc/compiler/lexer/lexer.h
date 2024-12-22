@@ -2,6 +2,10 @@
  * Expose all needed lexer APIs to anywhere else that needs it
 */
 
+//Include guards
+#ifndef LEXER_H
+#define LEXER_H
+
 //All tokens that we can possible see
 //This list may grow as we go forward
 #include <stdio.h>
@@ -51,6 +55,17 @@ typedef enum {
 	DONE,
 } Token;
 
+
+//We will use this to keep track of what the current lexer state is
+typedef enum {
+	START,
+	IN_IDENT,
+	IN_INT,
+	IN_FLOAT,
+	IN_STRING,
+	IN_COMMENT
+} Lex_state;
+
 typedef struct Lexer_item Lexer_item;
 
 struct Lexer_item{
@@ -66,3 +81,5 @@ struct Lexer_item{
 Lexer_item identifier_or_keyword(const char* lexeme, int line_number);
 //Grab the next token from this file
 Lexer_item get_next_token(FILE* fl);
+
+#endif /* LEXER_H */
