@@ -9,11 +9,14 @@
 int main(int argc, char** argv){
 	FILE* fl;
 
+	//Open the file for reading only
 	fl = fopen(argv[1], "r");
 
 	//Very rudimentary here
 	get_next_token(fl);
 
-	printf("I do not yet do anything.\n");
+	//Close the file when done
+	fclose(fl);
+
 	return 0;
 }
