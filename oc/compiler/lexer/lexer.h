@@ -6,11 +6,12 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+#include <stdio.h>
+
 //All tokens that we can possible see
 //This list may grow as we go forward
-#include <stdio.h>
 typedef enum {
-	IF,
+	IF = 0,
 	THEN,
 	ELSE,
 	DO,
