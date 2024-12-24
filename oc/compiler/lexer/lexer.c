@@ -41,10 +41,6 @@ Lexer_item get_next_token(FILE* fl){
 	while((ch = fgetc(fl)) != EOF){
 		//Skip all whitespace--Ollie is whitespace agnostic
 		if(is_ws(ch) == 1){
-			if(current_state != IN_STRING){
-				current_state = START;
-			}
-
 			continue;
 		}
 
@@ -111,6 +107,13 @@ Lexer_item get_next_token(FILE* fl){
 							lex_item.tok = MINUS_EQUALS;
 							lex_item.lexeme = "-=";
 							return lex_item;
+						//We can also have an arrow
+						} else if(ch2 == '>'){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = ARROW;
+							lex_item.lexeme = "->";
+							return lex_item;
 						} else {
 							current_state = START;
 							//"Put back" the char
@@ -146,7 +149,7 @@ Lexer_item get_next_token(FILE* fl){
 						if(ch2 == '='){
 							current_state = START;
 							//Prepare and return
-							lex_item.tok = C_EQUALS;
+							lex_item.tok = D_EQUALS;
 							lex_item.lexeme = "==";
 							return lex_item;
 						} else {
@@ -158,8 +161,70 @@ Lexer_item get_next_token(FILE* fl){
 							return lex_item;
 						}
 
+					case '&':
+						ch2 = fgetc(fl);
+						
+						//If we get this then it's +=
+						if(ch2 == '&'){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = D_AND;
+							lex_item.lexeme = "&&";
+							return lex_item;
+						} else {
+							current_state = START;
+							//"Put back" the char
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = S_AND;
+							lex_item.lexeme = "&";
+							return lex_item;
+						}
 
+					case '|':
+						ch2 = fgetc(fl);
+						
+						//If we get this then it's +=
+						if(ch2 == '|'){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = D_OR;
+							lex_item.lexeme = "||";
+							return lex_item;
+						} else {
+							current_state = START;
+							//"Put back" the char
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = S_OR;
+							lex_item.lexeme = "|";
+							return lex_item;
+						}
 
+					case ';':
+						lex_item.tok = SEMICOLON;
+						lex_item.lexeme = ";";
+						return lex_item;
+				
+					case '(':
+						lex_item.tok = L_PAREN;
+						lex_item.lexeme = "(";
+						return lex_item;
+
+					case ')':
+						lex_item.tok = R_PAREN;
+						lex_item.lexeme = ")";
+						return lex_item;
+
+					case '{':
+						lex_item.tok = L_CURLY;
+						lex_item.lexeme = "{";
+						return lex_item;
+
+					case '}':
+						lex_item.tok = R_CURLY;
+						lex_item.lexeme = "}";
+						return lex_item;
+
+					
 
 
 				}

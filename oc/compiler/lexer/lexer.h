@@ -26,10 +26,11 @@ typedef enum {
 	REF,
 	DEREF,
 	MEMADDR,
-	L_AND,
-	L_OR,
-	B_AND,
-	B_OR,
+	D_AND, /* && */
+	D_OR,
+	S_AND, /* & */
+	S_OR,
+	DOT,
 	PLUS,
 	MINUS,
 	STAR,
@@ -45,10 +46,12 @@ typedef enum {
 	R_PAREN,
 	L_CURLY,
 	R_CURLY,
+	L_BRACKET,
+	R_BRACKET,
 	L_SHIFT,
 	R_SHIFT,
 	EQUALS,
-	C_EQUALS, /* == */
+	D_EQUALS, /* == */
 	NOT_EQUALS,
 	DIV_EQUALS,
 	PLUS_EQUALS,
@@ -57,6 +60,8 @@ typedef enum {
 	G_THAN,
 	L_THAN,
 	COLON,
+	SEMICOLON,
+	ARROW,
 	ERROR,
 	DONE,
 } Token;
