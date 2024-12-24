@@ -41,6 +41,10 @@ Lexer_item get_next_token(FILE* fl){
 	while((ch = fgetc(fl)) != EOF){
 		//Skip all whitespace--Ollie is whitespace agnostic
 		if(is_ws(ch) == 1){
+			if(current_state != IN_STRING){
+				current_state = START;
+			}
+
 			continue;
 		}
 
@@ -78,7 +82,6 @@ Lexer_item get_next_token(FILE* fl){
 							return lex_item;
 						}
 
-					//Grab the next char, if we see a '=' then we have a '+='
 					case '+':
 						ch2 = fgetc(fl);
 						
@@ -97,6 +100,65 @@ Lexer_item get_next_token(FILE* fl){
 							lex_item.lexeme = "+";
 							return lex_item;
 						}
+
+					case '-':
+						ch2 = fgetc(fl);
+						
+						//If we get this then it's +=
+						if(ch2 == '='){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = MINUS_EQUALS;
+							lex_item.lexeme = "-=";
+							return lex_item;
+						} else {
+							current_state = START;
+							//"Put back" the char
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = MINUS;
+							lex_item.lexeme = "-";
+							return lex_item;
+						}
+
+					case '*':
+						ch2 = fgetc(fl);
+						
+						//If we get this then it's +=
+						if(ch2 == '='){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = TIMES_EQUALS;
+							lex_item.lexeme = "*=";
+							return lex_item;
+						} else {
+							current_state = START;
+							//"Put back" the char
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = STAR;
+							lex_item.lexeme = "*";
+							return lex_item;
+						}
+
+					case '=':
+						ch2 = fgetc(fl);
+						
+						//If we get this then it's +=
+						if(ch2 == '='){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = C_EQUALS;
+							lex_item.lexeme = "==";
+							return lex_item;
+						} else {
+							current_state = START;
+							//"Put back" the char
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = EQUALS;
+							lex_item.lexeme = "=";
+							return lex_item;
+						}
+
+
 
 
 
@@ -143,10 +205,3 @@ Lexer_item get_next_token(FILE* fl){
 	return lex_item;
 }
 
-
-/**
- * May or may not use this
-*/
-void print_lexer_item(){
-
-}
