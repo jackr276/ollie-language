@@ -8,11 +8,25 @@
 
 int main(int argc, char** argv){
 	FILE* fl;
+	Lexer_item l;
 
 	//Open the file for reading only
 	fl = fopen(argv[1], "r");
 
 	//Very rudimentary here
+	while((l = get_next_token(fl)).tok != DONE){
+		if(l.tok == DIV_EQUALS){
+			printf("FOUND DIV_EQUALS\n");
+		}
+		
+		if(l.tok == PLUS_EQUALS){
+			printf("FOUND PLUS EQUALS\n");
+		}
+
+		if(l.tok == PLUS){
+			printf("FOUND PLUS\n");
+		}
+	}
 	get_next_token(fl);
 
 	//Close the file when done
