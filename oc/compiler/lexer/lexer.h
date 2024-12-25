@@ -7,6 +7,7 @@
 #define LEXER_H
 
 #include <stdio.h>
+#include <sys/types.h>
 
 //All tokens that we can possible see
 //This list may grow as we go forward
@@ -83,13 +84,11 @@ struct Lexer_item{
 	//The token associated with this item
 	Token tok;
 	//The string(lexeme) that got us this token
-	char* lexeme;
+	const char* lexeme;
 	//The line number of the source that we found it on
-	int line_num;
+	u_int16_t line_num;
 };
 
-//Is this lexeme an identifier or a reserved keyword
-Lexer_item identifier_or_keyword(const char* lexeme, int line_number);
 //Grab the next token from this file
 Lexer_item get_next_token(FILE* fl);
 
