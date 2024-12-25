@@ -78,18 +78,14 @@ Lexer_item get_next_token(FILE* fl){
 
 	//We'll run through character by character until we hit EOF
 	while((ch = fgetc(fl)) != EOF){
-		//Skip all whitespace--Ollie is whitespace agnostic
-		if(is_ws(ch, &line_num) == 1){
-			//Reset the state if it isn't a comment
-			if(current_state != IN_COMMENT){
-				current_state = START;
-			};
-			continue;
-		}
-
 		//Switch on the current state
 		switch(current_state){
 			case START:
+				//If we see whitespace we just get out
+				if(is_ws(ch, &line_num)){
+					break;
+				}
+
 				//Let's see what we have here
 				switch(ch){
 					//We could be seeing a comment here
@@ -355,6 +351,8 @@ Lexer_item get_next_token(FILE* fl){
 					}
 				}
 
+				//If we see whitespace we'll just increment the line number
+				is_ws(ch, &line_num);
 				break;
 		}
 	}
@@ -373,7 +371,7 @@ Lexer_item get_next_token(FILE* fl){
 */
 void print_token(Lexer_item* l){
 	//Print out with nice formatting
-	printf("TOKEN: %d, Lexeme: %s, Line: %d\n", l->tok, l->lexeme, l->line_num);
+	printf("TOKEN: %3d, Lexeme: %10s, Line: %4d\n", l->tok, l->lexeme, l->line_num);
 }
 
 

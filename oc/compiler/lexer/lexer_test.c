@@ -22,7 +22,8 @@ int main(int argc, char** argv){
 	while((l = get_next_token(fl)).tok != DONE){
 		print_token(&l);
 	}
-
+	//Print the last one
+	print_token(&l);
 	//Close the file when done
 	fclose(fl);
 
