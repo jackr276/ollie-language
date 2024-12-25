@@ -65,6 +65,18 @@ typedef enum {
 	ARROW,
 	ERROR,
 	DONE,
+	U_INT8,
+	S_INT8,
+	U_INT16,
+	S_INT16,
+	U_INT32,
+	S_INT32,
+	U_INT64,
+	S_INT64,
+	FLOAT32,
+	FLOAT64,
+	CHAR,
+	STR,
 } Token;
 
 
@@ -91,5 +103,6 @@ struct Lexer_item{
 
 //Grab the next token from this file
 Lexer_item get_next_token(FILE* fl);
-
+//Print a token out
+void print_token(Lexer_item* l);
 #endif /* LEXER_H */

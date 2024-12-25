@@ -2,7 +2,7 @@
 * Sample program
 */
 
-u_int32 main(){
+func main() -> u_int32 {
 	u_int8 i = 0;
 	ref u_int8 i_ptr = memaddr(i);
 
