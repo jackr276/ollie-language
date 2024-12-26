@@ -24,7 +24,6 @@ static u_int8_t is_ws(char ch, u_int16_t* line_num){
 }
 
 
-
 static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_number){
 	Lexer_item lex_item;
 	//Assign our line number;
@@ -323,7 +322,17 @@ Lexer_item get_next_token(FILE* fl){
 							//Add this in
 							*lexeme_cursor = ch;
 							lexeme_cursor++;
-
+						//If we get here we're in a real
+						} else if(ch == '.'){
+							//Erase this now
+							memset(lexeme, 0, 10000);
+							//Reset the cursor
+							lexeme_cursor = lexeme;
+							//We are not in an int
+							current_state = IN_FLOAT;
+							//Add this in
+							*lexeme_cursor = ch;
+							lexeme_cursor++;
 						}
 						
 						/*More stuff is needed here for numbers, floats, etc*/	
@@ -349,7 +358,6 @@ Lexer_item get_next_token(FILE* fl){
 					//Return if we have ident or keyword
 					return identifier_or_keyword(lexeme, line_num);
 				}
-
 
 				break;
 
@@ -380,6 +388,23 @@ Lexer_item get_next_token(FILE* fl){
 				break;
 
 			case IN_FLOAT:
+				//We're just in a regular float here
+				if(ch >= '0' && ch <= '9'){
+					*lexeme_cursor = ch;
+					lexeme_cursor++;
+				} else {
+					//Put back the char
+					fseek(fl, -1, SEEK_CUR);
+					//Reset the state
+					current_state = START;
+					
+					//We'll give this back now
+					lex_item.tok = FLOAT_CONST;
+					lex_item.lexeme = lexeme;
+					lex_item.line_num = line_num;
+					return lex_item;
+				}
+
 				break;
 
 			case IN_STRING:
