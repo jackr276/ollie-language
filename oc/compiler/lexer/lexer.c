@@ -3,6 +3,7 @@
 */
 
 #include "lexer.h"
+#include <bits/types/stack_t.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -71,10 +72,11 @@ Lexer_item get_next_token(FILE* fl){
 	//Current char we have
 	char ch;
 	char ch2;
-	//Is store the lexeme
-	char ident_or_kw[100];
+	//Store the lexeme
+	char lexeme[10000];
+
 	//The next index for the lexeme
-	char* idkw_cursor = ident_or_kw;
+	char* lexeme_cursor = lexeme;
 
 	//We'll run through character by character until we hit EOF
 	while((ch = fgetc(fl)) != EOF){
@@ -289,20 +291,43 @@ Lexer_item get_next_token(FILE* fl){
 						lex_item.line_num = line_num;
 						return lex_item;
 
+					//Beginning of a string literal
+					case '"':
+						//Say that we're in a string
+						current_state = IN_STRING;
+						//0 this out
+						memset(lexeme, 0, 10000);
+						//String literal pointer
+						lexeme_cursor = lexeme;
+						break;
+
 					default:
 						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')){
 							//Erase this now
-							memset(ident_or_kw, 0, 100);
+							memset(lexeme, 0, 10000);
 							//Reset the cursor
-							idkw_cursor = ident_or_kw;
+							lexeme_cursor = lexeme;
 							//We are now in an identifier
 							current_state = IN_IDENT;
 							//Add this char into the lexeme
-							*idkw_cursor = ch;
-							idkw_cursor++;
+							*lexeme_cursor = ch;
+							lexeme_cursor++;
+						//If we get here we have the start of either an int or a real
+						} else if(ch >= '0' && ch <= '9'){
+							//Erase this now
+							memset(lexeme, 0, 10000);
+							//Reset the cursor
+							lexeme_cursor = lexeme;
+							//We are not in an int
+							current_state = IN_INT;
+							//Add this in
+							*lexeme_cursor = ch;
+							lexeme_cursor++;
+
 						}
 						
 						/*More stuff is needed here for numbers, floats, etc*/	
+						break;
 				}
 
 				break;
@@ -312,9 +337,9 @@ Lexer_item get_next_token(FILE* fl){
 				if(ch == '_' || ch == '$' || (ch >= 'a' && ch <= 'z') 
 				   || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')){
 					//Add it in
-					*idkw_cursor = ch;
+					*lexeme_cursor = ch;
 					//Advance
-					idkw_cursor++;
+					lexeme_cursor++;
 				} else {
 					//If we get here, we need to get out of the thing
 					//We'll put this back as we went too far
@@ -322,19 +347,59 @@ Lexer_item get_next_token(FILE* fl){
 					//Restart the state
 					current_state = START;
 					//Return if we have ident or keyword
-					return identifier_or_keyword(ident_or_kw, line_num);
+					return identifier_or_keyword(lexeme, line_num);
 				}
 
 
 				break;
 
 			case IN_INT:
+				//Add it in and move along
+				if(ch >= '0' && ch <= '9'){
+					*lexeme_cursor = ch;
+					lexeme_cursor++;
+				} else if (ch == '.'){
+					//We're actually in a float const
+					current_state = IN_FLOAT;
+					*lexeme_cursor = ch;
+					lexeme_cursor++;
+				} else {
+					//Otherwise we're out
+					//"Put back" the char
+					fseek(fl, -1, SEEK_CUR);
+					//Reset the state
+					current_state = START;
+
+					//Populate and return
+					lex_item.tok = INT_CONST;
+					lex_item.lexeme = lexeme;
+					lex_item.line_num = line_num;
+					return lex_item;
+				}
+
 				break;
 
 			case IN_FLOAT:
 				break;
 
 			case IN_STRING:
+				//If we see the end of the string
+				if(ch == '"'){ 
+					//Reset the search
+					current_state = START;
+					//Set the token
+					lex_item.tok = STR_CONST;
+					//Set the lexeme & line num
+					lex_item.lexeme = lexeme;
+					lex_item.line_num = line_num;
+					
+					return lex_item;
+				} else {
+					//Otherwise we'll just keep adding here
+					*lexeme_cursor = ch;
+					lexeme_cursor++;
+				}
+
 				break;
 
 			//If we're in a comment, we can escape if we see "*/"
