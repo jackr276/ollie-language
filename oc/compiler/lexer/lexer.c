@@ -331,6 +331,40 @@ Lexer_item get_next_token(FILE* fl){
 						lexeme_cursor = lexeme;
 						break;
 
+					case '<':
+						//Grab the next char
+						ch2 = fgetc(fl);
+						if(ch2 == '<'){
+							lex_item.tok = L_SHIFT;
+							lex_item.lexeme = "<<";
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = L_THAN;
+							lex_item.lexeme = "<";
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+						break;
+
+					case '>':
+						//Grab the next char
+						ch2 = fgetc(fl);
+						if(ch2 == '>'){
+							lex_item.tok = R_SHIFT;
+							lex_item.lexeme = ">>";
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = G_THAN;
+							lex_item.lexeme = ">";
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+						break;
+
 					default:
 						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')){
 							//Erase this now
