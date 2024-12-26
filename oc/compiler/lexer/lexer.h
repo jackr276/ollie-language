@@ -61,6 +61,7 @@ typedef enum {
 	G_THAN,
 	L_THAN,
 	COLON,
+	COMMA,
 	SEMICOLON,
 	ARROW,
 	ERROR,

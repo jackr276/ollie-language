@@ -3,7 +3,6 @@
 */
 
 #include "lexer.h"
-#include <bits/types/stack_t.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -84,7 +83,7 @@ Lexer_item get_next_token(FILE* fl){
 			case START:
 				//If we see whitespace we just get out
 				if(is_ws(ch, &line_num)){
-					break;
+					continue;
 				}
 
 				//Let's see what we have here
@@ -290,6 +289,38 @@ Lexer_item get_next_token(FILE* fl){
 						lex_item.line_num = line_num;
 						return lex_item;
 
+					case '.':
+						//Let's see what we have here
+						ch2 = fgetc(fl);
+						if(ch2 >= '0' && ch2 <= '9'){
+							//Erase this now
+							memset(lexeme, 0, 10000);
+							//Reset the cursor
+							lexeme_cursor = lexeme;
+							//We are not in an int
+							current_state = IN_FLOAT;
+							//Add this in
+							*lexeme_cursor = ch;
+							lexeme_cursor++;
+							*lexeme_cursor = ch2;
+							lexeme_cursor++;
+						} else {
+							//Put back ch2
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = DOT;
+							lex_item.lexeme = ".";
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+						break;
+					
+					case ',':
+						lex_item.tok = COMMA;
+						lex_item.lexeme = ",";
+						lex_item.line_num = line_num;
+						return lex_item;
+
 					//Beginning of a string literal
 					case '"':
 						//Say that we're in a string
@@ -322,21 +353,12 @@ Lexer_item get_next_token(FILE* fl){
 							//Add this in
 							*lexeme_cursor = ch;
 							lexeme_cursor++;
-						//If we get here we're in a real
-						} else if(ch == '.'){
-							//Erase this now
-							memset(lexeme, 0, 10000);
-							//Reset the cursor
-							lexeme_cursor = lexeme;
-							//We are not in an int
-							current_state = IN_FLOAT;
-							//Add this in
-							*lexeme_cursor = ch;
-							lexeme_cursor++;
+						} else {
+							lex_item.tok = ERROR;
+							lex_item.lexeme = "Error: Invalid character provided for identifier";
+							lex_item.line_num = line_num;
+							return lex_item;
 						}
-						
-						/*More stuff is needed here for numbers, floats, etc*/	
-						break;
 				}
 
 				break;
