@@ -21,7 +21,10 @@ typedef enum {
 	TRUE,
 	FALSE,
 	FUNC,
+	LINK,
+	COMPTIME,
 	RET,
+	JUMP,
 	STATIC,
 	EXTERNAL,
 	REF,
@@ -40,6 +43,7 @@ typedef enum {
 	L_NOT,
 	B_NOT,
 	IDENT,
+	POUND, /* # */
 	INT_CONST,
 	FLOAT_CONST,
 	STR_CONST,

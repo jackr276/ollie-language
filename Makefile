@@ -10,7 +10,7 @@ all: $(PROGS)
 
 compiler: compiler.o parser.o lexer.o
 
-lexer_test_run: lexer_test
+ltest: lexer_test
 	$(OUT)/lexer_test ./oc/test_files/lex_test1.ol && \
 	$(OUT)/lexer_test ./oc/test_files/lex_test2.ol && \
 	$(OUT)/lexer_test ./oc/test_files/lex_test3.ol && \

@@ -29,12 +29,12 @@ static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_numbe
 	lex_item.line_num = line_number;
 
 	//Token array, we will index using their enum values
-	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, TRUE, FALSE, FUNC, RET,
-						STATIC, EXTERNAL, REF, DEREF, MEMADDR, U_INT8, S_INT8, U_INT16, S_INT16,
+	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, TRUE, FALSE, FUNC, RET, JUMP, LINK,
+						STATIC, COMPTIME, EXTERNAL, REF, DEREF, MEMADDR, U_INT8, S_INT8, U_INT16, S_INT16,
 						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, STR};
 
-	const char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "func", "ret",
-								 "static", "external", "ref", "deref", "memaddr", "u_int8", "s_int8", "u_int16",
+	const char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "func", "ret", "jump",
+								 "link", "static", "comptime", "external", "ref", "deref", "memaddr", "u_int8", "s_int8", "u_int16",
 								 "s_int16", "u_int32", "s_int32", "u_int64", "s_int64", "float32", "float64", "char", "str"};
 
 	//Let's see if we have a keyword here
@@ -288,6 +288,13 @@ Lexer_item get_next_token(FILE* fl){
 						lex_item.lexeme = "}";
 						lex_item.line_num = line_num;
 						return lex_item;
+
+					case '#':
+						lex_item.tok = POUND;
+						lex_item.lexeme = "#";
+						lex_item.line_num = line_num;
+						return lex_item;
+
 
 					case '.':
 						//Let's see what we have here

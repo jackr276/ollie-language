@@ -16,4 +16,4 @@ jobs:
     - name: make
       run: make
     - name: make test
-      run: make lexer_test_run
+      run: make ltest 
