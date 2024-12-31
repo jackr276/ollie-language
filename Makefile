@@ -3,6 +3,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -c
 LEX_PATH = ./oc/compiler/lexer
 STACK_PATH = ./oc/compiler/stack
+SYMTAB_PATH = ./oc/compiler/symtab
 OUT = ./oc/out
 PROGS = lexer_test
 
@@ -25,6 +26,9 @@ lexer.o: $(LEX_PATH)/lexer.c
 
 stack.o: $(STACK_PATH)/stack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/stack.c -o $(OUT)/stack.o
+
+symtab.o: $(SYMTAB_PATH)/symtab.c
+	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtb.c -o $(OUT)/symtab.o
 
 clean:
 	rm -f ./out/*
