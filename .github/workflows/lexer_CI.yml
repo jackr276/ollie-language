@@ -15,5 +15,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: make
       run: make
-    - name: make test
+    - name: make lexer test
       run: make ltest 
+    - name: make symtab test
+      run: make stest 

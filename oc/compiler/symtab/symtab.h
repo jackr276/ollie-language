@@ -46,6 +46,11 @@ struct symtab_t{
 
 
 /**
+ * Initialize the overall global symtab
+ */
+symtab_t* initialize_global_symtab();
+
+/**
  * Initialize the symbol table
  */
 symtab_t* initialize_scope(symtab_t* symtab);
@@ -74,6 +79,11 @@ u_int8_t insert(symtab_t* symtab, symtab_record_t* record);
  */
 symtab_record_t* lookup(symtab_t* symtab, char* name);
 
+
+/**
+ * A printing function for development purposes
+ */
+void print_record(symtab_record_t* record);
 
 /**
  * Deinitialize the symbol table

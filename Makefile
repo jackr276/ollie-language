@@ -28,7 +28,17 @@ stack.o: $(STACK_PATH)/stack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/stack.c -o $(OUT)/stack.o
 
 symtab.o: $(SYMTAB_PATH)/symtab.c
-	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtb.c -o $(OUT)/symtab.o
+	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT)/symtab.o
+
+symtab_test.o: $(SYMTAB_PATH)/symtab_test.c
+	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab_test.c -o $(OUT)/symtab_test.o
+
+symtab_test: symtab.o symtab_test.o
+	$(CC) -o $(OUT)/symtab_test $(OUT)/symtab_test.o $(OUT)/symtab.o
+
+stest: symtab_test
+	$(OUT)/symtab_test
+
 
 clean:
 	rm -f ./out/*

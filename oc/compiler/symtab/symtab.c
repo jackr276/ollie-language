@@ -4,10 +4,20 @@
 
 #include "symtab.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 
 #define LARGE_PRIME 611593
+
+
+/**
+ * Initialize the global symtab
+ */
+symtab_t* initialize_global_symtab(){
+	return (symtab_t*)calloc(1, sizeof(symtab_t));
+}
+
 
 /**
  * Initialize a new lexical scope
@@ -17,8 +27,14 @@ symtab_t* initialize_scope(symtab_t* symtab){
 	if(symtab->next_level == NULL){
 		//Let's make one
 		symtab_t* next_level = (symtab_t*)calloc(1, sizeof(symtab_t));
+		//Let's link this in here too
+		symtab->next_level = next_level;
+
 		//Next lexical level
 		next_level->lexical_level = symtab->lexical_level + 1;
+		//Remember where we came from
+		next_level->previous_level = symtab;
+
 		return next_level;
 	} 
 
@@ -122,14 +138,23 @@ symtab_record_t* lookup(symtab_t* symtab, char* name){
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_t* cursor = symtab;
+	symtab_record_t* records_cursor;
 
 	//As long as the previous level is not null
 	while(cursor->previous_level != NULL){
+		records_cursor = cursor->records[h];
+		
 		//If we actually have something in here
-		if(cursor->records[h] != NULL){
-
-
-
+		if(records_cursor != NULL){
+			//We could have had collisions so we'll have to hunt here
+			while(records_cursor != NULL){
+				//If we find the right one, then we can get out
+				if(strcmp(records_cursor->name, name) == 0){
+					return records_cursor;
+				}
+				//Advance it
+				records_cursor = records_cursor->next;
+			}
 		}
 
 		//Go up to a higher scope
@@ -138,6 +163,24 @@ symtab_record_t* lookup(symtab_t* symtab, char* name){
 
 	//We found nothing
 	return NULL;
+}
+
+
+/**
+ * A record printer that is used for development/error messages
+ */
+void print_record(symtab_record_t* record){
+	//Safety check
+	if(record == NULL){
+		printf("NULL RECORD\n");
+		return;
+	}
+
+	printf("Record: {\n");
+	printf("Name: %s,\n", record->name);
+	printf("Lexical Level: %d,\n", record->lexical_level);
+	printf("Offset: %p\n", (void*)(record->offset));
+	printf("}\n");
 }
 
 
@@ -151,10 +194,23 @@ void destroy_symtab(symtab_t* symtab){
 		return;
 	}
 
+	symtab_record_t* record;
+	symtab_record_t* temp;
+
 	//Run through here and free everything that isn't null
 	for(u_int16_t i = 0; i < KEYSPACE; i++){
-		if(symtab->records[i] != NULL){
-			free(symtab->records[i]);
+		record = symtab->records[i];
+		//Iterate through the potential linked list here
+		while(record != NULL){
+			temp = record;
+			record = record->next;
+			free(temp);
 		}
 	}
+
+	//Move our way down to destroy
+	destroy_symtab(symtab->next_level);
+
+	//Finally free this one
+	free(symtab);
 }
