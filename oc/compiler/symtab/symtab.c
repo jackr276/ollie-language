@@ -4,6 +4,7 @@
 
 #include "symtab.h"
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 #define LARGE_PRIME 611593
@@ -23,6 +24,15 @@ symtab_t* initialize_scope(symtab_t* symtab){
 
 	//Otherwise there already exist a next level, so we'll just return that
 	return symtab->next_level;
+}
+
+
+/**
+ * Finalize the scope, for the purposes of this project, finalizing the scope just means going
+ * up by one level
+ */
+symtab_t* finalize_scope(symtab_t* symtab){
+	return symtab->previous_level;
 }
 
 
@@ -99,5 +109,52 @@ u_int8_t insert(symtab_t* symtab, symtab_record_t* record){
 }
 
 
+/**
+ * Lookup the record in the symtab that corresponds to the following name.
+ * 
+ * We are ALWAYS biased to the most local(in scope) version of the name. If we
+ * do not find it in the local scope, we then search the outer scope, until there are
+ * no more outer scopes to search
+ */
+symtab_record_t* lookup(symtab_t* symtab, char* name){
+	//Let's grab it's hash
+	u_int16_t h = hash(name); 
+
+	//Define the cursor so we don't mess with the original reference
+	symtab_t* cursor = symtab;
+
+	//As long as the previous level is not null
+	while(cursor->previous_level != NULL){
+		//If we actually have something in here
+		if(cursor->records[h] != NULL){
 
 
+
+		}
+
+		//Go up to a higher scope
+		cursor = cursor->previous_level;
+	}
+
+	//We found nothing
+	return NULL;
+}
+
+
+/**
+ * Provide a function that will destroy the symtab completely. It is important to note that 
+ * we must have the root level symtab here
+*/
+void destroy_symtab(symtab_t* symtab){
+	//Base case
+	if(symtab == NULL){
+		return;
+	}
+
+	//Run through here and free everything that isn't null
+	for(u_int16_t i = 0; i < KEYSPACE; i++){
+		if(symtab->records[i] != NULL){
+			free(symtab->records[i]);
+		}
+	}
+}

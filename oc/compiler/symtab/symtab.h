@@ -56,6 +56,7 @@ symtab_t* initialize_scope(symtab_t* symtab);
  */
 symtab_record_t* create_record(char* name, u_int16_t lexical_level, u_int64_t offset);
 
+
 /**
  * Finalize the scope and go back a level
  */
@@ -66,6 +67,7 @@ symtab_t* finalize_scope(symtab_t* symtab);
  * Insert a name into the symbol table
  */
 u_int8_t insert(symtab_t* symtab, symtab_record_t* record);
+
 
 /**
  * Lookup a name in the symtab
