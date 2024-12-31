@@ -57,6 +57,7 @@ typedef enum {
 	R_SHIFT,
 	EQUALS,
 	D_EQUALS, /* == */
+	CONDITIONAL_DEREF, /* =? */
 	NOT_EQUALS,
 	DIV_EQUALS,
 	PLUS_EQUALS,

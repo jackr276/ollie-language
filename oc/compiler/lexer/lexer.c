@@ -201,6 +201,12 @@ Lexer_item get_next_token(FILE* fl){
 							lex_item.lexeme = "==";
 							lex_item.line_num = line_num;
 							return lex_item;
+						} else if (ch2 == '?') {
+							//Prepare and return
+							lex_item.tok = CONDITIONAL_DEREF;
+							lex_item.lexeme = "=?";
+							lex_item.line_num = line_num;
+							return lex_item;
 						} else {
 							current_state = START;
 							//"Put back" the char
