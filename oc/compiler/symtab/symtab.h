@@ -8,8 +8,8 @@
 
 #include <sys/types.h>
 
-//We define that each lexical scope can have 1000 symbols at most
-#define KEYSPACE 1000 
+//We define that each lexical scope can have 5000 symbols at most
+#define KEYSPACE 5000 
 
 typedef struct symtab_t symtab_t;
 typedef struct symtab_record_t symtab_record_t;
@@ -19,22 +19,57 @@ struct symtab_record_t{
 	char* name;
 	//The hash that we have
 	u_int16_t hash;
+	//The lexical level of this record
+	u_int8_t lexical_level;
+	//Will be used later, the offset for the address in the data area
+	u_int64_t offset;
 	//In case of collisions, we can chain these records
 	symtab_record_t* next;
 
 };
 
 
+/**
+ * This struct represents a specific lexical level of a symtab
+ */
 struct symtab_t{
+	//Link to the next level
+	symtab_t* next_level;
+	//Link to the prior level
+	symtab_t* previous_level;
 	//How many records(names) we can have
 	symtab_record_t records[KEYSPACE];
+	//The level of this particular symtab
+	u_int8_t lexical_level;
 };
+
 
 /**
  * Initialize the symbol table
  */
-symtab_t* initialize_symtab();
+symtab_t* initialize_scope(symtab_t* symtab);
 
+
+/**
+ * Create a record for the symbol table
+ */
+symtab_record_t* create_record(char* name, u_int8_t lexical_level, u_int64_t offset);
+
+/**
+ * Finalize the scope and go back a level
+ */
+symtab_t* finalize_scope(symtab_t* symtab);
+
+
+/**
+ * Insert a name into the symbol table
+ */
+u_int8_t insert(symtab_t* symtab, char* name, symtab_record_t* record);
+
+/**
+ * Lookup a name in the symtab
+ */
+symtab_record_t* lookup(symtab_t* symtab, char* name);
 
 
 /**
