@@ -5,7 +5,7 @@ LEX_PATH = ./oc/compiler/lexer
 STACK_PATH = ./oc/compiler/stack
 SYMTAB_PATH = ./oc/compiler/symtab
 OUT = ./oc/out
-PROGS = lexer_test
+PROGS = lexer_test symtab_test
 
 
 all: $(PROGS)

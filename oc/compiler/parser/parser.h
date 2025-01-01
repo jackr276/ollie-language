@@ -6,7 +6,8 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-
+#include "../stack/stack.h"
+#include "../symtab/symtab.h"
 
 
 #endif /* PARSER_H */

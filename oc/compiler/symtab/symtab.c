@@ -3,13 +3,8 @@
 */
 
 #include "symtab.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
 
 #define LARGE_PRIME 611593
-
 
 /**
  * Initialize the global symtab

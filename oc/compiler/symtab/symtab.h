@@ -7,6 +7,9 @@
 #define SYMTAB_H
 
 #include <sys/types.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2

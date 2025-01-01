@@ -3,6 +3,10 @@
 */
 
 #include "parser.h"
-#include "../stack/stack.h"
+
+symtab_t* symtab;
+stack_t* stack;
+
+
 
 

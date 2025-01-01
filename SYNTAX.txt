@@ -1,40 +1,63 @@
 Syntax of ollie-lang in BNF Form
 Everything surrounded in angle brackets(<>) is a nonterminal
 
-1. <program>            ::= {<decl_part>}*
+1. <program>::= {<declaration-partition>}*
 
-2. <decl_part>          ::= <func_def>
-                          | <decl>
+2. <declaration-partition>::= <function-definition>
+                          	| <declaration>
 
-3. <func_dec>           ::= <storage_spec>? func <func_ident> <param_list> -> <type_spec> <compound_statement>
+3. <function-declaration>::= <storage_spec>? func <identifier> <parameter-list> -> <type-specifier> <compound-statement>
 
-4. <storage_spec>       ::= static
-	 			          | external
-						  | user_type
+4. <storage-specifier> ::= static
+	 			         | external
+						 | register
+						 | user_type
 
-5.  <type_spec> 		 ::= {<pointer>}* <type>
+5.  <type-specifier> ::= {<pointer>}* <type>
 
-6.  <pointer> 			 ::= ref
+6.  <pointer> ::= ref
 
-7.  <type>               ::= void | u_int8 | s_int8 | u_int16 | s_int16 | u_int32 | s_int32 | u_int64 | s_int64
-							 | float32 | float64 | char | str | <enumeration_spec> | <structure_spec> | <user_defined_type>
+7.  <type> ::= void | u_int8 | s_int8 | u_int16 | s_int16 | u_int32 | s_int32 | u_int64 | s_int64
+			 | float32 | float64 | char | str | <enumeration-specifier> | <structure-specifier> 
+			 | <user-defined-type>
 
-8.  <jump_statement>     ::= jump <ident>
-						  | continue;
-						  | break;
-						  | ret {<expression>}?
-							
-9.  <compound_statement>  ::= {{<declaration>}* {<statement>}*}
+8. 	<structure-specifier> ::= structure <identifier>{ {struct-declaration}+ }
+							| structure { {struct-declaration}+ }
+							| structure <identifier>
 
-10. <iterative_statement> ::= while( <expression> ) do <statement>
-							| do <statement> while( <expression> )
-							| for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
+9. <structure-declaration> ::= {<specifier-qualifier>}* <structure-declarator-list>
 
-11. <if_statement> 		  ::= if( <expression> ) then <statement> {else <statement>}*
-12. <switch_statement> 	  ::= switch on( <expression> ) <statement>
-13. <logical_or_expr> 	  ::= <logical_and_expr> | <logical-or-expression> or <logical-and-expression>
-14. <logical_and_expr> 	  ::= <inclusive_or_expr> | <logical-and-expression> and <inclusive_or_expression>
-15. <inclusive_or_expr>   ::= <exclusive_or_expr> | <inclusive-or-expr> | <exclusive_or_expr>
+10. <specifier-qualifier> ::= <type-specifier>
+							| constant
+
+11. <structure-declarator-list> ::= <structure-declarator>
+								  | <structure-declarator-list>, <structure-declarator>
+
+12. <structure-declarator> ::= <declarator>
+							 | <declarator> := <constant-expression>
+							 | := <constant-expression>
+
+13. <declarator> ::= {<pointer>}? <direct-declarator>
+
+14. <direct-declarator> ::= <identifier>
+						  | ( <declarator> )
+						  | <direct-declarator> [ {constant-expression}? ]
+						  | <direct-declarator> ( <parameter-type-list> ) 
+						  | <direct-declarator> ( {<identifier>}* )
+
+15. <constant-expression> ::= <conditional-expression>
+
+16. <conditional-expression> ::= <logical-or-expression>
+
+17. <logical-or-expression> ::= <logical-and-expression> 
+							  | <logical-or-expression> || <logical-and-expression>
+
+18. <logical-and-expression> ::= <inclusive-or-expression> 
+							   | <logical-and-expression> && <inclusive-or-expression>
+
+19. <inclusive-or-expression> ::= <exclusive-or-expression> 
+								| <inclusive-or-expression> | <exclusive-or-expression>
+
 16. <exclusive_or_expr>   ::= <and-expr> | <exclusive_or_expr> ^ <and_expr>
 17. <and-expr> 			  ::= <equality_expr> | <and_expr> & <equality_expr>
 18. <equality_expr> 	  ::= <relational_expr> | <equality_expr> == <relational_expr> | <equality_expr> != <relational_expr>
@@ -48,9 +71,22 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 24. <unary_expr> 		  ::= <postfix_expr> | preinc <unary_expr> | predec <unary_expr> | <unary_op> <cast_expr>
 25. <unary_opt> 		  ::= memaddr | deref | + | - | ~ | ! 
 
+10. <iterative_statement> ::= while( <expression> ) do <statement>
+							| do <statement> while( <expression> )
+							| for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
+							
+9.  <compound_statement>  ::= {{<declaration>}* {<statement>}*}
 
-13. <func_ident> 		::= <letter>{(<letter> | <digit> | _ | $)}*
-14. <ident>				::= (<letter> | <digit> | _ | $){(<letter> | <digit> | _ | $)}*
+
+
+11. <if_statement> 		  ::= if( <expression> ) then <statement> {else <statement>}*
+12. <switch_statement> 	  ::= switch on( <expression> ) <statement>
+
+8.  <jump_statement>    ::= jump <ident>
+						  | continue;
+						  | break;
+						  | ret {<expression>}?
+14. <identifier>		::= (<letter> | <digit> | _ | $){(<letter> | <digit> | _ | $)}*
 
 15. <int_const> 			::= {-}?[1-9][0-9]*
 16. <float_const>  		    ::= {-}?[0-9]+.[1-9]*
