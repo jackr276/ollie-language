@@ -41,6 +41,7 @@ typedef enum {
 	STAR,
 	F_SLASH,
 	MOD,
+	ON,
 	L_NOT,
 	B_NOT,
 	IDENT,

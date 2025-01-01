@@ -165,44 +165,72 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 								   | {<direct-abstract-declarator>}? [ {<constant-expression>}? ]
 								   | {<direct-abstract-declarator>}? ( {<parameter-type-list>}?)
 
-<enumator-specifier> ::= enumerated
+40. <enumator-specifier> ::= enumerated <identifier> { <enumerator-list> }
+						   | enumerated <identifier>
 
+41. <enumerator-list> ::= <enumerator>
+						| <enumator-list>, <enumerator>
 
+42. <enumerator> ::= <identifier>
+				   | <identifier> = <constant-expression>
 
+43. <user-defined-type> ::= <identifier>
 
-33. <iterative-statement> ::= while( <expression> ) do <statement>
+44. <declaration> ::= {<declaration-specifier>}+ {<initial-declarator>}* ;
+
+45. <initial-declarator> ::= <declarator>
+						  | <declarator> = <initializer>
+
+46. <initializer> ::= <assignment-expression>
+					| { <initializer-list> }
+					| { <initializer-list>, }
+
+47. <initializer-list> ::= <initializer>
+						 | <initializer-list> , <initializer>
+
+48. <statement> ::= <labeled-statement>
+				  | <expression-statement>
+				  | <compound-statement>
+				  | <if-statement>
+				  | <switch-statement>
+				  | <iterative-statement>
+				  | <jump-statement>
+
+49. <iterative-statement> ::= while( <expression> ) do <statement>
 							| do <statement> while( <expression> )
 							| for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
-
 							
-34. <compound-statement> ::= {{<declaration>}* {<statement>}*}
+50. <compound-statement> ::= {{<declaration>}* {<statement>}*}
 
-35. <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
+51. <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
 
-36. <switch-statement> ::= switch on( <expression> ) <statement>
+52. <switch-statement> ::= switch on( <expression> ) <statement>
 
-37.  <jump-statement> ::= jump <identifier>
-					     | continue on <expression>;
+53. <jump-statement> ::= jump <identifier>
+					     | continue on <expression>
 						 | continue;
-						 | break on <expression>;
+						 | break on <expression>
 						 | break;
 						 | ret {<expression>}?
 
+54. <labeled-statement> ::= <label-identifier> : <statement>
+						  | case <constant-expression> : <statement>
+						  | defualt : <statement>
 
-38. <identifier> ::= (<letter> | <digit> | _ | $){(<letter> | <digit> | _ | $)}*
+55. <expression-statement> ::= {<expression>}?;
 
-15. <integer-constant>	::= {-}?[1-9][0-9]*
+56. <identifier> ::= (<letter> | <digit> | _ | $){(<letter> | <digit> | _ | $)}*
 
-16. <float-constnt> ::= {-}?[0-9]+.[1-9]*
+57. <label-identifier> ::= ${(<letter> | <digit> | _ )}*
 
-17. <string-constant>	 ::= "<ASCII CHARACTER 33-127>"
+58. <integer-constant>	::= {-}?[1-9][0-9]*
 
-18. <boolean-constant> ::= (True | False)
+59. <float-constnt> ::= {-}?[0-9]+.[1-9]*
 
-19. <digit>	::= [0-9]
+60. <string-constant>	 ::= "<ASCII CHARACTER 33-127>"
 
-20. <letter> ::= [a-zA-Z]
+61. <boolean-constant> ::= (True | False)
 
+62. <digit>	::= [0-9]
 
-
-
+63. <letter> ::= [a-zA-Z]
