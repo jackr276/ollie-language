@@ -30,7 +30,7 @@ struct symtab_record_t{
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
-	u_int16_t lexical_level;
+	int16_t lexical_level;
 	//Will be used later, the offset for the address in the data area
 	u_int64_t offset;
 	//In case of collisions, we can chain these records

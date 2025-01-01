@@ -3,6 +3,7 @@
 */
 
 #include "symtab.h"
+#include <stdio.h>
 #include <sys/types.h>
 
 #define LARGE_PRIME 611593
@@ -14,7 +15,7 @@
 symtab_t* initialize_symtab(){
 	symtab_t* symtab = (symtab_t*)calloc(1, sizeof(symtab_t));
 	//Just in case
-	symtab->current_lexical_scope = 0;
+	symtab->current_lexical_scope = -1;
 	symtab->next_index = 0;
 
 	return symtab;
@@ -29,12 +30,11 @@ void initialize_scope(symtab_t* symtab){
 	symtab_sheaf_t* current = (symtab_sheaf_t*)calloc(1, sizeof(symtab_sheaf_t));
 
 	//Store it in here for later
-	symtab->sheafs[symtab->next_index++] = current;
+	symtab->sheafs[symtab->next_index] = current;
+	symtab->next_index++;
 
-	//Increment if it isn't 0
-	if(symtab->current_lexical_scope != 0){
-		symtab->current_lexical_scope++;
-	}
+	//Increment(down the chain)
+	symtab->current_lexical_scope++;
 
 	//Store this here
 	current->lexical_level = symtab->current_lexical_scope;
@@ -55,10 +55,8 @@ void finalize_scope(symtab_t* symtab){
 	//Back out of this one as it's finalized
 	symtab->current = symtab->current->previous_level;
 
-	//Back up one
-	if(symtab->current_lexical_scope != 0){
-		symtab->current_lexical_scope--;
-	}
+	//Go back up one
+	symtab->current_lexical_scope--;
 }
 
 
@@ -150,26 +148,24 @@ symtab_record_t* lookup(symtab_t* symtab, char* name){
 	symtab_sheaf_t* cursor = symtab->current;
 	symtab_record_t* records_cursor;
 
-	//As long as the previous level is not null
-	while(cursor->previous_level != NULL){
+	while(cursor != NULL){
+		//As long as the previous level is not null
 		records_cursor = cursor->records[h];
 		
-		//If we actually have something in here
-		if(records_cursor != NULL){
-			//We could have had collisions so we'll have to hunt here
-			while(records_cursor != NULL){
-				//If we find the right one, then we can get out
-				if(strcmp(records_cursor->name, name) == 0){
-					return records_cursor;
-				}
-				//Advance it
-				records_cursor = records_cursor->next;
+		//We could have had collisions so we'll have to hunt here
+		while(records_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strcmp(records_cursor->name, name) == 0){
+				return records_cursor;
 			}
+			//Advance it
+			records_cursor = records_cursor->next;
 		}
 
 		//Go up to a higher scope
 		cursor = cursor->previous_level;
 	}
+
 
 	//We found nothing
 	return NULL;
@@ -218,6 +214,9 @@ void destroy_symtab(symtab_t* symtab){
 				free(temp);
 			}
 		}
+
+		//Free the sheaf
+		free(cursor);
 	}
 
 	//Once we're all done here, destroy the global symtab
