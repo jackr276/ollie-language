@@ -11,14 +11,27 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 4. <storage-specifier> ::= static
 	 			         | external
 						 | register
-						 | user_type
+						 | defined
 
 5.  <type-specifier> ::= {<pointer>}* <type>
 
-6.  <pointer> ::= ref
+6.  <pointer> ::= * {const}* {<pointer>}?
 
-7.  <type> ::= void | u_int8 | s_int8 | u_int16 | s_int16 | u_int32 | s_int32 | u_int64 | s_int64
-			 | float32 | float64 | char | str | <enumeration-specifier> | <structure-specifier> 
+7.  <type> ::= void 
+			 | u_int8 
+			 | s_int8 
+			 | u_int16 
+			 | s_int16 
+			 | u_int32 
+			 | s_int32 
+			 | u_int64 
+			 | s_int64
+			 | float32 
+			 | float64 
+			 | char 
+			 | str 
+			 | <enumeration-specifier> 
+			 | <structure-specifier> 
 			 | <user-defined-type>
 
 8. 	<structure-specifier> ::= structure <identifier>{ {struct-declaration}+ }
@@ -58,42 +71,137 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 19. <inclusive-or-expression> ::= <exclusive-or-expression> 
 								| <inclusive-or-expression> | <exclusive-or-expression>
 
-16. <exclusive_or_expr>   ::= <and-expr> | <exclusive_or_expr> ^ <and_expr>
-17. <and-expr> 			  ::= <equality_expr> | <and_expr> & <equality_expr>
-18. <equality_expr> 	  ::= <relational_expr> | <equality_expr> == <relational_expr> | <equality_expr> != <relational_expr>
-19. <relational_expr> 	  ::= <shift_expr> | <relational_expr> < <shift_expr> | <relational_expr> > <shift_expr> 
-							| <relational_expr> >= <shift_expr> | <relational_expr> <= <shift_expr>
+20. <exclusive-or-expression> ::= <and-expression> 
+								| <exclusive-or-expression> ^ <and_expression>
 
-20. <shift_expr> 		  ::= <additive_expr> | <shift_expr> << <additive_expr> | <shift_expr> >> <additive_expr>
-21. <additive_expr> 	  ::= <mult_expr> | <additive_expr> + <mult_expr> | <additive_expr> - <mult_expr>
-22. <mult_expr> 		  ::= <cast_expr> | <mult_expr> * <cast_expr> | <mult_expr> * <cast_expr>
-23. <cast_expr> 		  ::= <unary_expr> | ( <type_name> ) <unary_expr>
-24. <unary_expr> 		  ::= <postfix_expr> | preinc <unary_expr> | predec <unary_expr> | <unary_op> <cast_expr>
-25. <unary_opt> 		  ::= memaddr | deref | + | - | ~ | ! 
+21. <and-expression> ::= <equality-expression> 
+					   | <and-expression> & <equality-expression>
 
-10. <iterative_statement> ::= while( <expression> ) do <statement>
+22. <equality-expression> ::= <relational-expression> 
+					   		| <equality-expression> == <relational-expression>
+							| <equality-expression> != <relational-expression>
+
+23. <relational-expression> ::= <shift-expression> 
+							  | <relational-expression> < <shift-expression> 
+							  | <relational-expression> > <shift-expression> 
+							  | <relational-expression> >= <shift-expression> 
+							  | <relational-expression> <= <shift-expression>
+
+24. <shift-expression> ::= <additive-expression> 
+				   		 | <shift-expression> << <additive-expression> 
+						 | <shift-expression> >> <additive-expression>
+
+25. <additive-expression> ::= <multiplicative-expression> 
+					  		| <additive_expression> + <multiplicative-expression>
+					  		| <additive-expression> - <multiplicative-expression>
+
+26. <multiplicative-expression> ::= <cast-expression>
+								  | <multiplicative-expression> * <cast-expression>
+								  | <multiplicative-expression> / <cast-expr>
+								  | <multiplicative-expression> % <cast-expr>
+
+27. <cast-expression> ::= <unary-expression> 
+						| ( <type-name> ) <unary-expression>
+
+28. <unary-expression> ::= <postfix-expression>
+						 | ++<unary-expression> 
+						 | --<unary-expression> 
+						 | <unary-operator> <cast-expression>
+						 | size <unary-expression> 
+						 | size <type-name>
+
+29. <postfix-expression> ::= <primary-expression>
+						   | <postfix-expression> [ <expression> ]
+						   | <postfix-expression> ( {assignment-expression}* )
+						   | <postfix-expression> : <identifier>
+						   | <postfix-expression> :: <identifier>
+						   | <postfix-expression> ++
+						   | <postfix-expression> --
+
+30. <primary-expression> ::= <identifier>
+							| <constant>
+							| (<expression>)
+
+31. <expression> ::= <assignment-expression>
+				   | <expression, <assignment-expression>
+
+32. <assignment-expression> ::= <conditional-expression>
+							 | <unary-expression> <assignment-operator> <assignment-expression>
+
+33. <constant> ::= <integer-constant>
+				 | <string-constant>
+				 | <float-constant>
+				 | <boolean-constant>
+
+34. <unary-operator> ::= & 
+					  | * 
+					  | ` 
+					  | + 
+					  | - 
+					  | ~ 
+					  | ! 
+
+35. <assignment-operator> ::= =
+							| *=
+							| /=
+							| %=
+							| +=
+							| -=
+							| <<=
+							| >>=
+							| &=
+							| |=
+
+36. <type-name> ::= {<specifier-qualifier>}+ {abstract-declarator}?
+
+37. <parameter-list> ::= <parameter-declaration>
+					   | <parameter-list>, <parameter-declaration>
+
+38. <parameter-declaration> ::= <pointer>
+							  | <pointer> <direct-abstract-declarator>
+							  | <direct-abstract-declarator>
+
+39. <direct-abstract-declarator> ::= ( <abstract-declarator> )
+								   | {<direct-abstract-declarator>}? [ {<constant-expression>}? ]
+								   | {<direct-abstract-declarator>}? ( {<parameter-type-list>}?)
+
+<enumator-specifier> ::= enumerated
+
+
+
+
+33. <iterative-statement> ::= while( <expression> ) do <statement>
 							| do <statement> while( <expression> )
 							| for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
+
 							
-9.  <compound_statement>  ::= {{<declaration>}* {<statement>}*}
+34. <compound-statement> ::= {{<declaration>}* {<statement>}*}
+
+35. <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
+
+36. <switch-statement> ::= switch on( <expression> ) <statement>
+
+37.  <jump-statement> ::= jump <identifier>
+					     | continue on <expression>;
+						 | continue;
+						 | break on <expression>;
+						 | break;
+						 | ret {<expression>}?
 
 
+38. <identifier> ::= (<letter> | <digit> | _ | $){(<letter> | <digit> | _ | $)}*
 
-11. <if_statement> 		  ::= if( <expression> ) then <statement> {else <statement>}*
-12. <switch_statement> 	  ::= switch on( <expression> ) <statement>
+15. <integer-constant>	::= {-}?[1-9][0-9]*
 
-8.  <jump_statement>    ::= jump <ident>
-						  | continue;
-						  | break;
-						  | ret {<expression>}?
-14. <identifier>		::= (<letter> | <digit> | _ | $){(<letter> | <digit> | _ | $)}*
+16. <float-constnt> ::= {-}?[0-9]+.[1-9]*
 
-15. <int_const> 			::= {-}?[1-9][0-9]*
-16. <float_const>  		    ::= {-}?[0-9]+.[1-9]*
-17. <str_const>			    ::= "<ASCII CHARACTER 33-127>"
-18. <bool_const>			::= (True | False)
-19. <digit> 				::= [0-9]
-20. <letter>				::= [a-zA-Z]
+17. <string-constant>	 ::= "<ASCII CHARACTER 33-127>"
+
+18. <boolean-constant> ::= (True | False)
+
+19. <digit>	::= [0-9]
+
+20. <letter> ::= [a-zA-Z]
 
 
 

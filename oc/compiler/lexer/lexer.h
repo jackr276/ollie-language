@@ -27,15 +27,16 @@ typedef enum {
 	JUMP,
 	STATIC,
 	EXTERNAL,
-	REF,
-	DEREF,
-	MEMADDR,
-	D_AND, /* && */
-	D_OR,
-	S_AND, /* & */
-	S_OR,
+	CONDITIONAL_DEREF, /* ` */
+	DOUBLE_AND, /* && */
+	DOUBLE_OR,
+	AND, /* & */
+	OR,
 	DOT,
 	PLUS,
+	DEFINED,
+	ENUMERATED,
+	SIZE,
 	MINUS,
 	STAR,
 	F_SLASH,
@@ -57,7 +58,6 @@ typedef enum {
 	R_SHIFT,
 	EQUALS,
 	D_EQUALS, /* == */
-	CONDITIONAL_DEREF, /* =? */
 	NOT_EQUALS,
 	DIV_EQUALS,
 	PLUS_EQUALS,
@@ -66,6 +66,7 @@ typedef enum {
 	G_THAN,
 	L_THAN,
 	COLON,
+	DOUBLE_COLON,
 	COMMA,
 	SEMICOLON,
 	ARROW,

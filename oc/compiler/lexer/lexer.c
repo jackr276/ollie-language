@@ -30,12 +30,12 @@ static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_numbe
 
 	//Token array, we will index using their enum values
 	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, TRUE, FALSE, FUNC, RET, JUMP, LINK,
-						STATIC, COMPTIME, EXTERNAL, REF, DEREF, MEMADDR, U_INT8, S_INT8, U_INT16, S_INT16,
-						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, STR};
+						STATIC, COMPTIME, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
+						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, STR, SIZE, DEFINED, ENUMERATED};
 
 	const char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "func", "ret", "jump",
-								 "link", "static", "comptime", "external", "ref", "deref", "memaddr", "u_int8", "s_int8", "u_int16",
-								 "s_int16", "u_int32", "s_int32", "u_int64", "s_int64", "float32", "float64", "char", "str"};
+								 "link", "static", "comptime", "external", "u_int8", "s_int8", "u_int16",
+								 "s_int16", "u_int32", "s_int32", "u_int64", "s_int64", "float32", "float64", "char", "str", "size", "defined", "enumerated"};
 
 	//Let's see if we have a keyword here
 	for(u_int8_t i = 0; i < 27; i++){
@@ -224,7 +224,7 @@ Lexer_item get_next_token(FILE* fl){
 						if(ch2 == '&'){
 							current_state = START;
 							//Prepare and return
-							lex_item.tok = D_AND;
+							lex_item.tok = DOUBLE_AND;
 							lex_item.lexeme = "&&";
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -232,7 +232,7 @@ Lexer_item get_next_token(FILE* fl){
 							current_state = START;
 							//"Put back" the char
 							fseek(fl, -1, SEEK_CUR);
-							lex_item.tok = S_AND;
+							lex_item.tok = AND;
 							lex_item.lexeme = "&";
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -245,7 +245,7 @@ Lexer_item get_next_token(FILE* fl){
 						if(ch2 == '|'){
 							current_state = START;
 							//Prepare and return
-							lex_item.tok = D_OR;
+							lex_item.tok = DOUBLE_OR;
 							lex_item.lexeme = "||";
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -253,7 +253,7 @@ Lexer_item get_next_token(FILE* fl){
 							current_state = START;
 							//"Put back" the char
 							fseek(fl, -1, SEEK_CUR);
-							lex_item.tok = S_OR;
+							lex_item.tok = OR;
 							lex_item.lexeme = "|";
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -266,10 +266,24 @@ Lexer_item get_next_token(FILE* fl){
 						return lex_item;
 
 					case ':':
-						lex_item.tok = SEMICOLON;
-						lex_item.lexeme = ";";
-						lex_item.line_num = line_num;
-						return lex_item;
+						ch2 = fgetc(fl);
+
+						if(ch2 == ':'){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = DOUBLE_COLON;
+							lex_item.lexeme = "::";
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							current_state = START;
+							//Put it back
+							fseek(fl, -1, SEEK_CUR);
+							lex_item.tok = COLON;
+							lex_item.lexeme = ":";
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
 
 					case '(':
 						lex_item.tok = L_PAREN;
@@ -300,6 +314,13 @@ Lexer_item get_next_token(FILE* fl){
 						lex_item.lexeme = "#";
 						lex_item.line_num = line_num;
 						return lex_item;
+
+					case '`':
+						lex_item.tok = CONDITIONAL_DEREF;
+						lex_item.lexeme = "`";
+						lex_item.line_num = line_num;
+						return lex_item;
+
 
 
 					case '.':
