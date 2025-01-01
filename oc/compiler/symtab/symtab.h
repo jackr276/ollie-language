@@ -14,10 +14,16 @@
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
 #define KEYSPACE 4999 
+#define MAX_SHEAFS 200
 
 typedef struct symtab_t symtab_t;
+typedef struct symtab_sheaf_t symtab_sheaf_t;
 typedef struct symtab_record_t symtab_record_t;
 
+
+/**
+ * A struct that represents a symtab record
+ */
 struct symtab_record_t{
 	//The name that we are storing. This is used to derive the hash
 	char* name;
@@ -36,11 +42,9 @@ struct symtab_record_t{
 /**
  * This struct represents a specific lexical level of a symtab
  */
-struct symtab_t{
-	//Link to the next level
-	symtab_t* next_level;
+struct symtab_sheaf_t{
 	//Link to the prior level
-	symtab_t* previous_level;
+	symtab_sheaf_t* previous_level;
 	//How many records(names) we can have
 	symtab_record_t* records[KEYSPACE];
 	//The level of this particular symtab
@@ -49,26 +53,46 @@ struct symtab_t{
 
 
 /**
- * Initialize the overall global symtab
+ * This struct represents the overall collection of the sheafs of symtabs
  */
-symtab_t* initialize_global_symtab();
+struct symtab_t{
+	//The next index that we'll insert into
+	u_int16_t next_index;
+
+	//A global storage array for all symtab "sheaths"
+	symtab_sheaf_t* sheafs[MAX_SHEAFS];
+
+	//The current symtab sheaf
+	symtab_sheaf_t* current;
+
+	//The current lexical scope
+	u_int16_t current_lexical_scope;
+};
+
+
+/**
+ * Initialize a symbol table. In our compiler, we may have many symbol tables, so it's important
+ * that we're able to initialize separate ones and keep them distinct
+ */
+symtab_t* initialize_symtab();
+
 
 /**
  * Initialize the symbol table
  */
-symtab_t* initialize_scope(symtab_t* symtab);
+void initialize_scope(symtab_t* symtab);
+
+
+/**
+ * Finalize the scope and go back a level
+ */
+void finalize_scope(symtab_t* symtab);
 
 
 /**
  * Create a record for the symbol table
  */
 symtab_record_t* create_record(char* name, u_int16_t lexical_level, u_int64_t offset);
-
-
-/**
- * Finalize the scope and go back a level
- */
-symtab_t* finalize_scope(symtab_t* symtab);
 
 
 /**
@@ -91,7 +115,7 @@ void print_record(symtab_record_t* record);
 /**
  * Deinitialize the symbol table
  */
-void destroy_symtab(symtab_t* symtab);
+void destroy_symtab(symtab_t*);
 
 
 #endif /* SYMTAB_H */

@@ -3,38 +3,47 @@
 */
 
 #include "symtab.h"
+#include <sys/types.h>
 
 #define LARGE_PRIME 611593
 
+
 /**
- * Initialize the global symtab
+ * Dynamically allocate and return a symtab pointer for compiler use
  */
-symtab_t* initialize_global_symtab(){
-	return (symtab_t*)calloc(1, sizeof(symtab_t));
+symtab_t* initialize_symtab(){
+	symtab_t* symtab = (symtab_t*)calloc(1, sizeof(symtab_t));
+	//Just in case
+	symtab->current_lexical_scope = 0;
+	symtab->next_index = 0;
+
+	return symtab;
 }
 
-
 /**
- * Initialize a new lexical scope
+ * Initialize a new lexical scope. This involves making a new sheaf and
+ * adding it in
 */
-symtab_t* initialize_scope(symtab_t* symtab){
-	//If there is no next level
-	if(symtab->next_level == NULL){
-		//Let's make one
-		symtab_t* next_level = (symtab_t*)calloc(1, sizeof(symtab_t));
-		//Let's link this in here too
-		symtab->next_level = next_level;
+void initialize_scope(symtab_t* symtab){
+	//Dynamically allocate a new one
+	symtab_sheaf_t* current = (symtab_sheaf_t*)calloc(1, sizeof(symtab_sheaf_t));
 
-		//Next lexical level
-		next_level->lexical_level = symtab->lexical_level + 1;
-		//Remember where we came from
-		next_level->previous_level = symtab;
+	//Store it in here for later
+	symtab->sheafs[symtab->next_index++] = current;
 
-		return next_level;
-	} 
+	//Increment if it isn't 0
+	if(symtab->current_lexical_scope != 0){
+		symtab->current_lexical_scope++;
+	}
 
-	//Otherwise there already exist a next level, so we'll just return that
-	return symtab->next_level;
+	//Store this here
+	current->lexical_level = symtab->current_lexical_scope;
+
+	//Now we'll link back to the previous one level
+	current->previous_level = symtab->current;
+	
+	//Set this so it's up-to-date
+	symtab->current = current;
 }
 
 
@@ -42,8 +51,14 @@ symtab_t* initialize_scope(symtab_t* symtab){
  * Finalize the scope, for the purposes of this project, finalizing the scope just means going
  * up by one level
  */
-symtab_t* finalize_scope(symtab_t* symtab){
-	return symtab->previous_level;
+void finalize_scope(symtab_t* symtab){
+	//Back out of this one as it's finalized
+	symtab->current = symtab->current->previous_level;
+
+	//Back up one
+	if(symtab->current_lexical_scope != 0){
+		symtab->current_lexical_scope--;
+	}
 }
 
 
@@ -94,16 +109,16 @@ symtab_record_t* create_record(char* name, u_int16_t lexical_level, u_int64_t of
 */
 u_int8_t insert(symtab_t* symtab, symtab_record_t* record){
 	//No collision here, just store and get out
-	if(symtab->records[record->hash] == NULL){
+	if(symtab->current->records[record->hash] == NULL){
 		//Store this and get out
-		symtab->records[record->hash] = record;
+		symtab->current->records[record->hash] = record;
 		//0 = success, no collision
 		return 0;
 	}
 
 	//Otherwise, there is a collision
 	//Grab the head record
-	symtab_record_t* cursor = symtab->records[record->hash];
+	symtab_record_t* cursor = symtab->current->records[record->hash];
 
 	//Get to the very last node
 	while(cursor->next != NULL){
@@ -132,7 +147,7 @@ symtab_record_t* lookup(symtab_t* symtab, char* name){
 	u_int16_t h = hash(name); 
 
 	//Define the cursor so we don't mess with the original reference
-	symtab_t* cursor = symtab;
+	symtab_sheaf_t* cursor = symtab->current;
 	symtab_record_t* records_cursor;
 
 	//As long as the previous level is not null
@@ -184,28 +199,27 @@ void print_record(symtab_record_t* record){
  * we must have the root level symtab here
 */
 void destroy_symtab(symtab_t* symtab){
-	//Base case
-	if(symtab == NULL){
-		return;
-	}
-
+	symtab_sheaf_t* cursor;
 	symtab_record_t* record;
 	symtab_record_t* temp;
 
-	//Run through here and free everything that isn't null
-	for(u_int16_t i = 0; i < KEYSPACE; i++){
-		record = symtab->records[i];
-		//Iterate through the potential linked list here
-		while(record != NULL){
-			temp = record;
-			record = record->next;
-			free(temp);
+	//Run through all of the sheafs
+	for(u_int16_t i = 0; i < symtab->next_index; i++){
+		cursor = symtab->sheafs[i];
+
+		//Now we'll free all non-null records
+		for(u_int16_t j = 0; j < KEYSPACE; j++){
+			record = cursor->records[j];
+
+			//We could have chaining here, so run through just in case
+			while(record != NULL){
+				temp = record;
+				record = record->next;
+				free(temp);
+			}
 		}
 	}
 
-	//Move our way down to destroy
-	destroy_symtab(symtab->next_level);
-
-	//Finally free this one
+	//Once we're all done here, destroy the global symtab
 	free(symtab);
 }
