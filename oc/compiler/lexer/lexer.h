@@ -87,17 +87,6 @@ typedef enum {
 	STR,
 } Token;
 
-
-//We will use this to keep track of what the current lexer state is
-typedef enum {
-	START,
-	IN_IDENT,
-	IN_INT,
-	IN_FLOAT,
-	IN_STRING,
-	IN_COMMENT
-} Lex_state;
-
 typedef struct Lexer_item Lexer_item;
 
 struct Lexer_item{

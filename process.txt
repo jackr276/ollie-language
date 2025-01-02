@@ -1,0 +1,3 @@
+
+
+Source code -> Lexical analyzer/tokenizer/lexer -> Token stream -> Parser/syntax analyzer -> Optimizer -> assembly code generation

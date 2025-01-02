@@ -14,7 +14,7 @@ all: $(PROGS)
 compiler: compiler.o parser.o lexer.o
 
 ltest: lexer_test
-	$(OUT)/lexer_test ./oc/test_files/lex_test1.ol ./oc/test_files/lex_test2.ol ./oc/test_files/lex_test3.ol ./oc/test_files/lex_test4.ol
+	cat ./oc/test_files/test_files.txt | xargs ./oc/out/lexer_test
 
 lexer_test: lexer.o lexer_test.o
 	$(CC) -o $(OUT)/lexer_test $(OUT)/lexer_test.o $(OUT)/lexer.o

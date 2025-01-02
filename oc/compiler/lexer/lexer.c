@@ -15,6 +15,16 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+//We will use this to keep track of what the current lexer state is
+typedef enum {
+	START,
+	IN_IDENT,
+	IN_INT,
+	IN_FLOAT,
+	IN_STRING,
+	IN_COMMENT
+} Lex_state;
+
 
 /**
  * Helper that will determine if we have whitespace(ws) 
@@ -31,6 +41,9 @@ static u_int8_t is_ws(char ch, u_int16_t* line_num){
 }
 
 
+/**
+ * Determines if an identifier is a keyword or some user-written identifier
+ */
 static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_number){
 	Lexer_item lex_item;
 	//Assign our line number;
@@ -46,7 +59,7 @@ static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_numbe
 								 "s_int16", "u_int32", "s_int32", "u_int64", "s_int64", "float32", "float64", "char", "str", "size", "defined", "enumerated", "on"};
 
 	//Let's see if we have a keyword here
-	for(u_int8_t i = 0; i < 27; i++){
+	for(u_int8_t i = 0; i < 31; i++){
 		if(strcmp(keyword_arr[i], lexeme) == 0){
 			//We can get out of here
 			lex_item.tok = tok_arr[i];
