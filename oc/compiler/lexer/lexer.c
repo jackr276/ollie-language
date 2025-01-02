@@ -26,11 +26,16 @@ typedef enum {
 	IN_COMMENT
 } Lex_state;
 
+
+/* ============================================= GLOBAL VARIABLES  ============================================ */
 //Current line num
 static u_int16_t line_num;
 
 //The number of characters in the current token
 int16_t token_char_count;
+
+/* ============================================= GLOBAL VARIABLES  ============================================ */
+
 
 /**
  * Helper that will determine if we have whitespace(ws) 
@@ -636,6 +641,7 @@ Lexer_item get_next_token(FILE* fl){
 
 	return lex_item;
 }
+
 
 /**
  * Push a token back by moving the seek head back appropriately

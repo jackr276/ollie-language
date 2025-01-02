@@ -9,11 +9,73 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+static u_int8_t identifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
 
 
+static u_int8_t shift_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+static u_int8_t relational_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+static u_int8_t equality_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+static u_int8_t and_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+static u_int8_t exclusive_or_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+static u_int8_t inclusive_or_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+u_int8_t logical_and_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+u_int8_t logical_or_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+u_int8_t conditional_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+u_int8_t constant_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+u_int8_t direct_declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+u_int8_t declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+u_int8_t structure_declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
 
 u_int8_t structure_declarator_list(FILE* fl, symtab_t* symtab, stack_t* stack){
-
+	return 0;
 }
 
 
