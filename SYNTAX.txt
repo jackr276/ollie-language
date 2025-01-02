@@ -6,7 +6,16 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 2. <declaration-partition>::= <function-definition>
                           	| <declaration>
 
-3. <function-declaration>::= <storage_spec>? func <identifier> <parameter-list> -> <type-specifier> <compound-statement>
+3. <function-declaration>::= <function-specifier>? func <identifier> <parameter-list> -> <type-specifier> <compound-statement>
+
+4. <declaration-specifier> ::= <storage-specifier>
+							  | <type-specifier>
+							  | <type-qualifier>
+
+5. <type-qualifier> ::= const
+
+4. <function-specifier> ::= static
+						  | external
 
 4. <storage-specifier> ::= static
 	 			         | external

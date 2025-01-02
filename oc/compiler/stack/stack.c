@@ -27,7 +27,7 @@ stack_t* create_stack(){
 /**
  * Push data to the top of the stack
  */
-void push(stack_t* stack, void* element){
+void push(stack_t* stack, Lexer_item l){
 	//Just in case
 	if(stack == NULL){
 		printf("ERROR: Stack was never initialized\n");
@@ -37,7 +37,7 @@ void push(stack_t* stack, void* element){
 	//Allocate a new node
 	stack_node_t* new = (stack_node_t*)malloc(sizeof(stack_node_t));
 	//Store the data
-	new->data = element;
+	new->l = l;
 
 	//Attach to the front of the stack
 	new->next = stack->top;
@@ -52,25 +52,28 @@ void push(stack_t* stack, void* element){
 /**
  * Pop the head off of the stack and return the data
  */
-void* pop(stack_t* stack){
+Lexer_item pop(stack_t* stack){
+	Lexer_item l;
+	l.tok = BLANK;
+
 	//Just in case
 	if(stack == NULL){
 		printf("ERROR: Stack was never initialized\n");
-		return NULL;
+		return l;
 	}
 
 	//Special case: we have an empty stack
 	if(stack->top == NULL){
-		return NULL;
+		return l;
 	}
 
 	//If there are no nodes return 0
 	if(stack->num_nodes == 0){
-		return NULL;
+		return l;
 	}
 
 	//Grab the data
-	void* ptr = stack->top->data;
+	Lexer_item top = stack->top->l;
 	
 	stack_node_t* temp = stack->top;
 
@@ -82,39 +85,42 @@ void* pop(stack_t* stack){
 	//Decrement number of nodes
 	stack->num_nodes--;
 
-	return ptr;
+	return top;
 }
 
 
 /**
  * Peek the top of the stack without removing it
  */
-void* peek(stack_t* stack){
+Lexer_item peek(stack_t* stack){
+	Lexer_item l;
+	l.tok = BLANK;
+
 	//Just in case
 	if(stack == NULL){
 		printf("ERROR: Stack was never initialized\n");
-		return NULL;
+		return l;
 	}
 
 	//If the top is NULL, just return NULL
 	if(stack->top == NULL){
-		return NULL;
+		return l;
 	}
 
 	//If there are no nodes return 0
 	if(stack->num_nodes == 0){
-		return NULL;
+		return l;
 	}
 
 	//Return the data pointer
-	return stack->top->data;
+	return stack->top->l;
 }
 
 
 /**
  * Completely free all memory in the stack
  */
-void destroy_stack(stack_t* stack, stack_cleanup_mode_t mode){
+void destroy_stack(stack_t* stack){
 	//Just in case...
 	if(stack == NULL){
 		printf("ERROR: Attempt to free a null pointer\n");
@@ -129,11 +135,6 @@ void destroy_stack(stack_t* stack, stack_cleanup_mode_t mode){
 	while(cursor != NULL){
 		//Save the cursor
 		temp = cursor; 
-
-		//If we are in full cleanup mode, free the data too
-		if(mode == FULL_CLEANUP){
-			free(cursor->data);
-		}
 
 		//Advance the cursor
 		cursor = cursor->next;

@@ -51,7 +51,7 @@ stest: symtab_test
 	$(OUT)/symtab_test
 
 ptest: parser_test
-	cat ./oc/test_files/test_files.txt | xargs ./oc/out/lexer_test
+	cat ./oc/test_files/test_files.txt | xargs ./oc/out/parser_test
 
 clean:
 	rm -f ./out/*

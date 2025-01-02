@@ -12,7 +12,8 @@
 //All tokens that we can possible see
 //This list may grow as we go forward
 typedef enum {
-	IF = 0,
+	BLANK = 0,
+	IF,
 	THEN,
 	ELSE,
 	DO,
@@ -21,6 +22,7 @@ typedef enum {
 	TRUE,
 	FALSE,
 	FUNC,
+	REGISTER,
 	LINK,
 	COMPTIME,
 	RET,
