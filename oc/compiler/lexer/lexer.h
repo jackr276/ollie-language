@@ -96,12 +96,16 @@ struct Lexer_item{
 	const char* lexeme;
 	//The line number of the source that we found it on
 	u_int16_t line_num;
-	//The char that this item started on
-	u_int16_t char_num;
+	//The number of characters in this token
+	int16_t char_count;
 };
 
 //Grab the next token from this file
 Lexer_item get_next_token(FILE* fl);
+
+//Push a token back
+void push_back_token(FILE* fl, Lexer_item l);
+
 //Print a token out
 void print_token(Lexer_item* l);
 #endif /* LEXER_H */
