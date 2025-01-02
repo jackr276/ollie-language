@@ -1,6 +1,7 @@
 # Makefile for OC
 CC = gcc
 CFLAGS = -Wall -Wextra -c
+CFLAGSLINK = -Wall -Wextra
 LEX_PATH = ./oc/compiler/lexer
 STACK_PATH = ./oc/compiler/stack
 SYMTAB_PATH = ./oc/compiler/symtab
@@ -37,12 +38,20 @@ parser.o: $(PARSER_PATH)/parser.c
 symtab_test.o: $(SYMTAB_PATH)/symtab_test.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab_test.c -o $(OUT)/symtab_test.o
 
+parser_test.o: $(PARSER_PATH)/parser_test.c
+	$(CC) $(CFLAGS) $(PARSER_PATH)/parser_test.c -o $(OUT)/parser_test.o
+
+parser_test: parser.o lexer.o parser_test.o symtab.o stack.o 
+	$(CC) -o $(OUT)/parser_test $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o
+
 symtab_test: symtab.o symtab_test.o
 	$(CC) -o $(OUT)/symtab_test $(OUT)/symtab_test.o $(OUT)/symtab.o
 
 stest: symtab_test
 	$(OUT)/symtab_test
 
+ptest: parser_test
+	cat ./oc/test_files/test_files.txt | xargs ./oc/out/lexer_test
 
 clean:
 	rm -f ./out/*
