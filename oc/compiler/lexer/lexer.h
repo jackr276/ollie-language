@@ -96,6 +96,8 @@ struct Lexer_item{
 	const char* lexeme;
 	//The line number of the source that we found it on
 	u_int16_t line_num;
+	//The char that this item started on
+	u_int16_t char_num;
 };
 
 //Grab the next token from this file

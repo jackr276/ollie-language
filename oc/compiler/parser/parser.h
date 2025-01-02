@@ -8,6 +8,7 @@
 
 #include "../stack/stack.h"
 #include "../symtab/symtab.h"
+#include "../lexer/lexer.h"
 #include <sys/types.h>
 
 typedef struct parse_message_t parse_message_t;
@@ -17,7 +18,7 @@ typedef struct parse_message_t parse_message_t;
  */
 typedef enum {
 	WARNING=0,
-	ERROR=1,
+	PARSE_ERROR=1,
 	INFO=2,
 } parse_message_type_t;
 

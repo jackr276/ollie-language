@@ -25,6 +25,11 @@ typedef enum {
 	IN_COMMENT
 } Lex_state;
 
+//Current line num
+static u_int16_t line_num = 0;
+
+//Always starts at 0 here
+u_int16_t token_char_num;
 
 /**
  * Helper that will determine if we have whitespace(ws) 
@@ -75,6 +80,21 @@ static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_numbe
 	return lex_item;
 }
 
+char get_next_char(FILE* fl){
+	char ch = fgetc(fl);
+	token_char_num++;
+	return ch;
+}
+
+
+/**
+ * Put back the char and update the token char num appropriately
+ */
+void put_back_char(FILE* fl){
+	fseek(fl, -1, SEEK_CUR);
+	token_char_num--;
+}
+
 
 /**
  * Constantly iterate through the file and grab the next token that we have
@@ -82,8 +102,14 @@ static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_numbe
 Lexer_item get_next_token(FILE* fl){
 	//We'll eventually return this
 	Lexer_item lex_item;
-	//Current line num
-	static u_int16_t line_num = 0;
+
+	//If we're at the start -- added to avoid overcounts
+	if(SEEK_CUR == 0){
+		line_num = 0;
+	}
+	
+	//Reset this
+	token_char_num = 0;
 
 	//We begin in the start state
 	Lex_state current_state = START;
@@ -113,7 +139,7 @@ Lexer_item get_next_token(FILE* fl){
 					case '/':
 						//Grab the next char, if we see a '*' then we're in a comment
 						ch2 = fgetc(fl);
-						
+							
 						//If we're here we have a comment
 						if(ch2 == '*'){
 							current_state = IN_COMMENT;
@@ -133,6 +159,8 @@ Lexer_item get_next_token(FILE* fl){
 							current_state = START;
 							//"Put back" the char
 							fseek(fl, -1, SEEK_CUR);
+							char_num--;
+
 							//Prepare the token and return it
 							lex_item.tok = F_SLASH;
 							lex_item.lexeme = "/";
@@ -142,6 +170,7 @@ Lexer_item get_next_token(FILE* fl){
 
 					case '+':
 						ch2 = fgetc(fl);
+						char_num++;
 						
 						//If we get this then it's +=
 						if(ch2 == '='){
@@ -155,6 +184,8 @@ Lexer_item get_next_token(FILE* fl){
 							current_state = START;
 							//"Put back" the char
 							fseek(fl, -1, SEEK_CUR);
+							char_num--;
+
 							lex_item.tok = PLUS;
 							lex_item.lexeme = "+";
 							lex_item.line_num = line_num;
@@ -163,6 +194,7 @@ Lexer_item get_next_token(FILE* fl){
 
 					case '-':
 						ch2 = fgetc(fl);
+						char_num++;
 						
 						//If we get this then it's +=
 						if(ch2 == '='){
@@ -184,6 +216,8 @@ Lexer_item get_next_token(FILE* fl){
 							current_state = START;
 							//"Put back" the char
 							fseek(fl, -1, SEEK_CUR);
+							char_num--;
+
 							lex_item.tok = MINUS;
 							lex_item.lexeme = "-";
 							lex_item.line_num = line_num;
@@ -192,6 +226,7 @@ Lexer_item get_next_token(FILE* fl){
 
 					case '*':
 						ch2 = fgetc(fl);
+						char_num++;
 						
 						//If we get this then it's +=
 						if(ch2 == '='){
@@ -205,6 +240,8 @@ Lexer_item get_next_token(FILE* fl){
 							current_state = START;
 							//"Put back" the char
 							fseek(fl, -1, SEEK_CUR);
+							char_num--;
+
 							lex_item.tok = STAR;
 							lex_item.lexeme = "*";
 							lex_item.line_num = line_num;
@@ -213,6 +250,7 @@ Lexer_item get_next_token(FILE* fl){
 
 					case '=':
 						ch2 = fgetc(fl);
+						char_num++;
 						
 						//If we get this then it's +=
 						if(ch2 == '='){
@@ -232,6 +270,8 @@ Lexer_item get_next_token(FILE* fl){
 							current_state = START;
 							//"Put back" the char
 							fseek(fl, -1, SEEK_CUR);
+							char_num--;
+
 							lex_item.tok = EQUALS;
 							lex_item.lexeme = "=";
 							lex_item.line_num = line_num;
@@ -570,7 +610,7 @@ Lexer_item get_next_token(FILE* fl){
 */
 void print_token(Lexer_item* l){
 	//Print out with nice formatting
-	printf("TOKEN: %3d, Lexeme: %10s, Line: %4d\n", l->tok, l->lexeme, l->line_num);
+	printf("TOKEN: %3d, Lexeme: %10s, Line: %4d, Character: %4d\n", l->tok, l->lexeme, l->line_num, l->char_num);
 }
 
 

@@ -12,6 +12,55 @@
 
 
 
+u_int8_t structure_declarator_list(FILE* fl, symtab_t* symtab, stack_t* stack){
+
+}
+
+
+u_int8_t specifier_qualifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+u_int8_t structure_declaration(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+u_int8_t structure_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+u_int8_t type(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+u_int8_t pointer(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+u_int8_t type_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+u_int8_t storage_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+
+}
+
+u_int8_t function_defintion(FILE* fl, symtab_t* symtab, stack_t* stack){
+
+	return 0;
+}
+
+u_int8_t declaration_partition(FILE* fl, symtab_t* symtab, stack_t* stack){
+
+	return 0;
+}
+
+u_int8_t program(FILE* fl, symtab_t* symtab, stack_t* stack){
+	Lexer_item l;
+	return 0;
+}
 
 /**
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
@@ -23,6 +72,9 @@ u_int8_t parse(FILE* fl){
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	stack_t* stack = create_stack();
 
+
+	program(fl, symtab, stack);
+	
 	
 	//Clean these both up for memory safety
 	destroy_stack(stack, STATES_ONLY);
