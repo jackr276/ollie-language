@@ -13,6 +13,9 @@
 symtab_t* symtab;
 //Our global stack
 stack_t* stack;
+//The number of errors
+u_int8_t num_errors = 0;
+
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -141,18 +144,56 @@ u_int8_t storage_specifier(FILE* fl){
 }
 
 
+/**
+ * A function specifier can be either a STATIC or an EXTERNAL definition
+ *
+ * BNF rule: <function-specifier> ::= static 
+ *			        			  | external
+ */
 u_int8_t function_specifier(FILE* fl){
+	//Grab the next token
+	Lexer_item l = get_next_token(fl);
+	
+	//If we find one of these, push it to the stack and return 1
+	if(l.tok == STATIC || l.tok == EXTERNAL){
+		push(stack, l);
+		return 1;
+	}
+
+	//Otherwise, we didn't find one
+	//Whatever we found, put it back
+	push_back_token(fl, l);
 	return 0;
 
 }
 
+
 u_int8_t function_defintion(FILE* fl){
 	Lexer_item l;
+	//We may need this for later info
+	Token specifier = BLANK;
+	u_int8_t status;
 
+	//We could see a function specifier here
+	status = function_specifier(fl);
+
+	//If there actually was one
+	if(status == 1){
+		//Let's grab it
+		l = pop(stack);
+		//Save this for later
+		specifier = l.tok;
+	}
+
+	//We didn't absolutely need one there though, but we do need to see the FUNC keyword
 	l = get_next_token(fl);
-	
 
-	
+	//If we don't see this, then it isn't a function so we'll get out
+	if(l.tok != FUNC){
+		push_back_token(fl, l);
+		return 0;
+	}
+
 
 	return 0;
 }
@@ -189,6 +230,8 @@ u_int8_t declaration_partition(FILE* fl){
 	message.message = PARSE_ERROR;
 	message.info = "Declaration Partition could not find a function or declaration";
 	print_parse_message(&message);
+	num_errors++;
+
 	return 0;
 }
 
@@ -216,10 +259,10 @@ u_int8_t program(FILE* fl){
 			message.message = PARSE_ERROR;
 			message.info = "Program rule encountered an error from declaration partition";
 			print_parse_message(&message);
+			num_errors++;
+			//If we have but one failure, the whole thing is toast
 			break;
 		}
-
-		//If we have but one failure, the whole thing is toast
 	}
 
 	return status;
@@ -231,20 +274,31 @@ u_int8_t program(FILE* fl){
  * static methods
 */
 u_int8_t parse(FILE* fl){
+	u_int8_t status = 0;
+	num_errors = 0;
+	parse_message_t message;
+
 	//Initialize our global symtab here
 	symtab = initialize_symtab();
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	stack = create_stack();
 
+	status = program(fl);
 
-	program(fl);
-	
+	//If we failed
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		char info[500];
+		sprintf(info, "Parsing failed with %d errors", num_errors);
+		message.info = info;
+		print_parse_message(&message);
+	}
 	
 	//Clean these both up for memory safety
 	destroy_stack(stack);
 	destroy_symtab(symtab);
 	
-	return 0;
+	return status;
 }
 
 
