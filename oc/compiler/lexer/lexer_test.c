@@ -13,6 +13,7 @@ int main(int argc, char** argv){
 
 	FILE* fl;
 	Lexer_item l;
+	u_int16_t parser_line_num;
 
 	for(int32_t i = 1; i < argc; i++){
 		//Open the file for reading only
@@ -24,7 +25,7 @@ int main(int argc, char** argv){
 		}
 
 		//Very rudimentary here
-		while((l = get_next_token(fl)).tok != DONE){
+		while((l = get_next_token(fl, &parser_line_num)).tok != DONE){
 			print_token(&l);
 		}
 		//Print the last one

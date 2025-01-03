@@ -7,7 +7,7 @@ STACK_PATH = ./oc/compiler/stack
 SYMTAB_PATH = ./oc/compiler/symtab
 PARSER_PATH = ./oc/compiler/parser
 OUT = ./oc/out
-PROGS = lexer_test symtab_test
+PROGS = lexer_test symtab_test parser_test
 
 
 all: $(PROGS)

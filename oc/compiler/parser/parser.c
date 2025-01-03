@@ -14,7 +14,10 @@ symtab_t* symtab;
 //Our global stack
 stack_t* stack;
 //The number of errors
-u_int8_t num_errors = 0;
+u_int16_t num_errors = 0;
+//The current parser line number
+u_int16_t parser_line_num = 0;
+
 
 
 /**
@@ -29,8 +32,30 @@ void print_parse_message(parse_message_t* parse_message){
 }
 
 
+/**
+ * Do we have an identifier or not?
+ */
 static u_int8_t identifier(FILE* fl){
-	return 0;
+	//Grab the next token
+	Lexer_item l = get_next_token(fl, &parser_line_num);
+	parse_message_t message;
+	char info[500];
+	
+	//If we can't find it that's bad
+	if(l.tok != IDENT){
+		message.message = PARSE_ERROR;
+		sprintf(info, "String %s is not a valid identifier", l.lexeme);
+		message.line_num = l.line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//We'll push this ident onto the stack and let whoever called(function/variable etc.) deal with it
+	//We have no need to search the symtable in this function because we are unable to context-sensitive
+	//analysis here
+	push(stack, l);
+	return 1;
 }
 
 static u_int8_t declaration(FILE* fl){
@@ -128,6 +153,10 @@ u_int8_t type_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
 }
 
 
+u_int8_t parameter_list(FILE* fl){
+	return 0;
+}
+
 /** 
  * What storage specifier do we have?
  *
@@ -135,10 +164,11 @@ u_int8_t type_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
  * 						 | external 
  * 						 | register 
  * 						 | defined
+ * 						 TODO FIXME
  */
 u_int8_t storage_specifier(FILE* fl){
 	//Grab the next token
-	Lexer_item l = get_next_token(fl);
+	Lexer_item l = get_next_token(fl, &parser_line_num);
 	
 	//If we find one of these, push it to the stack and return 1
 	if(l.tok == STATIC || l.tok == EXTERNAL || l.tok == REGISTER || l.tok == DEFINED){
@@ -161,11 +191,12 @@ u_int8_t storage_specifier(FILE* fl){
  */
 u_int8_t function_specifier(FILE* fl){
 	//Grab the next token
-	Lexer_item l = get_next_token(fl);
+	Lexer_item l = get_next_token(fl, &parser_line_num);
 	parse_message_t message;
 	
 	//If we find one of these, push it to the stack and return 1
 	if(l.tok == STATIC || l.tok == EXTERNAL){
+		//Push to the stack and let the caller decide how to handle
 		push(stack, l);
 		return 1;
 	}
@@ -186,13 +217,16 @@ u_int8_t function_specifier(FILE* fl){
  */
 u_int8_t function_declaration(FILE* fl){
 	Lexer_item lookahead;
+	Lexer_item ident;
 	parse_message_t message;
 	//We may need this in later iterations
 	Token function_storage_type = BLANK;
 	u_int8_t status;
+	//This will be used for error printing
+	char info[500];
 	
 	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
-	lookahead = get_next_token(fl);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//We've seen the option function specifier
 	if(lookahead.tok == COLON){
@@ -202,10 +236,14 @@ u_int8_t function_declaration(FILE* fl){
 		if(status == 0){
 			message.message = PARSE_ERROR;
 			message.info = "Invalid function specifier";
-			message.line_num = lookahead.line_num;
+			message.line_num = parser_line_num;
 			print_parse_message(&message);
 			return 0;
 		}
+
+		//Otherwise we can grab out what we have here
+		function_storage_type = pop(stack).tok;
+
 	} else {
 		//Otherwise put the token back in the stream
 		push_back_token(fl, lookahead);
@@ -214,16 +252,43 @@ u_int8_t function_declaration(FILE* fl){
 	//Now we must see an identifer
 	status = identifier(fl);
 	
-	//At this point we'll need to store in symtable
-
+	//We have no identifier, so we must quit
 	if(status == 0){
 		message.message = PARSE_ERROR;
 		message.info = "No valid identifier found";
-		message.line_num = lookahead.line_num;
+		message.line_num = parser_line_num;
 		print_parse_message(&message);
 		return 0;
 	}
 
+	//At this point we'll need to store in symtable
+	//Pop this off the stack
+	ident = pop(stack);
+	//Let's see if this already exists
+	symtab_record_t* record = lookup(symtab, ident.lexeme);
+
+	//This means that we were trying to redefine a function
+	if(record != NULL){
+		message.message = PARSE_ERROR;
+		sprintf(info, "Function %s has already been defined on line %d", record->name, record->line_number);
+		message.info = info;
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		return 0;
+	}
+
+	//We'll deal with our storage of the function's name later, but at least now we know it's unique
+	//We must now see a valid parameter list
+	status = parameter_list(fl);
+
+	//We have a bad parameter list
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "No valid parameter list found";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		return 0;
+	}
 	
 	
 
@@ -242,7 +307,7 @@ u_int8_t declaration_partition(FILE* fl){
 	u_int8_t status;
 	parse_message_t message;
 
-	lookahead = get_next_token(fl);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//We know that we have a function here
 	if(lookahead.tok == FUNC){
@@ -259,7 +324,7 @@ u_int8_t declaration_partition(FILE* fl){
 		//Otherwise we've failed completely
 		message.message = PARSE_ERROR;
 		message.info = "Declaration Partition could not find a valid function or declaration";
-		message.line_num = lookahead.line_num;
+		message.line_num = parser_line_num;
 		print_parse_message(&message);
 
 		num_errors++;
@@ -282,7 +347,7 @@ u_int8_t program(FILE* fl){
 	parse_message_t message;
 
 	//As long as we aren't done
-	while((l = get_next_token(fl)).tok != DONE){
+	while((l = get_next_token(fl, &parser_line_num)).tok != DONE){
 		//Put the token back
 		push_back_token(fl, l);
 
@@ -293,7 +358,7 @@ u_int8_t program(FILE* fl){
 		if(status == 0){
 			message.message = PARSE_ERROR;
 			message.info = "Program rule encountered an error from declaration partition";
-			message.line_num = l.line_num;
+			message.line_num = parser_line_num;
 			print_parse_message(&message);
 			num_errors++;
 			//If we have but one failure, the whole thing is toast
@@ -323,11 +388,11 @@ u_int8_t parse(FILE* fl){
 
 	//If we failed
 	if(status == 0){
-		message.message = PARSE_ERROR;
 		char info[500];
 		sprintf(info, "Parsing failed with %d errors", num_errors);
-		message.info = info;
-		print_parse_message(&message);
+		printf("\n\n=======================================================================\n");
+		printf("%s\n", info);
+		printf("=======================================================================\n\n");
 	}
 	
 	//Clean these both up for memory safety

@@ -14,6 +14,7 @@
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
 #define KEYSPACE 4999 
+//We figure that 200 separate lexical-levels is enough
 #define MAX_SHEAFS 200
 
 typedef struct symtab_t symtab_t;
@@ -31,6 +32,8 @@ struct symtab_record_t{
 	u_int16_t hash;
 	//The lexical level of this record
 	int16_t lexical_level;
+	//The line number
+	u_int16_t line_number;
 	//Will be used later, the offset for the address in the data area
 	u_int64_t offset;
 	//In case of collisions, we can chain these records

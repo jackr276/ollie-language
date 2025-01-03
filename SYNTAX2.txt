@@ -2,20 +2,19 @@ Revised Syntax
 This syntax will enable recursive-descent parsing
 
 Backtrack-free grammar: A CFG for which the leftmost, top-down parser can always predict the correct
-rule with a lookahead of at most ONE token
+rule with a lookahead of at most ONE token. To do this, we need to eliminate any/all left recursion.
 
-To do this, we need to eliminate any/all left recursion
-
+This grammar is of the class LL1(Left recursive lookahead of at most 1 token)
 
 <program> ::= {<declaration-partition}*
 
 <declaration-partition> ::= <function-definition>
-							 | <declaration>
+						  | <declaration>
 
 <function-definition> ::= func (<function-specifier>)? <identifier> <parameter-list> -> <type-specifier> <compound-statement>
 
 <function-specifier> ::= :static
 		 			   | :external
 
-
+<identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
  

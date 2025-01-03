@@ -40,12 +40,13 @@ int16_t token_char_count;
 /**
  * Helper that will determine if we have whitespace(ws) 
  */
-static u_int8_t is_ws(char ch, u_int16_t* line_num){
+static u_int8_t is_ws(char ch, u_int16_t* line_num, u_int16_t* parser_line_num){
 	u_int8_t is_ws = ch == ' ' || ch == '\n' || ch == '\t';
 	
 	//Count if we have a higher line number
 	if(ch == '\n'){
 		(*line_num)++;
+		(*parser_line_num)++;
 	}
 
 	return is_ws;
@@ -55,7 +56,7 @@ static u_int8_t is_ws(char ch, u_int16_t* line_num){
 /**
  * Determines if an identifier is a keyword or some user-written identifier
  */
-static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_number){
+static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 	Lexer_item lex_item;
 	//Assign our line number;
 	lex_item.line_num = line_number;
@@ -66,7 +67,7 @@ static Lexer_item identifier_or_keyword(const char* lexeme, u_int16_t line_numbe
 						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, STR, SIZE, DEFINED, ENUMERATED, ON,
 						REGISTER};
 
-	const char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "func", "ret", "jump",
+	char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "func", "ret", "jump",
 								 "link", "static", "comptime", "external", "u_int8", "s_int8", "u_int16",
 								 "s_int16", "u_int32", "s_int32", "u_int64", "s_int64", "float32", "float64", "char", "str", "size", "defined", "enumerated", "on", "register"};
 
@@ -108,13 +109,14 @@ static void put_back_char(FILE* fl){
 /**
  * Constantly iterate through the file and grab the next token that we have
 */
-Lexer_item get_next_token(FILE* fl){
+Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 	//We'll eventually return this
 	Lexer_item lex_item;
 
 	//If we're at the start -- added to avoid overcounts
 	if(ftell(fl) == 0){
 		line_num = 0;
+		*parser_line_num = 0;
 	}
 
 	//We begin in the start state
@@ -140,7 +142,7 @@ Lexer_item get_next_token(FILE* fl){
 				token_char_count = 1;
 
 				//If we see whitespace we just get out
-				if(is_ws(ch, &line_num)){
+				if(is_ws(ch, &line_num, parser_line_num)){
 					continue;
 				}
 
@@ -628,7 +630,7 @@ Lexer_item get_next_token(FILE* fl){
 				}
 
 				//If we see whitespace we'll just increment the line number
-				is_ws(ch, &line_num);
+				is_ws(ch, &line_num, parser_line_num);
 				break;
 		}
 	}

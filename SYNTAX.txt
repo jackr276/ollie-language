@@ -1,6 +1,11 @@
 Syntax of ollie-lang in BNF Form
 Everything surrounded in angle brackets(<>) is a nonterminal
 
+Why is this first iteration of the syntax bad?
+	This syntax requires backtracking. It does not satisfy that LL(1) requirement for a recursive-descent
+	parser, meaning that we would have to waste time backtracking. The revised version in SYNTAX2 aims to fix
+	this issue.
+
 1. <program>::= {<declaration-partition>}*
 
 2. <declaration-partition>::= <function-definition>
@@ -10,9 +15,7 @@ Everything surrounded in angle brackets(<>) is a nonterminal
 
 4. <declaration-specifier> ::= <storage-specifier>
 							  | <type-specifier>
-							  | <type-qualifier>
-
-5. <type-qualifier> ::= const
+							  | const
 
 4. <function-specifier> ::= static
 						  | external

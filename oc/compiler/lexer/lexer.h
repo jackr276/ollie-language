@@ -95,7 +95,7 @@ struct Lexer_item{
 	//The token associated with this item
 	Token tok;
 	//The string(lexeme) that got us this token
-	const char* lexeme;
+	char* lexeme;
 	//The line number of the source that we found it on
 	u_int16_t line_num;
 	//The number of characters in this token
@@ -103,7 +103,7 @@ struct Lexer_item{
 };
 
 //Grab the next token from this file
-Lexer_item get_next_token(FILE* fl);
+Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num);
 
 //Push a token back
 void push_back_token(FILE* fl, Lexer_item l);
