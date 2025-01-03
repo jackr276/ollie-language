@@ -11,8 +11,9 @@
 
 //Our global symbol table
 symtab_t* symtab;
-//Our global stack
-stack_t* stack;
+//Our stack for storing variables, etc
+stack_t* variable_stack;
+stack_t* grouping_stack;
 //The number of errors
 u_int16_t num_errors = 0;
 //The current parser line number
@@ -54,7 +55,7 @@ static u_int8_t identifier(FILE* fl){
 	//We'll push this ident onto the stack and let whoever called(function/variable etc.) deal with it
 	//We have no need to search the symtable in this function because we are unable to context-sensitive
 	//analysis here
-	push(stack, l);
+	push(variable_stack, l);
 	return 1;
 }
 
@@ -153,8 +154,54 @@ u_int8_t type_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
 }
 
 
+u_int8_t parameter_declaration(FILE* fl){
+
+}
+
+
+/**
+ * Optional repetition allowed with our parameter list
+ *
+ * BNF Rule: <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
+ * 										| epsilon
+ */
+u_int8_t parameter_list_prime(FILE* fl){
+	Lexer_item lookahead;
+	u_int8_t status;
+	parse_message_t message;
+
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//If we see a comma, we know that this is the recursive step
+	if(lookahead.tok == COMMA){
+		//We need to now see a valid parameter declaration
+		status = parameter_declaration(fl);
+		
+		//If it went wrong
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid parameter declaration in parameter list";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			return 0;
+		}
+		
+		//Now we will take our recursive step in seeing a parameter list prime
+		return parameter_list_prime(fl);
+	}
+
+	//This means that we had an epsilon here, so we'll put the token back and leave
+	push_back_token(fl, lookahead);
+	return 1;
+}
+
+
+/**
+ * BNF Rule: <parameter-list> ::= <parameter-declaration>(<parameter-list-prime>)?
+ */
 u_int8_t parameter_list(FILE* fl){
-	return 0;
+	return parameter_list_prime(fl);
 }
 
 /** 
@@ -172,7 +219,7 @@ u_int8_t storage_specifier(FILE* fl){
 	
 	//If we find one of these, push it to the stack and return 1
 	if(l.tok == STATIC || l.tok == EXTERNAL || l.tok == REGISTER || l.tok == DEFINED){
-		push(stack, l);
+		push(variable_stack, l);
 		return 1;
 	}
 
@@ -197,7 +244,7 @@ u_int8_t function_specifier(FILE* fl){
 	//If we find one of these, push it to the stack and return 1
 	if(l.tok == STATIC || l.tok == EXTERNAL){
 		//Push to the stack and let the caller decide how to handle
-		push(stack, l);
+		push(variable_stack, l);
 		return 1;
 	}
 	
@@ -213,7 +260,7 @@ u_int8_t function_specifier(FILE* fl){
 /**
  * Handle the case where we declare a function
  *
- * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> <parameter-list> -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> (<parameter-list>?) -> <type-specifier> <compound-statement>
  */
 u_int8_t function_declaration(FILE* fl){
 	Lexer_item lookahead;
@@ -242,7 +289,7 @@ u_int8_t function_declaration(FILE* fl){
 		}
 
 		//Otherwise we can grab out what we have here
-		function_storage_type = pop(stack).tok;
+		function_storage_type = pop(variable_stack).tok;
 
 	} else {
 		//Otherwise put the token back in the stream
@@ -263,20 +310,44 @@ u_int8_t function_declaration(FILE* fl){
 
 	//At this point we'll need to store in symtable
 	//Pop this off the stack
-	ident = pop(stack);
+	ident = pop(variable_stack);
 	//Let's see if this already exists
 	symtab_record_t* record = lookup(symtab, ident.lexeme);
 
 	//This means that we were trying to redefine a function
 	if(record != NULL){
 		message.message = PARSE_ERROR;
+		memset(info, 0, 500*sizeof(char));
 		sprintf(info, "Function %s has already been defined on line %d", record->name, record->line_number);
 		message.info = info;
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
 		return 0;
 	}
+	
+	//Now we need to see a valid parentheis
+	lookahead = get_next_token(fl, &parser_line_num);
 
+	//If we didn't find it, no point in going further
+	if(lookahead.tok != L_PAREN){
+		message.message = PARSE_ERROR;
+		message.info = "Left parenthesis expected";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		return 0;
+	}
+
+	//SPECIAL CASE -- we could have a blank parameter list, in which case we're done
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	if(lookahead.tok == R_PAREN){
+		//TODO insert blank parameter list
+		goto arrow_ident;
+	}
+
+	//Otherwise we'll push this onto the grouping stack to check later
+	push(grouping_stack, lookahead);
+	
 	//We'll deal with our storage of the function's name later, but at least now we know it's unique
 	//We must now see a valid parameter list
 	status = parameter_list(fl);
@@ -284,15 +355,46 @@ u_int8_t function_declaration(FILE* fl){
 	//We have a bad parameter list
 	if(status == 0){
 		message.message = PARSE_ERROR;
-		message.info = "No valid parameter list found";
+		memset(info, 0, 500*sizeof(char));
+		sprintf(info, "No valid paramter list found for function %s", ident.lexeme);
+		message.info = info;
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
 		return 0;
 	}
 	
+	//Now we need to see a valid closing parenthesis
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't have an R_Paren that's an issue
+	if(lookahead.tok != R_PAREN){
+		message.message = PARSE_ERROR;
+		message.info = "Right parenthesis expected";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		return 0;
+	}
 	
+	//If this happens, then we have some unmatched parenthesis
+	if(pop(grouping_stack).tok != L_PAREN){
+		message.message = PARSE_ERROR;
+		message.info = "Unmatched opening parenthesis found";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+	}
+
+	//Once we know that we're all valid, we will store this in the symtab
+	//TODO PUT IN SYMTAB
+
+
+	//Past the point where we've seen the param_list
+arrow_ident:
+
+
+
 
 	return 0;
+	
 }
 
 
@@ -382,8 +484,10 @@ u_int8_t parse(FILE* fl){
 	//Initialize our global symtab here
 	symtab = initialize_symtab();
 	//Also create a stack for our matching uses(curlies, parens, etc.)
-	stack = create_stack();
+	variable_stack = create_stack();
+	grouping_stack = create_stack();
 
+	//Global entry/run point
 	status = program(fl);
 
 	//If we failed
@@ -396,7 +500,8 @@ u_int8_t parse(FILE* fl){
 	}
 	
 	//Clean these both up for memory safety
-	destroy_stack(stack);
+	destroy_stack(variable_stack);
+	destroy_stack(grouping_stack);
 	destroy_symtab(symtab);
 	
 	return status;

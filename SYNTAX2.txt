@@ -4,7 +4,7 @@ This syntax will enable recursive-descent parsing
 Backtrack-free grammar: A CFG for which the leftmost, top-down parser can always predict the correct
 rule with a lookahead of at most ONE token. To do this, we need to eliminate any/all left recursion.
 
-This grammar is of the class LL1(Left recursive lookahead of at most 1 token)
+This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 
 <program> ::= {<declaration-partition}*
 
@@ -17,4 +17,11 @@ This grammar is of the class LL1(Left recursive lookahead of at most 1 token)
 		 			   | :external
 
 <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
+
+<parameter-list> ::= (<parameter-declaration> <parameter-list-prime>)
+
+<parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
+						 | epsilon
+
+<parameter-declaration> ::= 
  
