@@ -33,6 +33,8 @@ struct parse_message_t{
 	char* info;
 	//Is this a fatal error
 	u_int8_t fatal;
+	//The line number
+	u_int16_t line_num;
 };
 
 

@@ -25,11 +25,11 @@ void print_parse_message(parse_message_t* parse_message){
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	printf("[PARSER %s]: %s\n", type[parse_message->message], parse_message->info);
+	printf("[LINE %d: PARSER %s]: %s\n", parse_message->line_num, type[parse_message->message], parse_message->info);
 }
 
 
-static u_int8_t identifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+static u_int8_t identifier(FILE* fl){
 	return 0;
 }
 
@@ -127,6 +127,15 @@ u_int8_t type_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
 	return 0;
 }
 
+
+/** 
+ * What storage specifier do we have?
+ *
+ * BNF Rule: <storage-specifier> ::= static
+ * 						 | external 
+ * 						 | register 
+ * 						 | defined
+ */
 u_int8_t storage_specifier(FILE* fl){
 	//Grab the next token
 	Lexer_item l = get_next_token(fl);
@@ -153,47 +162,70 @@ u_int8_t storage_specifier(FILE* fl){
 u_int8_t function_specifier(FILE* fl){
 	//Grab the next token
 	Lexer_item l = get_next_token(fl);
+	parse_message_t message;
 	
 	//If we find one of these, push it to the stack and return 1
 	if(l.tok == STATIC || l.tok == EXTERNAL){
 		push(stack, l);
 		return 1;
 	}
+	
+	//Otherwise we have something bad here
+	message.message = PARSE_ERROR;
+	message.info = "Invalid function specifier";
+	
 
-	//Otherwise, we didn't find one
-	//Whatever we found, put it back
-	push_back_token(fl, l);
 	return 0;
-
 }
 
 
-u_int8_t function_defintion(FILE* fl){
-	Lexer_item l;
-	//We may need this for later info
-	Token specifier = BLANK;
+/**
+ * Handle the case where we declare a function
+ *
+ * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> <parameter-list> -> <type-specifier> <compound-statement>
+ */
+u_int8_t function_declaration(FILE* fl){
+	Lexer_item lookahead;
+	parse_message_t message;
+	//We may need this in later iterations
+	Token function_storage_type = BLANK;
 	u_int8_t status;
+	
+	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
+	lookahead = get_next_token(fl);
+	
+	//We've seen the option function specifier
+	if(lookahead.tok == COLON){
+		status = function_specifier(fl);
 
-	//We could see a function specifier here
-	status = function_specifier(fl);
-
-	//If there actually was one
-	if(status == 1){
-		//Let's grab it
-		l = pop(stack);
-		//Save this for later
-		specifier = l.tok;
+		//If this happened then we have an issue
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid function specifier";
+			message.line_num = lookahead.line_num;
+			print_parse_message(&message);
+			return 0;
+		}
+	} else {
+		//Otherwise put the token back in the stream
+		push_back_token(fl, lookahead);
 	}
+	
+	//Now we must see an identifer
+	status = identifier(fl);
+	
+	//At this point we'll need to store in symtable
 
-	//We didn't absolutely need one there though, but we do need to see the FUNC keyword
-	l = get_next_token(fl);
-
-	//If we don't see this, then it isn't a function so we'll get out
-	if(l.tok != FUNC){
-		push_back_token(fl, l);
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "No valid identifier found";
+		message.line_num = lookahead.line_num;
+		print_parse_message(&message);
 		return 0;
 	}
 
+	
+	
 
 	return 0;
 }
@@ -206,33 +238,36 @@ u_int8_t function_defintion(FILE* fl){
  *                        	| <declaration>
  */
 u_int8_t declaration_partition(FILE* fl){
-	Lexer_item l;
+	Lexer_item lookahead;
 	u_int8_t status;
 	parse_message_t message;
 
-	//Let's see if we have a function here
-	status = function_defintion(fl);
-	
-	//We can get out now
-	if(status == 1){
-		return 1;
-	}
+	lookahead = get_next_token(fl);
 
-	//Otherwise, we could still see a declaration here
-	status = declaration(fl);
-
-	//We've succeeded
-	if(status == 1){
-		return 1;
+	//We know that we have a function here
+	if(lookahead.tok == FUNC){
+		status = function_declaration(fl);
+	} else {
+		//Push it back
+		push_back_token(fl, lookahead);
+		//Otherwise, the only other option is a declaration
+		status = declaration(fl);
 	}
 	
-	//Otherwise we've failed completely
-	message.message = PARSE_ERROR;
-	message.info = "Declaration Partition could not find a function or declaration";
-	print_parse_message(&message);
-	num_errors++;
+	//Something failed
+	if(status == 0){
+		//Otherwise we've failed completely
+		message.message = PARSE_ERROR;
+		message.info = "Declaration Partition could not find a valid function or declaration";
+		message.line_num = lookahead.line_num;
+		print_parse_message(&message);
 
-	return 0;
+		num_errors++;
+		return 0;
+	}
+	
+	//If we get here it worked
+	return 1;
 }
 
 
@@ -258,6 +293,7 @@ u_int8_t program(FILE* fl){
 		if(status == 0){
 			message.message = PARSE_ERROR;
 			message.info = "Program rule encountered an error from declaration partition";
+			message.line_num = l.line_num;
 			print_parse_message(&message);
 			num_errors++;
 			//If we have but one failure, the whole thing is toast
