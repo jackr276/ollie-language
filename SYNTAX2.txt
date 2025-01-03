@@ -23,5 +23,25 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
 						 | epsilon
 
-<parameter-declaration> ::= 
- 
+<parameter-declaration> ::= (<storage-class-specifier>)? (constant)? <type-specifier> <direct-declarator>
+
+<storage-class-specifier> ::= register
+							| static
+							| external
+
+ <type-specifier> ::= void 
+			 	    | u_int8 
+			 		| s_int8 
+			 		| u_int16 
+			 		| s_int16 
+			 		| u_int32 
+			 		| s_int32 
+			 		| u_int64 
+			 		| s_int64
+			 		| float32 
+			 		| float64 
+			 		| char 
+			 		| str 
+					| <enumeration-specifier> 
+			 		| <structure-specifier> 
+			 		| <user-defined-type>

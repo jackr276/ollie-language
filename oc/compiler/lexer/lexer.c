@@ -65,11 +65,12 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, TRUE, FALSE, FUNC, RET, JUMP, LINK,
 						STATIC, COMPTIME, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
 						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, STR, SIZE, DEFINED, ENUMERATED, ON,
-						REGISTER};
+						REGISTER, CONSTANT};
 
 	char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "func", "ret", "jump",
 								 "link", "static", "comptime", "external", "u_int8", "s_int8", "u_int16",
-								 "s_int16", "u_int32", "s_int32", "u_int64", "s_int64", "float32", "float64", "char", "str", "size", "defined", "enumerated", "on", "register"};
+								 "s_int16", "u_int32", "s_int32", "u_int64", "s_int64", "float32", "float64", 
+								  "char", "str", "size", "defined", "enumerated", "on", "register", "constant"};
 
 	//Let's see if we have a keyword here
 	for(u_int8_t i = 0; i < 32; i++){

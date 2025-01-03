@@ -23,6 +23,7 @@ typedef enum {
 	FALSE,
 	FUNC,
 	REGISTER,
+	CONSTANT,
 	LINK,
 	COMPTIME,
 	RET,

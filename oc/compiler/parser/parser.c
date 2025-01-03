@@ -155,7 +155,7 @@ u_int8_t type_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
 
 
 u_int8_t parameter_declaration(FILE* fl){
-
+	return 0;
 }
 
 
@@ -184,6 +184,7 @@ u_int8_t parameter_list_prime(FILE* fl){
 			message.info = "Invalid parameter declaration in parameter list";
 			message.line_num = parser_line_num;
 			print_parse_message(&message);
+			num_errors++;
 			return 0;
 		}
 		
@@ -201,8 +202,26 @@ u_int8_t parameter_list_prime(FILE* fl){
  * BNF Rule: <parameter-list> ::= <parameter-declaration>(<parameter-list-prime>)?
  */
 u_int8_t parameter_list(FILE* fl){
+	u_int8_t status;
+	parse_message_t message;
+
+	//First, we must see a valid parameter declaration
+	status = parameter_declaration(fl);
+	
+	//If we didn't see a valid one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid parameter declaration in parameter list";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we can see our parameter list
 	return parameter_list_prime(fl);
 }
+
 
 /** 
  * What storage specifier do we have?
@@ -251,7 +270,7 @@ u_int8_t function_specifier(FILE* fl){
 	//Otherwise we have something bad here
 	message.message = PARSE_ERROR;
 	message.info = "Invalid function specifier";
-	
+	num_errors++;
 
 	return 0;
 }
@@ -285,6 +304,7 @@ u_int8_t function_declaration(FILE* fl){
 			message.info = "Invalid function specifier";
 			message.line_num = parser_line_num;
 			print_parse_message(&message);
+			num_errors++;
 			return 0;
 		}
 
@@ -305,6 +325,7 @@ u_int8_t function_declaration(FILE* fl){
 		message.info = "No valid identifier found";
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
+		num_errors++;
 		return 0;
 	}
 
@@ -322,6 +343,7 @@ u_int8_t function_declaration(FILE* fl){
 		message.info = info;
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
+		num_errors++;
 		return 0;
 	}
 	
@@ -334,6 +356,7 @@ u_int8_t function_declaration(FILE* fl){
 		message.info = "Left parenthesis expected";
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
+		num_errors++;
 		return 0;
 	}
 
@@ -356,10 +379,11 @@ u_int8_t function_declaration(FILE* fl){
 	if(status == 0){
 		message.message = PARSE_ERROR;
 		memset(info, 0, 500*sizeof(char));
-		sprintf(info, "No valid paramter list found for function %s", ident.lexeme);
+		sprintf(info, "No valid paramter list found for function \"%s\"", ident.lexeme);
 		message.info = info;
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
+		num_errors++;
 		return 0;
 	}
 	
@@ -372,6 +396,7 @@ u_int8_t function_declaration(FILE* fl){
 		message.info = "Right parenthesis expected";
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
+		num_errors++;
 		return 0;
 	}
 	
@@ -381,6 +406,9 @@ u_int8_t function_declaration(FILE* fl){
 		message.info = "Unmatched opening parenthesis found";
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
+
+		num_errors++;
+		return 0;
 	}
 
 	//Once we know that we're all valid, we will store this in the symtab
@@ -389,7 +417,18 @@ u_int8_t function_declaration(FILE* fl){
 
 	//Past the point where we've seen the param_list
 arrow_ident:
+	//Grab the next one
+	lookahead = get_next_token(fl, &parser_line_num);
 
+	//We absolutely must see an arrow here
+	if(lookahead.tok != ARROW){
+		message.message = PARSE_ERROR;
+		message.info = "Arrow expected after function declaration";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
 
 
 
