@@ -110,7 +110,7 @@ u_int8_t constant_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
 }
 
 
-u_int8_t direct_declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
+u_int8_t direct_declarator(FILE* fl){
 	return 0;
 }
 
@@ -149,12 +149,188 @@ u_int8_t pointer(FILE* fl, symtab_t* symtab, stack_t* stack){
 	return 0;
 }
 
-u_int8_t type_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+
+u_int8_t enumeration_list(FILE* fl){
+
+}
+
+
+/**
+ * An enumeration specifier will always start with enumerated
+ * REMEMBER: Due to RL(1), by the time we get here ENUMERATED has already been seen
+ *
+ * BNF Rule: <enumator-specifier> ::= enumerated <identifier> { <enumerator-list> } 
+ * 						  			| enumerated <identifier>
+ * 						  			
+ */
+u_int8_t enumeration_specifier(FILE* fl){
+	Lexer_item l;
+	parse_message_t message;
+
+
+	//We now have to see a valid identifier, since we've already seen the ENUMERATED keyword
+	u_int8_t status = identifier(fl);
+
+	//If it's bad then we're done here
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid identifier in enumeration specifier";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+	
+	//Following this, if we see a right curly brace, we know that we have a list
+	l = get_next_token(fl, &parser_line_num);
+
+	if(l.tok == L_CURLY){
+		//Push onto the grouping stack for matching
+		push(grouping_stack, l);
+
+		//We now must see a valid enumeration list
+		status = enumeration_list(fl);
+
+		//If it's bad then we're done here
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid enumeration list in enumeration specifier";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		l = get_next_token(fl, &parser_line_num);
+
+		//All of our fail cases here
+		if(l.tok != R_CURLY){
+			message.message = PARSE_ERROR;
+			message.info = "Right curly brace expected at end of enumeration list";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		} else if(pop(grouping_stack).tok != L_CURLY){
+
+		}
+		
+		
+	} else {
+		//Otherwise, push it back and let someone else handle it
+		push_back_token(fl, l);
+		return 1;
+	}
+}
+
+
+/**
+ * Type specifiers can be the set of primitives or user defined types
+ *
+ * BNF Rule:  <type-specifier> ::= void
+ * 								 | u_int8
+ * 								 | s_int8
+ * 								 | u_int16
+ * 								 | s_int16
+ * 								 | u_int32
+ * 								 | s_int32
+ * 								 | u_int64
+ * 								 | s_int64
+ * 								 | float32
+ * 								 | float64
+ * 								 | char
+ * 								 | str
+ * 								 | <enumeration-specifier>
+ * 								 | <structure-specifier>
+ * 								 | <user-defined-type>
+ */
+u_int8_t type_specifier(FILE* fl){
+	//Grab the next token
+	Lexer_item l = get_next_token(fl, &parser_line_num);
+
+	//In the case that we have one of the primitive types
+	if(l.tok == VOID || l.tok == U_INT8 || l.tok == S_INT8 || l.tok == U_INT16 || l.tok == S_INT16
+	  || l.tok == U_INT32 || l.tok == S_INT32 || l.tok == U_INT64 || l.tok == S_INT64 || l.tok == FLOAT32
+	  || l.tok == FLOAT64 || l.tok == CHAR || l.tok == STR){
+		//TODO put in symtable
+		return 1;
+	}
+
+	//Otherwise, we still have some options here
+	//If we see enumerated, we know it's an enumerated type
+	if(l.tok == ENUMERATED){
+		return enumeration_specifier(fl);
+	}
+
+
 	return 0;
 }
 
 
+/**
+ * We can see several different storage class specifiers
+ * 
+ * BNF Rule: <storage-class-specifier> ::= static 
+ * 								 		| external
+ * 								 		| register
+ */
+u_int8_t storage_class_specifier(FILE* fl){
+	Lexer_item l = get_next_token(fl, &parser_line_num);
+
+	//If we see one here
+	if(l.tok == STATIC || l.tok == EXTERNAL | l.tok == REGISTER){
+		//TODO store in symtab
+		return 1;
+	} else {
+		//Otherwise, put the token back and get out
+		push_back_token(fl, l);
+		return 0;
+	}
+}
+
+
+/**
+ * For a parameter declaration, we can see this items in order
+ *
+ * BNF Rule: <parameter-declaration> ::= (<storage-class-specifier>)? (constant)? <type-specifier> <direct-declarator>
+ */
 u_int8_t parameter_declaration(FILE* fl){
+	Lexer_item lookahead;
+	parse_message_t message;
+	u_int8_t is_const = 0;
+	u_int8_t status = 0;
+
+	//We can optionally see a storage_class_specifier here
+	storage_class_specifier(fl);
+
+	//Now we can optionally see const here
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//We'll flag this for now TODO must go in symtab
+	if(lookahead.tok == CONSTANT){
+		is_const = 1;
+	} else {
+		//Put it back and move on
+		push_back_token(fl, lookahead);
+	}
+	
+	//Now we must see a valid type specifier
+	status = type_specifier(fl);
+	
+	//If it's bad then we're done here
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid type specifier found in parameter declaration";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Finally, we must see a direct declarator that is valid
+	status = direct_declarator(fl);
+
+
 	return 0;
 }
 
@@ -410,9 +586,6 @@ u_int8_t function_declaration(FILE* fl){
 		num_errors++;
 		return 0;
 	}
-
-	//Once we know that we're all valid, we will store this in the symtab
-	//TODO PUT IN SYMTAB
 
 
 	//Past the point where we've seen the param_list

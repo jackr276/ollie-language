@@ -76,6 +76,7 @@ typedef enum {
 	ARROW,
 	ERROR,
 	DONE,
+	VOID,
 	U_INT8,
 	S_INT8,
 	U_INT16,
