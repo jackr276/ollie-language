@@ -90,23 +90,99 @@ static u_int8_t inclusive_or_expression(FILE* fl, symtab_t* symtab, stack_t* sta
 }
 
 
-u_int8_t logical_and_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+u_int8_t logical_and_expression(FILE* fl){
 	return 0;
 }
 
 
-u_int8_t logical_or_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
-	return 0;
+/**
+ * A logical or expression can be chained together as many times as we want, and
+ * descends into a logical and expression
+ * BNF Rule: <logical-or-expression> ::= <logical-and-expression> 
+ * 									   | <logical-and-expression> || <logical-or-expression>
+ */
+u_int8_t logical_or_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We first must see a valid logical and expression
+	status = logical_and_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid logical and expression found in logical or expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double || here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Then we have a double or, so we'll make a recursive call
+	if(lookahead.tok == DOUBLE_OR){
+		return logical_or_expression(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
-u_int8_t conditional_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
-	return 0;
+/**
+ * A conditional expression is simply used as a passthrough for a logical or expression,
+ * but some important checks may be done here so we'll use it
+ *
+ * BNF Rule: <conditional-expression> ::= <logical-or-expression>
+ */
+u_int8_t conditional_expression(FILE* fl){
+	parse_message_t message;
+	//Pass through to the conditional expression
+	u_int8_t status = conditional_expression(fl);
+
+	//Something failed
+	if(status == 0){
+		//Otherwise we've failed completely
+		message.message = PARSE_ERROR;
+		message.info = "Invalid logical or expression found in conditional expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise we're all set
+	return 1;
 }
 
 
+/**
+ * A constant expression is simply used as a passthrough for a conditional expression,
+ * but some important checks may be performed here so that's why we have it
+ * BNF Rule: <constant-expression> ::= <conditional-expression> 
+ */
 u_int8_t constant_expression(FILE* fl){
-	return 0;
+	parse_message_t message;
+	//Pass through to the conditional expression
+	u_int8_t status = conditional_expression(fl);
+
+	//Something failed
+	if(status == 0){
+		//Otherwise we've failed completely
+		message.message = PARSE_ERROR;
+		message.info = "Invalid conditional expression found in constant expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise we're all set
+	return 1;
 }
 
 
@@ -193,7 +269,6 @@ u_int8_t enumerator(FILE* fl){
 		}
 		
 		return 1;
-
 	} else {
 		//Otherwise, push back and leave
 		push_back_token(fl, lookahead);

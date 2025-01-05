@@ -52,3 +52,22 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <enumerator-list> ::= <enumerator><enumerator-list-prime>
 
 <enumerator-list-prime> ::= ,<enumerator><enumerator-list-prime>
+
+<enumerator> ::= <identifier>
+			   | <identifier> := <constant-expression>
+
+<constant-expression> ::= <conditional-expression> 
+
+<conditional-expression> ::= <logical-or-expression>
+
+<logical-or-expression> ::= <logical-and-expression> 
+						  | <logical-and-expression> || <logical-or-expression>
+
+<logical-and-expression> ::= <inclusive-or-expression>
+                           | <inclusive-or-expression> && <logical-and-expression>
+
+<inclusive-or-expression> ::= <exclusive-or-expression>
+                            | <exclusive-or-expression> | <inclusive-or-expression>
+
+
+
