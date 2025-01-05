@@ -69,5 +69,9 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <inclusive-or-expression> ::= <exclusive-or-expression>
                             | <exclusive-or-expression> | <inclusive-or-expression>
 
+<exclusive-or-expression> ::= <and-expression> 
+							| <and_expression> ^ <exclusive-or-expression>
+
+
 
 
