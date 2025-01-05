@@ -76,6 +76,13 @@ static u_int8_t equality_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
 	return 0;
 }
 
+
+/**
+ * An and-expression descends into an equality expression and can be chained
+ *
+ * BNF Rule: <and-expression> ::= <equality-expression> 
+ * 								| <equality-expression> & <and-expression>
+ */
 static u_int8_t and_expression(FILE* fl){
 	return 0;
 }
@@ -116,7 +123,49 @@ static u_int8_t exclusive_or_expression(FILE* fl){
 		push_back_token(fl, lookahead);
 		return 1;
 	}
+
 	return 0;
+}
+
+
+/**
+ * A prime rule to avoid direct left recursion
+ *
+ * REMEMBER: By the time that we've gotten here, we've already seen the (|) terminal
+ *
+ * BNF Rule: <inclusive-or-expression-prime> ::= |<exclusive-or-expression><inclusive-or-expression-prime>
+ */
+u_int8_t inclusive_or_expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid exclusive or expression
+	status = exclusive_or_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid exclusive or expression found in inclusive or expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double && here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have see a pipe(|) we can make the recursive call
+	if(lookahead.tok == OR){
+		return inclusive_or_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+	return 0;
+
 }
 
 
@@ -124,8 +173,7 @@ static u_int8_t exclusive_or_expression(FILE* fl){
  * An inclusive or expression can be chained, and descends into an exclusive or
  * expression
  *
- * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression> 
- * 										 | <exclusive-or-expression> | <inclusive-or-expression>
+ * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression><inclusive-or-expression-prime>
  */
 static u_int8_t inclusive_or_expression(FILE* fl){
 	parse_message_t message;
@@ -149,8 +197,8 @@ static u_int8_t inclusive_or_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we have see a pipe(|) we can make the recursive call
-	if(lookahead.tok == DOUBLE_AND){
-		return inclusive_or_expression(fl);
+	if(lookahead.tok == OR){
+		return inclusive_or_expression_prime(fl);
 	} else {
 		//Otherwise we need to put it back and get out
 		push_back_token(fl, lookahead);
@@ -161,10 +209,49 @@ static u_int8_t inclusive_or_expression(FILE* fl){
 
 
 /**
+ * A prime nonterminal that will allow us to avoid left recursion
+ *
+ * REMEMBER: By the time that we get here, we've already seen the "&&" terminal
+ *
+ * BNF Rule: <logical-and-expression-prime> ::= &&<inclusive-or-expression><logical-and-expression-prime>
+ */
+u_int8_t logical_and_expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid inclusive or expression
+	status = inclusive_or_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid inclusive or expression found in logical and expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double && here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have a double and we'll make a recursive call
+	if(lookahead.tok == DOUBLE_AND){
+		return logical_and_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
  * A logical and expression can also be chained together, and it descends into
  * an inclusive or expression
- * BNF Rule: <logical-and-expression> ::= <inclusive-or-expression> 
- * 									    | <inclusive-or-expression> && <logical-and-expression>
+ *
+ * BNF Rule: <logical-and-expression> ::= <logical-and-expression> ::= <inclusive-or-expression><logical-and-expression-prime>
  */
 u_int8_t logical_and_expression(FILE* fl){
 	parse_message_t message;
@@ -189,7 +276,46 @@ u_int8_t logical_and_expression(FILE* fl){
 
 	//If we have a double and we'll make a recursive call
 	if(lookahead.tok == DOUBLE_AND){
-		return logical_and_expression(fl);
+		return logical_and_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * A prime nonterminal that will allow us to avoid left recursion. 
+ *
+ * REMEMBER: By the time that we've gotten here, we've already seen the "||" terminal
+ *
+ * BNF Rule: <logical-or-expression-prime ::= ||<logical-and-expression><logical-or-expression-prime> 
+ */
+u_int8_t logical_or_expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status;
+
+	//We now must see a valid logical and expression
+	status = logical_and_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid logical and expression found in logical or expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double || here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Then we have a double or, so we'll make a recursive call
+	if(lookahead.tok == DOUBLE_OR){
+		return logical_or_expression_prime(fl);
 	} else {
 		//Otherwise we need to put it back and get out
 		push_back_token(fl, lookahead);
@@ -201,8 +327,7 @@ u_int8_t logical_and_expression(FILE* fl){
 /**
  * A logical or expression can be chained together as many times as we want, and
  * descends into a logical and expression
- * BNF Rule: <logical-or-expression> ::= <logical-and-expression> 
- * 									   | <logical-and-expression> || <logical-or-expression>
+ * BNF Rule: <logical-or-expression> ::= <logical-and-expression><logical-or-expression-prime>
  */
 u_int8_t logical_or_expression(FILE* fl){
 	parse_message_t message;
@@ -227,7 +352,7 @@ u_int8_t logical_or_expression(FILE* fl){
 
 	//Then we have a double or, so we'll make a recursive call
 	if(lookahead.tok == DOUBLE_OR){
-		return logical_or_expression(fl);
+		return logical_or_expression_prime(fl);
 	} else {
 		//Otherwise we need to put it back and get out
 		push_back_token(fl, lookahead);
@@ -658,8 +783,17 @@ u_int8_t parameter_declaration(FILE* fl){
 	//Finally, we must see a direct declarator that is valid
 	status = direct_declarator(fl);
 
+	//If it's bad then we're done here
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid direct declarator found in parameter declaration";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
 
-	return 0;
+	return 1;
 }
 
 

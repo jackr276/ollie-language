@@ -60,18 +60,23 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 
 <conditional-expression> ::= <logical-or-expression>
 
-<logical-or-expression> ::= <logical-and-expression> 
-						  | <logical-and-expression> || <logical-or-expression>
+<logical-or-expression> ::= <logical-and-expression><logical-or-expression-prime>
 
-<logical-and-expression> ::= <inclusive-or-expression>
-                           | <inclusive-or-expression> && <logical-and-expression>
+<logical-or-expression-prime ::= ||<logical-and-expression><logical-or-expression-prime>
 
-<inclusive-or-expression> ::= <exclusive-or-expression>
-                            | <exclusive-or-expression> | <inclusive-or-expression>
+<logical-and-expression> ::= <inclusive-or-expression><logical-and-expression-prime>
+
+<logical-and-expression-prime> ::= &&<inclusive-or-expression><logical-and-expression-prime>
+
+<inclusive-or-expression> ::= <exclusive-or-expression><inclusive-or-expression-prime>
+
+<inclusive-or-expression-prime> ::= |<exclusive-or-expression><inclusive-or-expression-prime>
 
 <exclusive-or-expression> ::= <and-expression> 
 							| <and_expression> ^ <exclusive-or-expression>
 
+<and-expression> ::= <equality-expression> 
+				   | <equality-expression> & <and-expression>
 
 
 
