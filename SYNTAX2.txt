@@ -45,3 +45,10 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 					| <enumeration-specifier> 
 			 		| <structure-specifier> 
 			 		| <user-defined-type>
+
+<enumator-specifier> ::= enumerated <identifier> { <enumerator-list> }
+					   | enumerated <identifier>
+
+<enumerator-list> ::= <enumerator><enumerator-list-prime>
+
+<enumerator-list-prime> ::= ,<enumerator><enumerator-list-prime>

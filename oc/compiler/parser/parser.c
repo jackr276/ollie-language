@@ -150,8 +150,83 @@ u_int8_t pointer(FILE* fl, symtab_t* symtab, stack_t* stack){
 }
 
 
-u_int8_t enumeration_list(FILE* fl){
+u_int8_t enumerator(FILE* fl){
 
+}
+
+
+
+/**
+ * Helper to maintain RL(1) properties. Remember, by the time we've gotten here, we've already seen a COMMA
+ *
+ * BNF Rule: <enumerator-list-prime> ::= ,<enumerator><enumerator-list-prime>
+ */
+u_int8_t enumeration_list_prime(FILE* fl){
+	Lexer_item l;
+	parse_message_t message;
+	u_int8_t status = 0;
+
+	//We now need to see a valid enumerator
+	status = enumerator(fl);
+
+	//Get out if bad
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid enumerator in enumeration list";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Now if we see a comma, we know that we have an enumerator-list-prime
+	l = get_next_token(fl, &parser_line_num);
+
+	//If we see a comma, we'll use the helper
+	if(l.tok == COMMA){
+		return enumeration_list_prime(fl);
+	} else {
+		//Put it back and get out if no
+		push_back_token(fl, l);
+		return 1;
+	}
+}
+
+
+/**
+ * An enumeration list guarantees that we have at least one enumerator
+ *
+ * BNF Rule: <enumerator-list> ::= <enumerator><enumerator-list-prime>
+ */
+u_int8_t enumeration_list(FILE* fl){
+	Lexer_item l;
+	parse_message_t message;
+	u_int8_t status = 0;
+
+	//We need to see a valid enumerator
+	status = enumerator(fl);
+
+	//Get out if bad
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid enumerator in enumeration list";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Now if we see a comma, we know that we have an enumerator-list-prime
+	l = get_next_token(fl, &parser_line_num);
+
+	//If we see a comma, we'll use the helper
+	if(l.tok == COMMA){
+		return enumeration_list_prime(fl);
+	} else {
+		//Put it back and get out if no
+		push_back_token(fl, l);
+		return 1;
+	}
 }
 
 
@@ -161,6 +236,8 @@ u_int8_t enumeration_list(FILE* fl){
  *
  * BNF Rule: <enumator-specifier> ::= enumerated <identifier> { <enumerator-list> } 
  * 						  			| enumerated <identifier>
+ *
+ * TODO SYMTAB
  * 						  			
  */
 u_int8_t enumeration_specifier(FILE* fl){
@@ -211,10 +288,20 @@ u_int8_t enumeration_specifier(FILE* fl){
 			print_parse_message(&message);
 			num_errors++;
 			return 0;
-		} else if(pop(grouping_stack).tok != L_CURLY){
-
 		}
-		
+
+		//Unmatched left curly
+		if(pop(grouping_stack).tok != L_CURLY){
+			message.message = PARSE_ERROR;
+			message.info = "Unmatched right parenthesis";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise we should be fine when we get here, so we can return
+		return 0;
 		
 	} else {
 		//Otherwise, push it back and let someone else handle it
@@ -226,6 +313,7 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 /**
  * Type specifiers can be the set of primitives or user defined types
+ * TODO SYMTAB stuff
  *
  * BNF Rule:  <type-specifier> ::= void
  * 								 | u_int8
@@ -245,8 +333,10 @@ u_int8_t enumeration_specifier(FILE* fl){
  * 								 | <user-defined-type>
  */
 u_int8_t type_specifier(FILE* fl){
+	parse_message_t message;
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
+	u_int8_t status = 0;
 
 	//In the case that we have one of the primitive types
 	if(l.tok == VOID || l.tok == U_INT8 || l.tok == S_INT8 || l.tok == U_INT16 || l.tok == S_INT16
@@ -259,7 +349,19 @@ u_int8_t type_specifier(FILE* fl){
 	//Otherwise, we still have some options here
 	//If we see enumerated, we know it's an enumerated type
 	if(l.tok == ENUMERATED){
-		return enumeration_specifier(fl);
+		status = enumeration_specifier(fl);
+
+		//If it's bad then we're done here
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid enumeration specifier in type specifier";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}	
+
+		return 1;
 	}
 
 
@@ -396,32 +498,6 @@ u_int8_t parameter_list(FILE* fl){
 
 	//Now we can see our parameter list
 	return parameter_list_prime(fl);
-}
-
-
-/** 
- * What storage specifier do we have?
- *
- * BNF Rule: <storage-specifier> ::= static
- * 						 | external 
- * 						 | register 
- * 						 | defined
- * 						 TODO FIXME
- */
-u_int8_t storage_specifier(FILE* fl){
-	//Grab the next token
-	Lexer_item l = get_next_token(fl, &parser_line_num);
-	
-	//If we find one of these, push it to the stack and return 1
-	if(l.tok == STATIC || l.tok == EXTERNAL || l.tok == REGISTER || l.tok == DEFINED){
-		push(variable_stack, l);
-		return 1;
-	}
-
-	//Otherwise, we didn't find one
-	//Whatever we found, put it back
-	push_back_token(fl, l);
-	return 0;
 }
 
 
