@@ -35,6 +35,7 @@ typedef enum {
 	DOUBLE_OR,
 	AND, /* & */
 	OR,
+	COLONEQ, /* := */
 	DOT,
 	PLUS,
 	DEFINED,

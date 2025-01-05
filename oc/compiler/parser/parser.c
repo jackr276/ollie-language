@@ -105,7 +105,7 @@ u_int8_t conditional_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
 }
 
 
-u_int8_t constant_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+u_int8_t constant_expression(FILE* fl){
 	return 0;
 }
 
@@ -150,8 +150,55 @@ u_int8_t pointer(FILE* fl, symtab_t* symtab, stack_t* stack){
 }
 
 
+/**
+ * For an enumerator, we can see an ident or an assigned ident
+ *
+ * BNF Rule: <enumerator> ::= <identifier> 
+ * 			           	  | <identifier> := <constant-expression>
+ */
 u_int8_t enumerator(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status;
 
+	//We must see a valid identifier here
+	status = identifier(fl);
+
+	//Get out if bad
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid identifier in enumerator";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Let's see what's up ahead
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//We're now seeing a constant expression here
+	if(lookahead.tok == COLONEQ){
+		//We now must see a valid constant expression
+		status = constant_expression(fl);
+
+		//Get out if bad
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid constant expression in enumerator";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+		
+		return 1;
+
+	} else {
+		//Otherwise, push back and leave
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
@@ -535,6 +582,8 @@ u_int8_t function_specifier(FILE* fl){
  */
 u_int8_t function_declaration(FILE* fl){
 	Lexer_item lookahead;
+	Lexer_item lookahead2;
+	char* function_name;
 	Lexer_item ident;
 	parse_message_t message;
 	//We may need this in later iterations
@@ -599,6 +648,9 @@ u_int8_t function_declaration(FILE* fl){
 		return 0;
 	}
 	
+	//Save this as function name
+	function_name = ident.lexeme;
+
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -613,13 +665,15 @@ u_int8_t function_declaration(FILE* fl){
 	}
 
 	//SPECIAL CASE -- we could have a blank parameter list, in which case we're done
-	lookahead = get_next_token(fl, &parser_line_num);
+	lookahead2 = get_next_token(fl, &parser_line_num);
 	
-	if(lookahead.tok == R_PAREN){
+	if(lookahead2.tok == R_PAREN){
 		//TODO insert blank parameter list
 		goto arrow_ident;
+	} else {
+		push_back_token(fl, lookahead2);
 	}
-
+	
 	//Otherwise we'll push this onto the grouping stack to check later
 	push(grouping_stack, lookahead);
 	
@@ -631,7 +685,7 @@ u_int8_t function_declaration(FILE* fl){
 	if(status == 0){
 		message.message = PARSE_ERROR;
 		memset(info, 0, 500*sizeof(char));
-		sprintf(info, "No valid paramter list found for function \"%s\"", ident.lexeme);
+		sprintf(info, "No valid paramter list found for function \"%s\"", function_name);
 		message.info = info;
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
