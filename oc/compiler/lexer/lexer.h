@@ -75,6 +75,8 @@ typedef enum {
 	OR_EQUALS,
 	G_THAN,
 	L_THAN,
+	G_THAN_OR_EQ,
+	L_THAN_OR_EQ,
 	COLON,
 	DOUBLE_COLON,
 	COMMA,

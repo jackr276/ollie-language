@@ -559,6 +559,12 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
+						} else if(ch2 == '=') {
+							lex_item.tok = L_THAN_OR_EQ;
+							lex_item.lexeme = "<=";
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
 						} else {
 							put_back_char(fl);
 							lex_item.tok = L_THAN;
@@ -575,6 +581,12 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						if(ch2 == '>'){
 							lex_item.tok = R_SHIFT;
 							lex_item.lexeme = ">>";
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
+						} else if(ch2 == '=') {
+							lex_item.tok = G_THAN_OR_EQ;
+							lex_item.lexeme = ">=";
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;

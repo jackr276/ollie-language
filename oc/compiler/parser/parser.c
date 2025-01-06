@@ -63,12 +63,108 @@ static u_int8_t declaration(FILE* fl){
 	return 0;
 }
 
-static u_int8_t shift_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
+static u_int8_t shift_expression(FILE* fl){
 	return 0;
 }
 
-static u_int8_t relational_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
-	return 0;
+
+
+
+/**
+ * A relational expression will descend into a shift expression. Ollie language does not allow for
+ * chaining in relational expressions, no recursion will occur here.
+ *
+ * <relational-expression> ::= <shift-expression> 
+ * 						     | <shift-expression> > <shift-expression> 
+ * 						     | <shift-expression> < <shift-expression> 
+ * 						     | <shift-expression> >= <shift-expression> 
+ * 						     | <shift-expression> <= <shift-expression>
+ */
+static u_int8_t relational_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid shift expression
+	status = shift_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid shift expression found in relational expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double && here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see one of our relational operators, then we can get out
+	if(lookahead.tok != G_THAN && lookahead.tok != L_THAN
+	  && lookahead.tok != G_THAN_OR_EQ && lookahead.tok != L_THAN_OR_EQ){
+		//Put it back and leave
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+	
+	//Otherwise, we now must see another valid shift expression
+	//We must first see a valid shift expression
+	status = shift_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid shift expression found in relational expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+	
+	//If we get to here then we're all good
+	return 1;
+}
+
+
+/**
+ * A prime rule that allows us to avoid left recursion
+ *
+ * REMEMBER: By the time that we've gotten here, we will have already seen == or !=
+ *
+ * BNF Rule: <equality-expression-prime> ::= ==<relational-expression><equality-expression-prime> 
+ *										   | !=<relational-expression><equality-expression-prime>
+ */
+static u_int8_t equality_expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid relational-expression
+	status = relational_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid relational expression found in equality expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double && here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a == or a != we can make a recursive call
+	if(lookahead.tok == D_EQUALS || lookahead.tok == NOT_EQUALS){
+		return equality_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
@@ -83,13 +179,13 @@ static u_int8_t equality_expression(FILE* fl){
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
-	//We must first see a valid equality-expression
-	status = equality_expression(fl);
+	//We must first see a valid relational-expression
+	status = relational_expression(fl);
 	
 	//We have a bad one
 	if(status == 0){
 		message.message = PARSE_ERROR;
-		message.info = "Invalid equality expression found in and expression";
+		message.info = "Invalid relational expression found in equality expression";
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
 		num_errors++;
@@ -99,9 +195,9 @@ static u_int8_t equality_expression(FILE* fl){
 	//Otherwise, we may be able to see the double && here to chain
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we have see an and(&) we can make the recursive call
-	if(lookahead.tok == AND){
-		return and_expression_prime(fl);
+	//If we see a == or a != we can make a recursive call
+	if(lookahead.tok == D_EQUALS || lookahead.tok == NOT_EQUALS){
+		return equality_expression_prime(fl);
 	} else {
 		//Otherwise we need to put it back and get out
 		push_back_token(fl, lookahead);

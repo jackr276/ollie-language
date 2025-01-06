@@ -88,6 +88,11 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <equality-expression-prime> ::= ==<relational-expression><equality-expression-prime>
 							 |	!=<relational-expression><equality-expression-prime>
 
+<relational-expression> ::= <shift-expression>
+					 	  | <shift-expression> > <shift-expression>
+					  	  | <shift-expression> < <shift-expression>
+						  | <shift-expression> >= <shift-expression>
+						  | <shift-expression> <= <shift-expression>
 
 
 
