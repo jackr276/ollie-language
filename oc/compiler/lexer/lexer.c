@@ -308,6 +308,14 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
+						} else if(ch2 == '='){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = AND_EQUALS;
+							lex_item.lexeme = "&=";
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
 						} else {
 							current_state = START;
 							//"Put back" the char
@@ -332,6 +340,14 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
+						} else if(ch2 == '='){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = OR_EQUALS;
+							lex_item.lexeme = "|=";
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
 						} else {
 							current_state = START;
 							//"Put back" the char
@@ -349,6 +365,28 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
+
+					case '%':
+						ch2 = get_next_char(fl);
+
+						if(ch2 == '='){
+							current_state = START;
+							//Prepare and return
+							lex_item.tok = MOD_EQUALS;
+							lex_item.lexeme = "%=";
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
+						} else {
+							current_state = START;
+							//Put it back
+							put_back_char(fl);
+							lex_item.tok = COLON;
+							lex_item.lexeme = ":";
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
+						}
 
 					case ':':
 						ch2 = get_next_char(fl);
@@ -466,6 +504,46 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						//String literal pointer
 						lexeme_cursor = lexeme;
 						break;
+
+					//Beginning of a char const
+					case '\'':
+						//0 this out
+						memset(lexeme, 0, 10000);
+						//String literal pointer
+						lexeme_cursor = lexeme;
+
+						*lexeme_cursor = '\'';
+						lexeme_cursor++;
+
+						//Grab the next char
+						ch2 = get_next_char(fl);
+
+						//Put this in
+						*lexeme_cursor = ch2;
+						lexeme_cursor++;
+
+						//Now we must see another single quote
+						ch2 = get_next_char(fl);
+
+						//If this is the case, then we've messed up
+						if(ch2 != '\''){
+							lex_item.tok = ERROR;
+							lex_item.lexeme = "Error: Char constant may be one character in length";
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
+						}
+
+						//Othwerise, add it in and get out
+						*lexeme_cursor = '\'';
+						lexeme_cursor++;
+
+						//Package and return
+						lex_item.tok = CHAR_CONST;
+						lex_item.lexeme = lexeme;
+						lex_item.line_num = line_num;
+						lex_item.char_count = 3;
+						return lex_item;
 
 					case '<':
 						//Grab the next char
