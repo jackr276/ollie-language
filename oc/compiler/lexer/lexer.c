@@ -1,7 +1,5 @@
 /**
  * Lexical analyzer and tokenizer for Ollie-language
- *
- *
  * GOAL: A lexical analyzer(also called a tokenizer, lexer, etc) runs through a source code file and "chunks" it into 
  * tokens. These tokens represent valid "lexemes" in the language. It will also determine if there are any invalid characters and pass
  * that information along to the parser.
@@ -429,6 +427,13 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					case ')':
 						lex_item.tok = R_PAREN;
 						lex_item.lexeme = ")";
+						lex_item.line_num = line_num;
+						lex_item.char_count = token_char_count;
+						return lex_item;
+
+					case '^':
+						lex_item.tok = CARROT;
+						lex_item.lexeme = "^";
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;

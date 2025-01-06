@@ -63,6 +63,7 @@ typedef enum {
 	L_SHIFT,
 	R_SHIFT,
 	EQUALS,
+	CARROT,
 	D_EQUALS, /* == */
 	NOT_EQUALS,
 	DIV_EQUALS,

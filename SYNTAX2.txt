@@ -73,10 +73,21 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <inclusive-or-expression-prime> ::= |<exclusive-or-expression><inclusive-or-expression-prime>
 
 <exclusive-or-expression> ::= <and-expression> 
-							| <and_expression> ^ <exclusive-or-expression>
+							| <and_expression><exclusive-or-expression-prime>
+
+<exclusive-or-expression-prime> ::= ^<and_expression><exlcusive-or-expression-prime>
 
 <and-expression> ::= <equality-expression> 
-				   | <equality-expression> & <and-expression>
+				   | <equality-expression><and-expression-prime>
+
+<and-expression-prime> ::= <equality-expression><and-expression-prime>
+
+<equality-expression> ::= <relational-expression> 
+						| <relational-expression><equality-expression-prime>
+
+<equality-expression-prime> ::= ==<relational-expression><equality-expression-prime>
+							 |	!=<relational-expression><equality-expression-prime>
+
 
 
 

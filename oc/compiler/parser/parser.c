@@ -72,8 +72,80 @@ static u_int8_t relational_expression(FILE* fl, symtab_t* symtab, stack_t* stack
 }
 
 
-static u_int8_t equality_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
-	return 0;
+/**
+ * An equality expression can be chained and descends into a relational expression 
+ *
+ * BNF Rule: <equality-expression> ::= <relational-expression> 
+ * 									 | <relational-expression><equality-expression-prime>
+ */
+static u_int8_t equality_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid equality-expression
+	status = equality_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid equality expression found in and expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double && here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have see an and(&) we can make the recursive call
+	if(lookahead.tok == AND){
+		return and_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * A prime rule that we use to avoid direct left recursion
+ *
+ * REMEMBER: By the time that we get here, we've already seen a '&'
+ * 
+ * BNF Rule: <and-expression-prime> ::= &<equality-expression><and-expression-prime>
+ */
+static u_int8_t and_expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid equality-expression
+	status = equality_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid equality expression found in and expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double && here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have see an and(&) we can make the recursive call
+	if(lookahead.tok == AND){
+		return and_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
@@ -81,25 +153,53 @@ static u_int8_t equality_expression(FILE* fl, symtab_t* symtab, stack_t* stack){
  * An and-expression descends into an equality expression and can be chained
  *
  * BNF Rule: <and-expression> ::= <equality-expression> 
- * 								| <equality-expression> & <and-expression>
+ * 								| <equality-expression><and-expression-prime>
  */
 static u_int8_t and_expression(FILE* fl){
-	return 0;
-}
-
-
-/**
- * An exclusive or expression can be chained, and descends into an and-expression
- *
- * BNF Rule: <exclusive-or-expression> ::= <and-expression> 
- * 										 | <and_expression> ^ <exclusive-or-expression>
- */
-static u_int8_t exclusive_or_expression(FILE* fl){
 	parse_message_t message;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
-	//We must first see a valid inclusive or expression
+	//We must first see a valid equality-expression
+	status = equality_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid equality expression found in and expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the double && here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have see an and(&) we can make the recursive call
+	if(lookahead.tok == AND){
+		return and_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * A prime rule to avoid direct left recursion
+ *
+ * Remember, by the time that we've gotten here, we've already seen the ^ operator
+ *
+ * BNF Rule: <exclusive-or-expression-prime> ::= ^<and_expression><exlcusive-or-expression-prime>
+ */
+static u_int8_t exclusive_or_expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid and-expression
 	status = and_expression(fl);
 	
 	//We have a bad one
@@ -116,15 +216,51 @@ static u_int8_t exclusive_or_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we have see a carrot(^) we can make the recursive call
-	if(lookahead.tok == DOUBLE_AND){
-		return exclusive_or_expression(fl);
+	if(lookahead.tok == CARROT){
+		return exclusive_or_expression_prime(fl);
 	} else {
 		//Otherwise we need to put it back and get out
 		push_back_token(fl, lookahead);
 		return 1;
 	}
+}
 
-	return 0;
+
+/**
+ * An exclusive or expression can be chained, and descends into an and-expression
+ *
+ * BNF Rule: <exclusive-or-expression> ::= <and-expression> 
+ * 										 | <and_expression><exclusive-or-expression-prime>
+ */
+static u_int8_t exclusive_or_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid and-expression
+	status = and_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid and expression found in exclusive or expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see the carrot(^) here to chain
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have see a carrot(^) we can make the recursive call
+	if(lookahead.tok == CARROT){
+		return exclusive_or_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
@@ -164,8 +300,6 @@ u_int8_t inclusive_or_expression_prime(FILE* fl){
 		push_back_token(fl, lookahead);
 		return 1;
 	}
-	return 0;
-
 }
 
 
@@ -204,7 +338,6 @@ static u_int8_t inclusive_or_expression(FILE* fl){
 		push_back_token(fl, lookahead);
 		return 1;
 	}
-	return 0;
 }
 
 
