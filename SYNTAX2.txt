@@ -94,5 +94,16 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 						  | <shift-expression> >= <shift-expression>
 						  | <shift-expression> <= <shift-expression>
 
+<shift-expression> ::= <additive-expression> 
+				   	|  <additive-expression> << <additive-expression> 
+					|  <additive-expression> >> <additive-expression>
+
+<additive-expression> ::= <multiplicative-expression> 
+					  	| <multiplicative-expression><additive-expression-prime>
+	
+<additive-expression-prime> ::= + <multiplicative-expression><additive-expression-prime>
+							  | - <multiplicative-expression><additive-expression-prime>
+
+
 
 

@@ -63,11 +63,141 @@ static u_int8_t declaration(FILE* fl){
 	return 0;
 }
 
-static u_int8_t shift_expression(FILE* fl){
-	return 0;
+static u_int8_t multipliciative_expression(FILE* fl){
+
 }
 
 
+/**
+ * A prime rule to avoid left recursion
+ *
+ * REMEMBER: By the time we get here, we've already seen a plus or minus
+ *
+ * BNF Rule: <additive-expression-prime> ::= + <multiplicative-expression><additive-expression-prime> 
+ * 										   | - <multiplicative-expression><additive-expression-prime>
+ */
+static u_int8_t additive_expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//First we must see a valid multiplicative expression
+	status = multipliciative_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid multiplicative expression found in additive expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see * or / here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a + or a - we can make a recursive call
+	if(lookahead.tok == MINUS || lookahead.tok == STAR){
+		return additive_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * Additive expression can be chained and as such require a prime rule. They decay into multiplicative
+ * expressions
+ *
+ * BNF Rule: <additive-expression> ::= <multiplicative-expression> 
+ * 									 | <multiplicative-expression><additive-expression-prime>
+ */
+static u_int8_t additive_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//First we must see a valid multiplicative expression
+	status = multipliciative_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid multiplicative expression found in additive expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see * or / here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a + or a - we can make a recursive call
+	if(lookahead.tok == MINUS || lookahead.tok == PLUS){
+		return additive_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * A shift expression cannot be chained, so no recursion is needed here. It decays into an additive expression
+ *
+ * BNF Rule: <shift-expression> ::= <additive-expression> 
+ *								 |  <additive-expression> << <additive-expression> 
+ *								 |  <additive-expression> >> <additive-expression>
+ */
+static u_int8_t shift_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid additive expression
+	status = additive_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid additive expression found in shift expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Let's see if we have any shift operators
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Are there any shift operators?
+	if(lookahead.tok != L_SHIFT && lookahead.tok != R_SHIFT){
+		//If not, put it back and leave
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+	
+	//If we get here, we now have to see a valid additive expression
+	status = additive_expression(fl);
+
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid additive expression found in shift expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+	
+	//If we get to here then we're all good
+	return 1;
+}
 
 
 /**
