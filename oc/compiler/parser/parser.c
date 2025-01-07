@@ -63,8 +63,97 @@ static u_int8_t declaration(FILE* fl){
 	return 0;
 }
 
-static u_int8_t multipliciative_expression(FILE* fl){
+static u_int8_t unary_expression(FILE* fl){
 
+}
+
+/**
+ * A cast expression decays into a unary expression
+ *
+ * BNF Rule: <cast-expression> ::= <unary-expression> 
+ * 						    	| ( <type-name> ) <unary-expression>
+ */
+static u_int8_t cast_expression(FILE* fl){
+
+}
+
+
+/**
+ * A prime rule that allows us to avoid direct left recursion
+ *
+ * REMEMBER: By the time that we get here, we've already seen a *, / or %
+ *
+ * BNF Rule: <multiplicative-expression-prime> ::= *<cast-expression><multiplicative-expression-prime> 
+ * 												 | /<cast-expression><multiplicative-expression-prime> 
+ * 												 | %<cast-expression><multiplicative-expression-prime>
+ */
+static u_int8_t multiplicative_expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid cast expression
+	status = cast_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid cast expression found in multiplicative expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see *, /  or % here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a + or a - we can make a recursive call
+	if(lookahead.tok == STAR || lookahead.tok == MOD || lookahead.tok == F_SLASH){
+		return multiplicative_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * A multiplicative expression can be chained and decays into a cast expression
+ *
+ * BNF Rule: <multiplicative-expression> ::= <cast-expression> 
+ * 										   | <cast-expression><multiplicative-expression-prime>
+ */
+static u_int8_t multiplicative_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid cast expression
+	status = cast_expression(fl);
+	
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid cast expression found in multiplicative expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we may be able to see *, /  or % here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a + or a - we can make a recursive call
+	if(lookahead.tok == STAR || lookahead.tok == MOD || lookahead.tok == F_SLASH){
+		return multiplicative_expression_prime(fl);
+	} else {
+		//Otherwise we need to put it back and get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
@@ -82,7 +171,7 @@ static u_int8_t additive_expression_prime(FILE* fl){
 	u_int8_t status = 0;
 
 	//First we must see a valid multiplicative expression
-	status = multipliciative_expression(fl);
+	status = multiplicative_expression(fl);
 	
 	//We have a bad one
 	if(status == 0){
@@ -121,7 +210,7 @@ static u_int8_t additive_expression(FILE* fl){
 	u_int8_t status = 0;
 
 	//First we must see a valid multiplicative expression
-	status = multipliciative_expression(fl);
+	status = multiplicative_expression(fl);
 	
 	//We have a bad one
 	if(status == 0){
