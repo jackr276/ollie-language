@@ -22,6 +22,7 @@ u_int16_t parser_line_num = 0;
 
 
 static u_int8_t cast_expression(FILE* fl);
+static u_int8_t assignment_expression(FILE* fl);
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -100,8 +101,80 @@ static u_int8_t type_name(FILE* fl){
 }
 
 
-static u_int8_t expression(FILE* fl){
+/**
+ * A prime rule that allows for comma chaining and avoids right recursion
+ *
+ * REMEMBER: by the time that we've gotten here, we've already seen a comma
+ *
+ * BNF Rule: <expression_prime> ::= , <assignment-expression><expression_prime>
+ */
+static u_int8_t expression_prime(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status;
 
+	//We must first see a valid assignment-expression
+	status = assignment_expression(fl);
+	
+	//It failed
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid assignment expression found in expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//If we see a comma now, we know that we've triggered the prime rule
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Go on to the prime rule
+	if(lookahead.tok == COMMA){
+		return expression_prime(fl);
+	} else {
+		//Put it back and bail out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * An expression decays into an assignment expression and can be chained using commas
+ *
+ * BNF Rule: <expression> ::= <assignment-expression> 
+ * 							| <assignment-expression><expression_prime>
+ */
+static u_int8_t expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status;
+
+	//We must first see a valid assignment-expression
+	status = assignment_expression(fl);
+	
+	//It failed
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid assignment expression found in expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//If we see a comma now, we know that we've triggered the prime rule
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Go on to the prime rule
+	if(lookahead.tok == COMMA){
+		return expression_prime(fl);
+	} else {
+		//Put it back and bail out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
