@@ -115,11 +115,11 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 					| ( <type-name> ) <unary-expression>
 
 <unary-expression> ::= <postfix-expression>
-						 | ++<unary-expression> 
-						 | --<unary-expression> 
-						 | <unary-operator> <cast-expression>
-						 | size <unary-expression> 
-						 | size <type-name>
+					 | ++<unary-expression> 
+					 | --<unary-expression> 
+					 | <unary-operator> <cast-expression>
+					 | size(<unary-expression>) 
+					 | typesize(<type-name>)
 
 
 

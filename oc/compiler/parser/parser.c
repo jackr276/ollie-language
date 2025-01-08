@@ -80,10 +80,151 @@ static u_int8_t unary_operator(FILE* fl){
  * 								  | --<unary-expression> 
  * 								  | <unary-operator> <cast-expression> 
  * 								  | size (<unary-expression>)
- * 								  | size (<type-name>)
+ * 								  | typesize (<type-name>)
  */
 static u_int8_t unary_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 
+	//Let's first see what we have as the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	switch (lookahead.tok) {
+		//If we see either of these, we must next see a valid unary expression
+		case MINUSMINUS:
+		case PLUSPLUS:
+			//Let's see if we have it
+			status = unary_expression(fl);
+
+			//If it was bad
+			if(status == 0){
+				message.message = PARSE_ERROR;
+				message.info = "Invalid unary expression following preincrement/predecrement";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+		
+			//If we make it here we know it went well
+			return 1;
+
+		//If we see the size keyword
+		case SIZE:
+			//We must then see a left parenthesis
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			if(lookahead.tok != L_PAREN){
+				message.message = PARSE_ERROR;
+				message.info = "Left parenthesis expected after size keyword";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+			
+			//Push it onto the stack
+			push(grouping_stack, lookahead);
+			
+			//Now we must see a valid unary expression
+			status = unary_expression(fl);
+
+			//If it was bad
+			if(status == 0){
+				message.message = PARSE_ERROR;
+				message.info = "Invalid unary expression given to size operator";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+		
+			//If we get here though we know it worked
+			//Now we must see a valid closing parenthesis
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			//If this is an R_PAREN
+			if(lookahead.tok != R_PAREN) {
+				message.message = PARSE_ERROR;
+				message.info = "Right parenthesis expected after unary expression";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			//Otherwise if it wasn't matched right
+			} else if(pop(grouping_stack).tok != L_PAREN){
+				message.message = PARSE_ERROR;
+				message.info = "Unmatched parenthesis detected";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+		
+			//Otherwise, we're all good here
+			return 1;
+
+		//If we see the typesize keyword
+		case TYPESIZE:
+			//We must then see a left parenthesis
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			if(lookahead.tok != L_PAREN){
+				message.message = PARSE_ERROR;
+				message.info = "Left parenthesis expected after typesize keyword";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+			
+			//Push it onto the stack
+			push(grouping_stack, lookahead);
+			
+			//Now we must see a valid type name 
+			status = type_name(fl);
+
+			//If it was bad
+			if(status == 0){
+				message.message = PARSE_ERROR;
+				message.info = "Invalid type name given to typesize operator";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+		
+			//If we get here though we know it worked
+			//Now we must see a valid closing parenthesis
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			//If this is an R_PAREN
+			if(lookahead.tok != R_PAREN) {
+				message.message = PARSE_ERROR;
+				message.info = "Right parenthesis expected after type name";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			//Otherwise if it wasn't matched right
+			} else if(pop(grouping_stack).tok != L_PAREN){
+				message.message = PARSE_ERROR;
+				message.info = "Unmatched parenthesis detected";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+		
+			//Otherwise, we're all good here
+			return 1;
+
+	
+		
+		default:
+			return 0;
+	}
 
 }
 
