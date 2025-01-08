@@ -153,4 +153,8 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 
 <expression_prime> ::= , <assignment-expression><expression_prime>
 
+<assignment-expression> ::= <conditional-expression>
+						  | let <unary-expression> := <conditional_expression>
+
+
 

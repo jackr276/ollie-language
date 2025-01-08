@@ -5,15 +5,13 @@ defined structure my_type {
 
 
 func main(u_int32 argc, str* argv) -> u_int32 {
-	
-	
-	char x = 'a';
-	char y = 'c';
+	let char x = 'a';
+	let char y = 'c';
 
 	/* Should fail on parse */
-	u_int64 x = 1;
-	u_int64 y = 2;
-	u_int64 z = size(defined structure my_type*);
+	let u_int64 x = 1;
+	let u_int64 y = 2;
+	let u_int64 z = size(defined structure my_type*);
 	
 	switch on(x){
 		case 1:

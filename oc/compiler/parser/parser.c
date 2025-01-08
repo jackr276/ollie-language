@@ -20,9 +20,11 @@ u_int16_t num_errors = 0;
 //The current parser line number
 u_int16_t parser_line_num = 0;
 
-
+//Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static u_int8_t cast_expression(FILE* fl);
 static u_int8_t assignment_expression(FILE* fl);
+static u_int8_t conditional_expression(FILE* fl);
+static u_int8_t unary_expression(FILE* fl);
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -288,8 +290,86 @@ static u_int8_t primary_expression(FILE* fl){
 }
 
 
+/**
+ * An assignment expression can decay into a conditional expression or it
+ * can actually do assigning. There is no chaining in Ollie language of assignments
+ *
+ * BNF Rule: <assignment-expression> ::= <conditional-expression> 
+ * 									   | let <unary-expression> := <conditional-expression>
+ */
 static u_int8_t assignment_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//We've seen the LET keyword
+	if(lookahead.tok == LET){
+		//Since we've seen this, we now need to see a valid unary expression
+		status = unary_expression(fl);
+
+		//We have a bad one
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid unary expression found in assignment expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we must see the := assignment operator
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//We have a bad one
+		if(lookahead.tok != COLONEQ){
+			message.message = PARSE_ERROR;
+			message.info = "Assignment operator := expected after unary expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it worked just fine
+		//Now we must see an assignment expression again
+		status = assignment_expression(fl);
+
+		//We have a bad one
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid conditional expression found in assignment expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		//All went well if we get here
+		return 1;
+		
+	} else {
+		//Put it back if not
+		push_back_token(fl, lookahead);
+		//We have a conditional expression
+		status = conditional_expression(fl);
+
+		//We have a bad one
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid conditional expression found in postfix expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+		
+		
+		//Otherwise it worked
+		return 1;
+	}
 }
 
 
@@ -310,7 +390,7 @@ static u_int8_t assignment_expression(FILE* fl){
 static u_int8_t postfix_expression(FILE* fl){
 	parse_message_t message;
 	Lexer_item lookahead;
-	u_int8_t status;
+	u_int8_t status = 0;
 
 	//We must first see a valid primary expression no matter what
 	status = primary_expression(fl);

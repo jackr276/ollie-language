@@ -138,7 +138,7 @@ Why is this first iteration of the syntax bad?
 				   | <expression, <assignment-expression>
 
 32. <assignment-expression> ::= <conditional-expression>
-							 | <unary-expression> <assignment-operator> <assignment-expression>
+							  | <unary-expression> <assignment-operator> <assignment-expression>
 
 33. <constant> ::= <integer-constant>
 				 | <string-constant>
@@ -152,17 +152,6 @@ Why is this first iteration of the syntax bad?
 					  | - 
 					  | ~ 
 					  | ! 
-
-35. <assignment-operator> ::= =
-							| *=
-							| /=
-							| %=
-							| +=
-							| -=
-							| <<=
-							| >>=
-							| &=
-							| |=
 
 36. <type-name> ::= {<specifier-qualifier>}+ {abstract-declarator}?
 
