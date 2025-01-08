@@ -172,7 +172,6 @@ static u_int8_t postfix_expression(FILE* fl){
 				print_parse_message(&message);
 				num_errors++;
 				return 0;
-
 			}
 		
 			//If we make it here, then we should be all in the clear
@@ -180,24 +179,66 @@ static u_int8_t postfix_expression(FILE* fl){
 
 		//If we see a left bracket, we then need to see an expression
 		case L_BRACKET:
-			//Push to the stack for later
-			push(grouping_stack, lookahead);
+			//As long as we see left brackets
+			while(lookahead.tok == L_BRACKET){
+				//Push it onto the stack
+				push(grouping_stack, lookahead);
 
-			//We now must see a valid expression
-			status = expression(fl);
+				//We must see a valid expression
+				status = expression(fl);
+				
+				//We have a bad one
+				if(status == 0){
+					message.message = PARSE_ERROR;
+					message.info = "Invalid expression in primary expression index";
+					message.line_num = parser_line_num;
+					print_parse_message(&message);
+					num_errors++;
+					return 0;
+				}
 
-			
+				//Now we have to see a valid right bracket
+				lookahead = get_next_token(fl, &parser_line_num);
+
+				//Just to double check
+				if(lookahead.tok != R_BRACKET){
+					message.message = PARSE_ERROR;
+					message.info = "Right bracket expected after primary expression index";
+					message.line_num = parser_line_num;
+					print_parse_message(&message);
+					num_errors++;
+					return 0;
+				//Or we have some unmatched grouping operator
+				} else if(pop(grouping_stack).tok != L_BRACKET){
+					message.message = PARSE_ERROR;
+					message.info = "Unmatched bracket deteced";
+					message.line_num = parser_line_num;
+					print_parse_message(&message);
+					num_errors++;
+					return 0;
+				}
+				
+				//Now we must refresh the lookahead
+				lookahead = get_next_token(fl, &parser_line_num);
+			}
+
+			//Once we break out here, we no longer have any left brackets	
+			//We could however see the colon or double_colon operators, in which case we'd make a recursive call
+			if(lookahead.tok == COLON || lookahead.tok == DOUBLE_COLON){
+				//Return the postfix expression here
+				return postfix_expression(fl);
+			}
+		
+			//Otherwise we don't know what it is, so we'll get out
+			push_back_token(fl, lookahead);
+			return 1;
+
 		//It is possible to see nothing afterwards, so we'll just get out if this is the case
 		default:
 			//Whatever we saw we didn't use, so put it back
 			push_back_token(fl, lookahead);
 			return 1;
 	}
-	
-
-
-
-	
 }
 
 

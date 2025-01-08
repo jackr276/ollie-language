@@ -141,6 +141,5 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 					   
 <primary-expression> ::= <identifier>
                        | <constant>
-                       | <string>
                        | ( <expression> )
 
