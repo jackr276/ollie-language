@@ -18,6 +18,11 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 
 <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
 
+<constant> ::= <integer-constant>
+			 | <string-constant>
+			 | <float-constant>
+			 | <boolean-constant>
+
 <parameter-list> ::= (<parameter-declaration> <parameter-list-prime>)
 
 <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>

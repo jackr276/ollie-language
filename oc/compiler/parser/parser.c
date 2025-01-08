@@ -7,6 +7,7 @@
 
 #include "parser.h"
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 
 //Our global symbol table
@@ -60,6 +61,36 @@ static u_int8_t identifier(FILE* fl){
 	return 1;
 }
 
+/**
+ * Handle a constant. There are 4 main types of constant, all handled by this function
+ *
+ * BNF Rule: <constant> ::= <integer-constant> 
+ * 						  | <string-constant> 
+ * 						  | <float-constant> 
+ * 						  | <char-constant>
+ */
+static u_int8_t constant(FILE* fl){
+	parse_message_t message;
+	Lexer_item l;
+	
+	//We should see one of the 4 constants here
+	l = get_next_token(fl, &parser_line_num);
+
+	//Do this for now, later on we'll need symtable integration
+	if(l.tok == INT_CONST || l.tok == STR_CONST || l.tok == CHAR_CONST || l.tok == FLOAT_CONST ){
+		return 1;
+	}
+
+	//Otherwise here, we have an error
+	message.message = PARSE_ERROR;
+	message.info = "Invalid constant found";
+	message.line_num = parser_line_num;
+	print_parse_message(&message);
+	num_errors++;
+	return 0;
+}
+
+
 static u_int8_t declaration(FILE* fl){
 	return 0;
 }
@@ -74,8 +105,113 @@ static u_int8_t expression(FILE* fl){
 }
 
 
+/**
+ * A primary expression is, in a way, the termination of our expression chain. However, it can be used 
+ * to chain back up to an expression in general using () as an enclosure
+ *
+ * BNF Rule: <primary-expression> ::= <identifier>
+ * 									| <constant> 
+ * 									| (<expression>)
+ */
 static u_int8_t primary_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 
+	//Let's grab the token that we next have
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have an ident, we'll call the appropriate function
+	if(lookahead.tok == IDENT){
+		//Push it back and call ident
+		push_back_token(fl, lookahead);
+
+		status = identifier(fl);
+
+		//If it failed
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid identifier found in primary expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise we're all set
+		return 1;
+	//If we see a constant, we'll call the appropriate function to handle it
+	} else if(lookahead.tok == CHAR_CONST || lookahead.tok == INT_CONST 
+		   || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST){
+		//Push it back and call constant
+		push_back_token(fl, lookahead);
+		
+		status = constant(fl);
+
+		//If it failed
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid constant found in primary expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise we're all set
+		return 1;
+	//If we see an l_paren, we're gonna have another expression
+	} else if(lookahead.tok == L_PAREN){
+		//Push for later
+		push(grouping_stack, lookahead);
+		
+		//We now must see a valid expression
+		status = expression(fl);
+
+		//If it failed
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid expression found in primary expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		//We must now also see an R_PAREN, and ensure that we have matching on the stack
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If it isn't a right parenthesis
+		if(lookahead.tok != R_PAREN){
+			message.message = PARSE_ERROR;
+			message.info = "Right parenthesis expected after expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		//Make sure we match
+		} else if(pop(grouping_stack).tok != L_PAREN){
+			message.message = PARSE_ERROR;
+			message.info = "Unmatched parenthesis detected";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise we're all set
+		return 1;
+	} else {
+		message.message = PARSE_ERROR;
+		char info[500];
+		memset(info, 0, 500 * sizeof(char));
+		sprintf(info, "Invalid token with lexeme %s found in primary expression", lookahead.lexeme); 
+		message.info = info;
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
 }
 
 
