@@ -121,6 +121,14 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 					 | size(<unary-expression>) 
 					 | typesize(<type-name>)
 
+<unary-operator> ::= & 
+				  | * 
+				  | ` 
+				  | + 
+				  | - 
+				  | ~ 
+				  | ! 
+
 
 
 

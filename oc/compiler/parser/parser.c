@@ -20,6 +20,7 @@ u_int16_t num_errors = 0;
 u_int16_t parser_line_num = 0;
 
 
+static u_int8_t cast_expression(FILE* fl);
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -68,9 +69,10 @@ static u_int8_t type_name(FILE* fl){
 }
 
 
-static u_int8_t unary_operator(FILE* fl){
+static u_int8_t postfix_expression(FILE* fl){
 
 }
+
 
 /**
  * A unary expression decays into a postfix expression
@@ -81,6 +83,17 @@ static u_int8_t unary_operator(FILE* fl){
  * 								  | <unary-operator> <cast-expression> 
  * 								  | size (<unary-expression>)
  * 								  | typesize (<type-name>)
+ *
+ * Note that we will expand the Unary-operator rule here, as there is no point in having
+ * a separate function for it
+ *
+ * <unary-operator> ::= & 
+ * 					  | * 
+ * 					  | ` 
+ * 					  | + 
+ * 					  | - 
+ * 					  | ~ 
+ * 					  | ! 
  */
 static u_int8_t unary_expression(FILE* fl){
 	parse_message_t message;
@@ -220,12 +233,48 @@ static u_int8_t unary_expression(FILE* fl){
 			//Otherwise, we're all good here
 			return 1;
 
-	
-		
-		default:
-			return 0;
-	}
+		//We could also see one of our unary operators
+		case PLUS:
+		case MINUS:
+		case STAR:
+		case AND:
+		case CONDITIONAL_DEREF:
+		case B_NOT:
+		case L_NOT:
+			//No matter what we see here, we will have to see a valid cast expression after it
+			status = cast_expression(fl);
 
+			//If it was bad
+			if(status == 0){
+				message.message = PARSE_ERROR;
+				message.info = "Invalid cast expression following unary operator";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+
+			//If we get here then we know it worked
+			return 1;
+		
+		//If we make it all the way down here, we have to see a postfix expression
+		default:
+			//No matter what we see here, we will have to see a valid cast expression after it
+			status = postfix_expression(fl);
+
+			//If it was bad
+			if(status == 0){
+				message.message = PARSE_ERROR;
+				message.info = "Invalid postfix expression inside of unary expression";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			}
+
+			//If we get here then we know it worked
+			return 1;
+	}
 }
 
 
