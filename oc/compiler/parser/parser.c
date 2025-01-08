@@ -63,9 +63,31 @@ static u_int8_t declaration(FILE* fl){
 	return 0;
 }
 
-static u_int8_t unary_expression(FILE* fl){
+static u_int8_t type_name(FILE* fl){
 
 }
+
+
+static u_int8_t unary_operator(FILE* fl){
+
+}
+
+/**
+ * A unary expression decays into a postfix expression
+ *
+ * BNF Rule: <unary-expression> ::= <postfix-expression> 
+ * 								  | ++<unary-expression> 
+ * 								  | --<unary-expression> 
+ * 								  | <unary-operator> <cast-expression> 
+ * 								  | size (<unary-expression>)
+ * 								  | size (<type-name>)
+ */
+static u_int8_t unary_expression(FILE* fl){
+
+
+}
+
+
 
 /**
  * A cast expression decays into a unary expression
@@ -74,7 +96,73 @@ static u_int8_t unary_expression(FILE* fl){
  * 						    	| ( <type-name> ) <unary-expression>
  */
 static u_int8_t cast_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 
+	//Let's see if we have a parenthesis
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have an L_PAREN, we'll push it to the stack
+	if(lookahead.tok == L_PAREN){
+		//Push this on for later
+		push(grouping_stack, lookahead);
+		
+		//We now must see a valid type name
+		status = type_name(fl);
+		
+		//TODO symtab integration
+		
+		//If it was bad
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid type name found in cast expression";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise we're good to keep going
+		//We now must see a valid R_PAREN
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		//If this is an R_PAREN
+		if(lookahead.tok != R_PAREN) {
+			message.message = PARSE_ERROR;
+			message.info = "Right parenthesis expected after type name";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		} else if(pop(grouping_stack).tok != L_PAREN){
+			message.message = PARSE_ERROR;
+			message.info = "Unmatched parenthesis detected";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+		//Otherwise it all went well here
+	} else {
+		//If we didn't see an L_PAREN, put it back
+		push_back_token(fl, lookahead);
+	}
+
+	//Whether we saw the type-name or not, we now must see a valid unary expression
+	status = unary_expression(fl);
+	
+	//If it was bad
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid unary expression found in cast expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	return 1;
 }
 
 
