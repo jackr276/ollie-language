@@ -129,6 +129,18 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 				  | ~ 
 				  | ! 
 
-
-
+<postfix-expression> ::= <primary-expression>
+					   | <primary-expression>:<postfix-expression>
+					   | <primary-expression>::<postfix-expression>
+					   | <primary-expression>{[ <expression> ]}*
+					   | <primary-expression>{[ <expression> ]}*:<postifx-expression>
+					   | <primary-expression>{[ <expression> ]}*::<postfix-expression>
+					   | <primary-expression> ( {assignment-expression}* )
+					   | <primary-expression> ++
+					   | <primary-expression> --
+					   
+<primary-expression> ::= <identifier>
+                       | <constant>
+                       | <string>
+                       | ( <expression> )
 

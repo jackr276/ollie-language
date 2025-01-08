@@ -69,8 +69,135 @@ static u_int8_t type_name(FILE* fl){
 }
 
 
-static u_int8_t postfix_expression(FILE* fl){
+static u_int8_t expression(FILE* fl){
 
+}
+
+
+static u_int8_t primary_expression(FILE* fl){
+
+}
+
+
+static u_int8_t assignment_expression(FILE* fl){
+
+}
+
+
+/**
+ * A postfix expression decays into a primary expression, and there are certain
+ * operators that can be chained if context allows
+ *
+ * BNF Rule: <postfix-expression> ::= <primary-expression> 
+ * 									| <primary-expression>:<postfix-expression> 
+ * 									| <primary-expression>::<postfix-expression> 
+ * 									| <primary-expression>{[ <expression> ]}*
+ * 									| <primary-expression>{[ <expression> ]}*:<postifx-expression> 
+ * 									| <primary-expression>{[ <expression> ]}*::<postfix-expression> 
+ * 									| <primary-expression> ( {assignment-expression}* ) 
+ * 									| <primary-expression> ++ 
+ * 									| <primary-expression> --
+ */ 
+static u_int8_t postfix_expression(FILE* fl){
+	parse_message_t message;
+	Lexer_item lookahead;
+	u_int8_t status;
+
+	//We must first see a valid primary expression no matter what
+	status = primary_expression(fl);
+
+	//We have a bad one
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid primary expression found in postfix expression";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//Othwerise we're good to move on, so we'll need to lookahead here
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//There are a multitude of different things that we could see here
+	switch (lookahead.tok) {
+		//If we see these then we're done
+		case MINUSMINUS:
+		case PLUSPLUS:
+			//TODO handle this later
+			//All set here
+			return 1;
+	
+		//These are our memory addressing schemes
+		case COLON:
+		case DOUBLE_COLON:
+			//If we see these, we know that we'll need to make a recursive call
+			//TODO handle the actual memory addressing later on
+			return postfix_expression(fl);
+
+		//If we see a left paren, we are looking at an assignment expression
+		case L_PAREN:
+			//Push to the stack for later
+			push(grouping_stack, lookahead);
+
+			//Now we can see 0 or many assignment expressions
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			//As long as we don't see the enclosing right parenthesis
+			while(lookahead.tok != R_PAREN){
+				//Put it back
+				push_back_token(fl, lookahead);
+				
+				//We now need to see a valid assignment expression
+				status = assignment_expression(fl);
+				
+				//Refresh this for the next search
+				lookahead = get_next_token(fl, &parser_line_num);
+			}
+			
+			//Once we break out here, in theory our token will be a right paren
+			//Just to double check
+			if(lookahead.tok != R_PAREN){
+				message.message = PARSE_ERROR;
+				message.info = "Right parenthesis expected after primary expression";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+			//Some unmatched parenthesis here
+			} else if(pop(grouping_stack).tok != L_PAREN){
+				message.message = PARSE_ERROR;
+				message.info = "Unmatched parenthesis detected";
+				message.line_num = parser_line_num;
+				print_parse_message(&message);
+				num_errors++;
+				return 0;
+
+			}
+		
+			//If we make it here, then we should be all in the clear
+			return 1;
+
+		//If we see a left bracket, we then need to see an expression
+		case L_BRACKET:
+			//Push to the stack for later
+			push(grouping_stack, lookahead);
+
+			//We now must see a valid expression
+			status = expression(fl);
+
+			
+		//It is possible to see nothing afterwards, so we'll just get out if this is the case
+		default:
+			//Whatever we saw we didn't use, so put it back
+			push_back_token(fl, lookahead);
+			return 1;
+	}
+	
+
+
+
+	
 }
 
 
@@ -259,6 +386,8 @@ static u_int8_t unary_expression(FILE* fl){
 		
 		//If we make it all the way down here, we have to see a postfix expression
 		default:
+			//Whatever we saw, we didn't use, so push it back
+			push_back_token(fl, lookahead);
 			//No matter what we see here, we will have to see a valid cast expression after it
 			status = postfix_expression(fl);
 
