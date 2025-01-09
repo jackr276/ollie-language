@@ -14,6 +14,7 @@
 typedef enum {
 	BLANK = 0,
 	LET,
+	DECLARE,
 	IF,
 	THEN,
 	ELSE,

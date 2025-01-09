@@ -16,6 +16,8 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <function-specifier> ::= :static
 		 			   | :external
 
+<compound-statement> ::= {{<declaration>}* {<statement>}*}
+
 <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
 
 <constant> ::= <integer-constant>
@@ -156,16 +158,12 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <assignment-expression> ::= <conditional-expression>
 						  | let <unary-expression> := <conditional_expression>
 
-
-<declaration> ::= {<declaration-specifier>}+ <initial-declarator>;
-
 <declaration-specifier> ::= <storage-class-specifier>
 						  | <type-specifier>
 						  | constant
 
-<initial-declarator> ::= <declarator>
-					   | <declarator> := <initializer>
-
+<declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> <declarator>;
+	            | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
 
 <declarator> ::= {<pointer>}? <direct-declarator>
 

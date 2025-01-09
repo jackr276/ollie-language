@@ -2036,28 +2036,38 @@ u_int8_t parameter_list(FILE* fl){
 }
 
 
+/**
+ * A compound statement is denoted by the {} braces, and can decay in to 
+ * statements and declarations
+ *
+ * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
+ */
+static u_int8_t compound_statement(FILE* fl){
+	return 0;
+}
+
+
 u_int8_t direct_declarator(FILE* fl){
 	return 0;
 }
 
 
-
-u_int8_t declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
+static u_int8_t initializer(FILE* fl){
 	return 0;
 }
 
 
-static u_int8_t initial_declarator(FILE* fl){
 
+static u_int8_t declarator(FILE* fl){
+	return 0;
 }
-
-
 
 
 /**
  * A declaration is the other main kind of block that we can see other than functions
  *
- * BNF Rule: <declaration> ::= (constant)? <storage-class-specifier>? <type-specifier> <initial-declarator>;
+ * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> <declarator>; 
+ * 							 | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
  */
 static u_int8_t declaration(FILE* fl){
 	parse_message_t message;
@@ -2067,29 +2077,32 @@ static u_int8_t declaration(FILE* fl){
 	//Grab the token
 	l = get_next_token(fl, &parser_line_num);
 
-	//We can optionally see the word constant here
+	//We can see constant here optionally
 	if(l.tok == CONSTANT){
-		//TODO symtable constant handling
-		//Grab the next token to keep the search going
-	} else {
-		//Put it back if not
-		push_back_token(fl,  l);
+		//Handle accordingly
+		//Grab the next token
+		l = get_next_token(fl, &parser_line_num);
 	}
 
-	//We can now optionally see a storage class specifier
-	status = storage_class_specifier(fl);
+	//Something bad here
+	if(l.tok != LET && l.tok != DECLARE){
+		message.message = PARSE_ERROR;
+		message.info = "Declare or let keywords expected in declaration";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+	//We know we're clear if we get here
 	
-	//If we see it, use symtab TODO
-	if(status == 1){
-		//handle in symtable
-	}
-
-	//It's not all over if we don't
-	//Now we absolutely must see a valid type specifier
+	//We can now see a storage class specifier
+	status = storage_class_specifier(fl);
+	//Handle accordingly
+	
+	//We now must see a valid type specifier
 	status = type_specifier(fl);
 	
-	
-	//If this happened then we have an issue
+	//If bad
 	if(status == 0){
 		message.message = PARSE_ERROR;
 		message.info = "Invalid type specifier in declaration";
@@ -2098,36 +2111,79 @@ static u_int8_t declaration(FILE* fl){
 		num_errors++;
 		return 0;
 	}
-	
-	//TODO handle in symtable
-	
-	//Now we must see an initial declarator
-	status = initial_declarator(fl);
-	
-	//If this happened then we have an issue
+
+	//Now we must see a valid declarator
+	status = declarator(fl);
+
+	//If bad
 	if(status == 0){
 		message.message = PARSE_ERROR;
-		message.info = "Invalid initial declarator inside of declaration";
+		message.info = "Invalid declarator in declaration";
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
 		num_errors++;
 		return 0;
 	}
+		
+	//Now we can take two divergent paths here
+	if(l.tok == LET){
+		//Now we must see the assignment operator
+		l = get_next_token(fl, &parser_line_num);
+
+		//If we don't see it, get out
+		if(l.tok != COLONEQ){
+			message.message = PARSE_ERROR;
+			message.info = "Assignment operator(:=) expected after declarator";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+		
+		//Now we must see a valid initializer
+		status = initializer(fl);
+
+		//If we don't see it, get out
+		if(status == 0){
+			message.message = PARSE_ERROR;
+			message.info = "Invalid initializer in declaration";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+
+		//We now must see a semicolon
+		l = get_next_token(fl, &parser_line_num);
+
+		if(l.tok != SEMICOLON){
+			message.message = PARSE_ERROR;
+			message.info = "Semicolon expected at the end of declaration";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
 	
-	//Finally, we have to see the finalizing semicolon 
-	l = get_next_token(fl, &parser_line_num);
+		//Otherwise it worked and we can leave
+		return 1;
 
-	if(l.tok != SEMICOLON){
-		message.message = PARSE_ERROR;
-		message.info = "Expected semicolon at the end of declaration";
-		message.line_num = parser_line_num;
-		print_parse_message(&message);
-		num_errors++;
-		return 0;
+	} else if(l.tok == DECLARE){
+		//If it was a declare statement, we must only see the semicolon to exit
+		l = get_next_token(fl, &parser_line_num);
+
+		if(l.tok != SEMICOLON){
+			message.message = PARSE_ERROR;
+			message.info = "Semicolon expected at the end of declaration";
+			message.line_num = parser_line_num;
+			print_parse_message(&message);
+			num_errors++;
+			return 0;
+		}
+	
+		//Otherwise it worked and we can leave
+		return 1;
 	}
-
-	//If we make it here, then we're all good
-	return 1;
 }
 
 
@@ -2162,6 +2218,8 @@ u_int8_t function_specifier(FILE* fl){
  * Handle the case where we declare a function
  *
  * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> (<parameter-list>?) -> <type-specifier> <compound-statement>
+ *
+ * REMEMBER: By the time we get here, we've already seen the func keyword
  *
  * We will also handle function specifiers internally, an additional method would be silly
  *
@@ -2198,9 +2256,7 @@ u_int8_t function_declaration(FILE* fl){
 			print_parse_message(&message);
 			num_errors++;
 			return 0;
-
 		}
-
 	//Otherwise it's a plain function
 	} else {
 		//Otherwise put the token back in the stream
@@ -2302,10 +2358,33 @@ arrow_ident:
 		return 0;
 	}
 
+	//After the arrow we must see a valid type specifier
+	status = type_specifier(fl);
 
+	//If it failed
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid return type given to function";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
 
-	return 0;
-	
+	//Now we must see a compound statement
+	status = compound_statement(fl);
+
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid compound statement in function";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//All went well if we make it here
+	return 1;
 }
 
 

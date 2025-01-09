@@ -1,9 +1,3 @@
-
-defined structure my_type {
-	u_int32 sample;
-};
-
-
 func main(u_int32 argc, str* argv) -> u_int32 {
 	let char x = 'a';
 	let char y = 'c';
@@ -24,3 +18,9 @@ func main(u_int32 argc, str* argv) -> u_int32 {
 	
 	ret x % y;
 }
+
+defined structure my_type {
+	u_int32 sample;
+};
+
+
