@@ -25,6 +25,8 @@ static u_int8_t cast_expression(FILE* fl);
 static u_int8_t assignment_expression(FILE* fl);
 static u_int8_t conditional_expression(FILE* fl);
 static u_int8_t unary_expression(FILE* fl);
+static u_int8_t declaration(FILE* fl);
+static u_int8_t statement(FILE* fl);
 static u_int8_t direct_declarator(FILE* fl);
 
 /**
@@ -1782,7 +1784,7 @@ u_int8_t parameter_list_prime(FILE* fl){
  * BNF Rule: <parameter-list> ::= <parameter-declaration>(<parameter-list-prime>)?
  */
 u_int8_t parameter_list(FILE* fl){
-	u_int8_t status;
+	u_int8_t status = 0;
 
 	//First, we must see a valid parameter declaration
 	status = parameter_declaration(fl);
@@ -1806,7 +1808,73 @@ u_int8_t parameter_list(FILE* fl){
  * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
  */
 static u_int8_t compound_statement(FILE* fl){
-	return 0;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//When we get here, we absolutely must see a cury brace
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Opening curly brace expected to begin compound statement");
+		num_errors++;
+		return 0;
+	}
+
+	//We'll push this guy onto the stack for later
+	push(grouping_stack, lookahead);
+	//TODO change the lexical scope here
+	
+	//Grab the next token to search
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Now we keep going until we see the closing curly brace
+	while(lookahead.tok != R_CURLY){
+		//If we see this we know that we have a declaration
+		if(lookahead.tok == LET || lookahead.tok == DECLARE){
+			//Push it back
+			push_back_token(fl, lookahead);
+
+			//Hand it off to the declaration function
+			status = declaration(fl);
+			
+			//If we fail here just leave
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid declaration found in compound statement");
+				num_errors++;
+				return 0;
+			}
+			//Otherwise we're all good
+		} else {
+			//Put the token back
+			push_back_token(fl, lookahead);
+
+			//In the other case, we must see a statement here
+			status = statement(fl);
+
+			//If we failed
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid statement found in compound statement");
+				num_errors++;
+				return 0;
+			}
+			//Otherwise we're all good
+		}
+
+		//Grab the next token to refresh the search
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+	
+	//When we make it here, we know that we have an R_CURLY in the lookahead
+	//Let's check to see if the grouping went properly
+	if(pop(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected inside of compound statement");
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise everything worked here
+	return 1;
 }
 
 
@@ -1839,19 +1907,26 @@ static u_int8_t declaration(FILE* fl){
 	//Grab the token
 	l = get_next_token(fl, &parser_line_num);
 
-	//We can see constant here optionally
-	if(l.tok == CONSTANT){
-		//Handle accordingly
-		//Grab the next token
-		l = get_next_token(fl, &parser_line_num);
-	}
-
 	//Something bad here
 	if(l.tok != LET && l.tok != DECLARE){
 		print_parse_message(PARSE_ERROR, "Declare or let keywords expected in declaration");
 		num_errors++;
 		return 0;
 	}
+
+	//Grab the next token
+	l = get_next_token(fl, &parser_line_num);
+
+	//We can see constant here optionally
+	if(l.tok == CONSTANT){
+		//Handle accordingly
+		//Grab the next token
+		l = get_next_token(fl, &parser_line_num);
+	} else {
+		//Push it back if it isn't the constant keyword
+		push_back_token(fl, l);
+	}
+
 	//We know we're clear if we get here
 	
 	//We can now see a storage class specifier
@@ -1931,6 +2006,10 @@ static u_int8_t declaration(FILE* fl){
 	}
 }
 
+
+static u_int8_t statement(FILE* fl){
+
+}
 
 /**
  * A function specifier can be either a STATIC or an EXTERNAL definition
