@@ -25,6 +25,7 @@ static u_int8_t cast_expression(FILE* fl);
 static u_int8_t assignment_expression(FILE* fl);
 static u_int8_t conditional_expression(FILE* fl);
 static u_int8_t unary_expression(FILE* fl);
+static u_int8_t direct_declarator(FILE* fl);
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -64,6 +65,7 @@ static u_int8_t identifier(FILE* fl){
 	return 1;
 }
 
+
 /**
  * Handle a constant. There are 4 main types of constant, all handled by this function
  *
@@ -94,9 +96,6 @@ static u_int8_t constant(FILE* fl){
 }
 
 
-static u_int8_t declaration(FILE* fl){
-	return 0;
-}
 
 static u_int8_t type_name(FILE* fl){
 
@@ -1599,15 +1598,6 @@ u_int8_t constant_expression(FILE* fl){
 }
 
 
-u_int8_t direct_declarator(FILE* fl){
-	return 0;
-}
-
-u_int8_t declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
-	return 0;
-}
-
-
 u_int8_t structure_declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
 	return 0;
 }
@@ -2046,6 +2036,101 @@ u_int8_t parameter_list(FILE* fl){
 }
 
 
+u_int8_t direct_declarator(FILE* fl){
+	return 0;
+}
+
+
+
+u_int8_t declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
+	return 0;
+}
+
+
+static u_int8_t initial_declarator(FILE* fl){
+
+}
+
+
+
+
+/**
+ * A declaration is the other main kind of block that we can see other than functions
+ *
+ * BNF Rule: <declaration> ::= (constant)? <storage-class-specifier>? <type-specifier> <initial-declarator>;
+ */
+static u_int8_t declaration(FILE* fl){
+	parse_message_t message;
+	Lexer_item l;
+	u_int8_t status = 0;
+
+	//Grab the token
+	l = get_next_token(fl, &parser_line_num);
+
+	//We can optionally see the word constant here
+	if(l.tok == CONSTANT){
+		//TODO symtable constant handling
+		//Grab the next token to keep the search going
+	} else {
+		//Put it back if not
+		push_back_token(fl,  l);
+	}
+
+	//We can now optionally see a storage class specifier
+	status = storage_class_specifier(fl);
+	
+	//If we see it, use symtab TODO
+	if(status == 1){
+		//handle in symtable
+	}
+
+	//It's not all over if we don't
+	//Now we absolutely must see a valid type specifier
+	status = type_specifier(fl);
+	
+	
+	//If this happened then we have an issue
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid type specifier in declaration";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+	
+	//TODO handle in symtable
+	
+	//Now we must see an initial declarator
+	status = initial_declarator(fl);
+	
+	//If this happened then we have an issue
+	if(status == 0){
+		message.message = PARSE_ERROR;
+		message.info = "Invalid initial declarator inside of declaration";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+	
+	//Finally, we have to see the finalizing semicolon 
+	l = get_next_token(fl, &parser_line_num);
+
+	if(l.tok != SEMICOLON){
+		message.message = PARSE_ERROR;
+		message.info = "Expected semicolon at the end of declaration";
+		message.line_num = parser_line_num;
+		print_parse_message(&message);
+		num_errors++;
+		return 0;
+	}
+
+	//If we make it here, then we're all good
+	return 1;
+}
+
+
 /**
  * A function specifier can be either a STATIC or an EXTERNAL definition
  *
@@ -2077,6 +2162,11 @@ u_int8_t function_specifier(FILE* fl){
  * Handle the case where we declare a function
  *
  * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> (<parameter-list>?) -> <type-specifier> <compound-statement>
+ *
+ * We will also handle function specifiers internally, an additional method would be silly
+ *
+ * BNF rule: <function-specifier> ::= static 
+ *			        			  | external
  */
 u_int8_t function_declaration(FILE* fl){
 	Lexer_item lookahead;
@@ -2095,21 +2185,23 @@ u_int8_t function_declaration(FILE* fl){
 	
 	//We've seen the option function specifier
 	if(lookahead.tok == COLON){
-		status = function_specifier(fl);
-
-		//If this happened then we have an issue
-		if(status == 0){
+		//Let's find a function specifier
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		//If we find one of these, push it to the stack and return 1
+		if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL){
+			//TODO handle with symtable
+		} else {
 			message.message = PARSE_ERROR;
-			message.info = "Invalid function specifier";
+			message.info = "Function specifier STATIC or EXTERNAL expected after colon";
 			message.line_num = parser_line_num;
 			print_parse_message(&message);
 			num_errors++;
 			return 0;
+
 		}
 
-		//Otherwise we can grab out what we have here
-		function_storage_type = pop(variable_stack).tok;
-
+	//Otherwise it's a plain function
 	} else {
 		//Otherwise put the token back in the stream
 		push_back_token(fl, lookahead);
@@ -2128,26 +2220,7 @@ u_int8_t function_declaration(FILE* fl){
 		return 0;
 	}
 
-	//At this point we'll need to store in symtable
-	//Pop this off the stack
-	ident = pop(variable_stack);
-	//Let's see if this already exists
-	symtab_record_t* record = lookup(symtab, ident.lexeme);
-
-	//This means that we were trying to redefine a function
-	if(record != NULL){
-		message.message = PARSE_ERROR;
-		memset(info, 0, 500*sizeof(char));
-		sprintf(info, "Function %s has already been defined on line %d", record->name, record->line_number);
-		message.info = info;
-		message.line_num = parser_line_num;
-		print_parse_message(&message);
-		num_errors++;
-		return 0;
-	}
-	
-	//Save this as function name
-	function_name = ident.lexeme;
+	//TODO symtable stuff
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -2182,9 +2255,7 @@ u_int8_t function_declaration(FILE* fl){
 	//We have a bad parameter list
 	if(status == 0){
 		message.message = PARSE_ERROR;
-		memset(info, 0, 500*sizeof(char));
-		sprintf(info, "No valid paramter list found for function \"%s\"", function_name);
-		message.info = info;
+		message.info = "No valid parameter list found for function";
 		message.line_num = parser_line_num;
 		print_parse_message(&message);
 		num_errors++;

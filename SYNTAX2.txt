@@ -157,4 +157,25 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 						  | let <unary-expression> := <conditional_expression>
 
 
+<declaration> ::= {<declaration-specifier>}+ <initial-declarator>;
+
+<declaration-specifier> ::= <storage-class-specifier>
+						  | <type-specifier>
+						  | constant
+
+<initial-declarator> ::= <declarator>
+					   | <declarator> := <initializer>
+
+
+<declarator> ::= {<pointer>}? <direct-declarator>
+
+<direct-declarator> ::= <identifier>
+						  | ( <declarator> )
+						  | <direct-declarator> [ {constant-expression}? ]
+						  | <direct-declarator> ( <parameter-type-list> ) 
+						  | <direct-declarator> ( {<identifier>}* )
+
+
+
+
 
