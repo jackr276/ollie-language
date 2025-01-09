@@ -29,6 +29,7 @@ static u_int8_t unary_expression(FILE* fl);
 static u_int8_t declaration(FILE* fl);
 static u_int8_t compound_statement(FILE* fl);
 static u_int8_t statement(FILE* fl);
+static u_int8_t declarator(FILE* fl);
 static u_int8_t direct_declarator(FILE* fl);
 
 /**
@@ -2129,8 +2130,123 @@ static u_int8_t compound_statement(FILE* fl){
  */
 u_int8_t direct_declarator(FILE* fl){
 	Lexer_item lookahead;
+	Lexer_item lookahead2;
 	u_int8_t status = 0;
-	return 0;
+
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//We can see a declarator inside of here
+	if(lookahead.tok == L_PAREN){
+		//Save for later
+		push(grouping_stack, lookahead);
+
+		//Now we must see a valid declarator inside of here
+		status = declarator(fl);
+
+		//If bad get out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid declarator found inside of direct declarator");
+			num_errors++;
+			return 0;
+		}
+
+		//Now we must see a valid closing paren
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//No closing paren
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Closing parenthesis expected after declarator");
+			num_errors++;
+			return 0;
+		}
+
+		//Unmatched grouping operator
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise if we get here we're set
+		return 1;
+
+	//The other option, we have an ident
+	} else if(lookahead.tok == IDENT){
+		//So we see an ident, but certain stuff could come next
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//We have an array subscript here
+		if(lookahead.tok == L_BRACKET){
+			//We can keep seeing l_brackets here
+			while(lookahead.tok == L_BRACKET){
+				//Push it onto the stack
+				push(grouping_stack, lookahead);
+
+				//Special case, we can see empty ones here
+				lookahead2 = get_next_token(fl, &parser_line_num);
+
+				//If we have an empty set here
+				if(lookahead2.tok == R_BRACKET){
+					//TODO Handle empty brackets
+					//Clear this up
+					pop(grouping_stack);
+
+					//Keep going through the list
+					lookahead = get_next_token(fl, &parser_line_num);
+
+				//Otherwise we need a constant expression here
+				} else {
+					//Put it back
+					push_back_token(fl, lookahead2);
+
+					//See if it works
+					status = constant_expression(fl);
+
+					//Fail out if so
+					if(status == 0){
+						print_parse_message(PARSE_ERROR, "Invalid constant expression in array subscript");
+						return 0;
+					}
+
+					//Otherwise, we now have to see an R_BRACKET
+					lookahead = get_next_token(fl, &parser_line_num);
+
+					//If we don't see a ]
+					if(lookahead.tok != R_BRACKET){
+						print_parse_message(PARSE_ERROR, "Right bracket expected to close array subscript");
+						num_errors++;
+						return 0;
+					}
+
+					//If they don't match
+					if(pop(grouping_stack).tok != L_BRACKET){
+						print_parse_message(PARSE_ERROR, "Unmatched brackets detected");
+						num_errors++;
+						return 0;
+					}
+
+					//Otherwise, if we make it all the way here, we will refresh the token
+					lookahead = get_next_token(fl, &parser_line_num);
+				}
+			}
+
+			//If we make it here, lookahead is not an L_Bracket
+			//Put it back
+			push_back_token(fl, lookahead);
+			//Everything worked so success
+			return 1;
+
+		} else if(lookahead.tok == L_PAREN){
+
+		}
+
+	//If we get here it failed
+	} else {
+		print_parse_message(PARSE_ERROR, "Identifier or declarator expected in direct declarator");
+		num_errors++;
+		return 0;
+	}
 }
 
 
