@@ -6,9 +6,9 @@ func:static main(u_int32 arg_count, str arg_vector) -> u_int32{
 	if(arg_count == 0) then {
 		ret -1;
 	} else {
-		let float32 a = .23;
-		let float32 b = 2.322;
-		let float32 c = a + b;
+		let float32 a := .23;
+		let float32 b := 2.322;
+		let float32 c := a + b;
 	}
 
 	ret (u_int32)c >> 3;

@@ -1848,7 +1848,7 @@ static u_int8_t expression_statement(FILE* fl){
  * 						 | default : <statement>
  */
 static u_int8_t labeled_statement(FILE* fl){
-	return 1;
+	return 0;
 
 }
 
@@ -1857,7 +1857,7 @@ static u_int8_t labeled_statement(FILE* fl){
  * BNF Rule: <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
  */
 static u_int8_t if_statement(FILE* fl){
-	return 1;
+	return 0;
 
 }
 
@@ -1871,7 +1871,7 @@ static u_int8_t if_statement(FILE* fl){
  * 								| ret {<expression>}?;
  */
 static u_int8_t jump_statement(FILE* fl){
-	return 1;
+	return 0;
 
 }
 
@@ -1879,7 +1879,7 @@ static u_int8_t jump_statement(FILE* fl){
  * BNF Rule: <switch-statement> ::= switch on( <expression> ) <labeled-statement>
  */
 static u_int8_t switch_statement(FILE* fl){
-	return 1;
+	return 0;
 
 }
 
@@ -1890,7 +1890,7 @@ static u_int8_t switch_statement(FILE* fl){
  * 									 | for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
  */
 static u_int8_t iterative_statement(FILE* fl){
-	return 1;
+	return 0;
 }
 
 
@@ -2126,7 +2126,7 @@ static u_int8_t compound_statement(FILE* fl){
  * 								  | ( <declarator> ) 
  * 								  | <identifier> {[ {constant-expression}? ]}*
  * 								  | <identifier> ( <parameter-type-list>? ) 
- * 								  | <identifier> ( {<identifier>}* )
+ * 								  | <identifier> ( {<identifier>}*{, <identifier>}* )
  */
 u_int8_t direct_declarator(FILE* fl){
 	Lexer_item lookahead;
@@ -2237,8 +2237,91 @@ u_int8_t direct_declarator(FILE* fl){
 			//Everything worked so success
 			return 1;
 
+		//There are two things that could happen if we see an L_PAREN
 		} else if(lookahead.tok == L_PAREN){
+			//Put this on for matching reasons
+			push(grouping_stack, lookahead);
+			
+			//Handle the special case where it's empty
+			lookahead2 = get_next_token(fl, &parser_line_num);
 
+			//If we see this then we're done
+			if(lookahead2.tok == R_PAREN){
+				//TODO handle accordingly
+				//Clean up the stack
+				pop(grouping_stack);
+				return 1;
+			}
+
+			//Otherwise we weren't so lucky
+			//Not really needed, but for our sanity
+			lookahead = lookahead2;
+
+			//We can see a list of idents here
+			if(lookahead.tok == IDENT){
+				//TODO handle ident here
+
+				//Grab the next one
+				lookahead = get_next_token(fl, &parser_line_num);
+
+				//Handle our list here
+				while(lookahead.tok == COMMA){
+					//We now need to see another ident
+					lookahead = get_next_token(fl, &parser_line_num);
+					
+					//If it isn't one, that's bad
+					if(lookahead.tok != IDENT){
+						print_parse_message(PARSE_ERROR, "Identifier expected after comma in identifier list");
+						num_errors++;
+						return 0;
+					}
+
+					//Otherwise handle the ident TODO
+
+					//Refresh the search
+					lookahead = get_next_token(fl, &parser_line_num);
+				}
+
+				//We didn't see a comma so bail out
+				push_back_token(fl, lookahead);
+				//We'll check the parenthesis status at the end
+			} else {
+				//If not, we have to see this
+				status = parameter_list(fl);
+				
+				//If it failed
+				if(status == 0){
+					print_parse_message(PARSE_ERROR, "Invalid parameter list in function declarative");
+					num_errors++;
+					return 0;
+				}
+			}
+
+			//Whatever happened, we need to see a closing paren here
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			//If we don't see a )
+			if(lookahead.tok != R_PAREN){
+				print_parse_message(PARSE_ERROR, "Right parenthesis expected");
+				num_errors++;
+				return 0;
+			}
+
+			//If they don't match
+			if(pop(grouping_stack).tok != L_PAREN){
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+				num_errors++;
+				return 0;
+			}
+
+			//If we made it here it worked
+			return 1;
+
+		//Regular ident then
+		} else {
+			//Put it back and get out
+			push_back_token(fl, lookahead);
+			return 1;
 		}
 
 	//If we get here it failed
@@ -2292,6 +2375,7 @@ static u_int8_t declarator(FILE* fl){
 static u_int8_t declaration(FILE* fl){
 	Lexer_item l;
 	u_int8_t status = 0;
+	Token let_or_declare;
 
 	//Grab the token
 	l = get_next_token(fl, &parser_line_num);
@@ -2302,6 +2386,9 @@ static u_int8_t declaration(FILE* fl){
 		num_errors++;
 		return 0;
 	}
+
+	//Save this
+	let_or_declare = l.tok;
 
 	//Grab the next token
 	l = get_next_token(fl, &parser_line_num);
@@ -2343,7 +2430,7 @@ static u_int8_t declaration(FILE* fl){
 	}
 		
 	//Now we can take two divergent paths here
-	if(l.tok == LET){
+	if(let_or_declare == LET){
 		//Now we must see the assignment operator
 		l = get_next_token(fl, &parser_line_num);
 
@@ -2376,7 +2463,10 @@ static u_int8_t declaration(FILE* fl){
 		//Otherwise it worked and we can leave
 		return 1;
 
-	} else if(l.tok == DECLARE){
+	}
+
+	//If we had a declare statement
+	if(let_or_declare == DECLARE){
 		//If it was a declare statement, we must only see the semicolon to exit
 		l = get_next_token(fl, &parser_line_num);
 
@@ -2388,12 +2478,12 @@ static u_int8_t declaration(FILE* fl){
 	
 		//Otherwise it worked and we can leave
 		return 1;
-	} else {
-		print_parse_message(PARSE_ERROR, "Let or declare keyword expected in declaration");
-		num_errors++;
-		return 0;
 	}
+
+	//For compiler only, should never get here
+	return 0;
 }
+
 
 /**
  * A function specifier can be either a STATIC or an EXTERNAL definition

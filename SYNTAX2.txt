@@ -201,7 +201,7 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <direct-declarator> ::= <identifier>
 					  | ( <declarator> )
 					  | <direct-declarator> [ {constant-expression}? ]
-					  | <direct-declarator> ( <parameter-type-list> ) 
+					  | <direct-declarator> ( <parameter-list> ) 
 					  | <direct-declarator> ( {<identifier>}* )
 
 
