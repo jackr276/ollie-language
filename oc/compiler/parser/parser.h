@@ -43,10 +43,4 @@ struct parse_message_t{
  */
 u_int8_t parse(FILE* FL);
 
-
-/**
- * API exposed simply for nice formatting
- */
-void print_parse_message(parse_message_t* message);
-
 #endif /* PARSER_H */
