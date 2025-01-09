@@ -196,11 +196,13 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 
 <declarator> ::= {<pointer>}? <direct-declarator>
 
+<pointer> ::= * {<pointer>}?
+
 <direct-declarator> ::= <identifier>
-						  | ( <declarator> )
-						  | <direct-declarator> [ {constant-expression}? ]
-						  | <direct-declarator> ( <parameter-type-list> ) 
-						  | <direct-declarator> ( {<identifier>}* )
+					  | ( <declarator> )
+					  | <direct-declarator> [ {constant-expression}? ]
+					  | <direct-declarator> ( <parameter-type-list> ) 
+					  | <direct-declarator> ( {<identifier>}* )
 
 
 

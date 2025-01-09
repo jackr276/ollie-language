@@ -79,6 +79,40 @@ static u_int8_t identifier(FILE* fl){
 
 
 /**
+ * Pointers can be chained(several *'s at once)
+ *
+ * BNF Rule: <pointer> ::= * {<pointer>}?
+ */
+static u_int8_t pointer(FILE* fl){
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//Grab the star
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok == STAR){
+		//TODO handle it
+		lookahead = get_next_token(fl, &parser_line_num);
+		//If we see another pointer, handle it
+		if(lookahead.tok == STAR){
+			//Put it back for the next rule to handle
+			push_back_token(fl, lookahead);
+			return pointer(fl);
+		} else {
+			//Put back and leave
+			push_back_token(fl, lookahead);
+			return 1;
+		}
+
+	} else {
+		//Put it back and get out, it's not catastrophic if we don't see it
+		push_back_token(fl, lookahead);
+		return 0;
+	}
+}
+
+
+/**
  * Handle a constant. There are 4 main types of constant, all handled by this function
  *
  * BNF Rule: <constant> ::= <integer-constant> 
@@ -1438,10 +1472,6 @@ u_int8_t type(FILE* fl, symtab_t* symtab, stack_t* stack){
 	return 0;
 }
 
-u_int8_t pointer(FILE* fl, symtab_t* symtab, stack_t* stack){
-	return 0;
-}
-
 
 /**
  * For an enumerator, we can see an ident or an assigned ident
@@ -2088,7 +2118,18 @@ static u_int8_t compound_statement(FILE* fl){
 }
 
 
+/**
+ * A direct declarator can descend into many different forms
+ *
+ * BNF Rule: <direct-declarator> ::= <identifier> 
+ * 								  | ( <declarator> ) 
+ * 								  | <identifier> {[ {constant-expression}? ]}*
+ * 								  | <identifier> ( <parameter-type-list>? ) 
+ * 								  | <identifier> ( {<identifier>}* )
+ */
 u_int8_t direct_declarator(FILE* fl){
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 	return 0;
 }
 
@@ -2098,9 +2139,31 @@ static u_int8_t initializer(FILE* fl){
 }
 
 
-
+/**
+ * A declarator has an optional pointer type and is followed by a direct declarator
+ *
+ * BNF Rule: <declarator> ::= {<pointer>}? <direct-declarator>
+ */
 static u_int8_t declarator(FILE* fl){
-	return 0;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We can see pointers here
+	status = pointer(fl);
+
+	//If we see any pointers, handle them accordingly TODO
+	
+	//Now we must see a valid direct declarator
+	status = direct_declarator(fl);
+	
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid direct declarator found in declarator");
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise we're all set so return 1
+	return 1;
 }
 
 
