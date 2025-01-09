@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/types.h>
 
+
 //Our global symbol table
 symtab_t* symtab;
 //Our stack for storing variables, etc
@@ -1805,6 +1806,7 @@ u_int8_t parameter_list(FILE* fl){
  * BNF Rule: <expression-statement> ::= {<expression>}?;
  */
 static u_int8_t expression_statement(FILE* fl){
+	return 1;
 
 }
 
@@ -1815,6 +1817,7 @@ static u_int8_t expression_statement(FILE* fl){
  * 						 | default : <statement>
  */
 static u_int8_t labeled_statement(FILE* fl){
+	return 1;
 
 }
 
@@ -1823,15 +1826,40 @@ static u_int8_t labeled_statement(FILE* fl){
  * BNF Rule: <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
  */
 static u_int8_t if_statement(FILE* fl){
+	return 1;
 
 }
 
 
 /**
+ * BNF Rule: <jump-statement> ::= jump <identifier> 
+ * 								| continue when(<expression>); 
+ * 								| continue; 
+ * 								| break when(<expression>); 
+ * 								| break; 
+ * 								| ret {<expression>}?;
+ */
+static u_int8_t jump_statement(FILE* fl){
+	return 1;
+
+}
+
+/**
  * BNF Rule: <switch-statement> ::= switch on( <expression> ) <labeled-statement>
  */
 static u_int8_t switch_statement(FILE* fl){
+	return 1;
 
+}
+
+
+/**
+ * BNF Rule: <iterative-statement> ::= while( <expression> ) do <statement> 
+ * 									 | do <statement> while( <expression> ) 
+ * 									 | for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
+ */
+static u_int8_t iterative_statement(FILE* fl){
+	return 1;
 }
 
 
@@ -1889,6 +1917,7 @@ static u_int8_t statement(FILE* fl){
 		//Otherwise it worked so get out
 		return 1;
 
+	//If statement
 	} else if(lookahead.tok == IF){
 		//Put it back for the actual rule to handle
 		push_back_token(fl, lookahead);
@@ -1906,6 +1935,7 @@ static u_int8_t statement(FILE* fl){
 		//Otherwise it worked so get out
 		return 1;
 
+	//Switch statement
 	} else if(lookahead.tok == SWITCH){
 		//Put it back for the actual rule to handle
 		push_back_token(fl, lookahead);
@@ -1923,9 +1953,61 @@ static u_int8_t statement(FILE* fl){
 		//Otherwise it worked so get out
 		return 1;
 
-	} else if() 
+	//Jump statement
+	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
+			 || lookahead.tok == RET){
+		//Put it back for the actual rule to handle
+		push_back_token(fl, lookahead);
+		
+		//Let this handle it
+		status = jump_statement(fl);
 
+		//If it fails
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked so get out
+		return 1;
 
+	//Iterative statement
+	} else if(lookahead.tok == DO || lookahead.tok == WHILE || lookahead.tok == FOR){
+		//Put it back for the actual rule to handle
+		push_back_token(fl, lookahead);
+		
+		//Let this handle it
+		status = jump_statement(fl);
+
+		//If it fails
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked so get out
+		return 1;
+
+	//Otherwise we just have the generic expression rule here
+	} else {
+		//Put it back for the actual rule to handle
+		push_back_token(fl, lookahead);
+		
+		//Let this handle it
+		status = expression_statement(fl);
+
+		//If it fails
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked so get out
+		return 1;
+	}
 }
 
 

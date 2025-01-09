@@ -23,6 +23,8 @@ typedef enum {
 	WHILE,
 	FOR,
 	CASE,
+	BREAK,
+	CONTINUE,
 	DEFAULT,
 	SWITCH,
 	TRUE,
