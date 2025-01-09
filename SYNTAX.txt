@@ -205,18 +205,18 @@ Why is this first iteration of the syntax bad?
 
 51. <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
 
-52. <switch-statement> ::= switch on( <expression> ) <statement>
+52. <switch-statement> ::= switch on( <expression> ) <labeled-statement>
 
 53. <jump-statement> ::= jump <identifier>
-					     | continue on <expression>
+					     | continue when(<expression>);
 						 | continue;
-						 | break on <expression>
+						 | break when(<expression>);
 						 | break;
-						 | ret {<expression>}?
+						 | ret {<expression>}?;
 
 54. <labeled-statement> ::= <label-identifier> : <statement>
 						  | case <constant-expression> : <statement>
-						  | defualt : <statement>
+						  | default : <statement>
 
 55. <expression-statement> ::= {<expression>}?;
 

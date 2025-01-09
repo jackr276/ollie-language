@@ -18,6 +18,35 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 
 <compound-statement> ::= {{<declaration>}* {<statement>}*}
 
+<expression-statement> ::= {<expression>}?;
+
+<statement> ::= <labeled-statement>
+			  | <expression-statement>
+			  | <compound-statement>
+			  | <if-statement>
+			  | <switch-statement>
+			  | <iterative-statement>
+			  | <jump-statement>
+
+<jump-statement> ::= jump <identifier>
+				     | continue when(<expression>);
+					 | continue;
+					 | break when(<expression>);
+					 | break;
+					 | ret {<expression>}?;
+
+<switch-statement> ::= switch on( <expression> ) <labeled-statement>
+
+<labeled-statement> ::= <label-identifier> : <statement>
+					  | case <constant-expression> : <statement>
+					  | default : <statement>
+
+<iterative-statement> ::= while( <expression> ) do <statement>
+							| do <statement> while( <expression> )
+							| for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
+
+<if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
+
 <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
 
 <constant> ::= <integer-constant>

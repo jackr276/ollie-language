@@ -26,6 +26,7 @@ static u_int8_t assignment_expression(FILE* fl);
 static u_int8_t conditional_expression(FILE* fl);
 static u_int8_t unary_expression(FILE* fl);
 static u_int8_t declaration(FILE* fl);
+static u_int8_t compound_statement(FILE* fl);
 static u_int8_t statement(FILE* fl);
 static u_int8_t direct_declarator(FILE* fl);
 
@@ -72,7 +73,6 @@ static u_int8_t identifier(FILE* fl){
 	//We'll push this ident onto the stack and let whoever called(function/variable etc.) deal with it
 	//We have no need to search the symtable in this function because we are unable to context-sensitive
 	//analysis here
-	push(variable_stack, l);
 	return 1;
 }
 
@@ -1802,6 +1802,134 @@ u_int8_t parameter_list(FILE* fl){
 
 
 /**
+ * BNF Rule: <expression-statement> ::= {<expression>}?;
+ */
+static u_int8_t expression_statement(FILE* fl){
+
+}
+
+
+/**
+ * <labeled-statement> ::= <label-identifier> : <statement> 
+ * 						 | case <constant-expression> : <statement> 
+ * 						 | default : <statement>
+ */
+static u_int8_t labeled_statement(FILE* fl){
+
+}
+
+
+/**
+ * BNF Rule: <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
+ */
+static u_int8_t if_statement(FILE* fl){
+
+}
+
+
+/**
+ * BNF Rule: <switch-statement> ::= switch on( <expression> ) <labeled-statement>
+ */
+static u_int8_t switch_statement(FILE* fl){
+
+}
+
+
+/**
+ * A statement is a kind of multiplexing rule that just determines where we need to go to
+ *
+ * BNF Rule: <statement> ::= <labeled-statement> 
+ * 						   | <expression-statement> 
+ * 						   | <compound-statement> 
+ * 						   | <if-statement> 
+ * 						   | <switch-statement> 
+ * 						   | <iterative-statement> 
+ * 						   | <jump-statement>
+ */
+static u_int8_t statement(FILE* fl){
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//Let's grab the next item and see what we have here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have a compound statement
+	if(lookahead.tok == L_CURLY){
+		//We'll put the curly back and let compound statement handle it
+		push_back_token(fl, lookahead);
+		
+		//Let compound statement handle it
+		status = compound_statement(fl);
+
+		//If it fails
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid compound statement found in statement");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked so get out
+		return 1;
+
+	//If we see a labeled statement
+	} else if(lookahead.tok == LABEL_IDENT || lookahead.tok == CASE || lookahead.tok == DEFAULT){
+		//Put it back for the actual rule to handle
+		push_back_token(fl, lookahead);
+		
+		//Let this handle it
+		status = labeled_statement(fl);
+
+		//If it fails
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid labeled statement found in statement");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked so get out
+		return 1;
+
+	} else if(lookahead.tok == IF){
+		//Put it back for the actual rule to handle
+		push_back_token(fl, lookahead);
+		
+		//Let this handle it
+		status = if_statement(fl);
+
+		//If it fails
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid if statement found in statement");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked so get out
+		return 1;
+
+	} else if(lookahead.tok == SWITCH){
+		//Put it back for the actual rule to handle
+		push_back_token(fl, lookahead);
+		
+		//Let this handle it
+		status = switch_statement(fl);
+
+		//If it fails
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid switch statement found in statement");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked so get out
+		return 1;
+
+	} else if() 
+
+
+}
+
+
+/**
  * A compound statement is denoted by the {} braces, and can decay in to 
  * statements and declarations
  *
@@ -2004,11 +2132,6 @@ static u_int8_t declaration(FILE* fl){
 		num_errors++;
 		return 0;
 	}
-}
-
-
-static u_int8_t statement(FILE* fl){
-
 }
 
 /**
