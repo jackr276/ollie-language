@@ -311,7 +311,7 @@ static u_int8_t primary_expression(FILE* fl){
  * can actually do assigning. There is no chaining in Ollie language of assignments
  *
  * BNF Rule: <assignment-expression> ::= <conditional-expression> 
- * 									   | let <unary-expression> := <conditional-expression>
+ * 									   | asn <unary-expression> := <conditional-expression>
  */
 static u_int8_t assignment_expression(FILE* fl){
 	Lexer_item lookahead;
@@ -320,8 +320,8 @@ static u_int8_t assignment_expression(FILE* fl){
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//We've seen the LET keyword
-	if(lookahead.tok == LET){
+	//We've seen the ASN keyword
+	if(lookahead.tok == ASN){
 		//Since we've seen this, we now need to see a valid unary expression
 		status = unary_expression(fl);
 
@@ -1470,10 +1470,6 @@ u_int8_t structure_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
 	return 0;
 }
 
-u_int8_t type(FILE* fl, symtab_t* symtab, stack_t* stack){
-	return 0;
-}
-
 
 /**
  * For an enumerator, we can see an ident or an assigned ident
@@ -1865,11 +1861,132 @@ static u_int8_t labeled_statement(FILE* fl){
 
 
 /**
- * BNF Rule: <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
+ * The callee will have left the if token for us once we get here
+ *
+ * BNF Rule: <if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement | compound-statement>}*
  */
 static u_int8_t if_statement(FILE* fl){
-	return 0;
+	Lexer_item lookahead;
+	Lexer_item lookahead2;
+	u_int8_t status = 0;
 
+	//First we must see the if token
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we didn't see it fail out
+	if(lookahead.tok != IF){
+		print_parse_message(PARSE_ERROR, "if keyword expected in if statement");
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we now must see parenthesis
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail out
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected after if statement");
+		num_errors++;
+		return 0;
+	}
+
+	//Push onto the stack
+	push(grouping_stack, lookahead);
+	
+	//We now need to see a valid expression
+	status = expression(fl);
+
+	//If we fail
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid expression found in if statement"); 
+		num_errors++;
+		return 0;
+	}
+
+	//Following the expression we need to see a closing paren
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see the R_Paren
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in if statement");
+		num_errors++;
+		return 0;
+	}
+
+	//Now let's check the stack
+	if(pop(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+		num_errors++;
+		return 0;
+	}
+
+	//If we make it to this point, we need to see the THEN keyword
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail out if bad
+	if(lookahead.tok != THEN){
+		print_parse_message(PARSE_ERROR, "then keyword expected following expression in if statement");
+		num_errors++;
+		return 0;
+	}
+
+	//Now we must see a valid compound statement
+	status = compound_statement(fl);
+
+	//If we fail
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid compound statement in if block");
+		num_errors++;
+		return 0;
+	}
+
+	//Once we're here, we can optionally see the else keyword repeatedly
+	//Seed the search
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//As long as we keep seeing else
+	while(lookahead.tok == ELSE){
+		//Grab the next guy
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//We can either see an if statement or a compound statement
+		if(lookahead.tok == IF){
+			//Put it back
+			push_back_token(fl, lookahead);
+
+			//Call if statement if we see this
+			status = if_statement(fl);
+
+			//If we fail
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid else-if block");
+				num_errors++;
+				return 0;
+			}
+
+		} else {
+			//We have to see a compound statement here
+			//Push the token back
+			push_back_token(fl, lookahead);
+
+			//Let's see if we have one
+			status = compound_statement(fl);
+
+			//If we fail
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid compound statement in else block");
+				num_errors++;
+				return 0;
+			}
+		}
+
+		//Once we make it down here, we'll refresh the search to see what we have next
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+	
+	//We escaped so push it back and leave
+	push_back_token(fl, lookahead);
+	return 1;
 }
 
 
