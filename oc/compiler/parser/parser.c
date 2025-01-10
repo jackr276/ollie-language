@@ -81,6 +81,29 @@ static u_int8_t identifier(FILE* fl){
 
 
 /**
+ * Do we have a label identifier or not?
+ */
+static u_int8_t label_identifier(FILE* fl){
+	//Grab the next token
+	Lexer_item l = get_next_token(fl, &parser_line_num);
+	char info[500];
+	
+	//If we can't find it that's bad
+	if(l.tok != LABEL_IDENT){
+		sprintf(info, "String %s is not a valid label identifier", l.lexeme);
+		print_parse_message(PARSE_ERROR, info);
+		num_errors++;
+		return 0;
+	}
+
+	//We'll push this ident onto the stack and let whoever called(function/variable etc.) deal with it
+	//We have no need to search the symtable in this function because we are unable to context-sensitive
+	//analysis here
+	return 1;
+}
+
+
+/**
  * Pointers can be chained(several *'s at once)
  *
  * BNF Rule: <pointer> ::= * {<pointer>}?
@@ -2028,19 +2051,178 @@ static u_int8_t if_statement(FILE* fl){
 
 
 /**
- * BNF Rule: <jump-statement> ::= jump <identifier> 
+ * BNF Rule: <jump-statement> ::= jump <label-identifier>;
  * 								| continue when(<conditional-expression>); 
  * 								| continue; 
  * 								| break when(<conditional-expression>); 
  * 								| break; 
- * 								| ret {<expression>}?;
+ * 								| ret {<conditional-expression>}?;
  */
 static u_int8_t jump_statement(FILE* fl){
 	Lexer_item lookahead;
 	u_int8_t status = 0;
-	return 0;
 
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a jump statement
+	if(lookahead.tok == JUMP){
+		//We now must see a valid label-ident
+		status = label_identifier(fl);
+
+		//Fail out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid label identifier found after jump statement");
+			num_errors++;
+			return 0;
+		}
+		//semicolon handled at end
+		
+	} else if(lookahead.tok == CONTINUE){
+		//Grab the next toekn because we could have "continue when"
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we have continue when
+		if(lookahead.tok != WHEN){
+			//Regular continue here, go to semicolon
+			push_back_token(fl, lookahead);
+			//TODO handle accordingly
+			goto semicol;
+		}
+
+		//Otherwise, we must see parenthesis here
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after when keyword");
+			num_errors++;
+			return 0;
+		}
+
+		//Push to stack for later
+		push(grouping_stack, lookahead);
+
+		//Now we must see a valid conditional expression
+		status = conditional_expression(fl);
+
+		//fail out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement");
+			num_errors++;
+			return 0;
+		}
+
+		//Finally we must see a closing paren
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we don't see it
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after conditional expression");
+			num_errors++;
+			return 0;
+		}
+
+		//Double check that we matched
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise we're good to go
+	
+	} else if(lookahead.tok == BREAK){
+		//Grab the next toekn because we could have "break when"
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we have continue when
+		if(lookahead.tok != WHEN){
+			//Regular continue here, go to semicolon
+			push_back_token(fl, lookahead);
+			//TODO handle accordingly
+			goto semicol;
+		}
+
+		//Otherwise, we must see parenthesis here
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after when keyword");
+			num_errors++;
+			return 0;
+		}
+
+		//Push to stack for later
+		push(grouping_stack, lookahead);
+
+		//Now we must see a valid conditional expression
+		status = conditional_expression(fl);
+
+		//fail out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement");
+			num_errors++;
+			return 0;
+		}
+
+		//Finally we must see a closing paren
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we don't see it
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after conditional expression");
+			num_errors++;
+			return 0;
+		}
+
+		//Double check that we matched
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise we're good to go
+
+	} else if(lookahead.tok == RET){
+		//A return statement can have an expression at the end
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//We may just have a semicolon here
+		if(lookahead.tok == SEMICOLON){
+			//TODO handle
+			return 1;
+		}
+
+		//Otherwise we must see a valid expression
+		push_back_token(fl, lookahead);
+
+		//Now we must see a valid conditional-expression
+		status = conditional_expression(fl);
+
+		//If we fail
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression in ret statement");
+		}
+		//otherwise we're all set
+	}
+
+semicol:
+	//We now must see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of statement");
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise all went well
+	return 1;
 }
+
 
 /**
  * BNF Rule: <switch-statement> ::= switch on( <expression> ) <labeled-statement>
@@ -3039,6 +3221,11 @@ u_int8_t parse(FILE* fl){
 		printf("\n\n=======================================================================\n");
 		printf("%s\n", info);
 		printf("=======================================================================\n\n");
+	} else {
+		printf("\n\n=======================================================================\n");
+		printf("Parsing succeeded\n");
+		printf("=======================================================================\n\n");
+
 	}
 	
 	//Clean these both up for memory safety
