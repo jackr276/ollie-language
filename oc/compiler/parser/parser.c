@@ -36,12 +36,12 @@ static u_int8_t direct_declarator(FILE* fl);
 /**
  * Simply prints a parse message in a nice formatted way
 */
-void print_parse_message(parse_message_type_t message_type, char* info){
+void print_parse_message(parse_message_type_t message_type, char* info, u_int16_t line_num){
 	//Build and populate the message
 	parse_message_t parse_message;
 	parse_message.message = message_type;
 	parse_message.info = info;
-	parse_message.line_num = parser_line_num;
+	parse_message.line_num = line_num;
 
 	//Fatal if error
 	if(message_type == PARSE_ERROR){
@@ -61,6 +61,8 @@ void print_parse_message(parse_message_type_t message_type, char* info){
  * Do we have an identifier or not?
  */
 static u_int8_t identifier(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 	char info[500];
@@ -68,7 +70,7 @@ static u_int8_t identifier(FILE* fl){
 	//If we can't find it that's bad
 	if(l.tok != IDENT){
 		sprintf(info, "String %s is not a valid identifier", l.lexeme);
-		print_parse_message(PARSE_ERROR, info);
+		print_parse_message(PARSE_ERROR, info, current_line);
 		num_errors++;
 		return 0;
 	}
@@ -84,6 +86,8 @@ static u_int8_t identifier(FILE* fl){
  * Do we have a label identifier or not?
  */
 static u_int8_t label_identifier(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 	char info[500];
@@ -91,7 +95,7 @@ static u_int8_t label_identifier(FILE* fl){
 	//If we can't find it that's bad
 	if(l.tok != LABEL_IDENT){
 		sprintf(info, "String %s is not a valid label identifier", l.lexeme);
-		print_parse_message(PARSE_ERROR, info);
+		print_parse_message(PARSE_ERROR, info, current_line);
 		num_errors++;
 		return 0;
 	}
@@ -109,6 +113,8 @@ static u_int8_t label_identifier(FILE* fl){
  * BNF Rule: <pointer> ::= * {<pointer>}?
  */
 static u_int8_t pointer(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -146,6 +152,8 @@ static u_int8_t pointer(FILE* fl){
  * 						  | <char-constant>
  */
 static u_int8_t constant(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 	
 	//We should see one of the 4 constants here
@@ -157,7 +165,7 @@ static u_int8_t constant(FILE* fl){
 	}
 
 	//Otherwise here, we have an error
-	print_parse_message(PARSE_ERROR, "Invalid constant found");
+	print_parse_message(PARSE_ERROR, "Invalid constant found", current_line);
 	num_errors++;
 	return 0;
 }
@@ -165,7 +173,9 @@ static u_int8_t constant(FILE* fl){
 
 
 static u_int8_t type_name(FILE* fl){
-
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
+	return 0;
 }
 
 
@@ -177,6 +187,8 @@ static u_int8_t type_name(FILE* fl){
  * BNF Rule: <expression_prime> ::= , <assignment-expression><expression_prime>
  */
 static u_int8_t expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status;
 
@@ -185,7 +197,7 @@ static u_int8_t expression_prime(FILE* fl){
 	
 	//It failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression");
+		print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -211,6 +223,8 @@ static u_int8_t expression_prime(FILE* fl){
  * 							| <assignment-expression><expression_prime>
  */
 static u_int8_t expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status;
 
@@ -219,7 +233,7 @@ static u_int8_t expression(FILE* fl){
 	
 	//It failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression");
+		print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -247,6 +261,8 @@ static u_int8_t expression(FILE* fl){
  * 									| (<expression>)
  */
 static u_int8_t primary_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -262,7 +278,7 @@ static u_int8_t primary_expression(FILE* fl){
 
 		//If it failed
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid identifier found in primary expression");
+			print_parse_message(PARSE_ERROR, "Invalid identifier found in primary expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -279,7 +295,7 @@ static u_int8_t primary_expression(FILE* fl){
 
 		//If it failed
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid constant found in primary expression");
+			print_parse_message(PARSE_ERROR, "Invalid constant found in primary expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -296,7 +312,7 @@ static u_int8_t primary_expression(FILE* fl){
 
 		//If it failed
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid expression found in primary expression");
+			print_parse_message(PARSE_ERROR, "Invalid expression found in primary expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -306,12 +322,12 @@ static u_int8_t primary_expression(FILE* fl){
 
 		//If it isn't a right parenthesis
 		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression");
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
 			num_errors++;
 			return 0;
 		//Make sure we match
 		} else if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression");
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -322,7 +338,7 @@ static u_int8_t primary_expression(FILE* fl){
 		char info[500];
 		memset(info, 0, 500 * sizeof(char));
 		sprintf(info, "Invalid token with lexeme %s found in primary expression", lookahead.lexeme); 
-		print_parse_message(PARSE_ERROR, info);
+		print_parse_message(PARSE_ERROR, info, current_line);
 		num_errors++;
 		return 0;
 	}
@@ -337,6 +353,8 @@ static u_int8_t primary_expression(FILE* fl){
  * 									   | asn <unary-expression> := <conditional-expression>
  */
 static u_int8_t assignment_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -350,7 +368,7 @@ static u_int8_t assignment_expression(FILE* fl){
 
 		//We have a bad one
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid unary expression found in assignment expression");
+			print_parse_message(PARSE_ERROR, "Invalid unary expression found in assignment expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -360,7 +378,7 @@ static u_int8_t assignment_expression(FILE* fl){
 
 		//We have a bad one
 		if(lookahead.tok != COLONEQ){
-			print_parse_message(PARSE_ERROR, "Assignment operator := expected after unary expression");
+			print_parse_message(PARSE_ERROR, "Assignment operator := expected after unary expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -371,7 +389,7 @@ static u_int8_t assignment_expression(FILE* fl){
 
 		//We have a bad one
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in assingment expression");
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in assingment expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -387,7 +405,7 @@ static u_int8_t assignment_expression(FILE* fl){
 
 		//We have a bad one
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in postfix expression");
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in postfix expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -414,6 +432,8 @@ static u_int8_t assignment_expression(FILE* fl){
  * 									| <primary-expression> --
  */ 
 static u_int8_t postfix_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -422,7 +442,7 @@ static u_int8_t postfix_expression(FILE* fl){
 
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid primary expression found in postifx expression");
+		print_parse_message(PARSE_ERROR, "Invalid primary expression found in postifx expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -470,12 +490,12 @@ static u_int8_t postfix_expression(FILE* fl){
 			//Once we break out here, in theory our token will be a right paren
 			//Just to double check
 			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Right parenthesis expected after primary expression");
+				print_parse_message(PARSE_ERROR, "Right parenthesis expected after primary expression", current_line);
 				num_errors++;
 				return 0;
 			//Some unmatched parenthesis here
 			} else if(pop(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -495,7 +515,7 @@ static u_int8_t postfix_expression(FILE* fl){
 				
 				//We have a bad one
 				if(status == 0){
-					print_parse_message(PARSE_ERROR, "Invalid expression in primary expression index");
+					print_parse_message(PARSE_ERROR, "Invalid expression in primary expression index", current_line);
 					num_errors++;
 					return 0;
 				}
@@ -505,12 +525,12 @@ static u_int8_t postfix_expression(FILE* fl){
 
 				//Just to double check
 				if(lookahead.tok != R_BRACKET){
-					print_parse_message(PARSE_ERROR, "Right bracket expected after primary expression index");
+					print_parse_message(PARSE_ERROR, "Right bracket expected after primary expression index", current_line);
 					num_errors++;
 					return 0;
 				//Or we have some unmatched grouping operator
 				} else if(pop(grouping_stack).tok != L_BRACKET){
-					print_parse_message(PARSE_ERROR, "Unmatched bracket detected");
+					print_parse_message(PARSE_ERROR, "Unmatched bracket detected", current_line);
 					num_errors++;
 					return 0;
 				}
@@ -561,6 +581,8 @@ static u_int8_t postfix_expression(FILE* fl){
  * 					  | ! 
  */
 static u_int8_t unary_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -576,7 +598,7 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If it was bad
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid unary expression following preincrement/predecrement");
+				print_parse_message(PARSE_ERROR, "Invalid unary expression following preincrement/predecrement", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -590,7 +612,7 @@ static u_int8_t unary_expression(FILE* fl){
 			lookahead = get_next_token(fl, &parser_line_num);
 
 			if(lookahead.tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Left parenthesis expected after size keyword");
+				print_parse_message(PARSE_ERROR, "Left parenthesis expected after size keyword", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -603,7 +625,7 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If it was bad
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid unary expression given to size operator");
+				print_parse_message(PARSE_ERROR, "Invalid unary expression given to size operator", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -614,12 +636,12 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If this is an R_PAREN
 			if(lookahead.tok != R_PAREN) {
-				print_parse_message(PARSE_ERROR, "Right parenthesis expected after unary expression");
+				print_parse_message(PARSE_ERROR, "Right parenthesis expected after unary expression", current_line);
 				num_errors++;
 				return 0;
 			//Otherwise if it wasn't matched right
 			} else if(pop(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -633,7 +655,7 @@ static u_int8_t unary_expression(FILE* fl){
 			lookahead = get_next_token(fl, &parser_line_num);
 
 			if(lookahead.tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize keyword");
+				print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize keyword", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -646,7 +668,7 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If it was bad
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid type name given to typesize operator");
+				print_parse_message(PARSE_ERROR, "Invalid type name given to typesize operator", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -657,12 +679,12 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If this is an R_PAREN
 			if(lookahead.tok != R_PAREN) {
-				print_parse_message(PARSE_ERROR, "Right parenthesis expected after type name");
+				print_parse_message(PARSE_ERROR, "Right parenthesis expected after type name", current_line);
 				num_errors++;
 				return 0;
 			//Otherwise if it wasn't matched right
 			} else if(pop(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -683,7 +705,7 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If it was bad
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid cast expression following unary operator");
+				print_parse_message(PARSE_ERROR, "Invalid cast expression following unary operator", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -700,7 +722,7 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If it was bad
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid postfix expression inside of unary expression");
+				print_parse_message(PARSE_ERROR, "Invalid postfix expression inside of unary expression", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -719,6 +741,8 @@ static u_int8_t unary_expression(FILE* fl){
  * 						    	| ( <type-name> ) <unary-expression>
  */
 static u_int8_t cast_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -737,7 +761,7 @@ static u_int8_t cast_expression(FILE* fl){
 		
 		//If it was bad
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid type name found in cast expression");
+			print_parse_message(PARSE_ERROR, "Invalid type name found in cast expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -748,11 +772,11 @@ static u_int8_t cast_expression(FILE* fl){
 		
 		//If this is an R_PAREN
 		if(lookahead.tok != R_PAREN) {
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type name");
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type name", current_line);
 			num_errors++;
 			return 0;
 		} else if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis deteced");
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis deteced", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -767,7 +791,7 @@ static u_int8_t cast_expression(FILE* fl){
 	
 	//If it was bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid unary expression found in cast expression"); 
+		print_parse_message(PARSE_ERROR, "Invalid unary expression found in cast expression", current_line); 
 		num_errors++;
 		return 0;
 	}
@@ -786,6 +810,8 @@ static u_int8_t cast_expression(FILE* fl){
  * 												 | %<cast-expression><multiplicative-expression-prime>
  */
 static u_int8_t multiplicative_expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -794,7 +820,7 @@ static u_int8_t multiplicative_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression");
+		print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -820,6 +846,8 @@ static u_int8_t multiplicative_expression_prime(FILE* fl){
  * 										   | <cast-expression><multiplicative-expression-prime>
  */
 static u_int8_t multiplicative_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -828,7 +856,7 @@ static u_int8_t multiplicative_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression");
+		print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -856,6 +884,8 @@ static u_int8_t multiplicative_expression(FILE* fl){
  * 										   | - <multiplicative-expression><additive-expression-prime>
  */
 static u_int8_t additive_expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -864,7 +894,7 @@ static u_int8_t additive_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid mutliplicative expression found in additive expression");
+		print_parse_message(PARSE_ERROR, "Invalid mutliplicative expression found in additive expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -891,6 +921,8 @@ static u_int8_t additive_expression_prime(FILE* fl){
  * 									 | <multiplicative-expression><additive-expression-prime>
  */
 static u_int8_t additive_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -899,7 +931,7 @@ static u_int8_t additive_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid multiplicative expression found in additive expression");
+		print_parse_message(PARSE_ERROR, "Invalid multiplicative expression found in additive expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -926,6 +958,8 @@ static u_int8_t additive_expression(FILE* fl){
  *								 |  <additive-expression> >> <additive-expression>
  */
 static u_int8_t shift_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -934,7 +968,7 @@ static u_int8_t shift_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression");
+		print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -954,7 +988,7 @@ static u_int8_t shift_expression(FILE* fl){
 
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression");
+		print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -975,6 +1009,8 @@ static u_int8_t shift_expression(FILE* fl){
  * 						     | <shift-expression> <= <shift-expression>
  */
 static u_int8_t relational_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -983,7 +1019,7 @@ static u_int8_t relational_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression");
+		print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1005,7 +1041,7 @@ static u_int8_t relational_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression");
+		print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1024,6 +1060,8 @@ static u_int8_t relational_expression(FILE* fl){
  *										   | !=<relational-expression><equality-expression-prime>
  */
 static u_int8_t equality_expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1032,7 +1070,7 @@ static u_int8_t equality_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression");
+		print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1058,6 +1096,8 @@ static u_int8_t equality_expression_prime(FILE* fl){
  * 									 | <relational-expression><equality-expression-prime>
  */
 static u_int8_t equality_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1066,7 +1106,7 @@ static u_int8_t equality_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression");
+		print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1093,6 +1133,8 @@ static u_int8_t equality_expression(FILE* fl){
  * BNF Rule: <and-expression-prime> ::= &<equality-expression><and-expression-prime>
  */
 static u_int8_t and_expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1101,7 +1143,7 @@ static u_int8_t and_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression");
+		print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1127,6 +1169,8 @@ static u_int8_t and_expression_prime(FILE* fl){
  * 								| <equality-expression><and-expression-prime>
  */
 static u_int8_t and_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1135,7 +1179,7 @@ static u_int8_t and_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression");
+		print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1162,6 +1206,8 @@ static u_int8_t and_expression(FILE* fl){
  * BNF Rule: <exclusive-or-expression-prime> ::= ^<and_expression><exlcusive-or-expression-prime>
  */
 static u_int8_t exclusive_or_expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1170,7 +1216,7 @@ static u_int8_t exclusive_or_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression");
+		print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1196,6 +1242,8 @@ static u_int8_t exclusive_or_expression_prime(FILE* fl){
  * 										 | <and_expression><exclusive-or-expression-prime>
  */
 static u_int8_t exclusive_or_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1204,7 +1252,7 @@ static u_int8_t exclusive_or_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression");
+		print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1231,6 +1279,8 @@ static u_int8_t exclusive_or_expression(FILE* fl){
  * BNF Rule: <inclusive-or-expression-prime> ::= |<exclusive-or-expression><inclusive-or-expression-prime>
  */
 u_int8_t inclusive_or_expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1239,7 +1289,7 @@ u_int8_t inclusive_or_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression");
+		print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1265,6 +1315,8 @@ u_int8_t inclusive_or_expression_prime(FILE* fl){
  * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression><inclusive-or-expression-prime>
  */
 static u_int8_t inclusive_or_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1273,7 +1325,7 @@ static u_int8_t inclusive_or_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression");
+		print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1300,6 +1352,8 @@ static u_int8_t inclusive_or_expression(FILE* fl){
  * BNF Rule: <logical-and-expression-prime> ::= &&<inclusive-or-expression><logical-and-expression-prime>
  */
 u_int8_t logical_and_expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1308,7 +1362,7 @@ u_int8_t logical_and_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical and expression");
+		print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical and expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1334,6 +1388,8 @@ u_int8_t logical_and_expression_prime(FILE* fl){
  * BNF Rule: <logical-and-expression> ::= <logical-and-expression> ::= <inclusive-or-expression><logical-and-expression-prime>
  */
 u_int8_t logical_and_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1342,7 +1398,7 @@ u_int8_t logical_and_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical expression");
+		print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1369,6 +1425,8 @@ u_int8_t logical_and_expression(FILE* fl){
  * BNF Rule: <logical-or-expression-prime ::= ||<logical-and-expression><logical-or-expression-prime> 
  */
 u_int8_t logical_or_expression_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status;
 
@@ -1377,7 +1435,7 @@ u_int8_t logical_or_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression");
+		print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1402,6 +1460,8 @@ u_int8_t logical_or_expression_prime(FILE* fl){
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression><logical-or-expression-prime>
  */
 u_int8_t logical_or_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1410,7 +1470,7 @@ u_int8_t logical_or_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression");
+		print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1436,12 +1496,14 @@ u_int8_t logical_or_expression(FILE* fl){
  * BNF Rule: <conditional-expression> ::= <logical-or-expression>
  */
 u_int8_t conditional_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	//Pass through to the logical or expression expression
 	u_int8_t status = logical_or_expression(fl);
 
 	//Something failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid logical or expression found in conditional expression");
+		print_parse_message(PARSE_ERROR, "Invalid logical or expression found in conditional expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1457,12 +1519,14 @@ u_int8_t conditional_expression(FILE* fl){
  * BNF Rule: <constant-expression> ::= <conditional-expression> 
  */
 u_int8_t constant_expression(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	//Pass through to the conditional expression
 	u_int8_t status = conditional_expression(fl);
 
 	//Something failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression found in constant expression");
+		print_parse_message(PARSE_ERROR, "Invalid conditional expression found in constant expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1473,24 +1537,34 @@ u_int8_t constant_expression(FILE* fl){
 
 
 u_int8_t structure_declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	return 0;
 }
 
 u_int8_t structure_declarator_list(FILE* fl, symtab_t* symtab, stack_t* stack){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	return 0;
 }
 
 
 u_int8_t specifier_qualifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	return 0;
 }
 
 
 u_int8_t structure_declaration(FILE* fl, symtab_t* symtab, stack_t* stack){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	return 0;
 }
 
 u_int8_t structure_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	return 0;
 }
 
@@ -1502,6 +1576,8 @@ u_int8_t structure_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
  * 			           	  | <identifier> := <constant-expression>
  */
 u_int8_t enumerator(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status;
 
@@ -1510,7 +1586,7 @@ u_int8_t enumerator(FILE* fl){
 
 	//Get out if bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid identifier in enumerator");
+		print_parse_message(PARSE_ERROR, "Invalid identifier in enumerator", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1525,7 +1601,7 @@ u_int8_t enumerator(FILE* fl){
 
 		//Get out if bad
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid constant expression in enumerator");
+			print_parse_message(PARSE_ERROR, "Invalid constant expression in enumerator", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -1546,6 +1622,8 @@ u_int8_t enumerator(FILE* fl){
  * BNF Rule: <enumerator-list-prime> ::= ,<enumerator><enumerator-list-prime>
  */
 u_int8_t enumeration_list_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 	u_int8_t status = 0;
 
@@ -1554,7 +1632,7 @@ u_int8_t enumeration_list_prime(FILE* fl){
 
 	//Get out if bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list");
+		print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1579,6 +1657,8 @@ u_int8_t enumeration_list_prime(FILE* fl){
  * BNF Rule: <enumerator-list> ::= <enumerator><enumerator-list-prime>
  */
 u_int8_t enumeration_list(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 	u_int8_t status = 0;
 
@@ -1587,7 +1667,7 @@ u_int8_t enumeration_list(FILE* fl){
 
 	//Get out if bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list");
+		print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1617,6 +1697,8 @@ u_int8_t enumeration_list(FILE* fl){
  * 						  			
  */
 u_int8_t enumeration_specifier(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 
 	//We now have to see a valid identifier, since we've already seen the ENUMERATED keyword
@@ -1624,7 +1706,7 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 	//If it's bad then we're done here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid identifier in enumeration specifier");
+		print_parse_message(PARSE_ERROR, "Invalid identifier in enumeration specifier", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1641,7 +1723,7 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 		//If it's bad then we're done here
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid enumeration list in enumeration specifier");
+			print_parse_message(PARSE_ERROR, "Invalid enumeration list in enumeration specifier", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -1650,14 +1732,14 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 		//All of our fail cases here
 		if(l.tok != R_CURLY){
-			print_parse_message(PARSE_ERROR, "Right curly brace expected at end of enumeration list");
+			print_parse_message(PARSE_ERROR, "Right curly brace expected at end of enumeration list", current_line);
 			num_errors++;
 			return 0;
 		}
 
 		//Unmatched left curly
 		if(pop(grouping_stack).tok != L_CURLY){
-			print_parse_message(PARSE_ERROR, "Unmatched right parenthesis");
+			print_parse_message(PARSE_ERROR, "Unmatched right parenthesis", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -1695,6 +1777,8 @@ u_int8_t enumeration_specifier(FILE* fl){
  * 								 | <user-defined-type>
  */
 u_int8_t type_specifier(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 	u_int8_t status = 0;
@@ -1714,7 +1798,7 @@ u_int8_t type_specifier(FILE* fl){
 
 		//If it's bad then we're done here
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid enumeration specifier in type specifier");
+			print_parse_message(PARSE_ERROR, "Invalid enumeration specifier in type specifier", current_line);
 			num_errors++;
 			return 0;
 		}	
@@ -1736,6 +1820,8 @@ u_int8_t type_specifier(FILE* fl){
  * 								 		| register
  */
 u_int8_t storage_class_specifier(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 
 	//If we see one here
@@ -1756,6 +1842,8 @@ u_int8_t storage_class_specifier(FILE* fl){
  * BNF Rule: <parameter-declaration> ::= (<storage-class-specifier>)? (constant)? <type-specifier> <declarator>
  */
 u_int8_t parameter_declaration(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t is_const = 0;
 	u_int8_t status = 0;
@@ -1779,7 +1867,7 @@ u_int8_t parameter_declaration(FILE* fl){
 	
 	//If it's bad then we're done here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier found in parameter declaration");
+		print_parse_message(PARSE_ERROR, "Invalid type specifier found in parameter declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1789,7 +1877,7 @@ u_int8_t parameter_declaration(FILE* fl){
 
 	//If it's bad then we're done here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid declarator found in parameter declaration");
+		print_parse_message(PARSE_ERROR, "Invalid declarator found in parameter declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1806,6 +1894,8 @@ u_int8_t parameter_declaration(FILE* fl){
  * BNF Rule: <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
  */
 u_int8_t parameter_list_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1814,7 +1904,7 @@ u_int8_t parameter_list_prime(FILE* fl){
 
 	//Fail out if so
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list");
+		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1837,6 +1927,8 @@ u_int8_t parameter_list_prime(FILE* fl){
  * BNF Rule: <parameter-list> ::= <parameter-declaration>(<parameter-list-prime>)?
  */
 u_int8_t parameter_list(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1845,7 +1937,7 @@ u_int8_t parameter_list(FILE* fl){
 	
 	//If we didn't see a valid one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list");
+		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1868,6 +1960,8 @@ u_int8_t parameter_list(FILE* fl){
  * BNF Rule: <expression-statement> ::= {<expression>}?;
  */
 static u_int8_t expression_statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -1887,7 +1981,7 @@ static u_int8_t expression_statement(FILE* fl){
 
 	//Fail case
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid expression discovered");
+		print_parse_message(PARSE_ERROR, "Invalid expression discovered", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1899,7 +1993,7 @@ static u_int8_t expression_statement(FILE* fl){
 
 	//Empty expression, we're done here
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after statement");
+		print_parse_message(PARSE_ERROR, "Semicolon expected after statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1915,6 +2009,8 @@ static u_int8_t expression_statement(FILE* fl){
  * 						 | default : <statement>
  */
 static u_int8_t labeled_statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	return 0;
 
 }
@@ -1926,6 +2022,8 @@ static u_int8_t labeled_statement(FILE* fl){
  * BNF Rule: <if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement | compound-statement>}*
  */
 static u_int8_t if_statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	Lexer_item lookahead2;
 	u_int8_t status = 0;
@@ -1935,7 +2033,7 @@ static u_int8_t if_statement(FILE* fl){
 
 	//If we didn't see it fail out
 	if(lookahead.tok != IF){
-		print_parse_message(PARSE_ERROR, "if keyword expected in if statement");
+		print_parse_message(PARSE_ERROR, "if keyword expected in if statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1945,7 +2043,7 @@ static u_int8_t if_statement(FILE* fl){
 
 	//Fail out
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected after if statement");
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected after if statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1958,7 +2056,7 @@ static u_int8_t if_statement(FILE* fl){
 
 	//If we fail
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid expression found in if statement"); 
+		print_parse_message(PARSE_ERROR, "Invalid expression found in if statement", current_line); 
 		num_errors++;
 		return 0;
 	}
@@ -1968,14 +2066,14 @@ static u_int8_t if_statement(FILE* fl){
 
 	//If we don't see the R_Paren
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in if statement");
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in if statement", current_line);
 		num_errors++;
 		return 0;
 	}
 
 	//Now let's check the stack
 	if(pop(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1985,7 +2083,7 @@ static u_int8_t if_statement(FILE* fl){
 
 	//Fail out if bad
 	if(lookahead.tok != THEN){
-		print_parse_message(PARSE_ERROR, "then keyword expected following expression in if statement");
+		print_parse_message(PARSE_ERROR, "then keyword expected following expression in if statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1995,7 +2093,7 @@ static u_int8_t if_statement(FILE* fl){
 
 	//If we fail
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid compound statement in if block");
+		print_parse_message(PARSE_ERROR, "Invalid compound statement in if block", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2019,7 +2117,7 @@ static u_int8_t if_statement(FILE* fl){
 
 			//If we fail
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid else-if block");
+				print_parse_message(PARSE_ERROR, "Invalid else-if block", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -2034,7 +2132,7 @@ static u_int8_t if_statement(FILE* fl){
 
 			//If we fail
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid compound statement in else block");
+				print_parse_message(PARSE_ERROR, "Invalid compound statement in else block", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -2059,6 +2157,8 @@ static u_int8_t if_statement(FILE* fl){
  * 								| ret {<conditional-expression>}?;
  */
 static u_int8_t jump_statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -2072,7 +2172,7 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//Fail out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid label identifier found after jump statement");
+			print_parse_message(PARSE_ERROR, "Invalid label identifier found after jump statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2095,7 +2195,7 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//Fail out
 		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after when keyword");
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after when keyword", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2108,7 +2208,7 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//fail out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement");
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2118,14 +2218,14 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//If we don't see it
 		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after conditional expression");
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after conditional expression", current_line);
 			num_errors++;
 			return 0;
 		}
 
 		//Double check that we matched
 		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2149,7 +2249,7 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//Fail out
 		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after when keyword");
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after when keyword", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2162,7 +2262,7 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//fail out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement");
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2172,14 +2272,14 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//If we don't see it
 		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after conditional expression");
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after conditional expression", current_line);
 			num_errors++;
 			return 0;
 		}
 
 		//Double check that we matched
 		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2204,7 +2304,7 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//If we fail
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression in ret statement");
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression in ret statement", current_line);
 		}
 		//otherwise we're all set
 	}
@@ -2214,7 +2314,7 @@ semicol:
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of statement");
+		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2228,6 +2328,8 @@ semicol:
  * BNF Rule: <switch-statement> ::= switch on( <expression> ) <labeled-statement>
  */
 static u_int8_t switch_statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	return 0;
 
 }
@@ -2239,6 +2341,8 @@ static u_int8_t switch_statement(FILE* fl){
  * 									 | for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
  */
 static u_int8_t iterative_statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	return 0;
 }
 
@@ -2255,6 +2359,8 @@ static u_int8_t iterative_statement(FILE* fl){
  * 						   | <jump-statement>
  */
 static u_int8_t statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -2271,7 +2377,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid compound statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2289,7 +2395,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid labeled statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid labeled statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2307,7 +2413,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid if statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid if statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2325,7 +2431,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid switch statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid switch statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2344,7 +2450,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2362,7 +2468,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid iterative statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid iterative statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2380,7 +2486,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid expression statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid expression statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2398,6 +2504,8 @@ static u_int8_t statement(FILE* fl){
  * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
  */
 static u_int8_t compound_statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -2406,7 +2514,7 @@ static u_int8_t compound_statement(FILE* fl){
 
 	//Fail case
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Opening curly brace expected to begin compound statement");
+		print_parse_message(PARSE_ERROR, "Opening curly brace expected to begin compound statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2430,7 +2538,7 @@ static u_int8_t compound_statement(FILE* fl){
 			
 			//If we fail here just leave
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid declaration found in compound statement");
+				print_parse_message(PARSE_ERROR, "Invalid declaration found in compound statement", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -2444,7 +2552,7 @@ static u_int8_t compound_statement(FILE* fl){
 
 			//If we failed
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid statement found in compound statement");
+				print_parse_message(PARSE_ERROR, "Invalid statement found in compound statement", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -2458,7 +2566,7 @@ static u_int8_t compound_statement(FILE* fl){
 	//When we make it here, we know that we have an R_CURLY in the lookahead
 	//Let's check to see if the grouping went properly
 	if(pop(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected inside of compound statement");
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected inside of compound statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2478,6 +2586,8 @@ static u_int8_t compound_statement(FILE* fl){
  * 								  | <identifier> ( {<identifier>}*{, <identifier>}* )
  */
 u_int8_t direct_declarator(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	Lexer_item lookahead2;
 	u_int8_t status = 0;
@@ -2495,7 +2605,7 @@ u_int8_t direct_declarator(FILE* fl){
 
 		//If bad get out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid declarator found inside of direct declarator");
+			print_parse_message(PARSE_ERROR, "Invalid declarator found inside of direct declarator", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2505,14 +2615,14 @@ u_int8_t direct_declarator(FILE* fl){
 
 		//No closing paren
 		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Closing parenthesis expected after declarator");
+			print_parse_message(PARSE_ERROR, "Closing parenthesis expected after declarator", current_line);
 			num_errors++;
 			return 0;
 		}
 
 		//Unmatched grouping operator
 		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2554,7 +2664,7 @@ u_int8_t direct_declarator(FILE* fl){
 
 					//Fail out if so
 					if(status == 0){
-						print_parse_message(PARSE_ERROR, "Invalid constant expression in array subscript");
+						print_parse_message(PARSE_ERROR, "Invalid constant expression in array subscript", current_line);
 						return 0;
 					}
 
@@ -2563,14 +2673,14 @@ u_int8_t direct_declarator(FILE* fl){
 
 					//If we don't see a ]
 					if(lookahead.tok != R_BRACKET){
-						print_parse_message(PARSE_ERROR, "Right bracket expected to close array subscript");
+						print_parse_message(PARSE_ERROR, "Right bracket expected to close array subscript", current_line);
 						num_errors++;
 						return 0;
 					}
 
 					//If they don't match
 					if(pop(grouping_stack).tok != L_BRACKET){
-						print_parse_message(PARSE_ERROR, "Unmatched brackets detected");
+						print_parse_message(PARSE_ERROR, "Unmatched brackets detected", current_line);
 						num_errors++;
 						return 0;
 					}
@@ -2620,7 +2730,7 @@ u_int8_t direct_declarator(FILE* fl){
 					
 					//If it isn't one, that's bad
 					if(lookahead.tok != IDENT){
-						print_parse_message(PARSE_ERROR, "Identifier expected after comma in identifier list");
+						print_parse_message(PARSE_ERROR, "Identifier expected after comma in identifier list", current_line);
 						num_errors++;
 						return 0;
 					}
@@ -2640,7 +2750,7 @@ u_int8_t direct_declarator(FILE* fl){
 				
 				//If it failed
 				if(status == 0){
-					print_parse_message(PARSE_ERROR, "Invalid parameter list in function declarative");
+					print_parse_message(PARSE_ERROR, "Invalid parameter list in function declarative", current_line);
 					num_errors++;
 					return 0;
 				}
@@ -2651,14 +2761,14 @@ u_int8_t direct_declarator(FILE* fl){
 
 			//If we don't see a )
 			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Right parenthesis expected");
+				print_parse_message(PARSE_ERROR, "Right parenthesis expected", current_line);
 				num_errors++;
 				return 0;
 			}
 
 			//If they don't match
 			if(pop(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected");
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -2675,7 +2785,7 @@ u_int8_t direct_declarator(FILE* fl){
 
 	//If we get here it failed
 	} else {
-		print_parse_message(PARSE_ERROR, "Identifier or declarator expected in direct declarator");
+		print_parse_message(PARSE_ERROR, "Identifier or declarator expected in direct declarator", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2690,6 +2800,8 @@ u_int8_t direct_declarator(FILE* fl){
  * BNF Rule: <initializer-list-prime> ::= , <initializer><initializer-list-prime>
  */
 static u_int8_t initializer_list_prime(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -2698,7 +2810,7 @@ static u_int8_t initializer_list_prime(FILE* fl){
 
 	//Invalid here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list");
+		print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2723,6 +2835,8 @@ static u_int8_t initializer_list_prime(FILE* fl){
  * BNF Rule: <initializer-list> ::= <initializer><initializer-list-prime>
  */
 static u_int8_t initializer_list(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -2731,7 +2845,7 @@ static u_int8_t initializer_list(FILE* fl){
 
 	//Invalid here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list");
+		print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2757,6 +2871,8 @@ static u_int8_t initializer_list(FILE* fl){
  * 							| { <intializer-list> }
  */
 static u_int8_t initializer(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
@@ -2773,7 +2889,7 @@ static u_int8_t initializer(FILE* fl){
 
 		//Fail out here
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid initializer list in initializer");
+			print_parse_message(PARSE_ERROR, "Invalid initializer list in initializer", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2783,14 +2899,14 @@ static u_int8_t initializer(FILE* fl){
 
 		//If we don't see it
 		if(lookahead.tok != R_CURLY){
-			print_parse_message(PARSE_ERROR, "Closing curly brace expected after initializer list");
+			print_parse_message(PARSE_ERROR, "Closing curly brace expected after initializer list", current_line);
 			num_errors++;
 			return 0;
 		}
 		
 		//Unmatched curlies here
 		if(pop(grouping_stack).tok != L_CURLY){
-			print_parse_message(PARSE_ERROR, "Unmatched curly braces detected");
+			print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2808,7 +2924,7 @@ static u_int8_t initializer(FILE* fl){
 
 		//Fail out if we get here
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in initializer");
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in initializer", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2825,6 +2941,8 @@ static u_int8_t initializer(FILE* fl){
  * BNF Rule: <declarator> ::= {<pointer>}? <direct-declarator>
  */
 static u_int8_t declarator(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	u_int8_t status = 0;
 
 	//We can see pointers here
@@ -2836,7 +2954,7 @@ static u_int8_t declarator(FILE* fl){
 	status = direct_declarator(fl);
 	
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid direct declarator found in declarator");
+		print_parse_message(PARSE_ERROR, "Invalid direct declarator found in declarator", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2853,6 +2971,8 @@ static u_int8_t declarator(FILE* fl){
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
  */
 static u_int8_t declaration(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 	u_int8_t status = 0;
 	Token let_or_declare;
@@ -2862,7 +2982,7 @@ static u_int8_t declaration(FILE* fl){
 
 	//Something bad here
 	if(l.tok != LET && l.tok != DECLARE){
-		print_parse_message(PARSE_ERROR, "Declare or let keywords expected in declaration");
+		print_parse_message(PARSE_ERROR, "Declare or let keywords expected in declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2894,7 +3014,7 @@ static u_int8_t declaration(FILE* fl){
 	
 	//If bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier in declaration");
+		print_parse_message(PARSE_ERROR, "Invalid type specifier in declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2904,7 +3024,7 @@ static u_int8_t declaration(FILE* fl){
 
 	//If bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid declarator in declaration");
+		print_parse_message(PARSE_ERROR, "Invalid declarator in declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2916,7 +3036,7 @@ static u_int8_t declaration(FILE* fl){
 
 		//If we don't see it, get out
 		if(l.tok != COLONEQ){
-			print_parse_message(PARSE_ERROR, "Assignment operator(:=) expected after declaration");
+			print_parse_message(PARSE_ERROR, "Assignment operator(:=) expected after declaration", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2926,7 +3046,7 @@ static u_int8_t declaration(FILE* fl){
 
 		//If we don't see it, get out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid initializer in declaration");
+			print_parse_message(PARSE_ERROR, "Invalid initializer in declaration", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2935,7 +3055,7 @@ static u_int8_t declaration(FILE* fl){
 		l = get_next_token(fl, &parser_line_num);
 
 		if(l.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of a declaration");
+			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of a declaration", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2951,7 +3071,7 @@ static u_int8_t declaration(FILE* fl){
 		l = get_next_token(fl, &parser_line_num);
 
 		if(l.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration");
+			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2972,6 +3092,8 @@ static u_int8_t declaration(FILE* fl){
  *			        			  | external
  */
 u_int8_t function_specifier(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 	
@@ -3000,6 +3122,8 @@ u_int8_t function_specifier(FILE* fl){
  *			        			  | external
  */
 u_int8_t function_declaration(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	Lexer_item lookahead2;
 	char* function_name;
@@ -3022,7 +3146,7 @@ u_int8_t function_declaration(FILE* fl){
 		if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL){
 			//TODO handle with symtable
 		} else {
-			print_parse_message(PARSE_ERROR, "Function specifier STATIC or EXTERNAL expected after colon");
+			print_parse_message(PARSE_ERROR, "Function specifier STATIC or EXTERNAL expected after colon", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3037,7 +3161,7 @@ u_int8_t function_declaration(FILE* fl){
 	
 	//We have no identifier, so we must quit
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "No valid identifier found");
+		print_parse_message(PARSE_ERROR, "No valid identifier found", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3049,7 +3173,7 @@ u_int8_t function_declaration(FILE* fl){
 
 	//If we didn't find it, no point in going further
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected");
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3073,7 +3197,7 @@ u_int8_t function_declaration(FILE* fl){
 
 	//We have a bad parameter list
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "No valid parameter list found for function");
+		print_parse_message(PARSE_ERROR, "No valid parameter list found for function", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3083,14 +3207,14 @@ u_int8_t function_declaration(FILE* fl){
 
 	//If we don't have an R_Paren that's an issue
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected");
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected", current_line);
 		num_errors++;
 		return 0;
 	}
 	
 	//If this happens, then we have some unmatched parenthesis
 	if(pop(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis found");
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis found", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3103,7 +3227,7 @@ arrow_ident:
 
 	//We absolutely must see an arrow here
 	if(lookahead.tok != ARROW){
-		print_parse_message(PARSE_ERROR, "Arrow expected after function declaration");
+		print_parse_message(PARSE_ERROR, "Arrow expected after function declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3113,7 +3237,7 @@ arrow_ident:
 
 	//If it failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid return type given to function");
+		print_parse_message(PARSE_ERROR, "Invalid return type given to function", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3122,7 +3246,7 @@ arrow_ident:
 	status = compound_statement(fl);
 
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid compound statement in function");
+		print_parse_message(PARSE_ERROR, "Invalid compound statement in function", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3139,6 +3263,8 @@ arrow_ident:
  *                        	| <declaration>
  */
 u_int8_t declaration_partition(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status;
 
@@ -3156,7 +3282,7 @@ u_int8_t declaration_partition(FILE* fl){
 	
 	//Something failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Declaration Partition could not find a valid function or declaration");
+		print_parse_message(PARSE_ERROR, "Declaration Partition could not find a valid function or declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3172,6 +3298,8 @@ u_int8_t declaration_partition(FILE* fl){
  * BNF Rule: <program>::= {<declaration-partition>}*
  */
 u_int8_t program(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 	u_int8_t status = 0;
 
@@ -3185,7 +3313,7 @@ u_int8_t program(FILE* fl){
 		
 		//If we have an error then we'll print it out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid declaration partition found");
+			print_parse_message(PARSE_ERROR, "Invalid declaration partition found", current_line);
 			num_errors++;
 			//If we have but one failure, the whole thing is toast
 			break;
