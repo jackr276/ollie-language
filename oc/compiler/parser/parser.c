@@ -343,8 +343,8 @@ static u_int8_t assignment_expression(FILE* fl){
 		}
 
 		//Otherwise it worked just fine
-		//Now we must see an assignment expression again
-		status = assignment_expression(fl);
+		//Now we must see an conditional expression again
+		status = conditional_expression(fl);
 
 		//We have a bad one
 		if(status == 0){
@@ -437,6 +437,7 @@ static u_int8_t postfix_expression(FILE* fl){
 				push_back_token(fl, lookahead);
 				
 				//We now need to see a valid assignment expression
+				//TODO this is probably wrong
 				status = assignment_expression(fl);
 				
 				//Refresh this for the next search
@@ -1844,8 +1845,44 @@ u_int8_t parameter_list(FILE* fl){
  * BNF Rule: <expression-statement> ::= {<expression>}?;
  */
 static u_int8_t expression_statement(FILE* fl){
-	return 1;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 
+	//Let's see if we have a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Empty expression, we're done here
+	if(lookahead.tok == SEMICOLON){
+		return 1;
+	}
+
+	//Otherwise, put it back and call expression
+	push_back_token(fl, lookahead);
+	
+	//We now must see a valid expression
+	status = expression(fl);
+
+	//Fail case
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid expression discovered");
+		num_errors++;
+		return 0;
+	}
+
+	//Now to close out we must see a semicolon
+	//Let's see if we have a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+	printf("%s\n", lookahead.lexeme);
+
+	//Empty expression, we're done here
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after statement");
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise we're all set
+	return 1;
 }
 
 
@@ -1992,13 +2029,15 @@ static u_int8_t if_statement(FILE* fl){
 
 /**
  * BNF Rule: <jump-statement> ::= jump <identifier> 
- * 								| continue when(<expression>); 
+ * 								| continue when(<conditional-expression>); 
  * 								| continue; 
- * 								| break when(<expression>); 
+ * 								| break when(<conditional-expression>); 
  * 								| break; 
  * 								| ret {<expression>}?;
  */
 static u_int8_t jump_statement(FILE* fl){
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 	return 0;
 
 }
@@ -2141,7 +2180,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid iterative statement found in statement");
 			num_errors++;
 			return 0;
 		}
@@ -2159,7 +2198,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement");
+			print_parse_message(PARSE_ERROR, "Invalid expression statement found in statement");
 			num_errors++;
 			return 0;
 		}
@@ -2530,7 +2569,7 @@ static u_int8_t initializer_list(FILE* fl){
 
 
 /**
- * An initializer can descend into an assignment expression or an initializer list
+ * An initializer can descend into a conditional expression or an initializer list
  *
  * BNF Rule: <initializer> ::= <conditional-expression> 
  * 							| { <intializer-list> }

@@ -29,9 +29,9 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 			  | <jump-statement>
 
 <jump-statement> ::= jump <identifier>
-				     | continue when(<expression>);
+				     | continue when(<conditional-expression>);
 					 | continue;
-					 | break when(<expression>);
+					 | break when(<conditional-expression>);
 					 | break;
 					 | ret {<expression>}?;
 
@@ -185,7 +185,7 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <expression_prime> ::= , <assignment-expression><expression_prime>
 
 <assignment-expression> ::= <conditional-expression>
-						  | <unary-expression> := <conditional_expression>
+						  | asn <unary-expression> := <conditional_expression>
 
 <declaration-specifier> ::= <storage-class-specifier>
 						  | <type-specifier>
