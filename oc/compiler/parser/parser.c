@@ -29,6 +29,7 @@ static u_int8_t unary_expression(FILE* fl);
 static u_int8_t declaration(FILE* fl);
 static u_int8_t compound_statement(FILE* fl);
 static u_int8_t statement(FILE* fl);
+static u_int8_t initializer(FILE* fl);
 static u_int8_t declarator(FILE* fl);
 static u_int8_t direct_declarator(FILE* fl);
 
@@ -2333,8 +2334,140 @@ u_int8_t direct_declarator(FILE* fl){
 }
 
 
+/**
+ * A prime rule that allows us to avoid left recursion
+ * 
+ * REMEMBER: By the time we arrive here, we've already seen the comma
+ *
+ * BNF Rule: <initializer-list-prime> ::= , <initializer><initializer-list-prime>
+ */
+static u_int8_t initializer_list_prime(FILE* fl){
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid initializer
+	status = initializer(fl);
+
+	//Invalid here
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list");
+		num_errors++;
+		return 0;
+	}
+	
+	//Otherwise we may be able to see a comma and chain the initializer lists
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a comma we know to chain with intializer list prime
+	if(lookahead.tok == COMMA){
+		return initializer_list_prime(fl);
+	} else {
+		//Put it back and leave
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * An initializer list is a series of initializers chained together
+ *
+ * BNF Rule: <initializer-list> ::= <initializer><initializer-list-prime>
+ */
+static u_int8_t initializer_list(FILE* fl){
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We must first see a valid initializer
+	status = initializer(fl);
+
+	//Invalid here
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list");
+		num_errors++;
+		return 0;
+	}
+	
+	//Otherwise we may be able to see a comma and chain the initializer lists
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a comma we know to chain with intializer list prime
+	if(lookahead.tok == COMMA){
+		return initializer_list_prime(fl);
+	} else {
+		//Put it back and leave
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+}
+
+
+/**
+ * An initializer can descend into an assignment expression or an initializer list
+ *
+ * BNF Rule: <initializer> ::= <conditional-expression> 
+ * 							| { <intializer-list> }
+ */
 static u_int8_t initializer(FILE* fl){
-	return 0;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//Let's see what we have in front
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a left curly, we know that we have an intializer list
+	if(lookahead.tok == L_CURLY){
+		//Push to stack for checking
+		push(grouping_stack, lookahead);
+
+		//Now we just see a valid initializer list
+		u_int8_t status = initializer_list(fl);
+
+		//Fail out here
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid initializer list in initializer");
+			num_errors++;
+			return 0;
+		}
+		
+		//Now we have to see a closing curly
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we don't see it
+		if(lookahead.tok != R_CURLY){
+			print_parse_message(PARSE_ERROR, "Closing curly brace expected after initializer list");
+			num_errors++;
+			return 0;
+		}
+		
+		//Unmatched curlies here
+		if(pop(grouping_stack).tok != L_CURLY){
+			print_parse_message(PARSE_ERROR, "Unmatched curly braces detected");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked so we can get out
+		return 1;
+
+	//If we didn't see the curly, we must see a conditional expression
+	} else {
+		//Put the token back
+		push_back_token(fl, lookahead);
+
+		//Must work here
+		status = conditional_expression(fl);
+
+		//Fail out if we get here
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in initializer");
+			num_errors++;
+			return 0;
+		}
+		
+		//Otherwise it worked, so return 1
+		return 1;
+	}
 }
 
 
@@ -2344,7 +2477,6 @@ static u_int8_t initializer(FILE* fl){
  * BNF Rule: <declarator> ::= {<pointer>}? <direct-declarator>
  */
 static u_int8_t declarator(FILE* fl){
-	Lexer_item lookahead;
 	u_int8_t status = 0;
 
 	//We can see pointers here
