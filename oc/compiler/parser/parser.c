@@ -1733,7 +1733,7 @@ u_int8_t storage_class_specifier(FILE* fl){
 /**
  * For a parameter declaration, we can see this items in order
  *
- * BNF Rule: <parameter-declaration> ::= (<storage-class-specifier>)? (constant)? <type-specifier> <direct-declarator>
+ * BNF Rule: <parameter-declaration> ::= (<storage-class-specifier>)? (constant)? <type-specifier> <declarator>
  */
 u_int8_t parameter_declaration(FILE* fl){
 	Lexer_item lookahead;
@@ -1765,11 +1765,11 @@ u_int8_t parameter_declaration(FILE* fl){
 	}
 
 	//Finally, we must see a direct declarator that is valid
-	status = direct_declarator(fl);
+	status = declarator(fl);
 
 	//If it's bad then we're done here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid direct declarator found in parameter declaration");
+		print_parse_message(PARSE_ERROR, "Invalid declarator found in parameter declaration");
 		num_errors++;
 		return 0;
 	}
@@ -1781,35 +1781,35 @@ u_int8_t parameter_declaration(FILE* fl){
 /**
  * Optional repetition allowed with our parameter list
  *
+ * REMEMBER: By the time that we get here, we've already seen a comma
+ *
  * BNF Rule: <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
- * 										| epsilon
  */
 u_int8_t parameter_list_prime(FILE* fl){
 	Lexer_item lookahead;
-	u_int8_t status;
+	u_int8_t status = 0;
 
-	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num);
-	
-	//If we see a comma, we know that this is the recursive step
-	if(lookahead.tok == COMMA){
-		//We need to now see a valid parameter declaration
-		status = parameter_declaration(fl);
-		
-		//If it went wrong
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list");
-			num_errors++;
-			return 0;
-		}
-		
-		//Now we will take our recursive step in seeing a parameter list prime
-		return parameter_list_prime(fl);
+	//We must see a valid declaration
+	status = parameter_declaration(fl);
+
+	//Fail out if so
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list");
+		num_errors++;
+		return 0;
 	}
 
-	//This means that we had an epsilon here, so we'll put the token back and leave
-	push_back_token(fl, lookahead);
-	return 1;
+	//Otherwise, we can optionally see a comma
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a comma
+	if(lookahead.tok == COMMA){
+		return parameter_list_prime(fl);
+	} else {
+		//Otherwise, we can get out
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
@@ -1817,6 +1817,7 @@ u_int8_t parameter_list_prime(FILE* fl){
  * BNF Rule: <parameter-list> ::= <parameter-declaration>(<parameter-list-prime>)?
  */
 u_int8_t parameter_list(FILE* fl){
+	Lexer_item lookahead;
 	u_int8_t status = 0;
 
 	//First, we must see a valid parameter declaration
@@ -1829,8 +1830,17 @@ u_int8_t parameter_list(FILE* fl){
 		return 0;
 	}
 
-	//Now we can see our parameter list
-	return parameter_list_prime(fl);
+	//Let's see if we find a comma, if we do, we have a parameter list prime
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see one, send it to the prime rule
+	if(lookahead.tok == COMMA){
+		return parameter_list_prime(fl);
+	} else {
+		//Otherwise, push it back and leave
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 

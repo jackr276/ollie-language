@@ -59,7 +59,7 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
 						 | epsilon
 
-<parameter-declaration> ::= (<storage-class-specifier>)? (constant)? <type-specifier> <direct-declarator>
+<parameter-declaration> ::= (<storage-class-specifier>)? (constant)? <type-specifier> <declarator>
 
 <storage-class-specifier> ::= register
 							| static
@@ -210,7 +210,4 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 <initializer-list> ::= <initializer><initializer-list-prime>
 
 <initializer-list-prime> ::= , <initializer><initializer-list-prime>
-
-
-
 
