@@ -35,15 +35,15 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 					 | break;
 					 | ret {<expression>}?;
 
-<switch-statement> ::= switch on( <expression> ) <labeled-statement>
+<switch-statement> ::= switch on( <expression> ) <labeled-statement>*
 
-<labeled-statement> ::= <label-identifier> : <statement>
-					  | case <constant-expression> : <statement>
-					  | default : <statement>
+<labeled-statement> ::= <label-identifier> : <statement>*
+					  | case <constant-expression> : <statement>*
+					  | default : <statement>*
 
-<iterative-statement> ::= while( <expression> ) do <statement>
-							| do <statement> while( <expression> )
-							| for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
+<iterative-statement> ::= while( <expression> ) do <compound-statement>
+							| do <compound-statement> while( <expression> )
+							| for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
 
 <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
 

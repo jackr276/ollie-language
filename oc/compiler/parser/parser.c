@@ -2456,14 +2456,110 @@ static u_int8_t switch_statement(FILE* fl){
 /**
  * Iterative statements encompass while, for and do while loops
  *
- * BNF Rule: <iterative-statement> ::= while( <expression> ) do <statement> 
- * 									 | do <statement> while( <expression> ) 
- * 									 | for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
+ * BNF Rule: <iterative-statement> ::= while( <expression> ) do <compound-statement> 
+ * 									 | do <compound-statement> while( <expression> ) 
+ * 									 | for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
  */
 static u_int8_t iterative_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	return 0;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//Let's see what kind we have here
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//If we have a while loop
+	if(lookahead.tok == WHILE){
+		//We must then see parenthesis
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail case
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Push to stack for later
+		push(grouping_stack, lookahead);
+
+		//Now we must see a valid expression
+		status = expression(fl);
+
+		//Invalid one
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid expression in switch statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we must see a closing paren
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail case
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Unmatched parenthesis
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we must see a do keyword
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		//If we don't see it
+		if(lookahead.tok != DO){
+			print_parse_message(PARSE_ERROR, "Do keyword expected after expression in while loop", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Following that, we must see a valid compound statement
+		status = compound_statement(fl);
+
+		//Last fail case
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid compound statement in while loop", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it worked so
+		return 1;
+
+	//Do while loop
+	} else if(lookahead.tok == DO){
+		//We must immediately see a valid compound statement
+		status = compound_statement(fl);
+
+		//Fail out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid compound statement in do while loop", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we have to see the while keyword
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out
+		if(lookahead.tok != WHILE){
+			print_parse_message(PARSE_ERROR, "While keyword expected in do while loop", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we need to see parenthesis and an expression in them
+
+	}
+
 }
 
 
