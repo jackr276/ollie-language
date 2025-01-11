@@ -141,12 +141,12 @@ void finalize_scope(symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-void* create_variable_record(char* name, u_int16_t lexical_level, u_int64_t offset);
+symtab_variable_record_t* create_variable_record(char* name, u_int16_t lexical_level, u_int64_t offset);
 
 /**
  * Make a function record
  */
-void* create_function_record(char* name, u_int16_t lexical_level, u_int64_t offset);
+symtab_function_record_t* create_function_record(char* name, u_int16_t lexical_level, u_int64_t offset);
 
 
 /**
@@ -164,7 +164,12 @@ void* lookup(symtab_t* symtab, char* name);
 /**
  * A printing function for development purposes
  */
-void print_record(void* record);
+void print_function_record(symtab_function_record_t* record);
+
+/**
+ * A printing function for development purposes
+ */
+void print_variable_record(symtab_variable_record_t* record);
 
 /**
  * Deinitialize the symbol table

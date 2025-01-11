@@ -3748,7 +3748,7 @@ u_int8_t parse(FILE* fl){
 	parse_message_t message;
 
 	//Initialize our global symtab here
-	symtab = initialize_symtab();
+	symtab = initialize_symtab(VARIABLE);
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_stack();
 
