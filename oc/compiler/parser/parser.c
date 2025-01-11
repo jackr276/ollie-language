@@ -7,6 +7,7 @@
 
 #include "parser.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 
@@ -2649,8 +2650,96 @@ static u_int8_t iterative_statement(FILE* fl){
 				num_errors++;
 				return 0;
 			}
-
 		}
+
+		//Otherwise it was a semicolon and we have no expression
+		//We'll now repeat the exact process for the second one
+		//Now we can either see an expression or a SEMICOL
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//We must then see an expression
+		if(lookahead.tok != SEMICOLON){
+			//Put it back and find the expression
+			push_back_token(fl, lookahead);
+
+			status = expression(fl);
+
+			//Fail case
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid expression found in for loop", current_line);
+				num_errors++;
+				return 0;
+			}
+
+			//Now we do have to see a semicolon
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			if(lookahead.tok != SEMICOLON){
+				print_parse_message(PARSE_ERROR, "Semicolon expected after expression in for loop", current_line);
+				num_errors++;
+				return 0;
+			}
+		}
+
+		//Otherwise it was a semicolon and we have no expression
+		
+		//Finally we can see a third expression or a closing paren
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Let's see if there's a final expression
+		if(lookahead.tok != R_PAREN){
+			//Put it back for the search
+			push_back_token(fl, lookahead);
+
+			status = expression(fl);
+
+			//Fail case
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid expression found in for loop", current_line);
+				num_errors++;
+				return 0;
+			}
+
+			//Now we need to see an R_PAREN
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			if(lookahead.tok != R_PAREN){
+				print_parse_message(PARSE_ERROR, "Closing parenthesis expected", current_line);
+				num_errors++;
+				return 0;
+			}
+		}
+
+		//Once we get here, we know that we had an R_PAREN
+		//Let's now check for matching
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we need to see the do keyword
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out here
+		if(lookahead.tok != DO){
+			print_parse_message(PARSE_ERROR, "Do keyword expected in for loop", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise if we get here, the last thing that we need to see is a valid compound statement
+		status = compound_statement(fl);
+		
+		//Fail case
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid compound statement found in iterative statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise we're all set
+		return 1;
 
 	//Some weird error
 	} else {
@@ -2778,7 +2867,7 @@ static u_int8_t statement(FILE* fl){
 		push_back_token(fl, lookahead);
 		
 		//Let this handle it
-		status = jump_statement(fl);
+		status = iterative_statement(fl);
 
 		//If it fails
 		if(status == 0){
