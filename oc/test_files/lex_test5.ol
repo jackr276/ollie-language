@@ -7,18 +7,17 @@ func main(u_int32 argc, char** argv) -> u_int32 {
 	let u_int64 y := 2;
 	
 	switch on(x){
-		case 1:
+		case 1 {
+			declare u_int32 i;
+			asn i := 32;
 			break;
+		}
 
-		default:
+		default {
 			break;
+		}
 	}
 	
 	ret x % y;
 }
-
-defined structure my_type {
-	u_int32 sample;
-};
-
 

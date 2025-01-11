@@ -37,9 +37,9 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 
 <switch-statement> ::= switch on( <expression> ) <labeled-statement>*
 
-<labeled-statement> ::= <label-identifier> : <statement>*
-					  | case <constant-expression> : <statement>*
-					  | default : <statement>*
+<labeled-statement> ::= <label-identifier> <compound-statement>
+					  | case <constant-expression>  <compound-statement>
+					  | default <compound-statement>
 
 <iterative-statement> ::= while( <expression> ) do <compound-statement>
 							| do <compound-statement> while( <expression> )

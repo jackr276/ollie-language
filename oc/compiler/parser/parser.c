@@ -2005,15 +2005,82 @@ static u_int8_t expression_statement(FILE* fl){
 
 
 /**
- * <labeled-statement> ::= <label-identifier> : <statement>* 
- * 						 | case <constant-expression> : <statement>*
- * 						 | default : <statement>
+ * <labeled-statement> ::= <label-identifier> <compound-statement>
+ * 						 | case <constant-expression> <compound-statement>
+ * 						 | default <compound-statement>
  */
 static u_int8_t labeled_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	return 0;
+	Lexer_item lookahead;
+	u_int8_t status;
 
+	//Let's grab the next item here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a label identifier
+	if(lookahead.tok == LABEL_IDENT){
+		//Push it back and process it
+		push_back_token(fl, lookahead);
+		//Process it
+		label_identifier(fl);
+
+		//Now we can see a compound statement
+		status = compound_statement(fl);
+
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid compound statement in labeled statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it worked so
+		return 1;
+
+	//If we see the CASE keyword
+	} else if (lookahead.tok == CASE){
+		//Now we need to see a constant expression
+		status = constant_expression(fl);
+
+		//If it failed
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid constant expression in case statement", current_line);
+			num_errors++;
+			return 0;
+		}
+		//Now we can see a compound statement
+		status = compound_statement(fl);
+
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid compound statement in case statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it worked so
+		return 1;
+
+
+	//If we see the DEFAULT keyword
+	} else if(lookahead.tok == DEFAULT){
+		//Now we can see a compound statement
+		status = compound_statement(fl);
+
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid compound statement in case statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it worked so
+		return 1;
+
+	//Fail case here
+	} else {
+		print_parse_message(PARSE_ERROR, "Invalid keyword for labeled statement", current_line);
+		num_errors++;
+		return 0;
+	}
 }
 
 
