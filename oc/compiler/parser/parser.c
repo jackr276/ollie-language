@@ -7,7 +7,6 @@
 
 #include "parser.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 
@@ -1538,9 +1537,31 @@ u_int8_t constant_expression(FILE* fl){
 }
 
 
-u_int8_t structure_declarator(FILE* fl, symtab_t* symtab, stack_t* stack){
+/**
+ * A structure declarator is grammatically identical to a regular declarator
+ *
+ */
+u_int8_t structure_declarator(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	u_int8_t status = 0;
+
+	//We can see pointers here
+	status = pointer(fl);
+
+	//If we see any pointers, handle them accordingly TODO
+	
+	//Now we must see a valid direct declarator
+	status = direct_declarator(fl);
+	
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid direct declarator found in declarator", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise we're all set so return 1
+	return 1;
 	return 0;
 }
 
@@ -1551,23 +1572,83 @@ u_int8_t structure_declarator_list(FILE* fl, symtab_t* symtab, stack_t* stack){
 }
 
 
-u_int8_t specifier_qualifier(FILE* fl, symtab_t* symtab, stack_t* stack){
+/**
+ * A structure declaration can optionally be chained into a large list
+ *
+ * BNF Rule: <structure-declaration> ::= {constant}? <type-specifier> <structure-declarator>(<structure-declarator-list>?)
+ */
+u_int8_t structure_declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	return 0;
 }
 
-
-u_int8_t structure_declaration(FILE* fl, symtab_t* symtab, stack_t* stack){
+/**
+ * A strucutre specifier is the entry to a structure
+ *
+ * REMEMBER: By the time we get here, we've already seen the structure keyword
+ *
+ * BNF Rule: <structure-specifier> ::= structure <identifier>{ {structure-declaration} } 
+ * 									 | structure <identifier>
+ */
+u_int8_t structure_specifier(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	return 0;
-}
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 
-u_int8_t structure_specifier(FILE* fl, symtab_t* symtab, stack_t* stack){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	return 0;
+	//We must see an identifier here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Structure identifier not found", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we can optionally see the curlies for a declaration
+	lookahead = get_next_token(fl, &parser_line_num); 
+
+	//Still worked but we aren't declaring, just leave
+	if(lookahead.tok != L_CURLY){
+		//Put the token back
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+
+	//Otherwise we saw a left curly, so push to stack 
+	push(grouping_stack, lookahead);
+
+	//Now we must see a valid structure declaration
+	status = structure_declaration(fl);
+
+	//If we failed
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid strucutre declaration inside of structure specifier", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Othewrise, we need to see a closing curly here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see a curly
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Right curly brace expected after structure declaration", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//If it's unmatched
+	if(pop(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise it worked so
+	return 1;
 }
 
 
@@ -1807,6 +1888,11 @@ u_int8_t type_specifier(FILE* fl){
 
 		//Otherwise it worked so return 1
 		return 1;
+	} else if (l.tok == STRUCTURE){
+		status = structure_specifier(fl);
+
+	} else {
+		//We need to see some user defined type here
 	}
 
 
