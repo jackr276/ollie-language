@@ -2457,7 +2457,7 @@ static u_int8_t switch_statement(FILE* fl){
  * Iterative statements encompass while, for and do while loops
  *
  * BNF Rule: <iterative-statement> ::= while( <expression> ) do <compound-statement> 
- * 									 | do <compound-statement> while( <expression> ) 
+ * 									 | do <compound-statement> while( <expression> );
  * 									 | for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
  */
 static u_int8_t iterative_statement(FILE* fl){
@@ -2556,10 +2556,108 @@ static u_int8_t iterative_statement(FILE* fl){
 			return 0;
 		}
 
-		//Now we need to see parenthesis and an expression in them
+		//We must then see parenthesis
+		lookahead = get_next_token(fl, &parser_line_num);
 
+		//Fail case
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Push to stack for later
+		push(grouping_stack, lookahead);
+
+		//Now we must see a valid expression
+		status = expression(fl);
+
+		//Invalid one
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid expression in switch statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we must see a closing paren
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail case
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Unmatched parenthesis
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Finally we need to see a semicolon
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Final fail case
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it all worked here
+		return 1;
+
+	//For loop case
+	} else if(lookahead.tok == FOR){
+		//We must then see parenthesis
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail case
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Push to stack for later
+		push(grouping_stack, lookahead);
+
+		//Now we can either see an expression or a SEMICOL
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//We must then see an expression
+		if(lookahead.tok != SEMICOLON){
+			//Put it back and find the expression
+			push_back_token(fl, lookahead);
+
+			status = expression(fl);
+
+			//Fail case
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid expression found in for loop", current_line);
+				num_errors++;
+				return 0;
+			}
+
+			//Now we do have to see a semicolon
+			lookahead = get_next_token(fl, &parser_line_num);
+
+			if(lookahead.tok != SEMICOLON){
+				print_parse_message(PARSE_ERROR, "Semicolon expected after expression in for loop", current_line);
+				num_errors++;
+				return 0;
+			}
+
+		}
+
+	//Some weird error
+	} else {
+		print_parse_message(PARSE_ERROR, "Invalid keyword used for iterative statement", current_line); 
+		num_errors++;
+		return 0;
 	}
-
 }
 
 
