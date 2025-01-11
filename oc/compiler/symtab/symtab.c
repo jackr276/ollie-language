@@ -3,7 +3,9 @@
 */
 
 #include "symtab.h"
+#include <cstdlib>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
 #define LARGE_PRIME 611593
@@ -12,8 +14,10 @@
 /**
  * Dynamically allocate and return a symtab pointer for compiler use
  */
-symtab_t* initialize_symtab(){
+symtab_t* initialize_symtab(SYMTAB_RECORD_TYPE record_type){
 	symtab_t* symtab = (symtab_t*)calloc(1, sizeof(symtab_t));
+	//What type of symtab is it?
+	symtab->type = record_type;
 	//Just in case
 	symtab->current_lexical_scope = -1;
 	symtab->next_index = 0;
@@ -26,24 +30,44 @@ symtab_t* initialize_symtab(){
  * adding it in
 */
 void initialize_scope(symtab_t* symtab){
-	//Dynamically allocate a new one
-	symtab_sheaf_t* current = (symtab_sheaf_t*)calloc(1, sizeof(symtab_sheaf_t));
+	//Function symtab
+	if(symtab->type == FUNCTION){
+		symtab_function_sheaf_t* current = (symtab_function_sheaf_t*)calloc(1, sizeof(symtab_function_sheaf_t));
+		//Store it in here for later
+		symtab->sheafs[symtab->next_index] = current;
+		symtab->next_index++;
 
-	//Store it in here for later
-	symtab->sheafs[symtab->next_index] = current;
-	symtab->next_index++;
+		//Increment(down the chain)
+		symtab->current_lexical_scope++;
 
-	//Increment(down the chain)
-	symtab->current_lexical_scope++;
+		//Store this here
+		current->lexical_level = symtab->current_lexical_scope;
 
-	//Store this here
-	current->lexical_level = symtab->current_lexical_scope;
-
-	//Now we'll link back to the previous one level
-	current->previous_level = symtab->current;
+		//Now we'll link back to the previous one level
+		current->previous_level = symtab->current;
 	
-	//Set this so it's up-to-date
-	symtab->current = current;
+		//Set this so it's up-to-date
+		symtab->current = current;
+
+	//Variable symtab
+	} else {
+		symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
+		//Store it in here for later
+		symtab->sheafs[symtab->next_index] = current;
+		symtab->next_index++;
+
+		//Increment(down the chain)
+		symtab->current_lexical_scope++;
+
+		//Store this here
+		current->lexical_level = symtab->current_lexical_scope;
+
+		//Now we'll link back to the previous one level
+		current->previous_level = symtab->current;
+	
+		//Set this so it's up-to-date
+		symtab->current = current;
+	}
 }
 
 
@@ -52,11 +76,22 @@ void initialize_scope(symtab_t* symtab){
  * up by one level
  */
 void finalize_scope(symtab_t* symtab){
-	//Back out of this one as it's finalized
-	symtab->current = symtab->current->previous_level;
+	//Function symtab
+	if(symtab->type == FUNCTION){
+		//Back out of this one as it's finalized
+		symtab->current = ((symtab_function_sheaf_t*)symtab->current)->previous_level;
 
-	//Go back up one
-	symtab->current_lexical_scope--;
+		//Go back up one
+		symtab->current_lexical_scope--;
+
+	//Variable symtab
+	} else {
+		//Back out of this one as it's finalized
+		symtab->current = ((symtab_variable_sheaf_t*)symtab->current)->previous_level;
+
+		//Go back up one
+		symtab->current_lexical_scope--;
+	}
 }
 
 
@@ -83,9 +118,46 @@ static u_int16_t hash(char* name){
 
 
 /**
+ * Dynamically allocate a variable record
+*/
+symtab_variable_record_t* create_variable_record(char* name, u_int16_t lexical_level, u_int64_t offset){
+	//Allocate it
+	symtab_variable_record_t* record = (symtab_variable_record_t*)calloc(1, sizeof(symtab_variable_record_t));
+
+	//Store the name
+	record->var_name = name;
+	//Hash it and store it to avoid to repeated hashing
+	record->hash = hash(name);
+	record->lexical_level = lexical_level;
+	//This here is not used currently
+	record->offset = offset;
+
+	return record;
+}
+
+
+/**
+ * Dynamically allocate a function record
+*/
+symtab_function_record_t* create_function_record(char* name, u_int16_t lexical_level, u_int64_t offset){
+	//Allocate it
+	symtab_function_record_t* record = (symtab_function_record_t*)calloc(1, sizeof(symtab_function_record_t));
+
+	//Store the name
+	record->func_name = name;
+	//Hash it and store it to avoid to repeated hashing
+	record->hash = hash(name);
+	record->lexical_level = lexical_level;
+	//This here is not used currently
+	record->offset = offset;
+
+	return record;
+}
+
+/**
  * Dynamically allocate a record
 */
-symtab_record_t* create_record(char* name, u_int16_t lexical_level, u_int64_t offset){
+void* create_record(char* name, u_int16_t lexical_level, u_int64_t offset){
 	//Allocate it
 	symtab_record_t* record = (symtab_record_t*)calloc(1, sizeof(symtab_record_t));
 
@@ -99,7 +171,6 @@ symtab_record_t* create_record(char* name, u_int16_t lexical_level, u_int64_t of
 
 	return record;
 }
-
 
 /**
  * Insert a record into the symbol table. This assumes that the user 
