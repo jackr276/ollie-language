@@ -14,12 +14,13 @@
 //Our global symbol table
 symtab_t* symtab;
 //Our stack for storing variables, etc
-stack_t* variable_stack;
 stack_t* grouping_stack;
 //The number of errors
 u_int16_t num_errors = 0;
 //The current parser line number
 u_int16_t parser_line_num = 0;
+//Are we currently in a function declaration
+
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static u_int8_t cast_expression(FILE* fl);
@@ -1989,7 +1990,6 @@ static u_int8_t expression_statement(FILE* fl){
 	//Now to close out we must see a semicolon
 	//Let's see if we have a semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
-	printf("%s\n", lookahead.lexeme);
 
 	//Empty expression, we're done here
 	if(lookahead.tok != SEMICOLON){
@@ -2004,8 +2004,8 @@ static u_int8_t expression_statement(FILE* fl){
 
 
 /**
- * <labeled-statement> ::= <label-identifier> : <statement> 
- * 						 | case <constant-expression> : <statement> 
+ * <labeled-statement> ::= <label-identifier> : <statement>* 
+ * 						 | case <constant-expression> : <statement>*
  * 						 | default : <statement>
  */
 static u_int8_t labeled_statement(FILE* fl){
@@ -2325,17 +2325,137 @@ semicol:
 
 
 /**
- * BNF Rule: <switch-statement> ::= switch on( <expression> ) <labeled-statement>
+ * BNF Rule: <switch-statement> ::= switch on( <expression> ) {<labeled-statement>*}
  */
 static u_int8_t switch_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	return 0;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
 
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != SWITCH){
+		print_parse_message(PARSE_ERROR, "switch keyword expected in switch statement", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we have to see the on keyword
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != ON){
+		print_parse_message(PARSE_ERROR, "on keyword expected after switch in switch statement", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we must see an lparen
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Push to stack for later
+	push(grouping_stack, lookahead);
+
+	//Now we must see a valid expression
+	status = expression(fl);
+
+	//Invalid one
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid expression in switch statement", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we must see a closing paren
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	if(pop(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we must see an lcurly
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Left curly brace expected after expression", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Push to stack for later
+	push(grouping_stack, lookahead);
+
+	//Seed the search here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//So long as there is no closing curly
+	while(lookahead.tok != R_CURLY){
+		//Fail cases here
+		if(lookahead.tok != CASE && lookahead.tok != DEFAULT){
+			print_parse_message(PARSE_ERROR, "Invalid label statement found in switch statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise, we must see a labeled statement
+		push_back_token(fl, lookahead);
+
+		//Let's see if we have a valid one
+		status = labeled_statement(fl);
+
+		//Invalid here
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid label statement found in switch statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Reseed the search
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//By the time we get here, we should've seen an R_paren
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Closing curly brace expected", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//We could also have unmatched curlies
+	if(pop(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise if we get here, all went well
+	return 1;
 }
 
 
 /**
+ * Iterative statements encompass while, for and do while loops
+ *
  * BNF Rule: <iterative-statement> ::= while( <expression> ) do <statement> 
  * 									 | do <statement> while( <expression> ) 
  * 									 | for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <statement>
@@ -2527,7 +2647,7 @@ static u_int8_t compound_statement(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Now we keep going until we see the closing curly brace
-	while(lookahead.tok != R_CURLY){
+	while(lookahead.tok != R_CURLY && lookahead.tok != DONE){
 		//If we see this we know that we have a declaration
 		if(lookahead.tok == LET || lookahead.tok == DECLARE){
 			//Push it back
@@ -2561,6 +2681,13 @@ static u_int8_t compound_statement(FILE* fl){
 
 		//Grab the next token to refresh the search
 		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//We ran off the end, common fail case
+	if(lookahead.tok == DONE){
+		print_parse_message(PARSE_ERROR, "No closing curly brace given to compound statement", current_line);
+		num_errors++;
+		return 0;
 	}
 	
 	//When we make it here, we know that we have an R_CURLY in the lookahead
@@ -3100,7 +3227,7 @@ u_int8_t function_specifier(FILE* fl){
 	//If we find one of these, push it to the stack and return 1
 	if(l.tok == STATIC || l.tok == EXTERNAL){
 		//Push to the stack and let the caller decide how to handle
-		push(variable_stack, l);
+		//TODO handle me
 		return 1;
 	}
 
@@ -3122,6 +3249,7 @@ u_int8_t function_specifier(FILE* fl){
  *			        			  | external
  */
 u_int8_t function_declaration(FILE* fl){
+	//We are officially in a function
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -3245,6 +3373,7 @@ arrow_ident:
 	//Now we must see a compound statement
 	status = compound_statement(fl);
 
+	//If we fail here
 	if(status == 0){
 		print_parse_message(PARSE_ERROR, "Invalid compound statement in function", current_line);
 		num_errors++;
@@ -3268,11 +3397,14 @@ u_int8_t declaration_partition(FILE* fl){
 	Lexer_item lookahead;
 	u_int8_t status;
 
+	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//We know that we have a function here
 	if(lookahead.tok == FUNC){
+		//Otherwise our status is just whatever the function returns
 		status = function_declaration(fl);
+
 	} else {
 		//Push it back
 		push_back_token(fl, lookahead);
@@ -3313,10 +3445,9 @@ u_int8_t program(FILE* fl){
 		
 		//If we have an error then we'll print it out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid declaration partition found", current_line);
 			num_errors++;
 			//If we have but one failure, the whole thing is toast
-			break;
+			return 0;
 		}
 	}
 
@@ -3336,7 +3467,6 @@ u_int8_t parse(FILE* fl){
 	//Initialize our global symtab here
 	symtab = initialize_symtab();
 	//Also create a stack for our matching uses(curlies, parens, etc.)
-	variable_stack = create_stack();
 	grouping_stack = create_stack();
 
 	//Global entry/run point
@@ -3357,7 +3487,6 @@ u_int8_t parse(FILE* fl){
 	}
 	
 	//Clean these both up for memory safety
-	destroy_stack(variable_stack);
 	destroy_stack(grouping_stack);
 	destroy_symtab(symtab);
 	

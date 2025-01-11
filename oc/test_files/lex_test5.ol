@@ -8,7 +8,6 @@ func main(u_int32 argc, char** argv) -> u_int32 {
 	
 	switch on(x){
 		case 1:
-			ret x + y;
 			break;
 
 		default:

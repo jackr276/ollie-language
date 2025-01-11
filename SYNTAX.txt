@@ -205,7 +205,7 @@ Why is this first iteration of the syntax bad?
 
 51. <if-statement> ::= if( <expression> ) then <statement> {else <statement>}*
 
-52. <switch-statement> ::= switch on( <expression> ) <labeled-statement>
+52. <switch-statement> ::= switch on( <expression> ) <labeled-statement>*
 
 53. <jump-statement> ::= jump <identifier>
 					     | continue when(<expression>);
