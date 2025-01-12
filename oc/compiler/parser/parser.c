@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
+#include <time.h>
 
 
 //Variable and function symbol tables
@@ -70,7 +71,7 @@ static u_int8_t identifier(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
-	char info[500];
+	char info[2000];
 	
 	//If we can't find it that's bad
 	if(l.tok != IDENT){
@@ -98,7 +99,7 @@ static u_int8_t label_identifier(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
-	char info[500];
+	char info[2000];
 	
 	//If we can't find it that's bad
 	if(l.tok != LABEL_IDENT){
@@ -342,8 +343,8 @@ static u_int8_t primary_expression(FILE* fl){
 		//Otherwise we're all set
 		return 1;
 	} else {
-		char info[500];
-		memset(info, 0, 500 * sizeof(char));
+		char info[2000];
+		memset(info, 0, 2000 * sizeof(char));
 		sprintf(info, "Invalid token with lexeme %s found in primary expression", lookahead.lexeme); 
 		print_parse_message(PARSE_ERROR, info, current_line);
 		num_errors++;
@@ -442,7 +443,10 @@ static u_int8_t postfix_expression(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
-	char info[500];
+	char info[2000];
+	char function_name[100];
+	//0 this out
+	memset(function_name, 0, 100*sizeof(char));
 	u_int8_t status = 0;
 
 	//We must first see a valid primary expression no matter what
@@ -479,13 +483,15 @@ static u_int8_t postfix_expression(FILE* fl){
 			//Push to the stack for later
 			push(grouping_stack, lookahead);
 
+			//Copy it in for safety
+			strcpy(function_name, current_ident.lexeme);
 			//This is for sure a function call, so we need to be able to recognize the function
-			symtab_function_record_t* func = lookup(function_symtab, current_ident.lexeme);
+			symtab_function_record_t* func = lookup(function_symtab, function_name);
 
 			//Let's see if we found it
 			if(func == NULL){
 				//Wipe it
-				memset(info, 0, 500*sizeof(char));
+				memset(info, 0, 2000*sizeof(char));
 				//Format nice
 				sprintf(info, "Function \"%s\" was not defined", current_ident.lexeme);
 				print_parse_message(PARSE_ERROR, info, current_line);
@@ -3848,13 +3854,17 @@ u_int8_t function_declaration(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	Lexer_item lookahead2;
-	char* function_name;
+	//For storing our function name
+	char function_name[100];
+	//Wipe it out
+	memset(function_name, 0, sizeof(char)*100);
+
 	Lexer_item ident;
 	//We may need this in later iterations
 	Token function_storage_type = BLANK;
 	u_int8_t status;
 	//This will be used for error printing
-	char info[500];
+	char info[2000];
 	
 	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -3889,9 +3899,11 @@ u_int8_t function_declaration(FILE* fl){
 		return 0;
 	}
 	//TODO symtable stuff
+	//Copy this for memory safety
+	strcpy(function_name, current_ident.lexeme);
 
 	//Since this is a function IDENT, we'll store it in the symtab for functions
-	symtab_function_record_t* function = create_function_record(current_ident.lexeme, 0, 0);
+	symtab_function_record_t* function = create_function_record(function_name, 0, 0);
 
 	//Insert this into the function symtab
 	insert(function_symtab, function);
@@ -4063,6 +4075,10 @@ static u_int8_t program(FILE* fl){
 u_int8_t parse(FILE* fl){
 	u_int8_t status = 0;
 	num_errors = 0;
+	double time_spent;
+
+	//Start the timer
+	clock_t begin = clock();
 
 	//Initialize our global symtab here
 	variable_symtab = initialize_symtab(VARIABLE);
@@ -4077,16 +4093,21 @@ u_int8_t parse(FILE* fl){
 	//Global entry/run point
 	status = program(fl);
 
+	//Timer end
+	clock_t end = clock();
+	//Crude time calculation
+	time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+
 	//If we failed
 	if(status == 0){
 		char info[500];
-		sprintf(info, "Parsing failed with %d errors", num_errors);
+		sprintf(info, "Parsing failed with %d errors in %.8f seconds", num_errors, time_spent);
 		printf("\n\n=======================================================================\n");
 		printf("%s\n", info);
 		printf("=======================================================================\n\n");
 	} else {
 		printf("\n\n=======================================================================\n");
-		printf("Parsing succeeded\n");
+		printf("Parsing succeeded in %.8f seconds\n", time_spent);
 		printf("=======================================================================\n\n");
 
 	}
