@@ -111,6 +111,11 @@ typedef enum {
 	FLOAT64,
 	CHAR,
 	STR,
+	FINALLY,
+	TRY,
+	CATCH,
+	EXPONENT,
+	EXPONENT_EQUALS
 } Token;
 
 typedef struct Lexer_item Lexer_item;
