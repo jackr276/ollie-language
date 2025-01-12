@@ -5,7 +5,6 @@
 
 func:static example(s_int32* my_arr) -> void{
 	asn *(my_arr) := 2;
-
 	ret;
 }
 

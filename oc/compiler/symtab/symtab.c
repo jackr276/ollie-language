@@ -5,6 +5,7 @@
 #include "symtab.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 #define LARGE_PRIME 611593
@@ -124,7 +125,7 @@ symtab_variable_record_t* create_variable_record(char* name, u_int16_t lexical_l
 	symtab_variable_record_t* record = (symtab_variable_record_t*)calloc(1, sizeof(symtab_variable_record_t));
 
 	//Store the name
-	record->var_name = name;
+	strcpy(record->var_name, name);
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name);
 	record->lexical_level = lexical_level;
@@ -143,7 +144,7 @@ symtab_function_record_t* create_function_record(char* name, u_int16_t lexical_l
 	symtab_function_record_t* record = (symtab_function_record_t*)calloc(1, sizeof(symtab_function_record_t));
 
 	//Store the name
-	record->func_name = name;
+	strcpy(record->func_name, name);
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name);
 	record->lexical_level = lexical_level;
@@ -295,6 +296,7 @@ void print_function_record(symtab_function_record_t* record){
 
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->func_name);
+	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("Offset: %p\n", (void*)(record->offset));
 	printf("}\n");
@@ -312,6 +314,7 @@ void print_variable_record(symtab_variable_record_t* record){
 
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->var_name);
+	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("Offset: %p\n", (void*)(record->offset));
 	printf("}\n");

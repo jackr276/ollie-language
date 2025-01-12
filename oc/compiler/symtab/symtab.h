@@ -36,7 +36,7 @@ typedef enum SYMTAB_RECORD_TYPE{
  */
 struct symtab_function_record_t{
 	//The name that we are storing. This is used to derive the hash
-	char* func_name;
+	char func_name[100];
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
@@ -56,7 +56,7 @@ struct symtab_function_record_t{
  */
 struct symtab_variable_record_t{
 	//Variable name
-	char* var_name;
+	char var_name[100];
 	//The hash of it
 	u_int16_t hash;
 	//The lexical level of it

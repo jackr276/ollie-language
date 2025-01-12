@@ -11,8 +11,9 @@
 #include <sys/types.h>
 
 
-//Our global symbol table
-symtab_t* symtab;
+//Variable and function symbol tables
+symtab_t* variable_symtab;
+symtab_t* function_symtab;
 //Our stack for storing variables, etc
 heap_stack_t* grouping_stack;
 //The number of errors
@@ -21,6 +22,8 @@ u_int16_t num_errors = 0;
 u_int16_t parser_line_num = 0;
 //Are we currently in a function declaration
 
+//The current IDENT that we are tracking
+Lexer_item current_ident;
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static u_int8_t cast_expression(FILE* fl);
@@ -76,6 +79,9 @@ static u_int8_t identifier(FILE* fl){
 		num_errors++;
 		return 0;
 	}
+
+	//Save this globally
+	current_ident = l;
 
 	//We'll push this ident onto the stack and let whoever called(function/variable etc.) deal with it
 	//We have no need to search the symtable in this function because we are unable to context-sensitive
@@ -436,6 +442,7 @@ static u_int8_t postfix_expression(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
+	char info[500];
 	u_int8_t status = 0;
 
 	//We must first see a valid primary expression no matter what
@@ -471,6 +478,21 @@ static u_int8_t postfix_expression(FILE* fl){
 		case L_PAREN:
 			//Push to the stack for later
 			push(grouping_stack, lookahead);
+
+			//This is for sure a function call, so we need to be able to recognize the function
+			symtab_function_record_t* func = lookup(function_symtab, current_ident.lexeme);
+
+			//Let's see if we found it
+			if(func == NULL){
+				//Wipe it
+				memset(info, 0, 500*sizeof(char));
+				//Format nice
+				sprintf(info, "Function \"%s\" was not defined", current_ident.lexeme);
+				print_parse_message(PARSE_ERROR, info, current_line);
+				num_errors++;
+				return 0;
+			}
+
 
 			//Now we can see 0 or many assignment expressions
 			lookahead = get_next_token(fl, &parser_line_num);
@@ -3819,6 +3841,8 @@ u_int8_t function_specifier(FILE* fl){
  *			        			  | external
  */
 u_int8_t function_declaration(FILE* fl){
+	//Initialize the scope for variables
+	initialize_scope(variable_symtab);
 	//We are officially in a function
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
@@ -3854,18 +3878,24 @@ u_int8_t function_declaration(FILE* fl){
 		push_back_token(fl, lookahead);
 	}
 	
+
 	//Now we must see an identifer
 	status = identifier(fl);
-	
+
 	//We have no identifier, so we must quit
 	if(status == 0){
 		print_parse_message(PARSE_ERROR, "No valid identifier found", current_line);
 		num_errors++;
 		return 0;
 	}
-
 	//TODO symtable stuff
 
+	//Since this is a function IDENT, we'll store it in the symtab for functions
+	symtab_function_record_t* function = create_function_record(current_ident.lexeme, 0, 0);
+
+	//Insert this into the function symtab
+	insert(function_symtab, function);
+	
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -3950,6 +3980,8 @@ arrow_ident:
 		return 0;
 	}
 
+	//Finalize the variable symtab scope
+	finalize_scope(variable_symtab);
 	//All went well if we make it here
 	return 1;
 }
@@ -4033,7 +4065,12 @@ u_int8_t parse(FILE* fl){
 	num_errors = 0;
 
 	//Initialize our global symtab here
-	symtab = initialize_symtab(VARIABLE);
+	variable_symtab = initialize_symtab(VARIABLE);
+	function_symtab = initialize_symtab(FUNCTION);
+
+	//Global function scope here
+	initialize_scope(function_symtab);
+
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_stack();
 
@@ -4056,7 +4093,8 @@ u_int8_t parse(FILE* fl){
 	
 	//Clean these both up for memory safety
 	destroy_stack(grouping_stack);
-	destroy_symtab(symtab);
+	destroy_symtab(function_symtab);
+	destroy_symtab(variable_symtab);
 	
 	return status;
 }

@@ -44,6 +44,9 @@ parser_test.o: $(PARSER_PATH)/parser_test.c
 parser_test: parser.o lexer.o parser_test.o symtab.o stack.o 
 	$(CC) -o $(OUT)/parser_test $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o
 
+parser_test_debug: parser.o lexer.o parser_test.o symtab.o stack.o 
+	$(CC) -g -o $(OUT)/debug $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o
+
 symtab_test: symtab.o symtab_test.o
 	$(CC) -o $(OUT)/symtab_test $(OUT)/symtab_test.o $(OUT)/symtab.o
 
@@ -54,4 +57,4 @@ ptest: parser_test
 	cat ./oc/test_files/test_files.txt | xargs ./oc/out/parser_test
 
 clean:
-	rm -f ./out/*
+	rm -f ./oc/out/*
