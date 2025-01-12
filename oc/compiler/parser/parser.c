@@ -15,7 +15,7 @@
 //Our global symbol table
 symtab_t* symtab;
 //Our stack for storing variables, etc
-stack_t* grouping_stack;
+heap_stack_t* grouping_stack;
 //The number of errors
 u_int16_t num_errors = 0;
 //The current parser line number

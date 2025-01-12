@@ -29,35 +29,35 @@ struct stack_node_t {
 typedef struct {
 	struct stack_node_t* top;
 	u_int16_t num_nodes;
-} stack_t;
+} heap_stack_t;
 
 
 /**
  * Initialize a stack
  */
-stack_t* create_stack();
+heap_stack_t* create_stack();
 
 /**
  * Push a pointer onto the top of the stack
  */
-void push(stack_t* stack, Lexer_item l);
+void push(heap_stack_t* stack, Lexer_item l);
 
 /**
  * Remove the top value of the stack
  */
-Lexer_item pop(stack_t* stack);
+Lexer_item pop(heap_stack_t* stack);
 
 /**
  * Return the top value of the stack, but do not
  * remove it
  */
-Lexer_item peek(stack_t* stack);
+Lexer_item peek(heap_stack_t* stack);
 
 /**
  * Destroy the stack with a proper cleanup
  * FULL_CLEANUP: free all of the void* pointers on the stack
  * STATES_ONLY: all pointers are left alone. This may lead to memory leaks
  */
-void destroy_stack(stack_t* stack);
+void destroy_stack(heap_stack_t* stack);
 
 #endif

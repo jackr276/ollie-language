@@ -11,9 +11,9 @@
 /**
  * Create a stack
  */
-stack_t* create_stack(){
+heap_stack_t* create_stack(){
 	//Allocate our stack
-	stack_t* stack = (stack_t*)malloc(sizeof(stack_t));
+	heap_stack_t* stack = (heap_stack_t*)malloc(sizeof(heap_stack_t));
 
 	//Initialize these values
 	stack->num_nodes = 0;
@@ -27,7 +27,7 @@ stack_t* create_stack(){
 /**
  * Push data to the top of the stack
  */
-void push(stack_t* stack, Lexer_item l){
+void push(heap_stack_t* stack, Lexer_item l){
 	//Just in case
 	if(stack == NULL){
 		printf("ERROR: Stack was never initialized\n");
@@ -52,7 +52,7 @@ void push(stack_t* stack, Lexer_item l){
 /**
  * Pop the head off of the stack and return the data
  */
-Lexer_item pop(stack_t* stack){
+Lexer_item pop(heap_stack_t* stack){
 	Lexer_item l;
 	l.tok = BLANK;
 
@@ -92,7 +92,7 @@ Lexer_item pop(stack_t* stack){
 /**
  * Peek the top of the stack without removing it
  */
-Lexer_item peek(stack_t* stack){
+Lexer_item peek(heap_stack_t* stack){
 	Lexer_item l;
 	l.tok = BLANK;
 
@@ -120,7 +120,7 @@ Lexer_item peek(stack_t* stack){
 /**
  * Completely free all memory in the stack
  */
-void destroy_stack(stack_t* stack){
+void destroy_stack(heap_stack_t* stack){
 	//Just in case...
 	if(stack == NULL){
 		printf("ERROR: Attempt to free a null pointer\n");
