@@ -158,7 +158,7 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 									| %<cast-expression><multiplicative-expression-prime>
 
 <cast-expression> ::= <unary-expression> 
-					| ( <type-name> ) <unary-expression>
+					| < <type-name> > <unary-expression>
 
 <unary-expression> ::= <postfix-expression>
 					 | ++<unary-expression> 

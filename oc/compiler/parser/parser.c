@@ -9,7 +9,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
-#include <time.h>
 
 
 //Our global symbol table
@@ -741,7 +740,7 @@ static u_int8_t unary_expression(FILE* fl){
  * A cast expression decays into a unary expression
  *
  * BNF Rule: <cast-expression> ::= <unary-expression> 
- * 						    	| ( <type-name> ) <unary-expression>
+ * 						    	| < <type-name> > <unary-expression>
  */
 static u_int8_t cast_expression(FILE* fl){
 	//Freeze the line number
@@ -753,7 +752,7 @@ static u_int8_t cast_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we have an L_PAREN, we'll push it to the stack
-	if(lookahead.tok == L_PAREN){
+	if(lookahead.tok == L_THAN){
 		//Push this on for later
 		push(grouping_stack, lookahead);
 		
@@ -774,12 +773,12 @@ static u_int8_t cast_expression(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num);
 		
 		//If this is an R_PAREN
-		if(lookahead.tok != R_PAREN) {
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type name", current_line);
+		if(lookahead.tok != G_THAN) {
+			print_parse_message(PARSE_ERROR, "Angle brackets expected after type name", current_line);
 			num_errors++;
 			return 0;
-		} else if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis deteced", current_line);
+		} else if(pop(grouping_stack).tok != L_THAN){
+			print_parse_message(PARSE_ERROR, "Unmatched angle brackets detected", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -906,7 +905,7 @@ static u_int8_t additive_expression_prime(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we see a + or a - we can make a recursive call
-	if(lookahead.tok == MINUS || lookahead.tok == STAR){
+	if(lookahead.tok == MINUS || lookahead.tok == PLUS){
 		return additive_expression_prime(fl);
 	} else {
 		//Otherwise we need to put it back and get out
@@ -3989,7 +3988,7 @@ u_int8_t declaration_partition(FILE* fl){
  *
  * BNF Rule: <program>::= {<declaration-partition>}*
  */
-u_int8_t program(FILE* fl){
+static u_int8_t program(FILE* fl){
 	//Freeze the line number
 	Lexer_item l;
 	u_int8_t status = 0;

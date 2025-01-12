@@ -6,8 +6,8 @@ declare structure my_struct {
 
 func my_func(u_int32* error_code) -> u_int32{
 	let u_int32 i := 0;
-	let u_int32 j := 0;
+	let u_int32 i := 1;
 	let u_int32 k := 0;
 
-	main(i, j, k); 
+	main(i, j, i_do_not_exist); 
 }

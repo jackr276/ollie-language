@@ -476,6 +476,20 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
+					case '[':
+						lex_item.tok = L_BRACKET;
+						lex_item.lexeme = "[";
+						lex_item.line_num = line_num;
+						lex_item.char_count = token_char_count;
+						return lex_item;
+
+					case ']':
+						lex_item.tok = R_BRACKET;
+						lex_item.lexeme = "]";
+						lex_item.line_num = line_num;
+						lex_item.char_count = token_char_count;
+						return lex_item;
+
 					case '#':
 						lex_item.tok = POUND;
 						lex_item.lexeme = "#";
