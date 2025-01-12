@@ -205,7 +205,7 @@ static u_int8_t expression_prime(FILE* fl){
 	
 	//It failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -241,7 +241,7 @@ static u_int8_t expression(FILE* fl){
 	
 	//It failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -320,7 +320,7 @@ static u_int8_t primary_expression(FILE* fl){
 
 		//If it failed
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid expression found in primary expression", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid expression found in primary expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -335,7 +335,7 @@ static u_int8_t primary_expression(FILE* fl){
 			return 0;
 		//Make sure we match
 		} else if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -376,7 +376,7 @@ static u_int8_t assignment_expression(FILE* fl){
 
 		//We have a bad one
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid unary expression found in assignment expression", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid unary expression found in assignment expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -397,7 +397,7 @@ static u_int8_t assignment_expression(FILE* fl){
 
 		//We have a bad one
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in assingment expression", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid conditional expression found in assingment expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -413,7 +413,7 @@ static u_int8_t assignment_expression(FILE* fl){
 
 		//We have a bad one
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in postfix expression", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid conditional expression found in postfix expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -454,7 +454,7 @@ static u_int8_t postfix_expression(FILE* fl){
 
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid primary expression found in postifx expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid primary expression found in postifx expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -628,7 +628,7 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If it was bad
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid unary expression following preincrement/predecrement", current_line);
+				//print_parse_message(PARSE_ERROR, "Invalid unary expression following preincrement/predecrement", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -735,7 +735,7 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If it was bad
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid cast expression following unary operator", current_line);
+				//print_parse_message(PARSE_ERROR, "Invalid cast expression following unary operator", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -752,7 +752,7 @@ static u_int8_t unary_expression(FILE* fl){
 
 			//If it was bad
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid postfix expression inside of unary expression", current_line);
+				//print_parse_message(PARSE_ERROR, "Invalid postfix expression inside of unary expression", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -821,7 +821,7 @@ static u_int8_t cast_expression(FILE* fl){
 	
 	//If it was bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid unary expression found in cast expression", current_line); 
+		//print_parse_message(PARSE_ERROR, "Invalid unary expression found in cast expression", current_line); 
 		num_errors++;
 		return 0;
 	}
@@ -850,7 +850,7 @@ static u_int8_t multiplicative_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -886,7 +886,7 @@ static u_int8_t multiplicative_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -924,7 +924,7 @@ static u_int8_t additive_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid mutliplicative expression found in additive expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid mutliplicative expression found in additive expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -961,7 +961,7 @@ static u_int8_t additive_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid multiplicative expression found in additive expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid multiplicative expression found in additive expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -998,7 +998,7 @@ static u_int8_t shift_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1018,7 +1018,7 @@ static u_int8_t shift_expression(FILE* fl){
 
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1049,7 +1049,7 @@ static u_int8_t relational_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1071,7 +1071,7 @@ static u_int8_t relational_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1100,7 +1100,7 @@ static u_int8_t equality_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1136,7 +1136,7 @@ static u_int8_t equality_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1173,7 +1173,7 @@ static u_int8_t and_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1209,7 +1209,7 @@ static u_int8_t and_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1246,7 +1246,7 @@ static u_int8_t exclusive_or_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1282,7 +1282,7 @@ static u_int8_t exclusive_or_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1319,7 +1319,7 @@ u_int8_t inclusive_or_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1355,7 +1355,7 @@ static u_int8_t inclusive_or_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1392,7 +1392,7 @@ u_int8_t logical_and_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical and expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical and expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1428,7 +1428,7 @@ u_int8_t logical_and_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1465,7 +1465,7 @@ u_int8_t logical_or_expression_prime(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1500,7 +1500,7 @@ u_int8_t logical_or_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1533,7 +1533,7 @@ u_int8_t conditional_expression(FILE* fl){
 
 	//Something failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid logical or expression found in conditional expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid logical or expression found in conditional expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1556,7 +1556,7 @@ u_int8_t constant_expression(FILE* fl){
 
 	//Something failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression found in constant expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid conditional expression found in constant expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1596,7 +1596,7 @@ u_int8_t structure_declarator(FILE* fl){
 	status = constant_expression(fl);
 
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid constant expression found in structure declarator", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid constant expression found in structure declarator", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1632,7 +1632,7 @@ u_int8_t structure_declaration(FILE* fl){
 
 	//Fail out if bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier in structure declaration", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid type specifier in structure declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1642,7 +1642,7 @@ u_int8_t structure_declaration(FILE* fl){
 
 	//Fail out if bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid structure declarator in structure declaration", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid structure declarator in structure declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1687,7 +1687,7 @@ u_int8_t structure_specifier(FILE* fl){
 
 	//If we failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid strucutre declaration inside of structure specifier", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid strucutre declaration inside of structure specifier", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1702,7 +1702,7 @@ u_int8_t structure_specifier(FILE* fl){
 
 		//If we fail
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid strucutre declaration inside of structure specifier", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid strucutre declaration inside of structure specifier", current_line);
 			num_errors++;
 			return 0;
 		}	
@@ -1763,7 +1763,7 @@ u_int8_t enumerator(FILE* fl){
 
 		//Get out if bad
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid constant expression in enumerator", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid constant expression in enumerator", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -1794,7 +1794,7 @@ u_int8_t enumeration_list_prime(FILE* fl){
 
 	//Get out if bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1829,7 +1829,7 @@ u_int8_t enumeration_list(FILE* fl){
 
 	//Get out if bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1868,7 +1868,7 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 	//If it's bad then we're done here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid identifier in enumeration specifier", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid identifier in enumeration specifier", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1885,7 +1885,7 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 		//If it's bad then we're done here
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid enumeration list in enumeration specifier", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid enumeration list in enumeration specifier", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2072,7 +2072,7 @@ u_int8_t parameter_declaration(FILE* fl){
 	
 	//If it's bad then we're done here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier found in parameter declaration", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid type specifier found in parameter declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2082,7 +2082,7 @@ u_int8_t parameter_declaration(FILE* fl){
 
 	//If it's bad then we're done here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid declarator found in parameter declaration", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid declarator found in parameter declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2109,7 +2109,7 @@ u_int8_t parameter_list_prime(FILE* fl){
 
 	//Fail out if so
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2232,7 +2232,7 @@ static u_int8_t labeled_statement(FILE* fl){
 		status = compound_statement(fl);
 
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement in labeled statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid compound statement in labeled statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2247,7 +2247,7 @@ static u_int8_t labeled_statement(FILE* fl){
 
 		//If it failed
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid constant expression in case statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid constant expression in case statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2255,7 +2255,7 @@ static u_int8_t labeled_statement(FILE* fl){
 		status = compound_statement(fl);
 
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement in case statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid compound statement in case statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2270,7 +2270,7 @@ static u_int8_t labeled_statement(FILE* fl){
 		status = compound_statement(fl);
 
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement in case statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid compound statement in case statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2280,7 +2280,7 @@ static u_int8_t labeled_statement(FILE* fl){
 
 	//Fail case here
 	} else {
-		print_parse_message(PARSE_ERROR, "Invalid keyword for labeled statement", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid keyword for labeled statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2327,7 +2327,7 @@ static u_int8_t if_statement(FILE* fl){
 
 	//If we fail
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid expression found in if statement", current_line); 
+		//print_parse_message(PARSE_ERROR, "Invalid expression found in if statement", current_line); 
 		num_errors++;
 		return 0;
 	}
@@ -2364,7 +2364,7 @@ static u_int8_t if_statement(FILE* fl){
 
 	//If we fail
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid compound statement in if block", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid compound statement in if block", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2479,7 +2479,7 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//fail out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2533,7 +2533,7 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//fail out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2575,7 +2575,9 @@ static u_int8_t jump_statement(FILE* fl){
 
 		//If we fail
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression in ret statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid conditional expression in ret statement", current_line);
+			num_errors++;
+			return 0;
 		}
 		//otherwise we're all set
 	}
@@ -2642,7 +2644,7 @@ static u_int8_t switch_statement(FILE* fl){
 
 	//Invalid one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid expression in switch statement", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid expression in switch statement", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2683,7 +2685,7 @@ static u_int8_t switch_statement(FILE* fl){
 	while(lookahead.tok != R_CURLY){
 		//Fail cases here
 		if(lookahead.tok != CASE && lookahead.tok != DEFAULT){
-			print_parse_message(PARSE_ERROR, "Invalid label statement found in switch statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid label statement found in switch statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2696,7 +2698,7 @@ static u_int8_t switch_statement(FILE* fl){
 
 		//Invalid here
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid label statement found in switch statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid label statement found in switch statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3211,7 +3213,7 @@ static u_int8_t compound_statement(FILE* fl){
 			
 			//If we fail here just leave
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid declaration found in compound statement", current_line);
+				//print_parse_message(PARSE_ERROR, "Invalid declaration found in compound statement", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -3225,7 +3227,7 @@ static u_int8_t compound_statement(FILE* fl){
 
 			//If we failed
 			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid statement found in compound statement", current_line);
+				//print_parse_message(PARSE_ERROR, "Invalid statement found in compound statement", current_line);
 				num_errors++;
 				return 0;
 			}
@@ -3285,7 +3287,7 @@ u_int8_t direct_declarator(FILE* fl){
 
 		//If bad get out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid declarator found inside of direct declarator", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid declarator found inside of direct declarator", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3430,7 +3432,7 @@ u_int8_t direct_declarator(FILE* fl){
 				
 				//If it failed
 				if(status == 0){
-					print_parse_message(PARSE_ERROR, "Invalid parameter list in function declarative", current_line);
+					//print_parse_message(PARSE_ERROR, "Invalid parameter list in function declarative", current_line);
 					num_errors++;
 					return 0;
 				}
@@ -3465,7 +3467,7 @@ u_int8_t direct_declarator(FILE* fl){
 
 	//If we get here it failed
 	} else {
-		print_parse_message(PARSE_ERROR, "Identifier or declarator expected in direct declarator", current_line);
+		//print_parse_message(PARSE_ERROR, "Identifier or declarator expected in direct declarator", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3490,7 +3492,7 @@ static u_int8_t initializer_list_prime(FILE* fl){
 
 	//Invalid here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3525,7 +3527,7 @@ static u_int8_t initializer_list(FILE* fl){
 
 	//Invalid here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3569,7 +3571,7 @@ static u_int8_t initializer(FILE* fl){
 
 		//Fail out here
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid initializer list in initializer", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid initializer list in initializer", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3604,7 +3606,7 @@ static u_int8_t initializer(FILE* fl){
 
 		//Fail out if we get here
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression found in initializer", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid conditional expression found in initializer", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3634,7 +3636,7 @@ static u_int8_t declarator(FILE* fl){
 	status = direct_declarator(fl);
 	
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid direct declarator found in declarator", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid direct declarator found in declarator", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3697,7 +3699,7 @@ static u_int8_t declaration(FILE* fl){
 	
 	//If bad
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier in declaration", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid type specifier in declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3709,7 +3711,7 @@ static u_int8_t declaration(FILE* fl){
 
 		//If bad
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid declarator in declaration", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid declarator in declaration", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3732,7 +3734,7 @@ static u_int8_t declaration(FILE* fl){
 
 		//If we don't see it, get out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid initializer in declaration", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid initializer in declaration", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3987,7 +3989,7 @@ arrow_ident:
 
 	//If we fail here
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid compound statement in function", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid compound statement in function", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -4028,7 +4030,7 @@ u_int8_t declaration_partition(FILE* fl){
 	
 	//Something failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Declaration Partition could not find a valid function or declaration", current_line);
+		print_parse_message(PARSE_ERROR, "Invalid declaration or function definition", current_line);
 		num_errors++;
 		return 0;
 	}

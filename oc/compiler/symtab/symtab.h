@@ -23,12 +23,28 @@ typedef struct symtab_function_sheaf_t symtab_function_sheaf_t;
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
 typedef struct symtab_function_record_t symtab_function_record_t;
 typedef struct symtab_variable_record_t symtab_variable_record_t;
+//Parameter lists for functions TODO
+typedef struct parameter_list_t parameter_list_t;
+//Parameter type
+typedef struct parameter_t parameter_t;
+
 
 
 typedef enum SYMTAB_RECORD_TYPE{
 	FUNCTION,
 	VARIABLE
 } SYMTAB_RECORD_TYPE;
+
+
+
+struct parameter_t{
+
+};
+
+
+struct parameter_list_t{
+	parameter_t parameters[8];
+};
 
 
 /**
