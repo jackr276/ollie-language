@@ -1641,7 +1641,6 @@ u_int8_t structure_specifier(FILE* fl){
 	//Now we can optionally see the curlies for a declaration
 	lookahead = get_next_token(fl, &parser_line_num); 
 
-
 	if(lookahead.tok == IDENT){
 		//Handle the case where we have a struct IDENT
 		return 1;
@@ -3248,7 +3247,6 @@ u_int8_t direct_declarator(FILE* fl){
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
 	
-	printf("%s\n", lookahead.lexeme);
 	//We can see a declarator inside of here
 	if(lookahead.tok == L_PAREN){
 		//Save for later
@@ -3624,7 +3622,7 @@ static u_int8_t declarator(FILE* fl){
  * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> <declarator>; 
  * 							 | declare {constant}? <storage-class-specifier> <enum-specifier>; //TODO BAD
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
- *                           | define {constant} <storage-class-specifier>? <type-specifier> <declarator> as <ident>;
+ *                           | define {constant} <storage-class-specifier>? <type-specifier> <pointer>? as <ident>;
 
  */
 static u_int8_t declaration(FILE* fl){
@@ -3676,18 +3674,19 @@ static u_int8_t declaration(FILE* fl){
 		return 0;
 	}
 
-	//Now we must see a valid declarator
-	status = declarator(fl);
+	//We need to see a declarator if we're here
+	if(tok != DEFINE){
+		//Now we must see a valid declarator
+		status = declarator(fl);
 
-	//If bad
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid declarator in declaration", current_line);
-		num_errors++;
-		return 0;
+		//If bad
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid declarator in declaration", current_line);
+			num_errors++;
+			return 0;
+		}
 	}
-		
-	if(tok == DEFINE) printf("HERE1");
-	if(tok == DECLARE) printf("HERE2");
+			
 	//Now we can take two divergent paths here
 	if(tok == LET){
 		//Now we must see the assignment operator
@@ -3742,6 +3741,9 @@ static u_int8_t declaration(FILE* fl){
 	
 	//If we had a define statement
 	if(tok == DEFINE){
+		//we can optionally see a pointer here
+		pointer(fl);
+
 		//We now must see "as"
 		l = get_next_token(fl, &parser_line_num);
 
