@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
+#include <time.h>
 
 
 //Our global symbol table
@@ -27,6 +28,7 @@ static u_int8_t cast_expression(FILE* fl);
 static u_int8_t assignment_expression(FILE* fl);
 static u_int8_t conditional_expression(FILE* fl);
 static u_int8_t unary_expression(FILE* fl);
+static u_int8_t type_specifier(FILE* fl);
 static u_int8_t declaration(FILE* fl);
 static u_int8_t compound_statement(FILE* fl);
 static u_int8_t statement(FILE* fl);
@@ -117,7 +119,6 @@ static u_int8_t pointer(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
 	//Grab the star
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -428,7 +429,7 @@ static u_int8_t assignment_expression(FILE* fl){
  * 									| <primary-expression>{[ <expression> ]}*
  * 									| <primary-expression>{[ <expression> ]}*:<postifx-expression> 
  * 									| <primary-expression>{[ <expression> ]}*::<postfix-expression> 
- * 									| <primary-expression> ( {assignment-expression}* ) 
+ * 									| <primary-expression> ( {conditional-expression}* ) 
  * 									| <primary-expression> ++ 
  * 									| <primary-expression> --
  */ 
@@ -467,7 +468,7 @@ static u_int8_t postfix_expression(FILE* fl){
 			//TODO handle the actual memory addressing later on
 			return postfix_expression(fl);
 
-		//If we see a left paren, we are looking at an assignment expression
+		//If we see a left paren, we are looking at a conditional expression
 		case L_PAREN:
 			//Push to the stack for later
 			push(grouping_stack, lookahead);
@@ -477,12 +478,13 @@ static u_int8_t postfix_expression(FILE* fl){
 
 			//As long as we don't see the enclosing right parenthesis
 			while(lookahead.tok != R_PAREN){
-				//Put it back
-				push_back_token(fl, lookahead);
+				//If it isn't a comma
+				if(lookahead.tok != COMMA){
+					push_back_token(fl, lookahead);
+				}
 				
-				//We now need to see a valid assignment expression
-				//TODO this is probably wrong
-				status = assignment_expression(fl);
+				//We now need to see a valid conditional expression
+				status = conditional_expression(fl);
 				
 				//Refresh this for the next search
 				lookahead = get_next_token(fl, &parser_line_num);
@@ -1540,56 +1542,96 @@ u_int8_t constant_expression(FILE* fl){
 /**
  * A structure declarator is grammatically identical to a regular declarator
  *
+ * BNF Rule: <structure-declarator> ::= <declarator> 
+ * 									  | <declarator> := <constant-expression>
+ *
  */
 u_int8_t structure_declarator(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	Lexer_item lookahead;
 	u_int8_t status = 0;
 
-	//We can see pointers here
-	status = pointer(fl);
+	//We can see a declarator
+	status = declarator(fl);
 
-	//If we see any pointers, handle them accordingly TODO
-	
-	//Now we must see a valid direct declarator
-	status = direct_declarator(fl);
-	
+	//Now we can optionally see the assignment opperator
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see it we can leave
+	if(lookahead.tok != COLONEQ){
+		//Push back and leave
+		push_back_token(fl, lookahead);
+		return 1;
+	}
+
+	//Otherwise we now have to see a valid constant expression
+	status = constant_expression(fl);
+
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid direct declarator found in declarator", current_line);
+		print_parse_message(PARSE_ERROR, "Invalid constant expression found in structure declarator", current_line);
 		num_errors++;
 		return 0;
 	}
 
 	//Otherwise we're all set so return 1
 	return 1;
-	return 0;
 }
-
-u_int8_t structure_declarator_list(FILE* fl, symtab_t* symtab, stack_t* stack){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	return 0;
-}
-
 
 /**
  * A structure declaration can optionally be chained into a large list
  *
- * BNF Rule: <structure-declaration> ::= {constant}? <type-specifier> <structure-declarator>(<structure-declarator-list>?)
+ * BNF Rule: <structure-declaration> ::= {constant}? <type-specifier> <structure-declarator>
  */
 u_int8_t structure_declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	return 0;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//We can see the constant keyword here optionally
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see constant keyword
+	if(lookahead.tok == CONSTANT){
+		//TODO handle
+	} else {
+		//Put back
+		push_back_token(fl, lookahead);
+	}
+	
+	//We must see a valid one
+	status = type_specifier(fl);
+
+	//Fail out if bad
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier in structure declaration", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we must see a valid structure declarator
+	status = structure_declarator(fl);
+
+	//Fail out if bad
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid structure declarator in structure declaration", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise it worked so
+	return 1;
 }
+
 
 /**
  * A strucutre specifier is the entry to a structure
  *
  * REMEMBER: By the time we get here, we've already seen the structure keyword
  *
- * BNF Rule: <structure-specifier> ::= structure <identifier>{ {structure-declaration} } 
- * 									 | structure <identifier>
+ * BNF Rule: <structure-specifier> ::= structure <identifier>{ <structure-declaration> {, <strucutre-declaration>}* }  
+ *                                   | structure <identifier>
  */
 u_int8_t structure_specifier(FILE* fl){
 	//Freeze the line number
@@ -1630,9 +1672,26 @@ u_int8_t structure_specifier(FILE* fl){
 		return 0;
 	}
 
-	//Othewrise, we need to see a closing curly here
+	//We can optionally see a comma here
 	lookahead = get_next_token(fl, &parser_line_num);
 
+	//As long as we see commas
+	while(lookahead.tok == COMMA){
+		//We must now see a valid declaration
+		status = structure_declaration(fl);
+
+		//If we fail
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid strucutre declaration inside of structure specifier", current_line);
+			num_errors++;
+			return 0;
+		}	
+
+		//Refresh lookahead
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//Once we get here it must be a closing curly
 	//If we don't see a curly
 	if(lookahead.tok != R_CURLY){
 		print_parse_message(PARSE_ERROR, "Right curly brace expected after structure declaration", current_line);
@@ -1891,10 +1950,19 @@ u_int8_t type_specifier(FILE* fl){
 	} else if (l.tok == STRUCTURE){
 		status = structure_specifier(fl);
 
+		//If it's bad then we're done here
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid structure specifier in type specifier", current_line);
+			num_errors++;
+			return 0;
+		}	
+
+		//Otherwise it worked so return 1
+		return 1;
+
 	} else {
 		//We need to see some user defined type here
 	}
-
 
 	return 0;
 }
@@ -1913,7 +1981,7 @@ u_int8_t storage_class_specifier(FILE* fl){
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 
 	//If we see one here
-	if(l.tok == STATIC || l.tok == EXTERNAL | l.tok == REGISTER){
+	if(l.tok == STATIC || l.tok == EXTERNAL || l.tok == REGISTER){
 		//TODO store in symtab
 		return 1;
 	} else {
@@ -3531,6 +3599,8 @@ static u_int8_t declarator(FILE* fl){
  * A declaration is the other main kind of block that we can see other than functions
  *
  * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> <declarator>; 
+ * 							 | declare {constant}? <storage-class-specifier> <structure-specifer>; 
+ * 							 | declare {constant}? <storage-class-specifier> <enum-specifier>; 
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
  */
 static u_int8_t declaration(FILE* fl){
@@ -3572,6 +3642,59 @@ static u_int8_t declaration(FILE* fl){
 	status = storage_class_specifier(fl);
 	//Handle accordingly
 	
+	//We could have a structure or enum type here
+	l = get_next_token(fl, &parser_line_num);
+	
+	//If we have a structure
+	if(l.tok == STRUCTURE){
+		//Let this handle it
+		status = structure_specifier(fl);
+
+		//If we fail
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid structure declaration in declaration", current_line);
+			num_errors++;
+			return 0;
+		}
+		
+		l = get_next_token(fl, &parser_line_num);
+
+		if(l.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Semicolon expected after structure declaration", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it worked
+		return 1;
+
+	} else if(l.tok == ENUMERATED){
+		//Let this handle it
+		status = structure_specifier(fl);
+
+		//If we fail
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid structure declaration in declaration", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		l = get_next_token(fl, &parser_line_num);
+
+		if(l.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Semicolon expected after enumerated declaration", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it worked
+		return 1;
+
+	} else {
+		//Put back and move on
+		push_back_token(fl, l);
+	}
+
 	//We now must see a valid type specifier
 	status = type_specifier(fl);
 	
@@ -3630,6 +3753,7 @@ static u_int8_t declaration(FILE* fl){
 
 	//If we had a declare statement
 	if(let_or_declare == DECLARE){
+	SEMICOL:
 		//If it was a declare statement, we must only see the semicolon to exit
 		l = get_next_token(fl, &parser_line_num);
 
@@ -3867,7 +3991,6 @@ u_int8_t declaration_partition(FILE* fl){
  */
 u_int8_t program(FILE* fl){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 	u_int8_t status = 0;
 
@@ -3898,7 +4021,6 @@ u_int8_t program(FILE* fl){
 u_int8_t parse(FILE* fl){
 	u_int8_t status = 0;
 	num_errors = 0;
-	parse_message_t message;
 
 	//Initialize our global symtab here
 	symtab = initialize_symtab(VARIABLE);

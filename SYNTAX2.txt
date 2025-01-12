@@ -82,18 +82,14 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 			 		| <structure-specifier> 
 			 		| <user-defined-type>
 
-<structure-specifier> ::= structure <identifier>{ {structure-declaration} }
-						| structure { {structure-declaration} }
+<structure-specifier> ::= structure <identifier>{ <structure-declaration> {, <strucutre-declaration>}* }
+						| structure { <structure-declaration>{, <structure-declaration>}* }
 						| structure <identifier>
 
-<structure-declaration> ::= {constant}? <type-specifier> <structure-declarator>(<structure-declarator-list>?)
-
-<structure-declarator-list> ::= , <structure-declarator>{<structure-declarator-list>}?
+<structure-declaration> ::= {constant}? <type-specifier> <structure-declarator>
 
 <structure-declarator> ::= <declarator>
 						 | <declarator> := <constant-expression>
-
-
 
 
 <enumator-specifier> ::= enumerated <identifier> { <enumerator-list> }
@@ -185,7 +181,7 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 					   | <primary-expression>{[ <expression> ]}*
 					   | <primary-expression>{[ <expression> ]}*:<postifx-expression>
 					   | <primary-expression>{[ <expression> ]}*::<postfix-expression>
-					   | <primary-expression> ( {assignment-expression}* )
+					   | <primary-expression> ( {conditional_expression}* )
 					   | <primary-expression> ++
 					   | <primary-expression> --
 					   
