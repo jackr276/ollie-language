@@ -1629,8 +1629,8 @@ u_int8_t structure_declaration(FILE* fl){
  *
  * REMEMBER: By the time we get here, we've already seen the structure keyword
  *
- * BNF Rule: <structure-specifier> ::= structure <identifier>{ <structure-declaration> {, <strucutre-declaration>}* }  
- *                                   | structure <identifier>
+ * BNF Rule: <structure-specifier> ::= structure { <structure-declaration> {, <strucutre-declaration>}* } 
+ *                                   | structure <ident>
  */
 u_int8_t structure_specifier(FILE* fl){
 	//Freeze the line number
@@ -1638,24 +1638,18 @@ u_int8_t structure_specifier(FILE* fl){
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
-	//We must see an identifier here
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Fail case
-	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Structure identifier not found", current_line);
-		num_errors++;
-		return 0;
-	}
-
 	//Now we can optionally see the curlies for a declaration
 	lookahead = get_next_token(fl, &parser_line_num); 
 
+
+	if(lookahead.tok == IDENT){
+		//Handle the case where we have a struct IDENT
+		return 1;
+	}
+
 	//Still worked but we aren't declaring, just leave
 	if(lookahead.tok != L_CURLY){
-		//Put the token back
-		push_back_token(fl, lookahead);
-		return 1;
+		print_parse_message(PARSE_ERROR, "Opening curly brace exprected", current_line);
 	}
 
 	//Otherwise we saw a left curly, so push to stack 
@@ -1897,6 +1891,25 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 
 /**
+ * A user defined type is simply an ident with extra checks on it
+ *
+ * BNF Rule: <user-defined-type> ::= <ident>
+ */
+static u_int8_t user_defined_type(FILE* fl){
+	u_int16_t current_line = parser_line_num;
+	u_int8_t status = identifier(fl);
+
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Unrecognized ident in user defined type",  current_line);
+		num_errors++;
+		return 0;
+	}
+
+	return 1;
+}
+
+
+/**
  * Type specifiers can be the set of primitives or user defined types
  * TODO SYMTAB stuff
  *
@@ -1961,9 +1974,19 @@ u_int8_t type_specifier(FILE* fl){
 
 	} else {
 		//We need to see some user defined type here
-	}
+		//Push it back and call user type
+		push_back_token(fl, l);
+		status = user_defined_type(fl);
 
-	return 0;
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid user defined type in type specifier",  current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//If we make it here it worked
+		return 1;
+	}
 }
 
 
@@ -3152,7 +3175,7 @@ static u_int8_t compound_statement(FILE* fl){
 	//Now we keep going until we see the closing curly brace
 	while(lookahead.tok != R_CURLY && lookahead.tok != DONE){
 		//If we see this we know that we have a declaration
-		if(lookahead.tok == LET || lookahead.tok == DECLARE){
+		if(lookahead.tok == LET || lookahead.tok == DECLARE || lookahead.tok == DEFINE){
 			//Push it back
 			push_back_token(fl, lookahead);
 
@@ -3598,29 +3621,30 @@ static u_int8_t declarator(FILE* fl){
  * A declaration is the other main kind of block that we can see other than functions
  *
  * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> <declarator>; 
- * 							 | declare {constant}? <storage-class-specifier> <structure-specifer>; 
  * 							 | declare {constant}? <storage-class-specifier> <enum-specifier>; 
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
+ *                           | define {constant} <storage-class-specifier>? <type-specifier> <declarator> as <ident>;
+
  */
 static u_int8_t declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 	u_int8_t status = 0;
-	Token let_or_declare;
+	Token tok = BLANK;
 
 	//Grab the token
 	l = get_next_token(fl, &parser_line_num);
 
 	//Something bad here
-	if(l.tok != LET && l.tok != DECLARE){
-		print_parse_message(PARSE_ERROR, "Declare or let keywords expected in declaration", current_line);
+	if(l.tok != LET && l.tok != DECLARE && l.tok != DEFINE){
+		print_parse_message(PARSE_ERROR, "Declare, define or let keywords expected in declaration", current_line);
 		num_errors++;
 		return 0;
 	}
 
 	//Save this
-	let_or_declare = l.tok;
+	tok = l.tok;
 
 	//Grab the next token
 	l = get_next_token(fl, &parser_line_num);
@@ -3642,8 +3666,9 @@ static u_int8_t declaration(FILE* fl){
 	//Handle accordingly
 	
 	//We could have a structure or enum type here
-	l = get_next_token(fl, &parser_line_num);
+//	l = get_next_token(fl, &parser_line_num);
 	
+	/*
 	//If we have a structure
 	if(l.tok == STRUCTURE){
 		//Let this handle it
@@ -3693,6 +3718,7 @@ static u_int8_t declaration(FILE* fl){
 		//Put back and move on
 		push_back_token(fl, l);
 	}
+	*/
 
 	//We now must see a valid type specifier
 	status = type_specifier(fl);
@@ -3715,7 +3741,7 @@ static u_int8_t declaration(FILE* fl){
 	}
 		
 	//Now we can take two divergent paths here
-	if(let_or_declare == LET){
+	if(tok == LET){
 		//Now we must see the assignment operator
 		l = get_next_token(fl, &parser_line_num);
 
@@ -3751,7 +3777,7 @@ static u_int8_t declaration(FILE* fl){
 	}
 
 	//If we had a declare statement
-	if(let_or_declare == DECLARE){
+	if(tok == DECLARE){
 	SEMICOL:
 		//If it was a declare statement, we must only see the semicolon to exit
 		l = get_next_token(fl, &parser_line_num);

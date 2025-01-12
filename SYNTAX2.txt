@@ -65,6 +65,8 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 							| static
 							| external
 
+<user-defined-type> ::= <ident>
+
  <type-specifier> ::= void 
 			 	    | u_int8 
 			 		| s_int8 
@@ -203,6 +205,7 @@ This grammar is of the class RL1(Right recursive lookahead of at most 1 token)
 
 <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> <declarator>;
 	            | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
+				| define {constant} <storage-class-specifier>? <type-specifier> <declarator> as <ident>;
 
 <declarator> ::= {<pointer>}? <direct-declarator>
 
