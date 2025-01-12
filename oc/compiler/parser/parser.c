@@ -3248,6 +3248,7 @@ u_int8_t direct_declarator(FILE* fl){
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
 	
+	printf("%s\n", lookahead.lexeme);
 	//We can see a declarator inside of here
 	if(lookahead.tok == L_PAREN){
 		//Save for later
@@ -3621,7 +3622,7 @@ static u_int8_t declarator(FILE* fl){
  * A declaration is the other main kind of block that we can see other than functions
  *
  * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> <declarator>; 
- * 							 | declare {constant}? <storage-class-specifier> <enum-specifier>; 
+ * 							 | declare {constant}? <storage-class-specifier> <enum-specifier>; //TODO BAD
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
  *                           | define {constant} <storage-class-specifier>? <type-specifier> <declarator> as <ident>;
 
@@ -3664,61 +3665,6 @@ static u_int8_t declaration(FILE* fl){
 	//We can now see a storage class specifier
 	status = storage_class_specifier(fl);
 	//Handle accordingly
-	
-	//We could have a structure or enum type here
-//	l = get_next_token(fl, &parser_line_num);
-	
-	/*
-	//If we have a structure
-	if(l.tok == STRUCTURE){
-		//Let this handle it
-		status = structure_specifier(fl);
-
-		//If we fail
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid structure declaration in declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		l = get_next_token(fl, &parser_line_num);
-
-		if(l.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected after structure declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise it worked
-		return 1;
-
-	} else if(l.tok == ENUMERATED){
-		//Let this handle it
-		status = structure_specifier(fl);
-
-		//If we fail
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid structure declaration in declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		l = get_next_token(fl, &parser_line_num);
-
-		if(l.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected after enumerated declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise it worked
-		return 1;
-
-	} else {
-		//Put back and move on
-		push_back_token(fl, l);
-	}
-	*/
 
 	//We now must see a valid type specifier
 	status = type_specifier(fl);
@@ -3740,6 +3686,8 @@ static u_int8_t declaration(FILE* fl){
 		return 0;
 	}
 		
+	if(tok == DEFINE) printf("HERE1");
+	if(tok == DECLARE) printf("HERE2");
 	//Now we can take two divergent paths here
 	if(tok == LET){
 		//Now we must see the assignment operator
@@ -3779,6 +3727,41 @@ static u_int8_t declaration(FILE* fl){
 	//If we had a declare statement
 	if(tok == DECLARE){
 	SEMICOL:
+		//If it was a declare statement, we must only see the semicolon to exit
+		l = get_next_token(fl, &parser_line_num);
+
+		if(l.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
+			num_errors++;
+			return 0;
+		}
+	
+		//Otherwise it worked and we can leave
+		return 1;
+	}
+	
+	//If we had a define statement
+	if(tok == DEFINE){
+		//We now must see "as"
+		l = get_next_token(fl, &parser_line_num);
+
+		//Fail out
+		if(l.tok != AS){
+			print_parse_message(PARSE_ERROR, "As keyword expected in type definition", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we must see a valid IDENT
+		status = identifier(fl);
+
+		//Fail out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid ident in type definition", current_line);
+			num_errors++;
+			return 0;
+		}
+
 		//If it was a declare statement, we must only see the semicolon to exit
 		l = get_next_token(fl, &parser_line_num);
 

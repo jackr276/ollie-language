@@ -75,7 +75,7 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 								  "break", "continue", "asn", "structure", "as"};
 
 	//Let's see if we have a keyword here
-	for(u_int8_t i = 0; i < 45; i++){
+	for(u_int8_t i = 0; i < 46; i++){
 		if(strcmp(keyword_arr[i], lexeme) == 0){
 			//We can get out of here
 			lex_item.tok = tok_arr[i];
