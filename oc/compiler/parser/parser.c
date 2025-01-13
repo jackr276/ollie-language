@@ -16,19 +16,25 @@
 //Variable and function symbol tables
 symtab_t* variable_symtab;
 symtab_t* function_symtab;
+
 //Our stack for storing variables, etc
 heap_stack_t* grouping_stack;
+
 //The number of errors
 u_int16_t num_errors = 0;
+
 //The current parser line number
 u_int16_t parser_line_num = 0;
+
 //Are we in a param_list?
 u_int8_t in_param_list = 0;
+
 //What's the function that we're in currently?
 symtab_function_record_t* current_function = NULL;
 
 //The current IDENT that we are tracking
 Lexer_item* current_ident = NULL;
+
 //The current type
 type_t* active_type = NULL;
 
@@ -3817,6 +3823,7 @@ static u_int8_t declarator(FILE* fl){
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
  *                           | define {constant} <storage-class-specifier>? <type-specifier> <pointer>? as <ident>;
 
+TODO NEEDS COMPLETE REWRITE
  */
 static u_int8_t declaration(FILE* fl){
 	//Freeze the line number

@@ -40,7 +40,9 @@ typedef enum STORAGE_CLASS_T{
 } STORAGE_CLASS_T;
 
 
-
+/**
+ * Is it a function or variable symtab?
+ */
 typedef enum SYMTAB_RECORD_TYPE{
 	FUNCTION,
 	VARIABLE
@@ -52,7 +54,8 @@ typedef enum SYMTAB_RECORD_TYPE{
  * the type that we have is a basic type
  */
 typedef enum BASIC_TYPE{
-	NON_BASIC, /* If it's a complex type */
+	TYPE_STRUCTURE, /* If it's a complex type */
+	TYPE_ENUMERATED,
 	TYPE_U_INT8,
 	TYPE_S_INT8,
 	TYPE_U_INT16,
