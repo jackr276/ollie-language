@@ -21,7 +21,8 @@ typedef enum {
 	IN_INT,
 	IN_FLOAT,
 	IN_STRING,
-	IN_COMMENT
+	IN_MULTI_COMMENT,
+	IN_SINGLE_COMMENT
 } Lex_state;
 
 
@@ -167,9 +168,11 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							
 						//If we're here we have a comment
 						if(ch2 == '*'){
-							current_state = IN_COMMENT;
+							current_state = IN_MULTI_COMMENT;
 							break;
-
+						} else if(ch2 == '/'){
+							current_state = IN_SINGLE_COMMENT;
+							break;
 						//Otherwise we could have '=/'
 						} else if(ch2 == '='){
 							current_state = START;
@@ -762,7 +765,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 				break;
 
 			//If we're in a comment, we can escape if we see "*/"
-			case IN_COMMENT:
+			case IN_MULTI_COMMENT:
 				//Are we at the start of an escape sequence?
 				if(ch == '*'){
 					ch2 = fgetc(fl);	
@@ -777,6 +780,17 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 				//If we see whitespace we'll just increment the line number
 				is_ws(ch, &line_num, parser_line_num);
+				break;
+
+			//If we're in a single line comment
+			case IN_SINGLE_COMMENT:
+				//Are we at the start of the escape sequence
+				//Newline means we get out
+				if(ch == '\n'){
+					line_num++;
+					current_state = START;
+				} 
+				//Otherwise just go forward
 				break;
 		}
 	}
