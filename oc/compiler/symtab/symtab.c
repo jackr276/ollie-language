@@ -139,7 +139,7 @@ symtab_variable_record_t* create_variable_record(char* name, u_int16_t lexical_l
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(char* name, u_int16_t lexical_level, u_int64_t offset){
+symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T storage_class){
 	//Allocate it
 	symtab_function_record_t* record = (symtab_function_record_t*)calloc(1, sizeof(symtab_function_record_t));
 
@@ -147,9 +147,8 @@ symtab_function_record_t* create_function_record(char* name, u_int16_t lexical_l
 	strcpy(record->func_name, name);
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name);
-	record->lexical_level = lexical_level;
-	//This here is not used currently
-	record->offset = offset;
+	//Store the storage class
+	record->storage_class = storage_class;
 
 	return record;
 }

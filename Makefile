@@ -47,7 +47,7 @@ parser_test: parser.o lexer.o parser_test.o symtab.o stack.o
 parser_test_debug: parser.o lexer.o parser_test.o symtab.o stack.o 
 	$(CC) -g -o $(OUT)/debug $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o
 
-symtab_test: symtab.o symtab_test.o
+symtab_test: symtab.o symtab_test.o lexer.o
 	$(CC) -o $(OUT)/symtab_test $(OUT)/symtab_test.o $(OUT)/symtab.o
 
 stest: symtab_test

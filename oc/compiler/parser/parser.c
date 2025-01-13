@@ -21,7 +21,8 @@ heap_stack_t* grouping_stack;
 u_int16_t num_errors = 0;
 //The current parser line number
 u_int16_t parser_line_num = 0;
-//Are we currently in a function declaration
+//What's the function that we're in currently?
+symtab_function_record_t* current_function = NULL;
 
 //The current IDENT that we are tracking
 Lexer_item current_ident;
@@ -3851,20 +3852,23 @@ u_int8_t function_specifier(FILE* fl){
 u_int8_t function_declaration(FILE* fl){
 	//Initialize the scope for variables
 	initialize_scope(variable_symtab);
-	//We are officially in a function
+
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	u_int8_t status = 0;
+
+	//What is the function's storage class?
+	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
+
 	Lexer_item lookahead;
 	Lexer_item lookahead2;
+
 	//For storing our function name
 	char function_name[100];
+
 	//Wipe it out
 	memset(function_name, 0, sizeof(char)*100);
 
-	Lexer_item ident;
-	//We may need this in later iterations
-	Token function_storage_type = BLANK;
-	u_int8_t status;
 	//This will be used for error printing
 	char info[2000];
 	
@@ -3996,6 +4000,10 @@ arrow_ident:
 
 	//Finalize the variable symtab scope
 	finalize_scope(variable_symtab);
+
+	//Set this to null to avoid confusion
+	current_function = NULL;
+
 	//All went well if we make it here
 	return 1;
 }

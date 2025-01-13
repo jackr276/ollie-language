@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include "../lexer/lexer.h"
 
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
@@ -27,6 +28,15 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 typedef struct parameter_list_t parameter_list_t;
 //Parameter type
 typedef struct parameter_t parameter_t;
+//A type holder
+typedef struct type_t type_t;
+
+//The storage class of a given item
+typedef enum STORAGE_CLASS_T{
+	STORAGE_CLASS_STATIC,
+	STORAGE_CLASS_EXTERNAL,
+	STORAGE_CLASS_NORMAL,
+} STORAGE_CLASS_T;
 
 
 
@@ -36,14 +46,25 @@ typedef enum SYMTAB_RECORD_TYPE{
 } SYMTAB_RECORD_TYPE;
 
 
-
-struct parameter_t{
-
+/**
+ * A generic type holder for us
+ */
+struct type_t{
+	Lexer_item type_lex;
+	//TODO may need more stuff here
 };
 
 
-struct parameter_list_t{
-	parameter_t parameters[8];
+/**
+ * A parameter has a type and a name
+ */
+struct parameter_t{
+	//A function parameter has a type
+	type_t type;
+	//It also has a name
+	char param_name[100];
+	//Was it ever referenced?
+	u_int8_t referenced;
 };
 
 
@@ -61,11 +82,16 @@ struct symtab_function_record_t{
 	u_int16_t line_number;
 	//Will be used later, the offset for the address in the data area
 	u_int64_t offset;
-	//Parameter-list of some kind here TODO
-
+	//Parameter-list of some kind here -- at most 6, we accept no more
+	parameter_t parameters[6];
+	//Number of parameters
+	u_int8_t number_of_params;
+	//What's the storage class?
+	STORAGE_CLASS_T storage_class;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
 };
+
 
 /**
  * This struct represents a specific lexical level of a symtab
@@ -83,6 +109,8 @@ struct symtab_variable_record_t{
 	u_int64_t offset;
 	//Was it initialized?
 	u_int8_t initialized;
+	//Is it a function parameter?
+	u_int8_t is_function_paramater;
 	//What type is it?
 	char* type; //Char * for now TODO
 	symtab_variable_record_t* next;
@@ -162,7 +190,7 @@ symtab_variable_record_t* create_variable_record(char* name, u_int16_t lexical_l
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(char* name, u_int16_t lexical_level, u_int64_t offset);
+symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T storage_class);
 
 
 /**
