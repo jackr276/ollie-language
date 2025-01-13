@@ -72,6 +72,8 @@ typedef enum BASIC_TYPE{
  */
 struct type_t{
 	Lexer_item type_lex;
+	//The type name
+	char type_name[100];
 	//Is it a basic type?
 	BASIC_TYPE basic_type;
 	//Is it a pointer? 0 = not, 1 = 1 star, 2 star, etc
@@ -111,6 +113,8 @@ struct symtab_function_record_t{
 	parameter_t func_params[6];
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
+	//What's the return type?
+	type_t return_type;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
 };
@@ -241,6 +245,11 @@ void print_function_record(symtab_function_record_t* record);
  * A printing function for development purposes
  */
 void print_variable_record(symtab_variable_record_t* record);
+
+/**
+ * A helper method for function name printing
+ */
+void print_function_name(symtab_function_record_t* record);
 
 /**
  * Deinitialize the symbol table

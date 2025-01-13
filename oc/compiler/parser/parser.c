@@ -576,9 +576,13 @@ static u_int8_t postfix_expression(FILE* fl){
 
 			//Now check for parameter correctness TODO NOT DONE
 			if(params_seen != func->number_of_params){
+				//Special printing details here
 				memset(info, 0, 2000*sizeof(char));
 				sprintf(info, "Function %s requires %d parameters, was given %d", func->func_name, func->number_of_params, params_seen);
 				print_parse_message(PARSE_ERROR, info, current_line);
+				printf("Function was defined as: ");
+				print_function_name(func);
+
 				num_errors++;
 				return 0;
 			}
@@ -2000,6 +2004,8 @@ u_int8_t type_specifier(FILE* fl){
 	  || l.tok == FLOAT64 || l.tok == CHAR || l.tok == STR){
 		//Encode the type level STILL NOT DONE
 		active_type->type_lex = l;
+		//Add the type name in
+		strcpy(active_type->type_name, l.lexeme);
 		//TODO put in symtable
 		return 1;
 	}
@@ -4092,6 +4098,8 @@ u_int8_t function_declaration(FILE* fl){
 
 	//Officially make the function record
 	function_record = create_function_record(function_name, storage_class);
+	//Store the line number too
+	function_record->line_number = current_line;
 
 	//Set these equal here
 	current_function = function_record;
@@ -4170,6 +4178,9 @@ arrow_ident:
 	//After the arrow we must see a valid type specifier
 	status = type_specifier(fl);
 
+	//We'll store this as the function return type
+	function_record->return_type = *active_type;
+
 	//If it failed
 	if(status == 0){
 		print_parse_message(PARSE_ERROR, "Invalid return type given to function", current_line);
@@ -4192,6 +4203,9 @@ arrow_ident:
 
 	//Set this to null to avoid confusion
 	current_function = NULL;
+
+	free(active_type);
+	active_type = NULL;
 
 	//All went well if we make it here
 	return 1;

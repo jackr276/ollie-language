@@ -328,6 +328,28 @@ void print_variable_record(symtab_variable_record_t* record){
 
 
 /**
+ * Print a function name out in a stylised way
+ *
+ * NO NEWLINE at the end
+ */
+void print_function_name(symtab_function_record_t* record){
+	printf("\n\n%d | func %s(", record->line_number, record->func_name);
+
+	//Print out the params
+	for(u_int8_t i = 0; i < record->number_of_params; i++){
+		printf("%s %s", record->func_params[i].associate_var->type.type_name, record->func_params[i].associate_var->var_name);
+		//Comma if needed
+		if(i < record->number_of_params-1){
+			printf(", ");
+		}
+	}
+
+	//Final closing paren and return type
+	printf(") -> %s\n\n", record->return_type.type_name);
+}
+
+
+/**
  * Provide a function that will destroy the symtab completely. It is important to note that 
  * we must have the root level symtab here
 */
