@@ -3,7 +3,7 @@
 */
 
 
-func:static example(s_int32* my_arr) -> void{
+func:static example(s_int32* my_arr, u_int8 max) -> void{
 	asn *(my_arr) := 2;
 	ret;
 }
@@ -16,7 +16,7 @@ func main(s_int32 argc, char** argv) -> s_int32 {
 
 	let u_int32 my_int := 14;
 	
-	example(my_arr, x, y, z);
+	example(my_arr);
 
 	ret 0;
 }

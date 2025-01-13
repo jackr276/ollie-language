@@ -24,7 +24,7 @@ int main(){
 	initialize_scope(symtab);
 
 	for(u_int8_t i = 0; i < 5; i++){
-		num_collisions += insert(symtab, create_variable_record(idents_l1[i], symtab->current_lexical_scope, 0));
+		num_collisions += insert(symtab, create_variable_record(idents_l1[i], STORAGE_CLASS_NORMAL));
 	}
 
 	printf("Collisions: %d\n", num_collisions);
@@ -34,7 +34,7 @@ int main(){
 	symtab_variable_record_t* found;
 
 	for(u_int8_t i = 0; i < 2; i++){
-		num_collisions += insert(symtab, create_variable_record(idents_l2[i], symtab->current_lexical_scope, 0));
+		num_collisions += insert(symtab, create_variable_record(idents_l2[i], STORAGE_CLASS_NORMAL));
 	}
 
 

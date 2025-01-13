@@ -7,6 +7,7 @@
 
 #include "parser.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <time.h>
@@ -27,9 +28,9 @@ u_int8_t in_param_list = 0;
 symtab_function_record_t* current_function = NULL;
 
 //The current IDENT that we are tracking
-Lexer_item current_ident;
+Lexer_item* current_ident = NULL;
 //The current type
-type_t current_type;
+type_t* active_type = NULL;
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static u_int8_t cast_expression(FILE* fl);
@@ -87,8 +88,13 @@ static u_int8_t identifier(FILE* fl){
 		return 0;
 	}
 
-	//Save this globally
-	current_ident = l;
+	//Global save for current ident
+	current_ident = calloc(1, sizeof(Lexer_item));
+	current_ident->tok = l.tok;
+	strcpy(current_ident->lexeme, l.lexeme);
+	current_ident->char_count = l.char_count;
+	current_ident->line_num = l.line_num;
+
 
 	//We'll push this ident onto the stack and let whoever called(function/variable etc.) deal with it
 	//We have no need to search the symtable in this function because we are unable to context-sensitive
@@ -136,7 +142,10 @@ static u_int8_t pointer(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	if(lookahead.tok == STAR){
-		//TODO handle it
+		//Increment the pointer level
+		if(active_type != NULL){
+			active_type->pointer_level++;
+		}
 		lookahead = get_next_token(fl, &parser_line_num);
 		//If we see another pointer, handle it
 		if(lookahead.tok == STAR){
@@ -494,7 +503,7 @@ static u_int8_t postfix_expression(FILE* fl){
 			u_int8_t params_seen = 0;
 
 			//Copy it in for safety
-			strcpy(function_name, current_ident.lexeme);
+			strcpy(function_name, current_ident->lexeme);
 			//This is for sure a function call, so we need to be able to recognize the function
 			symtab_function_record_t* func = lookup(function_symtab, function_name);
 
@@ -503,12 +512,16 @@ static u_int8_t postfix_expression(FILE* fl){
 				//Wipe it
 				memset(info, 0, 2000*sizeof(char));
 				//Format nice
-				sprintf(info, "Function \"%s\" was not defined", current_ident.lexeme);
+				sprintf(info, "Function \"%s\" was not defined", current_ident->lexeme);
+				//Relese the memory
+				free(current_ident);
 				print_parse_message(PARSE_ERROR, info, current_line);
 				num_errors++;
 				return 0;
 			}
 
+			//Release these here
+			free(current_ident);
 			//Let's check to see if we have an immediate end
 			lookahead = get_next_token(fl, &parser_line_num);
 
@@ -1978,11 +1991,15 @@ u_int8_t type_specifier(FILE* fl){
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 	u_int8_t status = 0;
+	//Allocate the active type here
+	active_type = calloc(1, sizeof(type_t));
 
 	//In the case that we have one of the primitive types
 	if(l.tok == VOID || l.tok == U_INT8 || l.tok == S_INT8 || l.tok == U_INT16 || l.tok == S_INT16
 	  || l.tok == U_INT32 || l.tok == S_INT32 || l.tok == U_INT64 || l.tok == S_INT64 || l.tok == FLOAT32
 	  || l.tok == FLOAT64 || l.tok == CHAR || l.tok == STR){
+		//Encode the type level STILL NOT DONE
+		active_type->type_lex = l;
 		//TODO put in symtable
 		return 1;
 	}
@@ -2143,6 +2160,7 @@ static u_int8_t parameter_declaration(FILE* fl){
 	Lexer_item lookahead;
 	//General status var
 	u_int8_t status = 0;
+	//Set this so we can see it
 
 	//Now we can optionally see constant here
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -2198,6 +2216,14 @@ static u_int8_t parameter_declaration(FILE* fl){
 		return 0;
 	}
 
+	//After this call we should have the name of the ident that the parameter is
+	symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
+	//Store the active type
+	var->type = *active_type;
+
+	//Store in the symtab
+	insert(variable_symtab, var);
+	
 	//One more parameter
 	if(current_function == NULL){
 		print_parse_message(PARSE_ERROR,  "Internal parse error at parameter declaration", current_line);
@@ -2205,7 +2231,15 @@ static u_int8_t parameter_declaration(FILE* fl){
 		return 0;
 	}
 
+	//We'll also link this in with the function
+	current_function->func_params[current_function->number_of_params].associate_var = var;
+	//Increment for us
 	(current_function->number_of_params)++;
+
+	//Cleanup here
+	free(active_type);
+	active_type = NULL;
+
 	return 1;
 }
 
@@ -4050,7 +4084,11 @@ u_int8_t function_declaration(FILE* fl){
 	}
 
 	//Copy this for memory safety
-	strcpy(function_name, current_ident.lexeme);
+	strcpy(function_name, current_ident->lexeme);
+
+	//Once we're done with this, free the global ident
+	free(current_ident);
+	current_ident = NULL;
 
 	//Officially make the function record
 	function_record = create_function_record(function_name, storage_class);

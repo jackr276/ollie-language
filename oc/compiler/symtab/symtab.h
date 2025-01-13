@@ -74,6 +74,8 @@ struct type_t{
 	Lexer_item type_lex;
 	//Is it a basic type?
 	BASIC_TYPE basic_type;
+	//Is it a pointer? 0 = not, 1 = 1 star, 2 star, etc
+	u_int8_t pointer_level;
 	//TODO may need more stuff here
 };
 
@@ -105,6 +107,8 @@ struct symtab_function_record_t{
 	u_int64_t offset;
 	//Number of parameters
 	u_int8_t number_of_params;
+	//The parameters
+	parameter_t func_params[6];
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
 	//In case of collisions, we can chain these records
@@ -208,7 +212,7 @@ void finalize_scope(symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-symtab_variable_record_t* create_variable_record(char* name, u_int16_t lexical_level, u_int64_t offset);
+symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T storage_class);
 
 /**
  * Make a function record

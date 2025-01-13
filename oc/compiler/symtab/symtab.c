@@ -120,7 +120,7 @@ static u_int16_t hash(char* name){
 /**
  * Dynamically allocate a variable record
 */
-symtab_variable_record_t* create_variable_record(char* name, u_int16_t lexical_level, u_int64_t offset){
+symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T storage_class){
 	//Allocate it
 	symtab_variable_record_t* record = (symtab_variable_record_t*)calloc(1, sizeof(symtab_variable_record_t));
 
@@ -128,9 +128,8 @@ symtab_variable_record_t* create_variable_record(char* name, u_int16_t lexical_l
 	strcpy(record->var_name, name);
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name);
-	record->lexical_level = lexical_level;
-	//This here is not used currently
-	record->offset = offset;
+	//Store the storage class
+	record->storage_class = storage_class;
 
 	return record;
 }
@@ -162,6 +161,9 @@ u_int8_t insert(symtab_t* symtab, void* record){
 	//Function symtab
 	if(symtab->type == FUNCTION){
 		symtab_function_record_t* func_record = (symtab_function_record_t*)record;
+		//While we're at it store this
+		func_record->lexical_level = symtab->current_lexical_scope;
+
 		//No collision here, just store and get out
 		if(((symtab_function_sheaf_t*)symtab->current)->records[func_record->hash] == NULL){
 			//Store this and get out
@@ -173,6 +175,8 @@ u_int8_t insert(symtab_t* symtab, void* record){
 		//Otherwise, there is a collision
 		//Grab the head record
 		symtab_function_record_t* cursor = ((symtab_function_sheaf_t*)symtab->current)->records[func_record->hash];
+		//Store this while we're at it
+		cursor->lexical_level = symtab->current_lexical_scope;
 
 		//Get to the very last node
 		while(cursor->next != NULL){
@@ -190,6 +194,9 @@ u_int8_t insert(symtab_t* symtab, void* record){
 	//Variable symtab
 	} else {
 		symtab_variable_record_t* var_record = (symtab_variable_record_t*)record;
+		//While we're at it store this
+		var_record->lexical_level = symtab->current_lexical_scope;
+
 		//No collision here, just store and get out
 		if(((symtab_variable_sheaf_t*)symtab->current)->records[var_record->hash] == NULL){
 			//Store this and get out
