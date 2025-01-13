@@ -4,7 +4,7 @@ func main(u_int32 argc, char** argv) -> u_int32 {
 
 	/* Should fail on parse */
 	let u_int64 x := 1;
-	let u_int64 y := 2;
+	let u_int64 x := 2;
 	
 	switch on(x){
 		case 1 {
@@ -20,4 +20,3 @@ func main(u_int32 argc, char** argv) -> u_int32 {
 	
 	ret x % y;
 }
-

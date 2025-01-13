@@ -147,9 +147,11 @@ struct symtab_variable_record_t{
 	u_int8_t is_constant;
 	//What type is it?
 	type_t type;
+	//Was it declared or letted
+	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
+	//The next hashtable record
 	symtab_variable_record_t* next;
 };
-
 
 
 /**
@@ -164,6 +166,7 @@ struct symtab_function_sheaf_t{
 	u_int8_t lexical_level;
 };
 
+
 /**
  * This struct represents a specific lexical level of a symtab
  */
@@ -175,6 +178,7 @@ struct symtab_variable_sheaf_t{
 	//The level of this particular symtab
 	u_int8_t lexical_level;
 };
+
 
 /**
  * This struct represents the overall collection of the sheafs of symtabs
@@ -253,6 +257,11 @@ void print_variable_record(symtab_variable_record_t* record);
  * A helper method for function name printing
  */
 void print_function_name(symtab_function_record_t* record);
+
+/**
+ * A helper method for variable name printing
+ */
+void print_variable_name(symtab_variable_record_t* record);
 
 /**
  * Deinitialize the symbol table

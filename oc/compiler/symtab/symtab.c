@@ -329,11 +329,9 @@ void print_variable_record(symtab_variable_record_t* record){
 
 /**
  * Print a function name out in a stylised way
- *
- * NO NEWLINE at the end
  */
 void print_function_name(symtab_function_record_t* record){
-	printf("\n\n%d | func %s(", record->line_number, record->func_name);
+	printf("\n---> %d | func %s(", record->line_number, record->func_name);
 
 	//Print out the params
 	for(u_int8_t i = 0; i < record->number_of_params; i++){
@@ -345,7 +343,32 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Final closing paren and return type
-	printf(") -> %s\n\n", record->return_type.type_name);
+	printf(") -> %s\n", record->return_type.type_name);
+}
+
+/**
+ * Print a variable name out in a stylized way
+ * Intended for error messages
+ */
+void print_variable_name(symtab_variable_record_t* record){
+	//Line num
+	printf("\n---> %d | ", record->line_number);
+
+	//Declare or let
+	record->declare_or_let == 0 ? printf("declare ") : printf("let ");
+
+	//The type name
+	printf("%s ", record->type.type_name);
+
+	//The var name
+	printf("%s", record->var_name);
+
+	//We'll print out some abbreviated stuff with the let record
+	if(record->declare_or_let == 1){
+		printf(" := <initializer>;");
+	} else {
+		printf(";\n");
+	}
 }
 
 

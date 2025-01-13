@@ -586,7 +586,7 @@ static u_int8_t postfix_expression(FILE* fl){
 				memset(info, 0, 2000*sizeof(char));
 				sprintf(info, "Function %s requires %d parameters, was given %d", func->func_name, func->number_of_params, params_seen);
 				print_parse_message(PARSE_ERROR, info, current_line);
-				printf("Function was defined as: ");
+				printf("Function was defined here: ");
 				print_function_name(func);
 
 				num_errors++;
@@ -1162,7 +1162,7 @@ static u_int8_t equality_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1177,7 +1177,7 @@ static u_int8_t equality_expression(FILE* fl){
 
 		//Fail out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid relational expression in equality expression", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid relational expression in equality expression", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -2358,7 +2358,7 @@ static u_int8_t expression_statement(FILE* fl){
 
 	//Fail case
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid expression discovered", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid expression discovered", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -3333,7 +3333,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid expression statement found in statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid expression statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3912,6 +3912,16 @@ static u_int8_t declaration(FILE* fl){
 			return 0;
 		}
 
+		//Let's check if we can actually find it
+		symtab_variable_record_t* found = lookup(variable_symtab, current_ident->lexeme);
+
+		if(found != NULL){
+			print_parse_message(PARSE_ERROR, "Illegal variable redefinition. First defined here:", current_line);
+			print_variable_name(found);
+			num_errors++;
+			return 0;
+		}
+
 		//Otherwise all should have gone well here, so we can construct our declaration
 		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
 		//It was not initialized
@@ -3922,6 +3932,8 @@ static u_int8_t declaration(FILE* fl){
 		var->line_number = current_line;
 		//Not a function param
 		var->is_function_paramater = 0;
+		//Was made using DECLARE(0)
+		var->declare_or_let = 0;
 		
 		//Store for our uses
 		insert(variable_symtab, var);
@@ -3999,6 +4011,16 @@ static u_int8_t declaration(FILE* fl){
 			return 0;
 		}
 
+		//Let's check if we can actually find it
+		symtab_variable_record_t* found = lookup(variable_symtab, current_ident->lexeme);
+
+		if(found != NULL){
+			print_parse_message(PARSE_ERROR, "Illegal variable redefinition. First defined here:", current_line);
+			print_variable_name(found);
+			num_errors++;
+			return 0;
+		}
+
 		//Otherwise all should have gone well here, so we can construct our declaration
 		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
 		//It should be initialized in this case
@@ -4009,6 +4031,8 @@ static u_int8_t declaration(FILE* fl){
 		var->line_number = current_line;
 		//Not a function param
 		var->is_function_paramater = 0;
+		//Was made using LET(1) 
+		var->declare_or_let = 1;
 		
 		//Store for our uses
 		insert(variable_symtab, var);
@@ -4320,7 +4344,7 @@ u_int8_t declaration_partition(FILE* fl){
 	
 	//Something failed
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid declaration or function definition", current_line);
+		//print_parse_message(PARSE_ERROR, "Invalid declaration or function definition", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -4394,14 +4418,15 @@ u_int8_t parse(FILE* fl){
 	if(status == 0){
 		char info[500];
 		sprintf(info, "Parsing failed with %d errors in %.8f seconds", num_errors, time_spent);
-		printf("\n\n=======================================================================\n");
+		printf("\n===================== Ollie Compiler Summary ==========================\n");
+		printf("Lexer processed %d lines\n", parser_line_num);
 		printf("%s\n", info);
 		printf("=======================================================================\n\n");
 	} else {
-		printf("\n\n=======================================================================\n");
+		printf("\n===================== Ollie Compiler Summary ==========================\n");
+		printf("Lexer processed %d lines\n", parser_line_num);
 		printf("Parsing succeeded in %.8f seconds\n", time_spent);
 		printf("=======================================================================\n\n");
-
 	}
 	
 	//Clean these both up for memory safety
