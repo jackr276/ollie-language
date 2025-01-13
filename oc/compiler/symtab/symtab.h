@@ -82,8 +82,6 @@ struct symtab_function_record_t{
 	u_int16_t line_number;
 	//Will be used later, the offset for the address in the data area
 	u_int64_t offset;
-	//Parameter-list of some kind here -- at most 6, we accept no more
-	parameter_t parameters[6];
 	//Number of parameters
 	u_int8_t number_of_params;
 	//What's the storage class?

@@ -21,11 +21,15 @@ heap_stack_t* grouping_stack;
 u_int16_t num_errors = 0;
 //The current parser line number
 u_int16_t parser_line_num = 0;
+//Are we in a param_list?
+u_int8_t in_param_list = 0;
 //What's the function that we're in currently?
 symtab_function_record_t* current_function = NULL;
 
 //The current IDENT that we are tracking
 Lexer_item current_ident;
+//The current type
+type_t current_type;
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static u_int8_t cast_expression(FILE* fl);
@@ -36,6 +40,7 @@ static u_int8_t type_specifier(FILE* fl);
 static u_int8_t declaration(FILE* fl);
 static u_int8_t compound_statement(FILE* fl);
 static u_int8_t statement(FILE* fl);
+static u_int8_t expression(FILE* fl);
 static u_int8_t initializer(FILE* fl);
 static u_int8_t declarator(FILE* fl);
 static u_int8_t direct_declarator(FILE* fl);
@@ -196,6 +201,7 @@ static u_int8_t type_name(FILE* fl){
  * BNF Rule: <expression_prime> ::= , <assignment-expression><expression_prime>
  */
 static u_int8_t expression_prime(FILE* fl){
+	printf("HERE\n");
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -251,7 +257,7 @@ static u_int8_t expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Go on to the prime rule
-	if(lookahead.tok == COMMA){
+	if(lookahead.tok == COMMA && in_param_list == 0){
 		return expression_prime(fl);
 	} else {
 		//Put it back and bail out
@@ -436,7 +442,7 @@ static u_int8_t assignment_expression(FILE* fl){
  * 									| <primary-expression>{[ <expression> ]}*
  * 									| <primary-expression>{[ <expression> ]}*:<postifx-expression> 
  * 									| <primary-expression>{[ <expression> ]}*::<postfix-expression> 
- * 									| <primary-expression> ( {conditional-expression}* ) 
+ * 									| <primary-expression> ( {<conditional-expression>}* {, <conditional-expression>}*  ) 
  * 									| <primary-expression> ++ 
  * 									| <primary-expression> --
  */ 
@@ -479,10 +485,13 @@ static u_int8_t postfix_expression(FILE* fl){
 			//TODO handle the actual memory addressing later on
 			return postfix_expression(fl);
 
-		//If we see a left paren, we are looking at a conditional expression
+		//If we see a left paren, we are looking at a function call
 		case L_PAREN:
 			//Push to the stack for later
 			push(grouping_stack, lookahead);
+
+			//How many inputs have we seen?
+			u_int8_t params_seen = 0;
 
 			//Copy it in for safety
 			strcpy(function_name, current_ident.lexeme);
@@ -500,37 +509,67 @@ static u_int8_t postfix_expression(FILE* fl){
 				return 0;
 			}
 
-
-			//Now we can see 0 or many assignment expressions
+			//Let's check to see if we have an immediate end
 			lookahead = get_next_token(fl, &parser_line_num);
 
-			//As long as we don't see the enclosing right parenthesis
-			while(lookahead.tok != R_PAREN){
-				//If it isn't a comma
-				if(lookahead.tok != COMMA){
-					push_back_token(fl, lookahead);
+			//If it is an R_PAREN
+			if(lookahead.tok == R_PAREN){
+				goto end_params;
+			} else {
+				//Otherwise put it back
+				push_back_token(fl, lookahead);
+			} 
+
+			//Loop until we see the end
+			//As long as we don't see a right paren
+			while(1){
+				//Now we need to see a valid conditional-expression
+				status = conditional_expression(fl);
+
+				//Bail out if bad
+				if(status == 0){
+					print_parse_message(PARSE_ERROR,  "Invalid conditional expression given to function call", current_line);
+					num_errors++;
+					return 0;
 				}
 				
-				//We now need to see a valid conditional expression
-				status = conditional_expression(fl);
-				
-				//Refresh this for the next search
+				//One more param seen
+				params_seen++;
+
+				//Grab the next token here
 				lookahead = get_next_token(fl, &parser_line_num);
+				
+				//If it's not a comma get out
+				if(lookahead.tok != COMMA){
+					break;
+				}
 			}
 			
 			//Once we break out here, in theory our token will be a right paren
 			//Just to double check
 			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Right parenthesis expected after primary expression", current_line);
+				print_parse_message(PARSE_ERROR, "Right parenthesis at the end of function call", current_line);
 				num_errors++;
 				return 0;
-			//Some unmatched parenthesis here
-			} else if(pop(grouping_stack).tok != L_PAREN){
+			}
+			
+		end_params:
+			//Check for matching
+			if(pop(grouping_stack).tok != L_PAREN){
 				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 				num_errors++;
 				return 0;
 			}
-		
+
+			//Now check for parameter correctness TODO NOT DONE
+			if(params_seen != func->number_of_params){
+				memset(info, 0, 2000*sizeof(char));
+				sprintf(info, "Function %s requires %d parameters, was given %d", func->func_name, func->number_of_params, params_seen);
+				print_parse_message(PARSE_ERROR, info, current_line);
+				num_errors++;
+				return 0;
+			}
+
 			//If we make it here, then we should be all in the clear
 			return 1;
 
@@ -1083,48 +1122,11 @@ static u_int8_t relational_expression(FILE* fl){
 
 
 /**
- * A prime rule that allows us to avoid left recursion
- *
- * REMEMBER: By the time that we've gotten here, we will have already seen == or !=
- *
- * BNF Rule: <equality-expression-prime> ::= ==<relational-expression><equality-expression-prime> 
- *										   | !=<relational-expression><equality-expression-prime>
- */
-static u_int8_t equality_expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We must first see a valid relational-expression
-	status = relational_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the double && here to chain
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a == or a != we can make a recursive call
-	if(lookahead.tok == D_EQUALS || lookahead.tok == NOT_EQUALS){
-		return equality_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
  * An equality expression can be chained and descends into a relational expression 
  *
  * BNF Rule: <equality-expression> ::= <relational-expression> 
- * 									 | <relational-expression><equality-expression-prime>
+ * 									 | <relational-expression> == <relational-expression>
+ * 									 | <relational-expression> != <relational-expression>
  */
 static u_int8_t equality_expression(FILE* fl){
 	//Freeze the line number
@@ -1137,7 +1139,7 @@ static u_int8_t equality_expression(FILE* fl){
 	
 	//We have a bad one
 	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
+		print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1147,7 +1149,19 @@ static u_int8_t equality_expression(FILE* fl){
 
 	//If we see a == or a != we can make a recursive call
 	if(lookahead.tok == D_EQUALS || lookahead.tok == NOT_EQUALS){
-		return equality_expression_prime(fl);
+		//We now need to see another relational expression
+		status = relational_expression(fl);
+
+		//Fail out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid relational expression in equality expression", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Success otherwise
+		return 1;
+
 	} else {
 		//Otherwise we need to put it back and get out
 		push_back_token(fl, lookahead);
@@ -3857,8 +3871,11 @@ u_int8_t function_declaration(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	u_int8_t status = 0;
 
-	//What is the function's storage class?
+	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
+	
+	//The function record -- not initialized until IDENT
+	symtab_function_record_t* function_record;
 
 	Lexer_item lookahead;
 	Lexer_item lookahead2;
@@ -3880,20 +3897,27 @@ u_int8_t function_declaration(FILE* fl){
 		//Let's find a function specifier
 		lookahead = get_next_token(fl, &parser_line_num);
 		
-		//If we find one of these, push it to the stack and return 1
-		if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL){
-			//TODO handle with symtable
+		//Store it if we have something here
+		if(lookahead.tok == STATIC){
+			storage_class = STORAGE_CLASS_STATIC;
+		//NOT YET SUPPORTED
+		} else if(lookahead.tok == EXTERNAL){
+			storage_class = STORAGE_CLASS_EXTERNAL;
+			//Not yet supported TODO
+			print_parse_message(PARSE_ERROR, "External storage class is not yet supported",  current_line);
+			num_errors++;
+			return 0;
 		} else {
 			print_parse_message(PARSE_ERROR, "Function specifier STATIC or EXTERNAL expected after colon", current_line);
 			num_errors++;
 			return 0;
 		}
-	//Otherwise it's a plain function
+
+	//Otherwise it's a plain function so put the token back
 	} else {
 		//Otherwise put the token back in the stream
 		push_back_token(fl, lookahead);
 	}
-	
 
 	//Now we must see an identifer
 	status = identifier(fl);
@@ -3904,15 +3928,15 @@ u_int8_t function_declaration(FILE* fl){
 		num_errors++;
 		return 0;
 	}
-	//TODO symtable stuff
+
 	//Copy this for memory safety
 	strcpy(function_name, current_ident.lexeme);
 
-	//Since this is a function IDENT, we'll store it in the symtab for functions
-	symtab_function_record_t* function = create_function_record(function_name, 0, 0);
+	//Officially make the function record
+	function_record = create_function_record(function_name, storage_class);
 
 	//Insert this into the function symtab
-	insert(function_symtab, function);
+	insert(function_symtab, function_record);
 	
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -3927,8 +3951,10 @@ u_int8_t function_declaration(FILE* fl){
 	//SPECIAL CASE -- we could have a blank parameter list, in which case we're done
 	lookahead2 = get_next_token(fl, &parser_line_num);
 	
+	//If we get here, we have a blank parameter list
 	if(lookahead2.tok == R_PAREN){
-		//TODO insert blank parameter list
+		//Store this and get out
+		function_record->number_of_params = 0;
 		goto arrow_ident;
 	} else {
 		push_back_token(fl, lookahead2);
@@ -3939,6 +3965,7 @@ u_int8_t function_declaration(FILE* fl){
 	
 	//We'll deal with our storage of the function's name later, but at least now we know it's unique
 	//We must now see a valid parameter list
+	//TODO all parameters must be handled in here
 	status = parameter_list(fl);
 
 	//We have a bad parameter list
@@ -3964,7 +3991,6 @@ u_int8_t function_declaration(FILE* fl){
 		num_errors++;
 		return 0;
 	}
-
 
 	//Past the point where we've seen the param_list
 arrow_ident:

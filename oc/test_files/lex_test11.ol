@@ -16,7 +16,7 @@ func main(s_int32 argc, char** argv) -> s_int32 {
 
 	let u_int32 my_int := 14;
 	
-	example(my_arr);
+	example(my_arr, x, y, z);
 
 	ret 0;
 }
