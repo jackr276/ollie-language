@@ -36,6 +36,7 @@ typedef enum STORAGE_CLASS_T{
 	STORAGE_CLASS_STATIC,
 	STORAGE_CLASS_EXTERNAL,
 	STORAGE_CLASS_NORMAL,
+	STORAGE_CLASS_REGISTER
 } STORAGE_CLASS_T;
 
 
@@ -47,10 +48,32 @@ typedef enum SYMTAB_RECORD_TYPE{
 
 
 /**
+ * We want to be able to really quickly and easily determine if 
+ * the type that we have is a basic type
+ */
+typedef enum BASIC_TYPE{
+	NON_BASIC, /* If it's a complex type */
+	TYPE_U_INT8,
+	TYPE_S_INT8,
+	TYPE_U_INT16,
+	TYPE_S_INT16,
+	TYPE_U_INT32,
+	TYPE_S_INT32,
+	TYPE_U_INT64,
+	TYPE_S_INT64,
+	TYPE_FLOAT32,
+	TYPE_FLOAT64,
+	TYPE_CHAR,
+	TYPE_STRING
+} BASIC_TYPE;
+
+/**
  * A generic type holder for us
  */
 struct type_t{
 	Lexer_item type_lex;
+	//Is it a basic type?
+	BASIC_TYPE basic_type;
 	//TODO may need more stuff here
 };
 
@@ -59,10 +82,8 @@ struct type_t{
  * A parameter has a type and a name
  */
 struct parameter_t{
-	//A function parameter has a type
-	type_t type;
-	//It also has a name
-	char param_name[100];
+	//The associated variable for a parameter, since a parameter is a variable
+	symtab_variable_record_t* associate_var;
 	//Was it ever referenced?
 	u_int8_t referenced;
 };
@@ -109,8 +130,12 @@ struct symtab_variable_record_t{
 	u_int8_t initialized;
 	//Is it a function parameter?
 	u_int8_t is_function_paramater;
+	//What's the storage class?
+	STORAGE_CLASS_T storage_class;
+	//Is it a constant variable?
+	u_int8_t is_constant;
 	//What type is it?
-	char* type; //Char * for now TODO
+	type_t type;
 	symtab_variable_record_t* next;
 };
 

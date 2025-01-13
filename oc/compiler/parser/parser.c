@@ -2033,61 +2033,59 @@ u_int8_t type_specifier(FILE* fl){
 
 
 /**
- * We can see several different storage class specifiers
- * 
- * BNF Rule: <storage-class-specifier> ::= static 
- * 								 		| external
- * 								 		| register
- */
-u_int8_t storage_class_specifier(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item l = get_next_token(fl, &parser_line_num);
-
-	//If we see one here
-	if(l.tok == STATIC || l.tok == EXTERNAL || l.tok == REGISTER){
-		//TODO store in symtab
-		return 1;
-	} else {
-		//Otherwise, put the token back and get out
-		push_back_token(fl, l);
-		return 0;
-	}
-}
-
-
-/**
  * For a parameter declaration, we can see this items in order
  *
- * BNF Rule: <parameter-declaration> ::= (<storage-class-specifier>)? (constant)? <type-specifier> <declarator>
+ * BNF Rule: <parameter-declaration> ::= (constant)? (<storage-class-specifier>)? <type-specifier> <declarator>
  */
 u_int8_t parameter_declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//Normal storage class is default
+	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
+	//Is it constant?
+	u_int8_t is_constant = 0;
+	//Lookahead for peeking
 	Lexer_item lookahead;
-	u_int8_t is_const = 0;
+	//General status var
 	u_int8_t status = 0;
 
-	//We can optionally see a storage_class_specifier here
-	storage_class_specifier(fl);
-
-	//Now we can optionally see const here
+	//Now we can optionally see constant here
 	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//We'll flag this for now TODO must go in symtab
 	if(lookahead.tok == CONSTANT){
-		is_const = 1;
+		is_constant = 1;
 	} else {
 		//Put it back and move on
 		push_back_token(fl, lookahead);
+		is_constant = 0;
 	}
-	
+
+	//Grab the next token, we may see a storage class
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see one here
+	if(lookahead.tok == STATIC){
+		storage_class = STORAGE_CLASS_STATIC;
+	//Would make no sense so fail out
+	} else if(lookahead.tok == EXTERNAL){
+		print_parse_message(PARSE_ERROR, "External variable declarations are not supported in function parameters", current_line);
+		num_errors++;
+		return 0;
+	} else if(lookahead.tok == REGISTER){
+		storage_class = STORAGE_CLASS_REGISTER;
+	} else {
+		//Otherwise, put the token back and get out
+		push_back_token(fl, lookahead);
+		//Just to reaffirm
+		storage_class = STORAGE_CLASS_NORMAL;
+	}
+
 	//Now we must see a valid type specifier
 	status = type_specifier(fl);
 	
 	//If it's bad then we're done here
 	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid type specifier found in parameter declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -2097,11 +2095,18 @@ u_int8_t parameter_declaration(FILE* fl){
 
 	//If it's bad then we're done here
 	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid declarator found in parameter declaration", current_line);
 		num_errors++;
 		return 0;
 	}
 
+	//One more parameter
+	if(current_function == NULL){
+		print_parse_message(PARSE_ERROR,  "Internal parse error at parameter declaration", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	(current_function->number_of_params)++;
 	return 1;
 }
 
@@ -2147,6 +2152,9 @@ u_int8_t parameter_list_prime(FILE* fl){
  * BNF Rule: <parameter-list> ::= <parameter-declaration>(<parameter-list-prime>)?
  */
 u_int8_t parameter_list(FILE* fl){
+	//Initialize the scope for variables
+	initialize_scope(variable_symtab);
+
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -3442,6 +3450,7 @@ u_int8_t direct_declarator(FILE* fl){
 				push_back_token(fl, lookahead);
 				//We'll check the parenthesis status at the end
 			} else {
+				//The associated variable for a parameter, since a parameter is a variable
 				//If not, we have to see this
 				status = parameter_list(fl);
 				
@@ -3675,6 +3684,7 @@ static u_int8_t declaration(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	Lexer_item l;
 	u_int8_t status = 0;
+	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 	Token tok = BLANK;
 
 	//Grab the token
@@ -3704,10 +3714,24 @@ static u_int8_t declaration(FILE* fl){
 	}
 
 	//We know we're clear if we get here
+	l = get_next_token(fl, &parser_line_num);
 	
-	//We can now see a storage class specifier
-	status = storage_class_specifier(fl);
 	//Handle accordingly
+	//If we see one here
+	if(l.tok == STATIC){
+		storage_class = STORAGE_CLASS_STATIC;
+	//Would make no sense so fail out
+	} else if(l.tok == EXTERNAL){
+		print_parse_message(PARSE_ERROR, "External variable declarations are not supported in function parameters", current_line);
+		num_errors++;
+		return 0;
+	} else if(l.tok == REGISTER){
+		storage_class = STORAGE_CLASS_REGISTER;
+	} else {
+		//Otherwise, put the token back and get out
+		push_back_token(fl, l);
+		storage_class = STORAGE_CLASS_NORMAL;
+	}
 
 	//We now must see a valid type specifier
 	status = type_specifier(fl);
@@ -3864,9 +3888,6 @@ u_int8_t function_specifier(FILE* fl){
  *			        			  | external
  */
 u_int8_t function_declaration(FILE* fl){
-	//Initialize the scope for variables
-	initialize_scope(variable_symtab);
-
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	u_int8_t status = 0;
@@ -3955,6 +3976,8 @@ u_int8_t function_declaration(FILE* fl){
 	if(lookahead2.tok == R_PAREN){
 		//Store this and get out
 		function_record->number_of_params = 0;
+		//Just for record keeping
+		initialize_scope(variable_symtab);
 		goto arrow_ident;
 	} else {
 		push_back_token(fl, lookahead2);
