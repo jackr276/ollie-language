@@ -26,14 +26,26 @@ lexer_test.o: $(LEX_PATH)/lexer_test.c
 lexer.o: $(LEX_PATH)/lexer.c
 	$(CC) $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT)/lexer.o
 
+lexerd.o: $(LEX_PATH)/lexer.c
+	$(CC) $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT)/lexerd.o
+
 stack.o: $(STACK_PATH)/stack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/stack.c -o $(OUT)/stack.o
+
+stackd.o: $(STACK_PATH)/stack.c
+	$(CC) $(CFLAGS) $(STACK_PATH)/stack.c -o $(OUT)/stackd.o
 
 symtab.o: $(SYMTAB_PATH)/symtab.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT)/symtab.o
 
+symtabd.o: $(SYMTAB_PATH)/symtab.c
+	$(CC) -g $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT)/symtabd.o
+
 parser.o: $(PARSER_PATH)/parser.c
 	$(CC) $(CFLAGS) $(PARSER_PATH)/parser.c -o $(OUT)/parser.o
+
+parserd.o: $(PARSER_PATH)/parser.c
+	$(CC) -g $(CFLAGS) $(PARSER_PATH)/parser.c -o $(OUT)/parserd.o
 
 symtab_test.o: $(SYMTAB_PATH)/symtab_test.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab_test.c -o $(OUT)/symtab_test.o
@@ -41,11 +53,14 @@ symtab_test.o: $(SYMTAB_PATH)/symtab_test.c
 parser_test.o: $(PARSER_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(PARSER_PATH)/parser_test.c -o $(OUT)/parser_test.o
 
+parser_testd.o: $(PARSER_PATH)/parser_test.c
+	$(CC) $(CFLAGS) $(PARSER_PATH)/parser_test.c -o $(OUT)/parser_testd.o
+
 parser_test: parser.o lexer.o parser_test.o symtab.o stack.o 
 	$(CC) -o $(OUT)/parser_test $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o
 
-parser_test_debug: parser.o lexer.o parser_test.o symtab.o stack.o 
-	$(CC) -g -o $(OUT)/debug $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o
+parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o stackd.o 
+	$(CC) -g -o $(OUT)/debug $(OUT)/parser_testd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/stackd.o $(OUT)/symtabd.o
 
 symtab_test: symtab.o symtab_test.o lexer.o
 	$(CC) -o $(OUT)/symtab_test $(OUT)/symtab_test.o $(OUT)/symtab.o

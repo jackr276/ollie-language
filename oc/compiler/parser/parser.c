@@ -4402,6 +4402,8 @@ u_int8_t parse(FILE* fl){
 
 	//Global function scope here
 	initialize_scope(function_symtab);
+	//Global variable scope here
+	initialize_scope(variable_symtab);
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_stack();
