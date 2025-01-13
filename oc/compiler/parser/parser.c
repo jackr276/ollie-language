@@ -2240,6 +2240,9 @@ static u_int8_t parameter_declaration(FILE* fl){
 	if(current_function == NULL){
 		print_parse_message(PARSE_ERROR,  "Internal parse error at parameter declaration", current_line);
 		num_errors++;
+		//Cleanup here
+		free(active_type);
+		free(current_ident);
 		return 0;
 	}
 
@@ -2250,6 +2253,7 @@ static u_int8_t parameter_declaration(FILE* fl){
 
 	//Cleanup here
 	free(active_type);
+	free(current_ident);
 	active_type = NULL;
 
 	return 1;
@@ -3818,9 +3822,8 @@ static u_int8_t declarator(FILE* fl){
 /**
  * A declaration is the other main kind of block that we can see other than functions
  *
- * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> <declarator>; 
- * 							 | declare {constant}? <storage-class-specifier> <enum-specifier>; //TODO BAD
- * 							 | let {constant}? <storage-class-specifier>? <type-specifier> <declarator> := <intializer>;
+ * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator>; 
+ * 							 | let {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator := <intializer>;
  *                           | define {constant} <storage-class-specifier>? <type-specifier> <pointer>? as <ident>;
 
 TODO NEEDS COMPLETE REWRITE
@@ -3828,13 +3831,144 @@ TODO NEEDS COMPLETE REWRITE
 static u_int8_t declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	Lexer_item l;
+	//Lookahead token
+	Lexer_item lookahead;
+	//Generic status currently
 	u_int8_t status = 0;
+	//What is the storage class of our variable?
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
-	Token tok = BLANK;
+	//Keep track if it's a const or not
+	u_int8_t is_constant = 0;
+	//The type that we have
+	type_t type;
 
 	//Grab the token
-	l = get_next_token(fl, &parser_line_num);
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Handle declaration
+	if(lookahead.tok == DECLARE){
+		//We can optionally see the constant keyword here
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		//If it's constant we'll simply set the flag
+		if(lookahead.tok == CONSTANT){
+			is_constant = 1;
+			//Refresh lookahead
+			lookahead = get_next_token(fl, &parser_line_num);
+		}
+		//Otherwise we'll keep the same token for our uses
+
+		//Now we can optionally see storage class specifiers here
+		//If we see one here
+		if(lookahead.tok == STATIC){
+			storage_class = STORAGE_CLASS_STATIC;
+		//Would make no sense so fail out
+		} else if(lookahead.tok == EXTERNAL){
+			//TODO
+			print_parse_message(PARSE_ERROR, "External variables are not yet supported", current_line);
+			num_errors++;
+			return 0;
+		} else if(lookahead.tok == REGISTER){
+			storage_class = STORAGE_CLASS_REGISTER;
+		} else {
+			//Otherwise, put the token back and get out
+			push_back_token(fl, lookahead);
+			storage_class = STORAGE_CLASS_NORMAL;
+		}
+	
+		//Now we must see a valid type specifier
+		status = type_specifier(fl);
+
+		//fail case
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid type given to declaration", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we can optionally see several pointers
+		//Just let this do its thing
+		pointer(fl);
+
+		//Then we must see a direct declarator
+		status = direct_declarator(fl);
+
+		//fail case
+		if(status == 0){
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise all should have gone well here, so we can construct our declaration
+		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
+		//It was not initialized
+		var->initialized = 0;
+		//What's the type
+		var->type = *active_type;
+		//The current line
+		var->line_number = current_line;
+		//Not a function param
+		var->is_function_paramater = 0;
+		
+		//Store for our uses
+		insert(variable_symtab, var);
+
+		//Now once we make it here, we need to see a SEMICOL
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
+			//Free the active type condition
+			free(active_type);
+			num_errors++;
+			return 0;
+		}
+
+
+
+
+	//Handle declaration + assignment
+	} else if(lookahead.tok == LET){
+		//We can optionally see the constant keyword here
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		//If it's constant we'll simply set the flag
+		if(lookahead.tok == CONSTANT){
+			is_constant = 1;
+			//Refresh lookahead
+			lookahead = get_next_token(fl, &parser_line_num);
+		}
+		//Otherwise we'll keep the same token for our uses
+
+		//Now we can optionally see storage class specifiers here
+		//If we see one here
+		if(lookahead.tok == STATIC){
+			storage_class = STORAGE_CLASS_STATIC;
+		//Would make no sense so fail out
+		} else if(lookahead.tok == EXTERNAL){
+			//TODO
+			print_parse_message(PARSE_ERROR, "External variables are not yet supported", current_line);
+			num_errors++;
+			return 0;
+		} else if(lookahead.tok == REGISTER){
+			storage_class = STORAGE_CLASS_REGISTER;
+		} else {
+			//Otherwise, put the token back and get out
+			push_back_token(fl, lookahead);
+			storage_class = STORAGE_CLASS_NORMAL;
+		}
+
+	//Handle type definition
+	} else if(lookahead.tok == DEFINE){
+
+	//We had some failure here
+	} else {
+		print_parse_message(PARSE_ERROR, "Declare, let or define keyword expected in declaration block", current_line);
+		num_errors++;
+		return 0;
+	}
+
 
 	//Something bad here
 	if(l.tok != LET && l.tok != DECLARE && l.tok != DEFINE){
