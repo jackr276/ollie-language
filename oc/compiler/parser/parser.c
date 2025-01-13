@@ -2033,11 +2033,106 @@ u_int8_t type_specifier(FILE* fl){
 
 
 /**
+ * For parameter  direct declarators. This is done to avoid confusion with regular direct declarators, but the rules are nearly identical with some restrictions
+ *
+ * BNF Rule: <parameter-direct-declarator> ::= <identifier> 
+ * 											 | <identifier> {[ {constant-expression}? ]}* 
+ */
+static u_int8_t parameter_direct_declarator(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
+	u_int8_t status = 0;
+	Lexer_item lookahead;
+	Lexer_item lookahead2;
+
+	//We must first see a valid identifier
+	status = identifier(fl);
+
+	//If we don't see this then fail out
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given to parameter declaration", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//So we see an ident, but certain stuff could come next
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//We have an array subscript here
+	if(lookahead.tok == L_BRACKET){
+		//We can keep seeing l_brackets here
+		while(lookahead.tok == L_BRACKET){
+			//Push it onto the stack
+			push(grouping_stack, lookahead);
+
+			//Special case, we can see empty ones here
+			lookahead2 = get_next_token(fl, &parser_line_num);
+
+			//If we have an empty set here
+			if(lookahead2.tok == R_BRACKET){
+				//TODO Handle empty brackets
+				//Clear this up
+				pop(grouping_stack);
+
+				//Keep going through the list
+				lookahead = get_next_token(fl, &parser_line_num);
+
+			//Otherwise we need a constant expression here
+			} else {
+				//Put it back
+				push_back_token(fl, lookahead2);
+
+				//See if it works
+				status = constant_expression(fl);
+
+				//Fail out if so
+				if(status == 0){
+					print_parse_message(PARSE_ERROR, "Invalid constant expression in array subscript", current_line);
+					return 0;
+				}
+
+				//Otherwise, we now have to see an R_BRACKET
+				lookahead = get_next_token(fl, &parser_line_num);
+
+				//If we don't see a ]
+				if(lookahead.tok != R_BRACKET){
+					print_parse_message(PARSE_ERROR, "Right bracket expected to close array subscript", current_line);
+					num_errors++;
+					return 0;
+				}
+
+				//If they don't match
+				if(pop(grouping_stack).tok != L_BRACKET){
+					print_parse_message(PARSE_ERROR, "Unmatched brackets detected", current_line);
+					num_errors++;
+					return 0;
+				}
+
+				//Otherwise, if we make it all the way here, we will refresh the token
+				lookahead = get_next_token(fl, &parser_line_num);
+			}
+		}
+
+		//If we make it here, lookahead is not an L_Bracket
+		//Put it back
+		push_back_token(fl, lookahead);
+		//Everything worked so success
+		return 1;
+	} else {
+		//Push back and leave
+		push_back_token(fl,  lookahead);
+		return 1;
+	}
+}
+
+
+
+/**
  * For a parameter declaration, we can see this items in order
  *
- * BNF Rule: <parameter-declaration> ::= (constant)? (<storage-class-specifier>)? <type-specifier> <declarator>
+ * BNF Rule: <parameter-declaration> ::= (constant)? (<storage-class-specifier>)? <type-specifier> {<pointer>}? <parameter-direct-declarator>
  */
-u_int8_t parameter_declaration(FILE* fl){
+static u_int8_t parameter_declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Normal storage class is default
@@ -2090,8 +2185,12 @@ u_int8_t parameter_declaration(FILE* fl){
 		return 0;
 	}
 
+	//We can now see pointers
+	//TODO HANDLE ME
+	status = pointer(fl);
+
 	//Finally, we must see a direct declarator that is valid
-	status = declarator(fl);
+	status = parameter_direct_declarator(fl);
 
 	//If it's bad then we're done here
 	if(status == 0){
@@ -3955,6 +4054,9 @@ u_int8_t function_declaration(FILE* fl){
 
 	//Officially make the function record
 	function_record = create_function_record(function_name, storage_class);
+
+	//Set these equal here
+	current_function = function_record;
 
 	//Insert this into the function symtab
 	insert(function_symtab, function_record);
