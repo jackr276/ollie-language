@@ -3486,6 +3486,17 @@ u_int8_t direct_declarator(FILE* fl){
 
 	//The other option, we have an ident
 	} else if(lookahead.tok == IDENT){
+		//Put it back and call ident
+		push_back_token(fl,  lookahead);
+		//Call ident just to do handling
+		status = identifier(fl);
+
+		if(status == 0){
+			print_parse_message(PARSE_ERROR,  "Invalid identifier found in direct declarator", current_line);
+			num_errors++;
+			return 0;
+		}
+
 		//So we see an ident, but certain stuff could come next
 		lookahead = get_next_token(fl, &parser_line_num);
 
@@ -3825,8 +3836,6 @@ static u_int8_t declarator(FILE* fl){
  * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator>; 
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator := <intializer>;
  *                           | define {constant} <storage-class-specifier>? <type-specifier> <pointer>? as <ident>;
-
-TODO NEEDS COMPLETE REWRITE
  */
 static u_int8_t declaration(FILE* fl){
 	//Freeze the line number
@@ -3841,6 +3850,10 @@ static u_int8_t declaration(FILE* fl){
 	u_int8_t is_constant = 0;
 	//The type that we have
 	type_t type;
+	//The var name
+	char var_name[100];
+	//Wipe it
+	memset(var_name, 0, 100*sizeof(char));
 
 	//Grab the token
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -3920,13 +3933,17 @@ static u_int8_t declaration(FILE* fl){
 		if(lookahead.tok != SEMICOLON){
 			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
 			//Free the active type condition
-			free(active_type);
 			num_errors++;
 			return 0;
 		}
 
+		//Once we make it here, we know it worked
+		free(active_type);
+		free(current_ident);
+		active_type = NULL;
+		current_ident = NULL;
 
-
+		return 1;
 
 	//Handle declaration + assignment
 	} else if(lookahead.tok == LET){
@@ -3959,8 +3976,89 @@ static u_int8_t declaration(FILE* fl){
 			storage_class = STORAGE_CLASS_NORMAL;
 		}
 
+		//Now we must see a valid type specifier
+		status = type_specifier(fl);
+
+		//fail case
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid type given to declaration", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Now we can optionally see several pointers
+		//Just let this do its thing
+		pointer(fl);
+
+		//Then we must see a direct declarator
+		status = direct_declarator(fl);
+
+		//fail case
+		if(status == 0){
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise all should have gone well here, so we can construct our declaration
+		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
+		//It should be initialized in this case
+		var->initialized = 1;
+		//What's the type
+		var->type = *active_type;
+		//The current line
+		var->line_number = current_line;
+		//Not a function param
+		var->is_function_paramater = 0;
+		
+		//Store for our uses
+		insert(variable_symtab, var);
+
+		//Now we need to see a valid := initializer;
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out
+		if(lookahead.tok != COLONEQ){
+			print_parse_message(PARSE_ERROR, "Assignment operator(:=) expected in let statement", current_line);
+			num_errors++;
+			return 0;
+		}
+		
+		//Now we have to see a valid initializer
+		status = initializer(fl);
+
+		//Fail out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid initialization in let statement", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//TODO NEED MANY MORE TYPE CHECKS HERE
+
+		//Now once we make it here, we need to see a SEMICOL
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
+			//Free the active type condition
+			num_errors++;
+			return 0;
+		}
+
+		//Once we make it here, we know it worked
+		free(active_type);
+		free(current_ident);
+		active_type = NULL;
+		current_ident = NULL;
+
+		return 1;
+
 	//Handle type definition
 	} else if(lookahead.tok == DEFINE){
+		print_parse_message(PARSE_ERROR, "Define statement not yet implemented", current_line);
+		num_errors++;
+		return 0;
 
 	//We had some failure here
 	} else {
@@ -3968,166 +4066,6 @@ static u_int8_t declaration(FILE* fl){
 		num_errors++;
 		return 0;
 	}
-
-
-	//Something bad here
-	if(l.tok != LET && l.tok != DECLARE && l.tok != DEFINE){
-		print_parse_message(PARSE_ERROR, "Declare, define or let keywords expected in declaration", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Save this
-	tok = l.tok;
-
-	//Grab the next token
-	l = get_next_token(fl, &parser_line_num);
-
-	//We can see constant here optionally
-	if(l.tok == CONSTANT){
-		//Handle accordingly
-		//Grab the next token
-		l = get_next_token(fl, &parser_line_num);
-	} else {
-		//Push it back if it isn't the constant keyword
-		push_back_token(fl, l);
-	}
-
-	//We know we're clear if we get here
-	l = get_next_token(fl, &parser_line_num);
-	
-	//Handle accordingly
-	//If we see one here
-	if(l.tok == STATIC){
-		storage_class = STORAGE_CLASS_STATIC;
-	//Would make no sense so fail out
-	} else if(l.tok == EXTERNAL){
-		print_parse_message(PARSE_ERROR, "External variable declarations are not supported in function parameters", current_line);
-		num_errors++;
-		return 0;
-	} else if(l.tok == REGISTER){
-		storage_class = STORAGE_CLASS_REGISTER;
-	} else {
-		//Otherwise, put the token back and get out
-		push_back_token(fl, l);
-		storage_class = STORAGE_CLASS_NORMAL;
-	}
-
-	//We now must see a valid type specifier
-	status = type_specifier(fl);
-	
-	//If bad
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid type specifier in declaration", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//We need to see a declarator if we're here
-	if(tok != DEFINE){
-		//Now we must see a valid declarator
-		status = declarator(fl);
-
-		//If bad
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid declarator in declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-	}
-			
-	//Now we can take two divergent paths here
-	if(tok == LET){
-		//Now we must see the assignment operator
-		l = get_next_token(fl, &parser_line_num);
-
-		//If we don't see it, get out
-		if(l.tok != COLONEQ){
-			print_parse_message(PARSE_ERROR, "Assignment operator(:=) expected after declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Now we must see a valid initializer
-		status = initializer(fl);
-
-		//If we don't see it, get out
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid initializer in declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//We now must see a semicolon
-		l = get_next_token(fl, &parser_line_num);
-
-		if(l.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of a declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-	
-		//Otherwise it worked and we can leave
-		return 1;
-
-	}
-
-	//If we had a declare statement
-	if(tok == DECLARE){
-	SEMICOL:
-		//If it was a declare statement, we must only see the semicolon to exit
-		l = get_next_token(fl, &parser_line_num);
-
-		if(l.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-	
-		//Otherwise it worked and we can leave
-		return 1;
-	}
-	
-	//If we had a define statement
-	if(tok == DEFINE){
-		//we can optionally see a pointer here
-		pointer(fl);
-
-		//We now must see "as"
-		l = get_next_token(fl, &parser_line_num);
-
-		//Fail out
-		if(l.tok != AS){
-			print_parse_message(PARSE_ERROR, "As keyword expected in type definition", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we must see a valid IDENT
-		status = identifier(fl);
-
-		//Fail out
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid ident in type definition", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//If it was a declare statement, we must only see the semicolon to exit
-		l = get_next_token(fl, &parser_line_num);
-
-		if(l.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-	
-		//Otherwise it worked and we can leave
-		return 1;
-	}
-
-	//For compiler only, should never get here
-	return 0;
 }
 
 
