@@ -28,10 +28,10 @@ typedef enum {
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 //Current line num
-static u_int16_t line_num;
+u_int16_t line_num = 0;
 
 //The number of characters in the current token
-int16_t token_char_count;
+int16_t token_char_count = 0;
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -128,8 +128,8 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 	//If we're at the start -- added to avoid overcounts
 	if(ftell(fl) == 0){
-		line_num = 0;
-		*parser_line_num = 0;
+		line_num = 1;
+		*parser_line_num = 1;
 	}
 
 	//We begin in the start state
@@ -173,17 +173,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						} else if(ch2 == '/'){
 							current_state = IN_SINGLE_COMMENT;
 							break;
-						//Otherwise we could have '=/'
-						} else if(ch2 == '='){
-							current_state = START;
-							//Prepare the token and return it
-							lex_item.tok = DIV_EQUALS;
-							strcpy(lex_item.lexeme, "/=");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-
-						//Otherwise we just have a divide char
 						} else {
 							current_state = START;
 							//"Put back" the char
@@ -200,16 +189,8 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					case '+':
 						ch2 = get_next_char(fl);
 						
-						//If we get this then it's +=
-						if(ch2 == '='){
-							current_state = START;
-							//Prepare and return
-							lex_item.tok = PLUS_EQUALS;
-							strcpy(lex_item.lexeme, "+=");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						} else if(ch2 == '+'){
+						//We could see++
+						if(ch2 == '+'){
 							current_state = START;
 							//Prepare and return
 							lex_item.tok = PLUSPLUS;
@@ -232,16 +213,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					case '-':
 						ch2 = get_next_char(fl);
 
-						//If we get this then it's +=
-						if(ch2 == '='){
-							current_state = START;
-							//Prepare and return
-							lex_item.tok = MINUS_EQUALS;
-							strcpy(lex_item.lexeme, "-=");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						} else if(ch2 == '-'){
+						if(ch2 == '-'){
 							current_state = START;
 							//Prepare and return
 							lex_item.tok = MINUSMINUS;
@@ -271,28 +243,12 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						}
 
 					case '*':
-						ch2 = get_next_char(fl);
-						
-						//If we get this then it's +=
-						if(ch2 == '='){
-							current_state = START;
-							//Prepare and return
-							lex_item.tok = TIMES_EQUALS;
-							strcpy(lex_item.lexeme, "*=");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						} else {
-							current_state = START;
-							//"Put back" the char
-							put_back_char(fl);
-
-							lex_item.tok = STAR;
-							strcpy(lex_item.lexeme, "*");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						}
+						current_state = START;
+						lex_item.tok = STAR;
+						strcpy(lex_item.lexeme, "*");
+						lex_item.line_num = line_num;
+						lex_item.char_count = token_char_count;
+						return lex_item;
 
 					case '=':
 						ch2 = get_next_char(fl);
@@ -303,13 +259,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							//Prepare and return
 							lex_item.tok = D_EQUALS;
 							strcpy(lex_item.lexeme, "==");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						} else if (ch2 == '?') {
-							//Prepare and return
-							lex_item.tok = CONDITIONAL_DEREF;
-							strcpy(lex_item.lexeme, "=?");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -337,14 +286,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
-						} else if(ch2 == '='){
-							current_state = START;
-							//Prepare and return
-							lex_item.tok = AND_EQUALS;
-							strcpy(lex_item.lexeme, "&=");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
 						} else {
 							current_state = START;
 							//"Put back" the char
@@ -359,21 +300,12 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 					case '|':
 						ch2 = get_next_char(fl);
-						
 						//If we get this then it's +=
 						if(ch2 == '|'){
 							current_state = START;
 							//Prepare and return
 							lex_item.tok = DOUBLE_OR;
 							strcpy(lex_item.lexeme, "||");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						} else if(ch2 == '='){
-							current_state = START;
-							//Prepare and return
-							lex_item.tok = OR_EQUALS;
-							strcpy(lex_item.lexeme, "|=");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -396,30 +328,15 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						return lex_item;
 
 					case '%':
-						ch2 = get_next_char(fl);
-
-						if(ch2 == '='){
-							current_state = START;
-							//Prepare and return
-							lex_item.tok = MOD_EQUALS;
-							strcpy(lex_item.lexeme, "%=");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						} else {
-							current_state = START;
-							//Put it back
-							put_back_char(fl);
-							lex_item.tok = MOD;
-							strcpy(lex_item.lexeme, "%");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						}
+						current_state = START;
+						lex_item.tok = MOD;
+						strcpy(lex_item.lexeme, "%");
+						lex_item.line_num = line_num;
+						lex_item.char_count = token_char_count;
+						return lex_item;
 
 					case ':':
 						ch2 = get_next_char(fl);
-
 						if(ch2 == ':'){
 							current_state = START;
 							//Prepare and return
@@ -500,13 +417,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					case '#':
 						lex_item.tok = POUND;
 						strcpy(lex_item.lexeme, "#");
-						lex_item.line_num = line_num;
-						lex_item.char_count = token_char_count;
-						return lex_item;
-
-					case '`':
-						lex_item.tok = CONDITIONAL_DEREF;
-						strcpy(lex_item.lexeme, "`");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
@@ -758,6 +668,8 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					return lex_item;
 				} else {
 					//Otherwise we'll just keep adding here
+					//Just for line counting
+					is_ws(ch, &line_num, parser_line_num);
 					*lexeme_cursor = ch;
 					lexeme_cursor++;
 				}
@@ -772,13 +684,14 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					if(ch2 == '/'){
 						//We are now out of the comment
 						current_state = START;
+						break;
 					} else {
 						//"Put back" char2
 						fseek(fl, -1, SEEK_CUR);
+						break;
 					}
 				}
-
-				//If we see whitespace we'll just increment the line number
+				//Otherwise just check for whitespace
 				is_ws(ch, &line_num, parser_line_num);
 				break;
 
@@ -788,6 +701,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 				//Newline means we get out
 				if(ch == '\n'){
 					line_num++;
+					(*parser_line_num)++;
 					current_state = START;
 				} 
 				//Otherwise just go forward

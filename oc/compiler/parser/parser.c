@@ -24,7 +24,7 @@ heap_stack_t* grouping_stack;
 u_int16_t num_errors = 0;
 
 //The current parser line number
-u_int16_t parser_line_num = 0;
+u_int16_t parser_line_num = 1;
 
 //Are we in a param_list?
 u_int8_t in_param_list = 0;
@@ -791,7 +791,6 @@ static u_int8_t unary_expression(FILE* fl){
 		case MINUS:
 		case STAR:
 		case AND:
-		case CONDITIONAL_DEREF:
 		case B_NOT:
 		case L_NOT:
 			//No matter what we see here, we will have to see a valid cast expression after it

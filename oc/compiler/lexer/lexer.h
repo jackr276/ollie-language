@@ -40,7 +40,6 @@ typedef enum {
 	JUMP,
 	STATIC,
 	EXTERNAL,
-	CONDITIONAL_DEREF, /* ` */
 	DOUBLE_AND, /* && */
 	DOUBLE_OR,
 	AND, /* & */
@@ -81,13 +80,6 @@ typedef enum {
 	CARROT,
 	D_EQUALS, /* == */
 	NOT_EQUALS,
-	DIV_EQUALS,
-	PLUS_EQUALS,
-	MINUS_EQUALS,
-	TIMES_EQUALS,
-	MOD_EQUALS,
-	AND_EQUALS,
-	OR_EQUALS,
 	G_THAN,
 	L_THAN,
 	G_THAN_OR_EQ,
