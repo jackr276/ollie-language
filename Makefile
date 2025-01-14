@@ -46,7 +46,7 @@ type_system.o: $(TYPE_SYSTEM_PATH)/type_system.c
 	$(CC) $(CFLAGS) $(TYPE_SYSTEM_PATH)/type_system.c -o $(OUT)/type_system.o
 
 type_systemd.o: $(TYPE_SYSTEM_PATH)/type_system.c
-	$(CC) -g $(CFLAGS) $(TYPE_SYSTEM_PATH)/type_system.c -o $(OUT)/type_system
+	$(CC) -g $(CFLAGS) $(TYPE_SYSTEM_PATH)/type_system.c -o $(OUT)/type_systemd.o
 
 parser.o: $(PARSER_PATH)/parser.c
 	$(CC) $(CFLAGS) $(PARSER_PATH)/parser.c -o $(OUT)/parser.o
@@ -56,6 +56,9 @@ parserd.o: $(PARSER_PATH)/parser.c
 
 symtab_test.o: $(SYMTAB_PATH)/symtab_test.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab_test.c -o $(OUT)/symtab_test.o
+
+symtab_testd.o: $(SYMTAB_PATH)/symtab_test.c
+	$(CC) -g $(CFLAGS) $(SYMTAB_PATH)/symtab_test.c -o $(OUT)/symtab_testd.o
 
 parser_test.o: $(PARSER_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(PARSER_PATH)/parser_test.c -o $(OUT)/parser_test.o
@@ -70,10 +73,16 @@ parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o stackd.o type_sys
 	$(CC) -g -o $(OUT)/debug $(OUT)/parser_testd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/stackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o
 
 symtab_test: symtab.o symtab_test.o lexer.o type_system.o
-	$(CC) -o $(OUT)/symtab_test $(OUT)/symtab_test.o $(OUT)/symtab.o $(OUT)/type_system.o
+	$(CC) -o $(OUT)/symtab_test $(OUT)/lexer.o $(OUT)/symtab_test.o $(OUT)/symtab.o $(OUT)/type_system.o
+
+symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o
+	$(CC) -o $(OUT)/symtab_testd $(OUT)/lexerd.o $(OUT)/symtab_testd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o
 
 stest: symtab_test
 	$(OUT)/symtab_test
+
+stestd: symtab_testd
+	$(OUT)/symtab_testd
 
 ptest: parser_test
 	cat ./oc/test_files/test_files.txt | xargs ./oc/out/parser_test

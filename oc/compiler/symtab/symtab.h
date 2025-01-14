@@ -6,14 +6,14 @@
 #ifndef SYMTAB_H
 #define SYMTAB_H
 
-#include <functional>
 #include <stdint.h>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "../lexer/lexer.h"
-#include "../type_system//type_system.h"
+#include "../type_system/type_system.h"
+
 
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
@@ -145,7 +145,7 @@ struct symtab_type_record_t{
 	//What type is it?
 	generic_type_t* type;
 	//The next hashtable record
-	symtab_variable_record_t* next;
+	symtab_type_record_t* next;
 };
 
 
@@ -305,17 +305,17 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
 /**
  * Lookup a function name in the symtab
  */
-symtab_function_record_t* lookup_function(symtab_function_record_t* symtab, char* name);
+symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name);
 
 /**
  * Lookup a variable name in the symtab
  */
-symtab_variable_record_t* lookup_variable(symtab_variable_record_t* symtab, char* name);
+symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
 
 /**
  * Lookup a type name in the symtab
  */
-symtab_variable_record_t* lookup_variable(symtab_type_record_t* symtab, char* name);
+symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name);
 
 /**
  * A printing function for development purposes
@@ -326,6 +326,11 @@ void print_function_record(symtab_function_record_t* record);
  * A printing function for development purposes
  */
 void print_variable_record(symtab_variable_record_t* record);
+
+/**
+ * A printing function for development purposes
+ */
+void print_type_record(symtab_type_record_t* record);
 
 /**
  * A helper method for function name printing
@@ -340,16 +345,16 @@ void print_variable_name(symtab_variable_record_t* record);
 /**
  * Destroy a function symtab
  */
-void destroy_function_symtab(function_symtab_t*);
+void destroy_function_symtab(function_symtab_t* symtab);
 
 /**
  * Destroy a variable symtab
  */
-void destroy_variable_symtab(variable_symtab_t*);
+void destroy_variable_symtab(variable_symtab_t* symtab);
 
 /**
  * Destroy a type symtab 
  */
-void destroy_type_symtab(type_symtab_t*);
+void destroy_type_symtab(type_symtab_t* symtab);
 
 #endif /* SYMTAB_H */

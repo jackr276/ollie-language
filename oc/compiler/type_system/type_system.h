@@ -179,4 +179,10 @@ u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB);
 */
 generic_type_t* create_basic_type(char* type_name, BASIC_TYPE basic_type);
 
-#endif
+
+/**
+ * Destroy a type that is no longer in use
+*/
+void destroy_type(generic_type_t* type);
+
+#endif /* TYPE_SYSTEM_H */

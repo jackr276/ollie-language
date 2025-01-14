@@ -66,3 +66,12 @@ generic_type_t* create_basic_type(char* type_name, BASIC_TYPE basic_type){
 	//Give back the pointer, it will need to be freed eventually
 	return type;
 }
+
+/**
+ * Destroy a type that is no longer in use
+*/
+void destroy_type(generic_type_t* type){
+
+}
+
+

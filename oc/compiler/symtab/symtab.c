@@ -26,7 +26,7 @@ function_symtab_t* initialize_function_symtab(){
 /**
  * Dynamically allocate a variable symtab
  */
-variable_symtab_t* intialize_variable_symtab(){
+variable_symtab_t* initialize_variable_symtab(){
 	variable_symtab_t* symtab = (variable_symtab_t*)calloc(1, sizeof(variable_symtab_t));
 	symtab->current_lexical_scope = 0;
 	//Nothing has been initialized yet
@@ -271,77 +271,65 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
 	return 1;
 }
 
-
 /**
- * Insert a record into the symbol table. This assumes that the user 
- * has already checked to see if this record is in the symbol table
-*/
-u_int8_t insert(symtab_t* symtab, void* record){
-	//Function symtab
-	if(symtab->type == FUNCTION){
-		symtab_function_record_t* func_record = (symtab_function_record_t*)record;
-		//While we're at it store this
-		func_record->lexical_level = symtab->current_lexical_scope;
+ * Inserts a type record into the symtab. This assumes that the user has already checked to see if
+ * this record exists in the table
+ */
+u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
+	//While we're at it store this
+	record->lexical_level = symtab->current_lexical_scope;
 
-		//No collision here, just store and get out
-		if(((symtab_function_sheaf_t*)symtab->current)->records[func_record->hash] == NULL){
-			//Store this and get out
-			((symtab_function_sheaf_t*)symtab->current)->records[func_record->hash] = func_record;
-			//0 = success, no collision
-			return 0;
-		}
-
-		//Otherwise, there is a collision
-		//Grab the head record
-		symtab_function_record_t* cursor = ((symtab_function_sheaf_t*)symtab->current)->records[func_record->hash];
-		//Store this while we're at it
-		cursor->lexical_level = symtab->current_lexical_scope;
-
-		//Get to the very last node
-		while(cursor->next != NULL){
-			cursor = cursor->next;
-		}
-
-		//Now that cursor points to the very last node, we can add it in
-		cursor->next = record;
-		//This should be null anyways, but it never hurts to double check
-		func_record->next = NULL;
-
-		//1 = success, but there was a collision
-		return 1;
-
-	//Variable symtab
-	} else {
-		symtab_variable_record_t* var_record = (symtab_variable_record_t*)record;
-		//While we're at it store this
-		var_record->lexical_level = symtab->current_lexical_scope;
-
-		//No collision here, just store and get out
-		if(((symtab_variable_sheaf_t*)symtab->current)->records[var_record->hash] == NULL){
-			//Store this and get out
-			((symtab_variable_sheaf_t*)symtab->current)->records[var_record->hash] = var_record;
-			//0 = success, no collision
-			return 0;
-		}
-
-		//Otherwise, there is a collision
-		//Grab the head record
-		symtab_variable_record_t* cursor = ((symtab_variable_sheaf_t*)symtab->current)->records[var_record->hash];
-
-		//Get to the very last node
-		while(cursor->next != NULL){
-			cursor = cursor->next;
-		}
-
-		//Now that cursor points to the very last node, we can add it in
-		cursor->next = record;
-		//This should be null anyways, but it never hurts to double check
-		var_record->next = NULL;
-
-		//1 = success, but there was a collision
-		return 1;
+	//No collision here, just store and get out
+	if(symtab->current->records[record->hash] == NULL){
+		//Store this and get out
+		symtab->current->records[record->hash] = record;
+		//0 = success, no collision
+		return 0;
 	}
 
+	//Otherwise, there is a collision
+	//Grab the head record
+	symtab_type_record_t* cursor = symtab->current->records[record->hash];
+
+	//Get to the very last node
+	while(cursor->next != NULL){
+		cursor = cursor->next;
+	}
+
+	//Now that cursor points to the very last node, we can add it in
+	cursor->next = record;
+	//This should be null anyways, but it never hurts to double check
+	record->next = NULL;
+
+	//1 = success, but there was a collision
+	return 1;
+}
+
+
+/**
+ * Lookup the record in the symtab that corresponds to the following name.
+ * 
+ * There is only one lexical scope for functions, so this symtab is quite simple
+ */
+symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name){
+	//Let's grab it's hash
+	u_int16_t h = hash(name); 
+
+	//Grab whatever record is at that hash
+	symtab_function_record_t* record_cursor = symtab->records[h];
+		
+	//We could have had collisions so we'll have to hunt here
+	while(record_cursor != NULL){
+		//If we find the right one, then we can get out
+		if(strcmp(record_cursor->func_name, name) == 0){
+			return record_cursor;
+		}
+		//Advance it if we didn't have the right name
+		record_cursor = record_cursor->next;
+	}
+
+	//When we make it down here, we found nothing so
+	return NULL;
 }
 
 
@@ -352,58 +340,69 @@ u_int8_t insert(symtab_t* symtab, void* record){
  * do not find it in the local scope, we then search the outer scope, until there are
  * no more outer scopes to search
  */
-void* lookup(symtab_t* symtab, char* name){
-	//Let's grab it's hash
-	u_int16_t h = hash(name); 
+symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name){
+	//Grab the hash
+	u_int16_t h = hash(name);
 
-	//Function symtab
-	if(symtab->type == FUNCTION){
-		//Define the cursor so we don't mess with the original reference
-		symtab_function_sheaf_t* cursor = symtab->current;
-		symtab_function_record_t* records_cursor;
+	//Define the cursor so we don't mess with the original reference
+	symtab_variable_sheaf_t* cursor = symtab->current;
+	symtab_variable_record_t* records_cursor;
 
-		while(cursor != NULL){
-			//As long as the previous level is not null
-			records_cursor = cursor->records[h];
+	while(cursor != NULL){
+		//As long as the previous level is not null
+		records_cursor = cursor->records[h];
 		
-			//We could have had collisions so we'll have to hunt here
-			while(records_cursor != NULL){
-				//If we find the right one, then we can get out
-				if(strcmp(records_cursor->func_name, name) == 0){
-					return records_cursor;
-				}
-				//Advance it
-				records_cursor = records_cursor->next;
+		//We could have had collisions so we'll have to hunt here
+		while(records_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strcmp(records_cursor->var_name, name) == 0){
+				return records_cursor;
 			}
-
-			//Go up to a higher scope
-			cursor = cursor->previous_level;
+			//Advance it
+			records_cursor = records_cursor->next;
 		}
 
-	//Variable symtab
-	} else {
-		//Define the cursor so we don't mess with the original reference
-		symtab_variable_sheaf_t* cursor = symtab->current;
-		symtab_variable_record_t* records_cursor;
-
-		while(cursor != NULL){
-			//As long as the previous level is not null
-			records_cursor = cursor->records[h];
-		
-			//We could have had collisions so we'll have to hunt here
-			while(records_cursor != NULL){
-				//If we find the right one, then we can get out
-				if(strcmp(records_cursor->var_name, name) == 0){
-					return records_cursor;
-				}
-				//Advance it
-				records_cursor = records_cursor->next;
-			}
-
-			//Go up to a higher scope
-			cursor = cursor->previous_level;
-		}
+		//Go up to a higher scope
+		cursor = cursor->previous_level;
 	}
+
+	//We found nothing
+	return NULL;
+}
+
+/**
+ * Lookup the record in the symtab that corresponds to the following name.
+ * 
+ * We are ALWAYS biased to the most local(in scope) version of the name. If we
+ * do not find it in the local scope, we then search the outer scope, until there are
+ * no more outer scopes to search
+ */
+symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name){
+	//Grab the hash
+	u_int16_t h = hash(name);
+
+	//Define the cursor so we don't mess with the original reference
+	symtab_type_sheaf_t* cursor = symtab->current;
+	symtab_type_record_t* records_cursor;
+
+	while(cursor != NULL){
+		//As long as the previous level is not null
+		records_cursor = cursor->records[h];
+		
+		//We could have had collisions so we'll have to hunt here
+		while(records_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strcmp(records_cursor->type->type_name, name) == 0){
+				return records_cursor;
+			}
+			//Advance it
+			records_cursor = records_cursor->next;
+		}
+
+		//Go up to a higher scope
+		cursor = cursor->previous_level;
+	}
+
 	//We found nothing
 	return NULL;
 }
@@ -445,6 +444,22 @@ void print_variable_record(symtab_variable_record_t* record){
 	printf("}\n");
 }
 
+/**
+ * A record printer that is used for development/error messages
+ */
+void print_type_record(symtab_type_record_t* record){
+	//Safety check
+	if(record == NULL){
+		printf("NULL RECORD\n");
+		return;
+	}
+
+	printf("Record: {\n");
+	printf("Name: %s,\n", record->type->type_name);
+	printf("Hash: %d,\n", record->hash);
+	printf("Lexical Level: %d,\n", record->lexical_level);
+	printf("}\n");
+}
 
 /**
  * Print a function name out in a stylised way
@@ -498,61 +513,91 @@ void print_variable_name(symtab_variable_record_t* record){
 
 
 /**
- * Provide a function that will destroy the symtab completely. It is important to note that 
- * we must have the root level symtab here
-*/
-void destroy_symtab(symtab_t* symtab){
-	//Function symtab
-	if(symtab->type == FUNCTION){
-		symtab_function_sheaf_t* cursor;
-		symtab_function_record_t* record;
-		symtab_function_record_t* temp;
+ * Provide a function that will destroy the function symtab completely
+ */
+void destroy_function_symtab(function_symtab_t* symtab){
+	//For temporary holding
+	symtab_function_record_t* record;
+	symtab_function_record_t* temp;
 
-		//Run through all of the sheafs
-		for	(u_int16_t i = 0; i < symtab->next_index; i++){
-			cursor = symtab->sheafs[i];
+	//Run through and free all function records
+	for(u_int16_t i = 0; i < KEYSPACE; i++){
+		record = symtab->records[i];
 
-			//Now we'll free all non-null records
-			for(u_int16_t j = 0; j < KEYSPACE; j++){
-				record = cursor->records[j];
-
-				//We could have chaining here, so run through just in case
-				while(record != NULL){
-					temp = record;
-					record = record->next;
-					free(temp);
-				}
-			}
-
-			//Free the sheaf
-			free(cursor);
-		}
-	//var symtab
-	} else {
-		symtab_variable_sheaf_t* cursor;
-		symtab_variable_record_t* record;
-		symtab_variable_record_t* temp;
-
-		//Run through all of the sheafs
-		for	(u_int16_t i = 0; i < symtab->next_index; i++){
-			cursor = symtab->sheafs[i];
-
-			//Now we'll free all non-null records
-			for(u_int16_t j = 0; j < KEYSPACE; j++){
-				record = cursor->records[j];
-
-				//We could have chaining here, so run through just in case
-				while(record != NULL){
-					temp = record;
-					record = record->next;
-					free(temp);
-				}
-			}
-			//Free the sheaf
-			free(cursor);
+		//We could have chaining here, so run through just in case
+		while(record != NULL){
+			temp = record;
+			record = record->next;
+			free(temp);
 		}
 	}
 
-	//Once we're all done here, destroy the global symtab
+	//Free the entire symtab at the very end
+	free(symtab);
+}
+
+
+/**
+ * Provide a function that will destroy the variable symtab completely
+ */
+void destroy_variable_symtab(variable_symtab_t* symtab){
+	symtab_variable_sheaf_t* cursor;
+	symtab_variable_record_t* record;
+	symtab_variable_record_t* temp;
+
+	//Run through all of the sheafs
+	for	(u_int16_t i = 0; i < symtab->next_index; i++){
+		cursor = symtab->sheafs[i];
+
+		//Now we'll free all non-null records
+		for(u_int16_t j = 0; j < KEYSPACE; j++){
+			record = cursor->records[j];
+
+			//We could have chaining here, so run through just in case
+			while(record != NULL){
+				temp = record;
+				record = record->next;
+				free(temp);
+			}
+		}
+		//Free the sheaf
+		free(cursor);
+	}
+
+	//Finally free the symtab itself
+	free(symtab);
+}
+
+
+/**
+ * Provide a function that will destroy the variable symtab completely
+ */
+void destroy_type_symtab(type_symtab_t* symtab){
+	symtab_type_sheaf_t* cursor;
+	symtab_type_record_t* record;
+	symtab_type_record_t* temp;
+
+	//Run through all of the sheafs
+	for	(u_int16_t i = 0; i < symtab->next_index; i++){
+		cursor = symtab->sheafs[i];
+
+		//Now we'll free all non-null records
+		for(u_int16_t j = 0; j < KEYSPACE; j++){
+			record = cursor->records[j];
+
+			//We could have chaining here, so run through just in case
+			while(record != NULL){
+				temp = record;
+				record = record->next;
+				//Destroy the actual type while here
+				destroy_type(temp->type);
+				free(temp);
+			}
+		}
+		//Free the sheaf
+		free(cursor);
+	}
+
+	//Finally free the symtab itself
 	free(symtab);
 }
