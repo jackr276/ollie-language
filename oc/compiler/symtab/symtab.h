@@ -301,6 +301,10 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
  */
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
 
+/**
+ * A helper function that adds all basic types to the type symtab
+ */
+void add_all_basic_types(type_symtab_t* symtab);
 
 /**
  * Lookup a function name in the symtab
@@ -341,6 +345,11 @@ void print_function_name(symtab_function_record_t* record);
  * A helper method for variable name printing
  */
 void print_variable_name(symtab_variable_record_t* record);
+
+/**
+ * A helper method for type name printing
+ */
+void print_type_name(symtab_type_record_t* record);
 
 /**
  * Destroy a function symtab

@@ -307,6 +307,62 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 
 
 /**
+ * A helper function that adds all basic types to the type symtab
+ */
+void add_all_basic_types(type_symtab_t* symtab){
+	generic_type_t* type;
+
+	//Add in void type
+	type = create_basic_type("void", VOID);
+	insert_type(symtab, create_type_record(type));
+
+	//s_int8 type
+	type = create_basic_type("s_int8", S_INT8);
+	insert_type(symtab,  create_type_record(type));
+
+	//u_int8 type
+	type = create_basic_type("u_int8", U_INT8);
+	insert_type(symtab,  create_type_record(type));
+
+	//char type
+	type = create_basic_type("char", CHAR);
+	insert_type(symtab,  create_type_record(type));
+	
+	//u_int16 type
+	type = create_basic_type("u_int16", U_INT16);
+	insert_type(symtab,  create_type_record(type));
+		
+	//s_int16 type
+	type = create_basic_type("s_int16", S_INT16);
+	insert_type(symtab,  create_type_record(type));
+	
+	//s_int32 type
+	type = create_basic_type("s_int32", S_INT32);
+	insert_type(symtab,  create_type_record(type));
+	
+	//u_int32 type
+	type = create_basic_type("u_int32", U_INT32);
+	insert_type(symtab,  create_type_record(type));
+	
+	//u_int64 type
+	type = create_basic_type("u_int64", U_INT64);
+	insert_type(symtab,  create_type_record(type));
+	
+	//s_int64 type
+	type = create_basic_type("s_int64", S_INT64);
+	insert_type(symtab,  create_type_record(type));
+
+	//float32 type
+	type = create_basic_type("float32", FLOAT32);
+	insert_type(symtab,  create_type_record(type));
+	
+	//float64 type
+	type = create_basic_type("float32", FLOAT64);
+	insert_type(symtab,  create_type_record(type));
+}
+
+
+/**
  * Lookup the record in the symtab that corresponds to the following name.
  * 
  * There is only one lexical scope for functions, so this symtab is quite simple
@@ -509,6 +565,22 @@ void print_variable_name(symtab_variable_record_t* record){
 	} else {
 		printf(";\n\n");
 	}
+}
+
+
+/**
+ * Print a type name. Intended for error messages
+ */
+void print_type_name(symtab_type_record_t* record){
+	//Print out where it was declared
+	if(record->type->type_class == TYPE_CLASS_BASIC){
+		printf("---> BASIC TYPE | ");
+	} else {
+		printf("---> %d | ", record->type->line_number);
+	}
+
+	//Then print out the name
+	printf("%s\n\n", record->type->type_name);
 }
 
 

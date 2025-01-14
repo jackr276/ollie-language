@@ -48,27 +48,6 @@ typedef enum TYPE_CLASS{
 
 
 /**
- * All basic types in the system. This is helpful for
- * quick identification with basic types, which we can assume
- * will be the most common. Allows us to avoid doing string comparisons
- * for basic types
- */
-typedef enum BASIC_TYPE{
-	TYPE_U_INT8,
-	TYPE_S_INT8,
-	TYPE_U_INT16,
-	TYPE_S_INT16,
-	TYPE_U_INT32,
-	TYPE_S_INT32,
-	TYPE_U_INT64,
-	TYPE_S_INT64,
-	TYPE_FLOAT32,
-	TYPE_FLOAT64,
-	TYPE_CHAR,
-} BASIC_TYPE;
-
-
-/**
  * A lot of times we need optionality in a type system. The generic type provides this.
  * For example, in an array, we want the option to have an array of structures, an array of
  * pointers, etc. This generic type allows the array to hold one generic and take action based
@@ -79,6 +58,9 @@ struct generic_type_t{
 	char type_name[MAX_TYPE_NAME_LENGTH];
 	//What class of type is it
 	TYPE_CLASS type_class;
+	//When was it defined: -1 = generic type
+	int32_t line_number;
+
 	/**
 	 * The following pointers will be null except for the one that the type class
 	 * specifies this type belongs to
@@ -96,9 +78,8 @@ struct generic_type_t{
  * above and encodes the pointer_level, size and the name
  */
 struct basic_type_t{
-	Lexer_item type_lex; //TODO PROBABLY DON'T NEED
 	//What basic type is it
-	BASIC_TYPE basic_type;
+	Token basic_type;
 	//What is the size of this type?
 	u_int32_t size;
 };
@@ -177,7 +158,7 @@ u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB);
 /**
  * Dynamically allocate and create a basic type
 */
-generic_type_t* create_basic_type(char* type_name, BASIC_TYPE basic_type);
+generic_type_t* create_basic_type(char* type_name, Token basic_type);
 
 
 /**

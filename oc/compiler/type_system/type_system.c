@@ -36,11 +36,13 @@ u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 /**
  * Create a basic type dynamically
 */
-generic_type_t* create_basic_type(char* type_name, BASIC_TYPE basic_type){
+generic_type_t* create_basic_type(char* type_name, Token basic_type){
 	//Dynamically allocate
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 	//Store the type class
 	type->type_class = TYPE_CLASS_BASIC;
+	//Defined line num is at -1 because it's a basic type
+	type->line_number = -1;
 
 	//Allocate a basic type, all other pointers will be null
 	type->basic_type = calloc(1, sizeof(basic_type_t));
@@ -49,15 +51,18 @@ generic_type_t* create_basic_type(char* type_name, BASIC_TYPE basic_type){
 	strcpy(type->type_name, type_name);
 
 	//Now we can immediately determine the size based on what the actual type is
-	if(basic_type == TYPE_CHAR || basic_type == TYPE_S_INT8 || basic_type == TYPE_U_INT8){
+	if(basic_type == CHAR || basic_type == S_INT8 || basic_type == U_INT8){
 		//1 BYTE
 		type->basic_type->size = 1;
-	} else if(basic_type == TYPE_S_INT16 || basic_type == TYPE_U_INT16){
+	} else if(basic_type == S_INT16 || basic_type == U_INT16){
 		//2 BYTES
 		type->basic_type->size = 2;
-	} else if(basic_type == TYPE_U_INT32 || basic_type == TYPE_S_INT32 || basic_type == TYPE_FLOAT32){
+	} else if(basic_type == U_INT32 || basic_type == S_INT32 || basic_type == FLOAT32){
 		//4 BYTES
 		type->basic_type->size = 4;
+	} else if(basic_type == VOID){
+		//0 BYTES - special case
+		type->basic_type->size = 0;
 	} else {
 		//Otheriwse is 8 BYTES
 		type->basic_type->size = 8;

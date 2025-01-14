@@ -20,8 +20,10 @@
 #include <time.h>
 
 //Variable and function symbol tables
-symtab_t* variable_symtab;
-symtab_t* function_symtab;
+function_symtab_t* function_symtab;
+variable_symtab_t* variable_symtab;
+type_symtab_t* type_symtab;
+
 
 //Our stack for storing variables, etc
 heap_stack_t* grouping_stack;
@@ -515,7 +517,7 @@ static u_int8_t postfix_expression(FILE* fl){
 			//Copy it in for safety
 			strcpy(function_name, current_ident->lexeme);
 			//This is for sure a function call, so we need to be able to recognize the function
-			symtab_function_record_t* func = lookup(function_symtab, function_name);
+			symtab_function_record_t* func = lookup_function(function_symtab, function_name);
 
 			//Let's see if we found it
 			if(func == NULL){
@@ -2003,15 +2005,12 @@ u_int8_t type_specifier(FILE* fl){
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 	u_int8_t status = 0;
-	//Allocate the active type here
-	active_type = calloc(1, sizeof(basic_type_t));
 
 	//In the case that we have one of the primitive types
 	if(l.tok == VOID || l.tok == U_INT8 || l.tok == S_INT8 || l.tok == U_INT16 || l.tok == S_INT16
 	  || l.tok == U_INT32 || l.tok == S_INT32 || l.tok == U_INT64 || l.tok == S_INT64 || l.tok == FLOAT32
 	  || l.tok == FLOAT64 || l.tok == CHAR){
-		//Encode the type level STILL NOT DONE
-		active_type->type_lex = l;
+		active_type = create_basic_type(l.lexeme, l.tok);
 		//Add the type name in
 		strcpy(active_type->type_name, l.lexeme);
 		//TODO put in symtable
@@ -4216,7 +4215,7 @@ u_int8_t function_declaration(FILE* fl){
 	}
 
 	//Let's see if we have duplicate function names
-	symtab_function_record_t* func_record = lookup(function_symtab, current_ident->lexeme);
+	symtab_function_record_t* func_record = lookup_function(function_symtab, current_ident->lexeme);
 
 	//If we can find it we have a duplicate function
 	if(func_record != NULL && func_record->defined == 1){
@@ -4227,14 +4226,26 @@ u_int8_t function_declaration(FILE* fl){
 	}
 
 	//Let's see if we're trying to redefine variable names
-	symtab_variable_record_t* var_record = lookup(variable_symtab, current_ident->lexeme);
+	symtab_variable_record_t* var_record = lookup_variable(variable_symtab, current_ident->lexeme);
 
 	//If we can find it we have a duplicate function
-	if(func_record != NULL && func_record->defined == 1){
+	if(var_record != NULL){
 		print_parse_message(PARSE_ERROR, "Functions and variables may not share names. First defined here:", current_line);
 		print_variable_name(var_record);
 		num_errors++;
 		return 0;
+	}
+
+	//Let's see if we're trying to redefine a custom type name
+	symtab_type_record_t* type_record = lookup_type(type_symtab, current_ident->lexeme);
+
+	//If we can find it we have a duplicate function
+	if(type_record != NULL){
+		print_parse_message(PARSE_ERROR, "Functions and types. First defined here:", current_line);
+		print_variable_name(var_record);
+		num_errors++;
+		return 0;
+
 	}
 
 	//Officially make the function record
@@ -4438,14 +4449,18 @@ u_int8_t parse(FILE* fl){
 	//Start the timer
 	clock_t begin = clock();
 
-	//Initialize our global symtab here
-	variable_symtab = initialize_symtab(VARIABLE);
-	function_symtab = initialize_symtab(FUNCTION);
+	//Initialize all of our symtabs
+	function_symtab = initialize_function_symtab();
+	variable_symtab = initialize_variable_symtab();
+	type_symtab = initialize_type_symtab();
 
-	//Global function scope here
-	initialize_scope(function_symtab);
+	//Initialize the variable scope
+	initialize_variable_scope(variable_symtab);
 	//Global variable scope here
-	initialize_scope(variable_symtab);
+	initialize_type_scope(type_symtab);
+
+	//Add all basic types into the type symtab
+	add_all_basic_types(type_symtab);
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_stack();
@@ -4475,8 +4490,10 @@ u_int8_t parse(FILE* fl){
 	
 	//Clean these both up for memory safety
 	destroy_stack(grouping_stack);
-	destroy_symtab(function_symtab);
-	destroy_symtab(variable_symtab);
+	//Deallocate all symtabs
+	destroy_function_symtab(function_symtab);
+	destroy_variable_symtab(variable_symtab);
+	destroy_type_symtab(type_symtab);
 	
 	return status;
 }
