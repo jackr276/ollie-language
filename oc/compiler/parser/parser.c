@@ -43,7 +43,7 @@ symtab_function_record_t* current_function = NULL;
 //The current IDENT that we are tracking
 Lexer_item* current_ident = NULL;
 
-//The current type
+//The current type. Used for global access
 generic_type_t* active_type = NULL;
 
 
@@ -153,11 +153,23 @@ static u_int8_t pointer(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
+	generic_type_t* temp;
 
 	//Grab the star
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	if(lookahead.tok == STAR){
+		//We've seen a pointer, so now we need to handle a pointer
+		//Save the reference
+		temp = active_type;
+
+		//We'll also store the active type in the symtable to maintain it's information
+		insert_type(type_symtab, create_type_record(temp));
+		
+		//Create a pointer type that points to temp
+		active_type = create_pointer_type(temp);
+		
+		//Refresh the token, continue the search
 		lookahead = get_next_token(fl, &parser_line_num);
 		//If we see another pointer, handle it
 		if(lookahead.tok == STAR){
@@ -3450,7 +3462,7 @@ static u_int8_t compound_statement(FILE* fl){
  * 								  | ( <declarator> ) 
  * 								  | <identifier> {[ {constant-expression}? ]}*
  * 								  | <identifier> ( <parameter-type-list>? ) 
- * 								  | <identifier> ( {<identifier>}*{, <identifier>}* )
+ * 								  | <identifier> ( {<identifier>}{, <identifier>}* )
  */
 u_int8_t direct_declarator(FILE* fl){
 	//Freeze the line number
@@ -4156,7 +4168,7 @@ u_int8_t function_specifier(FILE* fl){
 /**
  * Handle the case where we declare a function
  *
- * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> (<parameter-list>?) -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> (<parameter-list>?) -> <type-specifier> {pointer}? <compound-statement>
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  *
@@ -4341,15 +4353,18 @@ arrow_ident:
 	//After the arrow we must see a valid type specifier
 	status = type_specifier(fl);
 
-	//We'll store this as the function return type
-	function_record->return_type = active_type;
-
 	//If it failed
 	if(status == 0){
 		print_parse_message(PARSE_ERROR, "Invalid return type given to function", current_line);
 		num_errors++;
 		return 0;
 	}
+
+	//We can also see pointers here--status is irrelevant this is just for type information
+	pointer(fl);
+
+	//We'll store this as the function return type
+	function_record->return_type = active_type;
 
 	//Now we must see a compound statement
 	status = compound_statement(fl);

@@ -1,7 +1,7 @@
 /**
 * Bad parens in here
 */
-func:static main(s_int32 argc, str* argv) -> u_int32 {
+func:static main(s_int32 argc, char** argv) -> u_int32 {
 	let u_int32 i := 0;
 	let u_int32 j := 0;
 	let u_int32 k := 0;

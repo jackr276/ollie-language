@@ -523,7 +523,12 @@ void print_type_record(symtab_type_record_t* record){
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){
-	printf("\n---> %d | func %s(", record->line_number, record->func_name);
+	//If it's statis we'll add the keyword in
+	if(record->storage_class == STORAGE_CLASS_STATIC){
+		printf("\n---> %d | func:static %s(", record->line_number, record->func_name);
+	} else {
+		printf("\n---> %d | func %s(", record->line_number, record->func_name);
+	}
 
 	//Print out the params
 	for(u_int8_t i = 0; i < record->number_of_params; i++){

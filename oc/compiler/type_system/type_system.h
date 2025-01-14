@@ -60,6 +60,9 @@ struct generic_type_t{
 	TYPE_CLASS type_class;
 	//When was it defined: -1 = generic type
 	int32_t line_number;
+	//We allows types to be aliased ONCE. Once a type has been aliased once, it may not
+	//be aliased again
+	char alias_name[MAX_TYPE_NAME_LENGTH];
 
 	/**
 	 * The following pointers will be null except for the one that the type class
@@ -160,6 +163,10 @@ u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB);
 */
 generic_type_t* create_basic_type(char* type_name, Token basic_type);
 
+/**
+ * Dynamically allocate and create a pointer type
+ */
+generic_type_t* create_pointer_type(generic_type_t* points_to);
 
 /**
  * Destroy a type that is no longer in use

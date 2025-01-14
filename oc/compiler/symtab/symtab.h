@@ -140,7 +140,7 @@ struct symtab_type_record_t{
 	int16_t lexical_level;
 	//Line number
 	u_int16_t line_number;
-	//Was it initialized?
+	//Was it initialized? This is usually for forward-declared structs
 	u_int8_t initialized;
 	//What type is it?
 	generic_type_t* type;
