@@ -29,8 +29,6 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 typedef struct parameter_list_t parameter_list_t;
 //Parameter type
 typedef struct parameter_t parameter_t;
-//A type holder
-typedef struct type_t type_t;
 
 //The storage class of a given item
 typedef enum STORAGE_CLASS_T{
@@ -49,41 +47,6 @@ typedef enum SYMTAB_RECORD_TYPE{
 	VARIABLE
 } SYMTAB_RECORD_TYPE;
 
-
-/**
- * We want to be able to really quickly and easily determine if 
- * the type that we have is a basic type
- */
-typedef enum BASIC_TYPE{
-	TYPE_STRUCTURE, /* If it's a complex type */
-	TYPE_ENUMERATED,
-	TYPE_U_INT8,
-	TYPE_S_INT8,
-	TYPE_U_INT16,
-	TYPE_S_INT16,
-	TYPE_U_INT32,
-	TYPE_S_INT32,
-	TYPE_U_INT64,
-	TYPE_S_INT64,
-	TYPE_FLOAT32,
-	TYPE_FLOAT64,
-	TYPE_CHAR,
-	TYPE_STRING
-} BASIC_TYPE;
-
-/**
- * A generic type holder for us
- */
-struct type_t{
-	Lexer_item type_lex;
-	//The type name
-	char type_name[100];
-	//Is it a basic type?
-	BASIC_TYPE basic_type;
-	//Is it a pointer? 0 = not, 1 = 1 star, 2 star, etc
-	u_int8_t pointer_level;
-	//TODO may need more stuff here
-};
 
 
 /**
@@ -118,7 +81,7 @@ struct symtab_function_record_t{
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
 	//What's the return type?
-	type_t return_type;
+	basic_type_t return_type;
 	//Has it been defined?(done to allow for predeclaration)
 	u_int8_t defined;
 	//In case of collisions, we can chain these records
@@ -151,7 +114,7 @@ struct symtab_variable_record_t{
 	//Is it a constant variable?
 	u_int8_t is_constant;
 	//What type is it?
-	type_t type;
+	basic_type_t type;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 	//The next hashtable record

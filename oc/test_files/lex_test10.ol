@@ -1,5 +1,5 @@
 /*
-declare structure {
+declare construct {
 	u_int32 i := 3,
 	u_int32 j,
 	u_int32 prog

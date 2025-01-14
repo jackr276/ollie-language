@@ -51,7 +51,7 @@ typedef enum {
 	DEFINE,
 	AS,
 	ENUMERATED,
-	STRUCTURE,
+	CONSTRUCT,
 	SIZE,
 	MINUS,
 	MINUSMINUS,
@@ -103,7 +103,6 @@ typedef enum {
 	FLOAT32,
 	FLOAT64,
 	CHAR,
-	STR,
 } Token;
 
 typedef struct Lexer_item Lexer_item;

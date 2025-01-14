@@ -42,7 +42,7 @@ symtab_function_record_t* current_function = NULL;
 Lexer_item* current_ident = NULL;
 
 //The current type
-type_t* active_type = NULL;
+basic_type_t* active_type = NULL;
 
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
@@ -2008,12 +2008,12 @@ u_int8_t type_specifier(FILE* fl){
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 	u_int8_t status = 0;
 	//Allocate the active type here
-	active_type = calloc(1, sizeof(type_t));
+	active_type = calloc(1, sizeof(basic_type_t));
 
 	//In the case that we have one of the primitive types
 	if(l.tok == VOID || l.tok == U_INT8 || l.tok == S_INT8 || l.tok == U_INT16 || l.tok == S_INT16
 	  || l.tok == U_INT32 || l.tok == S_INT32 || l.tok == U_INT64 || l.tok == S_INT64 || l.tok == FLOAT32
-	  || l.tok == FLOAT64 || l.tok == CHAR || l.tok == STR){
+	  || l.tok == FLOAT64 || l.tok == CHAR){
 		//Encode the type level STILL NOT DONE
 		active_type->type_lex = l;
 		//Add the type name in
@@ -2036,7 +2036,7 @@ u_int8_t type_specifier(FILE* fl){
 
 		//Otherwise it worked so return 1
 		return 1;
-	} else if (l.tok == STRUCTURE){
+	} else if (l.tok == CONSTRUCT){
 		status = structure_specifier(fl);
 
 		//If it's bad then we're done here
@@ -3858,7 +3858,7 @@ static u_int8_t declaration(FILE* fl){
 	//Keep track if it's a const or not
 	u_int8_t is_constant = 0;
 	//The type that we have
-	type_t type;
+	basic_type_t type;
 	//The var name
 	char var_name[100];
 	//Wipe it
