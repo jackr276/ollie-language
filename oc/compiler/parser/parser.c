@@ -156,10 +156,6 @@ static u_int8_t pointer(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	if(lookahead.tok == STAR){
-		//Increment the pointer level
-		if(active_type != NULL){
-			active_type->pointer_level++;
-		}
 		lookahead = get_next_token(fl, &parser_line_num);
 		//If we see another pointer, handle it
 		if(lookahead.tok == STAR){

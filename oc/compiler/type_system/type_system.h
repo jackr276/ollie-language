@@ -11,6 +11,14 @@
 #include "../lexer/lexer.h"
 #include <sys/types.h>
 
+//Type names may not exceed 200 characters in length
+#define MAX_TYPE_NAME_LENGTH 200
+//The maximum number of members in a construct
+#define MAX_CONSTRUCT_MEMBERS 100
+//The maximum number of members in an enumerated
+#define MAX_ENUMERATED_MEMBERS 200
+
+
 //The generic global type type
 typedef struct generic_type_t generic_type_t;
 //The most basic type that we can have
@@ -88,30 +96,66 @@ struct generic_type_t{
 struct basic_type_t{
 	Lexer_item type_lex; //TODO PROBABLY DON'T NEED
 	//The type name
-	char type_name[100];
+	char type_name[MAX_TYPE_NAME_LENGTH];
 	//What basic type is it
 	BASIC_TYPE basic_type;
-	//Is it a pointer? 0 = not, 1 = 1 star, 2 star, etc
-	u_int8_t pointer_level;
 	//What is the size of this type?
-	u_int8_t size;
+	u_int32_t size;
 };
 
 
 /**
  * An array type is a linear, contiguous collection of other types in memory.
  */
+struct array_type_t{
+	//The name of the array
+	char type_name[MAX_TYPE_NAME_LENGTH];
+	//Whatever the members are in the array
+	generic_type_t* member_type;
+	//Array bounds
+	u_int32_t num_members;
+	//The total size
+	u_int32_t size;
+};
+
 
 /**
- * An array type can be an array of 
+ * A pointer type contains a reference to the memory address of another 
+ * variable in memory. This other type may very well itself be a pointer, which is why the
+ * actual type pointed to is generic
  */
+struct pointer_type_t{
+	//The name of the type
+	char type_name[MAX_TYPE_NAME_LENGTH];
+	//What do we point to?
+	generic_type_t* points_to;
+	//What is the size
+	u_int32_t size; /* Always 8 for a pointer */
+};
+
+
+/**
+ * A constructed type contains a list of other types that are inside of it.
+ * As such, the type here contains an array of generic types of at most 100
+ */
+struct constructed_type_t{
+	//The name of the type
+	char type_name[MAX_TYPE_NAME_LENGTH];
+	//What types do we contain?
+	generic_type_t members[MAX_CONSTRUCT_MEMBERS];
+	//How many members are there?
+	u_int8_t num_members;
+	//What is the size?
+	u_int32_t size;
+};
+
 
 /**
  * Enumerated type tokens. Enumerated type token equality exists only
  * if there is exact string parity
  */
 struct enumerated_type_token_t{
-	char token_name[100];
+	char token_name[MAX_TYPE_NAME_LENGTH];
 };
 
 
@@ -120,14 +164,14 @@ struct enumerated_type_token_t{
  * are positionally encoded and this encoding is fixed at declaration
 */
 struct enumerated_type_t{
-	char type_name[100];
+	char type_name[MAX_TYPE_NAME_LENGTH];
 	//We need an array of enumerated type tokens
 	//We can have at most 500 of these
-	enumerated_type_token_t tokens[200];
+	enumerated_type_token_t tokens[MAX_ENUMERATED_MEMBERS];
 	//The current number of tokens
 	u_int8_t token_num;
 	//The size of the type
-	u_int8_t size;
+	u_int32_t size;
 };
 
 
