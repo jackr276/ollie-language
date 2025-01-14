@@ -3,6 +3,13 @@
  *
  * GOAL: The goal of the parser is to determine if the input program is a syntatically valid sentence in the language.
  * This is done via recursive-descent in our case. As the 
+ *
+ * OVERALL STRUCTURE: The parser is the second thing that sees the source code. It only acts upon token streams that are given
+ * to it from the lexer. The parser's goal is twofold. It will ensure that the structure of the program adheres to the rules of
+ * the programming language, and it will translate the source code into an "Intermediate Representation(IR)" that can be given to 
+ * the optimizer
+ *
+ * This parser will do both parsing AND elaboration of macros in the future(not yet supported)
 */
 
 #include "parser.h"
@@ -11,7 +18,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <time.h>
-
 
 //Variable and function symbol tables
 symtab_t* variable_symtab;

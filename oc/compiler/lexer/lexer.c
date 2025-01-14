@@ -6,6 +6,11 @@
  *
  * There is only one function that is exposed to external files, which is the "get_next_token()" function. This function simply returns
  * the next token from the file. When EOF is reached, a special DONE token is passed along so that the parser knows when to stop
+ *
+ * OVERALL STRUCTURE: The lexer/semantic analyzer is the very first thing that touches the source code. Once source code leaves the semantic
+ * analyzer, it really is no longer source code and is instead a token stream
+ *
+ * NEXT IN LINE: parser
 */
 
 #include "lexer.h"

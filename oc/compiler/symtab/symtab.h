@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../lexer/lexer.h"
+#include "../type_system//type_system.h"
 
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
