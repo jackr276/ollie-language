@@ -38,6 +38,7 @@ Lexer_item* current_ident = NULL;
 //The current type
 type_t* active_type = NULL;
 
+
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static u_int8_t cast_expression(FILE* fl);
 static u_int8_t assignment_expression(FILE* fl);
@@ -51,6 +52,7 @@ static u_int8_t expression(FILE* fl);
 static u_int8_t initializer(FILE* fl);
 static u_int8_t declarator(FILE* fl);
 static u_int8_t direct_declarator(FILE* fl);
+
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -584,9 +586,8 @@ static u_int8_t postfix_expression(FILE* fl){
 			if(params_seen != func->number_of_params){
 				//Special printing details here
 				memset(info, 0, 2000*sizeof(char));
-				sprintf(info, "Function %s requires %d parameters, was given %d", func->func_name, func->number_of_params, params_seen);
+				sprintf(info, "Function \"%s\" requires %d parameters, was given %d. Function first defined here:", func->func_name, func->number_of_params, params_seen);
 				print_parse_message(PARSE_ERROR, info, current_line);
-				printf("Function was defined here: ");
 				print_function_name(func);
 
 				num_errors++;
@@ -2232,6 +2233,9 @@ static u_int8_t parameter_declaration(FILE* fl){
 	symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
 	//Store the active type
 	var->type = *active_type;
+	//This is a function param so we'll keep it here
+	var->parent_function = current_function;
+	var->is_function_paramater = 1;
 
 	//Store in the symtab
 	insert(variable_symtab, var);
@@ -3224,7 +3228,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement found in statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid compound statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3242,7 +3246,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid labeled statement found in statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid labeled statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3260,7 +3264,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid if statement found in statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid if statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3278,7 +3282,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid switch statement found in statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid switch statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3297,7 +3301,7 @@ static u_int8_t statement(FILE* fl){
 
 		//If it fails
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement", current_line);
+			//print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -3913,14 +3917,27 @@ static u_int8_t declaration(FILE* fl){
 		}
 
 		//Let's check if we can actually find it
-		symtab_variable_record_t* found = lookup(variable_symtab, current_ident->lexeme);
+		symtab_variable_record_t* found_var = lookup(variable_symtab, current_ident->lexeme);
 
-		if(found != NULL){
+		//Can we grab it
+		if(found_var != NULL){
 			print_parse_message(PARSE_ERROR, "Illegal variable redefinition. First defined here:", current_line);
-			print_variable_name(found);
+			print_variable_name(found_var);
 			num_errors++;
 			return 0;
 		}
+
+		//Ollie language also does not allow duplicate function names
+		symtab_function_record_t* found_func = lookup(function_symtab, current_ident->lexeme);
+
+		//Can we grab it
+		if(found_func != NULL){
+			print_parse_message(PARSE_ERROR, "Variables may not share the same names as functions. First defined here:", current_line);
+			print_function_name(found_func);
+			num_errors++;
+			return 0;
+		}
+
 
 		//Otherwise all should have gone well here, so we can construct our declaration
 		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
@@ -4017,6 +4034,17 @@ static u_int8_t declaration(FILE* fl){
 		if(found != NULL){
 			print_parse_message(PARSE_ERROR, "Illegal variable redefinition. First defined here:", current_line);
 			print_variable_name(found);
+			num_errors++;
+			return 0;
+		}
+
+		//Ollie language also does not allow duplicate function names
+		symtab_function_record_t* found_func = lookup(function_symtab, current_ident->lexeme);
+
+		//Can we grab it
+		if(found_func != NULL){
+			print_parse_message(PARSE_ERROR, "Variables may not share the same names as functions. First defined here:", current_line);
+			print_function_name(found_func);
 			num_errors++;
 			return 0;
 		}
@@ -4143,12 +4171,6 @@ u_int8_t function_declaration(FILE* fl){
 	Lexer_item lookahead;
 	Lexer_item lookahead2;
 
-	//For storing our function name
-	char function_name[100];
-
-	//Wipe it out
-	memset(function_name, 0, sizeof(char)*100);
-
 	//This will be used for error printing
 	char info[2000];
 	
@@ -4192,17 +4214,36 @@ u_int8_t function_declaration(FILE* fl){
 		return 0;
 	}
 
-	//Copy this for memory safety
-	strcpy(function_name, current_ident->lexeme);
+	//Let's see if we have duplicate function names
+	symtab_function_record_t* func_record = lookup(function_symtab, current_ident->lexeme);
 
-	//Once we're done with this, free the global ident
-	free(current_ident);
-	current_ident = NULL;
+	//If we can find it we have a duplicate function
+	if(func_record != NULL && func_record->defined == 1){
+		print_parse_message(PARSE_ERROR, "Illegal redefinition of function. First defined here: ", current_line);
+		print_function_name(func_record);
+		num_errors++;
+		return 0;
+	}
+
+	//Let's see if we're trying to redefine variable names
+	symtab_variable_record_t* var_record = lookup(variable_symtab, current_ident->lexeme);
+
+	//If we can find it we have a duplicate function
+	if(func_record != NULL && func_record->defined == 1){
+		print_parse_message(PARSE_ERROR, "Functions and variables may not share names. First defined here:", current_line);
+		print_variable_name(var_record);
+		num_errors++;
+		return 0;
+	}
 
 	//Officially make the function record
-	function_record = create_function_record(function_name, storage_class);
+	function_record = create_function_record(current_ident->lexeme, storage_class);
 	//Store the line number too
 	function_record->line_number = current_line;
+
+	//Now that we're done using these we can free them
+	free(current_ident);
+	current_ident = NULL;
 
 	//Set these equal here
 	current_function = function_record;
@@ -4301,7 +4342,7 @@ arrow_ident:
 		return 0;
 	}
 
-	//Finalize the variable symtab scope
+	//TODO what is this
 	finalize_scope(variable_symtab);
 
 	//Set this to null to avoid confusion

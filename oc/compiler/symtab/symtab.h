@@ -118,6 +118,8 @@ struct symtab_function_record_t{
 	STORAGE_CLASS_T storage_class;
 	//What's the return type?
 	type_t return_type;
+	//Has it been defined?(done to allow for predeclaration)
+	u_int8_t defined;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
 };
@@ -141,6 +143,8 @@ struct symtab_variable_record_t{
 	u_int8_t initialized;
 	//Is it a function parameter?
 	u_int8_t is_function_paramater;
+	//If it is, we'll store the function as a reference
+	symtab_function_record_t* parent_function;
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
 	//Is it a constant variable?

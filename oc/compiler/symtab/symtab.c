@@ -343,7 +343,7 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Final closing paren and return type
-	printf(") -> %s\n", record->return_type.type_name);
+	printf(") -> %s\n\n", record->return_type.type_name);
 }
 
 /**
@@ -351,6 +351,12 @@ void print_function_name(symtab_function_record_t* record){
  * Intended for error messages
  */
 void print_variable_name(symtab_variable_record_t* record){
+	//If it's part of a function we'll just print that
+	if(record->is_function_paramater == 1){
+		print_function_name(record->parent_function);
+		return;
+	}
+
 	//Line num
 	printf("\n---> %d | ", record->line_number);
 
@@ -365,9 +371,9 @@ void print_variable_name(symtab_variable_record_t* record){
 
 	//We'll print out some abbreviated stuff with the let record
 	if(record->declare_or_let == 1){
-		printf(" := <initializer>;");
+		printf(" := <initializer>;\n\n");
 	} else {
-		printf(";\n");
+		printf(";\n\n");
 	}
 }
 
