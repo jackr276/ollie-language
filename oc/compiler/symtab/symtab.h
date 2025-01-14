@@ -6,6 +6,7 @@
 #ifndef SYMTAB_H
 #define SYMTAB_H
 
+#include <functional>
 #include <stdint.h>
 #include <sys/types.h>
 #include <stdlib.h>
@@ -37,6 +38,7 @@ typedef struct symtab_function_record_t symtab_function_record_t;
 //The records in a variable symtab
 typedef struct symtab_variable_record_t symtab_variable_record_t;
 //The records in a type symtab
+typedef struct symtab_type_record_t symtab_type_record_t;
 
 //Parameter lists for functions
 typedef struct parameter_list_t parameter_list_t;
@@ -165,7 +167,7 @@ struct symtab_variable_sheaf_t{
  */
 struct symtab_type_sheaf_t{
 	//Link to the prior level
-	symtab_type_sheaf_t* previosu_level;
+	symtab_type_sheaf_t* previous_level;
 	//The hash table for our records
 	symtab_type_record_t* records[KEYSPACE];
 	//The lexical level of this sheaf
@@ -236,7 +238,7 @@ variable_symtab_t* initialize_variable_symtab();
 /**
  * Initialize a symbol table for types
  */
-variable_symtab_t* initialize_type_symtab();
+type_symtab_t* initialize_type_symtab();
 
 
 /**
@@ -252,7 +254,7 @@ void initialize_variable_scope(variable_symtab_t* symtab);
 /**
  * Initialize the type symbol table scope
  */
-void initialize_variable_scope(variable_symtab_t* symtab);
+void initialize_type_scope(type_symtab_t* symtab);
 
 /**
  * NOTE: Functions only have one scope, which is why they do not
@@ -267,8 +269,7 @@ void finalize_variable_scope(variable_symtab_t* symtab);
 /**
  * Finalize the variable scope and go back a level
  */
-void finalize_type_scope(typ* symtab);
-
+void finalize_type_scope(type_symtab_t* symtab);
 
 /**
  * Create a record for the symbol table
@@ -281,25 +282,40 @@ symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T sto
 symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T storage_class);
 
 /**
- * Insert a name into the symbol table
+ * Create a type record for the symbol table
  */
-u_int8_t insert_function(symtab_t* symtab, void* record);
+symtab_type_record_t* create_type_record(generic_type_t* type);
+
+/**
+ * Insert a function into the symbol table
+ */
+u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record);
 
 /**
  * Insert variables into the symbol table
  */
-u_int8_t insert_variable(symtab_t* symtab, void* record);
+u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* record);
 
 /**
  * Insert types into the type symtab
  */
-u_int8_t insert_type();
+u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
+
 
 /**
- * Lookup a name in the symtab
+ * Lookup a function name in the symtab
  */
-void* lookup(symtab_t* symtab, char* name);
+symtab_function_record_t* lookup_function(symtab_function_record_t* symtab, char* name);
 
+/**
+ * Lookup a variable name in the symtab
+ */
+symtab_variable_record_t* lookup_variable(symtab_variable_record_t* symtab, char* name);
+
+/**
+ * Lookup a type name in the symtab
+ */
+symtab_variable_record_t* lookup_variable(symtab_type_record_t* symtab, char* name);
 
 /**
  * A printing function for development purposes
@@ -322,9 +338,18 @@ void print_function_name(symtab_function_record_t* record);
 void print_variable_name(symtab_variable_record_t* record);
 
 /**
- * Deinitialize the symbol table
+ * Destroy a function symtab
  */
-void destroy_symtab(symtab_t*);
+void destroy_function_symtab(function_symtab_t*);
 
+/**
+ * Destroy a variable symtab
+ */
+void destroy_variable_symtab(variable_symtab_t*);
+
+/**
+ * Destroy a type symtab 
+ */
+void destroy_type_symtab(type_symtab_t*);
 
 #endif /* SYMTAB_H */

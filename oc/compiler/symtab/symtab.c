@@ -12,62 +12,88 @@
 
 
 /**
- * Dynamically allocate and return a symtab pointer for compiler use
+ * Dynamically allocate a function symtab
  */
-symtab_t* initialize_symtab(SYMTAB_RECORD_TYPE record_type){
-	symtab_t* symtab = (symtab_t*)calloc(1, sizeof(symtab_t));
-	//What type of symtab is it?
-	symtab->type = record_type;
-	//Just in case
-	symtab->current_lexical_scope = -1;
+function_symtab_t* initialize_function_symtab(){
+	function_symtab_t* symtab = (function_symtab_t*)calloc(1, sizeof(function_symtab_t));
+	//The function symtab's lexical scope is always global
+	symtab->current_lexical_scope = 0;
+
+	return symtab;
+}
+
+
+/**
+ * Dynamically allocate a variable symtab
+ */
+variable_symtab_t* intialize_variable_symtab(){
+	variable_symtab_t* symtab = (variable_symtab_t*)calloc(1, sizeof(variable_symtab_t));
+	symtab->current_lexical_scope = 0;
+	//Nothing has been initialized yet
+	symtab->current = NULL;
 	symtab->next_index = 0;
 
 	return symtab;
 }
 
 /**
+ * Dynamically allocate a type symtab
+ */
+type_symtab_t* initialize_type_symtab(){
+	type_symtab_t* symtab = (type_symtab_t*)calloc(1, sizeof(type_symtab_t));
+	symtab->next_index = 0;
+	symtab->current_lexical_scope = 0;
+	symtab->current = NULL;
+
+	return symtab;
+}
+
+
+/**
  * Initialize a new lexical scope. This involves making a new sheaf and
  * adding it in
 */
-void initialize_scope(symtab_t* symtab){
-	//Function symtab
-	if(symtab->type == FUNCTION){
-		symtab_function_sheaf_t* current = (symtab_function_sheaf_t*)calloc(1, sizeof(symtab_function_sheaf_t));
-		//Store it in here for later
-		symtab->sheafs[symtab->next_index] = current;
-		symtab->next_index++;
+void initialize_variable_scope(variable_symtab_t* symtab){
+	symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
+	//Store it in here for later
+	symtab->sheafs[symtab->next_index] = current;
+	symtab->next_index++;
 
-		//Increment(down the chain)
-		symtab->current_lexical_scope++;
+	//Increment(down the chain)
+	symtab->current_lexical_scope++;
 
-		//Store this here
-		current->lexical_level = symtab->current_lexical_scope;
+	//Store this here
+	current->lexical_level = symtab->current_lexical_scope;
 
-		//Now we'll link back to the previous one level
-		current->previous_level = symtab->current;
+	//Now we'll link back to the previous one level
+	current->previous_level = symtab->current;
 	
-		//Set this so it's up-to-date
-		symtab->current = current;
+	//Set this so it's up-to-date
+	symtab->current = current;
+}
 
-	//Variable symtab
-	} else {
-		symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
-		//Store it in here for later
-		symtab->sheafs[symtab->next_index] = current;
-		symtab->next_index++;
 
-		//Increment(down the chain)
-		symtab->current_lexical_scope++;
+/**
+ * Initialize a new lexical scope. This involves making a new sheaf and
+ * adding it in
+*/
+void initialize_type_scope(type_symtab_t* symtab){
+	symtab_type_sheaf_t* current = (symtab_type_sheaf_t*)calloc(1, sizeof(symtab_type_sheaf_t));
+	//Store it in here for later
+	symtab->sheafs[symtab->next_index] = current;
+	symtab->next_index++;
 
-		//Store this here
-		current->lexical_level = symtab->current_lexical_scope;
+	//Increment(down the chain)
+	symtab->current_lexical_scope++;
 
-		//Now we'll link back to the previous one level
-		current->previous_level = symtab->current;
+	//Store this here
+	current->lexical_level = symtab->current_lexical_scope;
+
+	//Now we'll link back to the previous one level
+	current->previous_level = symtab->current;
 	
-		//Set this so it's up-to-date
-		symtab->current = current;
-	}
+	//Set this so it's up-to-date
+	symtab->current = current;
 }
 
 
@@ -75,23 +101,25 @@ void initialize_scope(symtab_t* symtab){
  * Finalize the scope, for the purposes of this project, finalizing the scope just means going
  * up by one level
  */
-void finalize_scope(symtab_t* symtab){
-	//Function symtab
-	if(symtab->type == FUNCTION){
-		//Back out of this one as it's finalized
-		symtab->current = ((symtab_function_sheaf_t*)symtab->current)->previous_level;
+void finalize_variable_scope(variable_symtab_t* symtab){
+	//Back out of this one as it's finalized
+	symtab->current = symtab->current->previous_level;
 
-		//Go back up one
-		symtab->current_lexical_scope--;
+	//Go back up one
+	symtab->current_lexical_scope--;
+}
 
-	//Variable symtab
-	} else {
-		//Back out of this one as it's finalized
-		symtab->current = ((symtab_variable_sheaf_t*)symtab->current)->previous_level;
 
-		//Go back up one
-		symtab->current_lexical_scope--;
-	}
+/**
+ * Finalize the scope, for the purposes of this project, finalizing the scope just means going
+ * up by one level
+ */
+void finalize_type_scope(type_symtab_t* symtab){
+	//Back out of this one as it's finalized
+	symtab->current = symtab->current->previous_level;
+
+	//Go back up one
+	symtab->current_lexical_scope--;
 }
 
 
@@ -150,6 +178,97 @@ symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T sto
 	record->storage_class = storage_class;
 
 	return record;
+}
+
+
+/**
+ * Dynamically allocate and create a type record
+ */
+symtab_type_record_t* create_type_record(generic_type_t* type){
+	//Allocate it
+	symtab_type_record_t* record = (symtab_type_record_t*)calloc(1, sizeof(symtab_type_record_t));
+
+	//Hard fail and exit if this happens
+	if(type == NULL){
+		printf("TYPE WAS NULL\n");
+		exit(1);
+	}
+
+	//Hash the type name and store it
+	record->hash = hash(type->type_name);
+
+	return record;
+}
+
+
+/**
+ * Insert a record into the function symbol table. This assumes that the user
+ * has already checked to see if this record exists in the table
+ *
+ * RETURNS 0 if no collision, 1 if collision
+ */
+u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record){
+	//While we're at it store this
+	record->lexical_level = symtab->current_lexical_scope;
+	
+	//If there's no collision
+	if(symtab->records[record->hash] == NULL){
+		//Store it and get out
+		symtab->records[record->hash] = record;
+		return 0;
+	}
+	
+	//Otherwise if we get here there was a collision
+	//Grab the head record
+	symtab_function_record_t* cursor = symtab->records[record->hash];
+
+	//Get to the very last node
+	while(cursor->next != NULL){
+		cursor = cursor->next;
+	}
+
+	//Now that cursor points to the very last node, we can add it in
+	cursor->next = record;
+	//This should be null anyways, but it never hurts to double check
+	record->next = NULL;
+
+	//1 = success, but there was a collision
+	return 1;
+}
+
+
+/**
+ * Inserts a variable record into the symtab. This assumes that the user has already checked to see if
+ * this record exists in the table
+ */
+u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* record){
+	//While we're at it store this
+	record->lexical_level = symtab->current_lexical_scope;
+
+	//No collision here, just store and get out
+	if(symtab->current->records[record->hash] == NULL){
+		//Store this and get out
+		symtab->current->records[record->hash] = record;
+		//0 = success, no collision
+		return 0;
+	}
+
+	//Otherwise, there is a collision
+	//Grab the head record
+	symtab_variable_record_t* cursor = symtab->current->records[record->hash];
+
+	//Get to the very last node
+	while(cursor->next != NULL){
+		cursor = cursor->next;
+	}
+
+	//Now that cursor points to the very last node, we can add it in
+	cursor->next = record;
+	//This should be null anyways, but it never hurts to double check
+	record->next = NULL;
+
+	//1 = success, but there was a collision
+	return 1;
 }
 
 
