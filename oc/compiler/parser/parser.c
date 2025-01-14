@@ -2004,16 +2004,27 @@ u_int8_t type_specifier(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Grab the next token
 	Lexer_item l = get_next_token(fl, &parser_line_num);
+	symtab_type_record_t* type_record;
 	u_int8_t status = 0;
 
 	//In the case that we have one of the primitive types
 	if(l.tok == VOID || l.tok == U_INT8 || l.tok == S_INT8 || l.tok == U_INT16 || l.tok == S_INT16
 	  || l.tok == U_INT32 || l.tok == S_INT32 || l.tok == U_INT64 || l.tok == S_INT64 || l.tok == FLOAT32
 	  || l.tok == FLOAT64 || l.tok == CHAR){
-		active_type = create_basic_type(l.lexeme, l.tok);
-		//Add the type name in
-		strcpy(active_type->type_name, l.lexeme);
-		//TODO put in symtable
+
+		//We should be able to find this in the type symtab
+		type_record = lookup_type(type_symtab, l.lexeme);
+
+		//Immediate exit, something is very wrong if this happens
+		if(type_record == NULL){
+			print_parse_message(PARSE_ERROR, "Fatal compiler error: Basic type was not in the type symtable", current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise set the active type to be what we found
+		active_type = type_record->type;
+
 		return 1;
 	}
 

@@ -196,6 +196,8 @@ symtab_type_record_t* create_type_record(generic_type_t* type){
 
 	//Hash the type name and store it
 	record->hash = hash(type->type_name);
+	//Assign the type
+	record->type = type;
 
 	return record;
 }

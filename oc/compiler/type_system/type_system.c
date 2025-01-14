@@ -49,6 +49,8 @@ generic_type_t* create_basic_type(char* type_name, Token basic_type){
 	
 	//Copy the type name
 	strcpy(type->type_name, type_name);
+	//Assign the type in
+	type->basic_type->basic_type = basic_type;
 
 	//Now we can immediately determine the size based on what the actual type is
 	if(basic_type == CHAR || basic_type == S_INT8 || basic_type == U_INT8){
