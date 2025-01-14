@@ -75,6 +75,8 @@ typedef enum BASIC_TYPE{
  * on what it's holding, as opposed to having several different classes of arrays
  */
 struct generic_type_t{
+	//The name of the type
+	char type_name[MAX_TYPE_NAME_LENGTH];
 	//What class of type is it
 	TYPE_CLASS type_class;
 	/**
@@ -95,8 +97,6 @@ struct generic_type_t{
  */
 struct basic_type_t{
 	Lexer_item type_lex; //TODO PROBABLY DON'T NEED
-	//The type name
-	char type_name[MAX_TYPE_NAME_LENGTH];
 	//What basic type is it
 	BASIC_TYPE basic_type;
 	//What is the size of this type?
@@ -108,8 +108,6 @@ struct basic_type_t{
  * An array type is a linear, contiguous collection of other types in memory.
  */
 struct array_type_t{
-	//The name of the array
-	char type_name[MAX_TYPE_NAME_LENGTH];
 	//Whatever the members are in the array
 	generic_type_t* member_type;
 	//Array bounds
@@ -125,8 +123,6 @@ struct array_type_t{
  * actual type pointed to is generic
  */
 struct pointer_type_t{
-	//The name of the type
-	char type_name[MAX_TYPE_NAME_LENGTH];
 	//What do we point to?
 	generic_type_t* points_to;
 	//What is the size
@@ -139,8 +135,6 @@ struct pointer_type_t{
  * As such, the type here contains an array of generic types of at most 100
  */
 struct constructed_type_t{
-	//The name of the type
-	char type_name[MAX_TYPE_NAME_LENGTH];
 	//What types do we contain?
 	generic_type_t members[MAX_CONSTRUCT_MEMBERS];
 	//How many members are there?
@@ -164,7 +158,6 @@ struct enumerated_type_token_t{
  * are positionally encoded and this encoding is fixed at declaration
 */
 struct enumerated_type_t{
-	char type_name[MAX_TYPE_NAME_LENGTH];
 	//We need an array of enumerated type tokens
 	//We can have at most 500 of these
 	enumerated_type_token_t tokens[MAX_ENUMERATED_MEMBERS];
@@ -176,7 +169,14 @@ struct enumerated_type_t{
 
 
 /**
- * A generic, global type that could be any of the core types that we've defined.
+ * Are two types equivalent?
  */
+u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB);
+
+
+/**
+ * Dynamically allocate and create a basic type
+*/
+generic_type_t* create_basic_type(char* type_name, BASIC_TYPE basic_type);
 
 #endif

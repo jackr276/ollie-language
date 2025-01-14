@@ -335,7 +335,7 @@ void print_function_name(symtab_function_record_t* record){
 
 	//Print out the params
 	for(u_int8_t i = 0; i < record->number_of_params; i++){
-		printf("%s %s", record->func_params[i].associate_var->type.type_name, record->func_params[i].associate_var->var_name);
+		printf("%s %s", record->func_params[i].associate_var->type->type_name, record->func_params[i].associate_var->var_name);
 		//Comma if needed
 		if(i < record->number_of_params-1){
 			printf(", ");
@@ -343,7 +343,7 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Final closing paren and return type
-	printf(") -> %s\n\n", record->return_type.type_name);
+	printf(") -> %s\n\n", record->return_type->type_name);
 }
 
 /**
@@ -364,7 +364,7 @@ void print_variable_name(symtab_variable_record_t* record){
 	record->declare_or_let == 0 ? printf("declare ") : printf("let ");
 
 	//The type name
-	printf("%s ", record->type.type_name);
+	printf("%s ", record->type->type_name);
 
 	//The var name
 	printf("%s", record->var_name);

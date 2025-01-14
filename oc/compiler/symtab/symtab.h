@@ -20,15 +20,29 @@
 //We figure that 200 separate lexical-levels is enough
 #define MAX_SHEAFS 200
 
-typedef struct symtab_t symtab_t;
-typedef struct symtab_function_sheaf_t symtab_function_sheaf_t;
+//A variable symtab
+typedef struct variable_symtab_t variable_symtab_t;
+//A function symtab
+typedef struct function_symtab_t function_symtab_t;
+//A type symtab
+typedef struct type_symtab_t type_symtab_t;
+
+//The sheafs in the variable symtab
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
+//The sheafs in the type symtab
+typedef struct symtab_type_sheaf_t symtab_type_sheaf_t;
+
+//The records in the function symtab
 typedef struct symtab_function_record_t symtab_function_record_t;
+//The records in a variable symtab
 typedef struct symtab_variable_record_t symtab_variable_record_t;
-//Parameter lists for functions TODO
+//The records in a type symtab
+
+//Parameter lists for functions
 typedef struct parameter_list_t parameter_list_t;
 //Parameter type
 typedef struct parameter_t parameter_t;
+
 
 //The storage class of a given item
 typedef enum STORAGE_CLASS_T{
@@ -37,16 +51,6 @@ typedef enum STORAGE_CLASS_T{
 	STORAGE_CLASS_NORMAL,
 	STORAGE_CLASS_REGISTER
 } STORAGE_CLASS_T;
-
-
-/**
- * Is it a function or variable symtab?
- */
-typedef enum SYMTAB_RECORD_TYPE{
-	FUNCTION,
-	VARIABLE
-} SYMTAB_RECORD_TYPE;
-
 
 
 /**
@@ -61,7 +65,8 @@ struct parameter_t{
 
 
 /**
- * A struct that represents a symtab record
+ * The symtab function record. This stores data about the function's name, parameter
+ * numbers, parameter types, return types, etc.
  */
 struct symtab_function_record_t{
 	//The name that we are storing. This is used to derive the hash
@@ -81,7 +86,7 @@ struct symtab_function_record_t{
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
 	//What's the return type?
-	basic_type_t return_type;
+	generic_type_t* return_type;
 	//Has it been defined?(done to allow for predeclaration)
 	u_int8_t defined;
 	//In case of collisions, we can chain these records
@@ -90,7 +95,8 @@ struct symtab_function_record_t{
 
 
 /**
- * This struct represents a specific lexical level of a symtab
+ * The symtab variable record. This stores data about the variable's name,
+ * lexical level, line_number, parent function, etc.
  */
 struct symtab_variable_record_t{
 	//Variable name
@@ -114,7 +120,7 @@ struct symtab_variable_record_t{
 	//Is it a constant variable?
 	u_int8_t is_constant;
 	//What type is it?
-	basic_type_t type;
+	generic_type_t* type;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 	//The next hashtable record
@@ -123,15 +129,21 @@ struct symtab_variable_record_t{
 
 
 /**
- * This struct represents a specific lexical level of a symtab
+ * This struct represents a specific type record in the symtab. This is how we 
+ * will keep references to all created types like structs, enums, etc
  */
-struct symtab_function_sheaf_t{
-	//Link to the prior level
-	symtab_function_sheaf_t* previous_level;
-	//How many records(names) we can have
-	symtab_function_record_t* records[KEYSPACE];
-	//The level of this particular symtab
-	u_int8_t lexical_level;
+struct symtab_type_record_t{
+	u_int16_t hash;
+	//The lexical level of it
+	int16_t lexical_level;
+	//Line number
+	u_int16_t line_number;
+	//Was it initialized?
+	u_int8_t initialized;
+	//What type is it?
+	generic_type_t* type;
+	//The next hashtable record
+	symtab_variable_record_t* next;
 };
 
 
@@ -149,20 +161,30 @@ struct symtab_variable_sheaf_t{
 
 
 /**
+ * This structure represents a specific lexical level of a type symtab
+ */
+struct symtab_type_sheaf_t{
+	//Link to the prior level
+	symtab_type_sheaf_t* previosu_level;
+	//The hash table for our records
+	symtab_type_record_t* records[KEYSPACE];
+	//The lexical level of this sheaf
+	u_int8_t lexical_level;
+};
+
+
+/**
  * This struct represents the overall collection of the sheafs of symtabs
  */
-struct symtab_t{
+struct variable_symtab_t{
 	//The next index that we'll insert into
 	u_int16_t next_index;
 
-	//Are we storing functions or variables
-	SYMTAB_RECORD_TYPE type;
-
 	//A global storage array for all symtab "sheaths"
-	void* sheafs[MAX_SHEAFS];
+	symtab_variable_sheaf_t* sheafs[MAX_SHEAFS];
 
 	//The current symtab sheaf
-	void* current;
+	symtab_variable_sheaf_t* current;
 
 	//The current lexical scope
 	u_int16_t current_lexical_scope;
@@ -170,22 +192,82 @@ struct symtab_t{
 
 
 /**
- * Initialize a symbol table. In our compiler, we may have many symbol tables, so it's important
- * that we're able to initialize separate ones and keep them distinct
+ * This struct represents the overall collection of the sheafs of symtabs
  */
-symtab_t* initialize_symtab(SYMTAB_RECORD_TYPE record_type);
+struct type_symtab_t{
+	//The next index that we'll insert into
+	u_int16_t next_index;
+
+	//A global storage array for all symtab "sheaths"
+	symtab_type_sheaf_t* sheafs[MAX_SHEAFS];
+
+	//The current symtab sheaf
+	symtab_type_sheaf_t* current;
+
+	//The current lexical scope
+	u_int16_t current_lexical_scope;
+};
 
 
 /**
- * Initialize the symbol table
+ * There is only one namespace for functions, that being the global namespace.
+ * As such, there are no "sheafs" like we have for types or variables
  */
-void initialize_scope(symtab_t* symtab);
+struct function_symtab_t{
+	//How many records(names) we can have
+	symtab_function_record_t* records[KEYSPACE];
+	//The level of this particular symtab
+	u_int8_t current_lexical_scope;
+};
 
 
 /**
- * Finalize the scope and go back a level
+ * Initialize a function symtab
  */
-void finalize_scope(symtab_t* symtab);
+function_symtab_t* initialize_function_symtab();
+
+
+/**
+ * Initialize a symbol table for vairables.
+ */
+variable_symtab_t* initialize_variable_symtab();
+
+
+/**
+ * Initialize a symbol table for types
+ */
+variable_symtab_t* initialize_type_symtab();
+
+
+/**
+ * NOTE: Functions only have one scope, which is why they do not
+ * have any initialize_scope routine
+ */
+
+/**
+ * Initialize the variable symbol table scope
+ */
+void initialize_variable_scope(variable_symtab_t* symtab);
+
+/**
+ * Initialize the type symbol table scope
+ */
+void initialize_variable_scope(variable_symtab_t* symtab);
+
+/**
+ * NOTE: Functions only have one scope, which is why they do not
+ * have any finalize_scope routine
+ */
+
+/**
+ * Finalize the variable scope and go back a level
+ */
+void finalize_variable_scope(variable_symtab_t* symtab);
+
+/**
+ * Finalize the variable scope and go back a level
+ */
+void finalize_type_scope(typ* symtab);
 
 
 /**
@@ -198,12 +280,20 @@ symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T sto
  */
 symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T storage_class);
 
-
 /**
  * Insert a name into the symbol table
  */
-u_int8_t insert(symtab_t* symtab, void* record);
+u_int8_t insert_function(symtab_t* symtab, void* record);
 
+/**
+ * Insert variables into the symbol table
+ */
+u_int8_t insert_variable(symtab_t* symtab, void* record);
+
+/**
+ * Insert types into the type symtab
+ */
+u_int8_t insert_type();
 
 /**
  * Lookup a name in the symtab

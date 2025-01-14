@@ -42,7 +42,7 @@ symtab_function_record_t* current_function = NULL;
 Lexer_item* current_ident = NULL;
 
 //The current type
-basic_type_t* active_type = NULL;
+generic_type_t* active_type = NULL;
 
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
