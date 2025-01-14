@@ -2232,20 +2232,19 @@ static u_int8_t parameter_declaration(FILE* fl){
 	//After this call we should have the name of the ident that the parameter is
 	symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
 	//Store the active type
-	var->type = *active_type;
+	var->type = active_type;
 	//This is a function param so we'll keep it here
 	var->parent_function = current_function;
 	var->is_function_paramater = 1;
 
 	//Store in the symtab
-	insert(variable_symtab, var);
+	insert_variable(variable_symtab, var);
 	
 	//One more parameter
 	if(current_function == NULL){
 		print_parse_message(PARSE_ERROR,  "Internal parse error at parameter declaration", current_line);
 		num_errors++;
 		//Cleanup here
-		free(active_type);
 		free(current_ident);
 		return 0;
 	}
@@ -2256,7 +2255,6 @@ static u_int8_t parameter_declaration(FILE* fl){
 	(current_function->number_of_params)++;
 
 	//Cleanup here
-	free(active_type);
 	free(current_ident);
 	active_type = NULL;
 
@@ -2306,7 +2304,7 @@ u_int8_t parameter_list_prime(FILE* fl){
  */
 u_int8_t parameter_list(FILE* fl){
 	//Initialize the scope for variables
-	initialize_scope(variable_symtab);
+	initialize_variable_scope(variable_symtab);
 
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
@@ -3917,7 +3915,7 @@ static u_int8_t declaration(FILE* fl){
 		}
 
 		//Let's check if we can actually find it
-		symtab_variable_record_t* found_var = lookup(variable_symtab, current_ident->lexeme);
+		symtab_variable_record_t* found_var = lookup_variable(variable_symtab, current_ident->lexeme);
 
 		//Can we grab it
 		if(found_var != NULL){
@@ -3928,7 +3926,7 @@ static u_int8_t declaration(FILE* fl){
 		}
 
 		//Ollie language also does not allow duplicate function names
-		symtab_function_record_t* found_func = lookup(function_symtab, current_ident->lexeme);
+		symtab_function_record_t* found_func = lookup_function(function_symtab, current_ident->lexeme);
 
 		//Can we grab it
 		if(found_func != NULL){
@@ -3944,7 +3942,7 @@ static u_int8_t declaration(FILE* fl){
 		//It was not initialized
 		var->initialized = 0;
 		//What's the type
-		var->type = *active_type;
+		var->type = active_type;
 		//The current line
 		var->line_number = current_line;
 		//Not a function param
@@ -3953,7 +3951,7 @@ static u_int8_t declaration(FILE* fl){
 		var->declare_or_let = 0;
 		
 		//Store for our uses
-		insert(variable_symtab, var);
+		insert_variable(variable_symtab, var);
 
 		//Now once we make it here, we need to see a SEMICOL
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -3967,7 +3965,7 @@ static u_int8_t declaration(FILE* fl){
 		}
 
 		//Once we make it here, we know it worked
-		free(active_type);
+		active_type = NULL;
 		free(current_ident);
 		active_type = NULL;
 		current_ident = NULL;
@@ -4029,7 +4027,7 @@ static u_int8_t declaration(FILE* fl){
 		}
 
 		//Let's check if we can actually find it
-		symtab_variable_record_t* found = lookup(variable_symtab, current_ident->lexeme);
+		symtab_variable_record_t* found = lookup_variable(variable_symtab, current_ident->lexeme);
 
 		if(found != NULL){
 			print_parse_message(PARSE_ERROR, "Illegal variable redefinition. First defined here:", current_line);
@@ -4039,7 +4037,7 @@ static u_int8_t declaration(FILE* fl){
 		}
 
 		//Ollie language also does not allow duplicate function names
-		symtab_function_record_t* found_func = lookup(function_symtab, current_ident->lexeme);
+		symtab_function_record_t* found_func = lookup_function(function_symtab, current_ident->lexeme);
 
 		//Can we grab it
 		if(found_func != NULL){
@@ -4054,7 +4052,7 @@ static u_int8_t declaration(FILE* fl){
 		//It should be initialized in this case
 		var->initialized = 1;
 		//What's the type
-		var->type = *active_type;
+		var->type = active_type;
 		//The current line
 		var->line_number = current_line;
 		//Not a function param
@@ -4063,7 +4061,7 @@ static u_int8_t declaration(FILE* fl){
 		var->declare_or_let = 1;
 		
 		//Store for our uses
-		insert(variable_symtab, var);
+		insert_variable(variable_symtab, var);
 
 		//Now we need to see a valid := initializer;
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -4099,7 +4097,6 @@ static u_int8_t declaration(FILE* fl){
 		}
 
 		//Once we make it here, we know it worked
-		free(active_type);
 		free(current_ident);
 		active_type = NULL;
 		current_ident = NULL;
@@ -4241,11 +4238,10 @@ u_int8_t function_declaration(FILE* fl){
 
 	//If we can find it we have a duplicate function
 	if(type_record != NULL){
-		print_parse_message(PARSE_ERROR, "Functions and types. First defined here:", current_line);
-		print_variable_name(var_record);
+		print_parse_message(PARSE_ERROR, "Functions and types may not share the same name. First defined here:", current_line);
+		print_type_name(type_record);
 		num_errors++;
 		return 0;
-
 	}
 
 	//Officially make the function record
@@ -4261,7 +4257,7 @@ u_int8_t function_declaration(FILE* fl){
 	current_function = function_record;
 
 	//Insert this into the function symtab
-	insert(function_symtab, function_record);
+	insert_function(function_symtab, function_record);
 	
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4281,7 +4277,7 @@ u_int8_t function_declaration(FILE* fl){
 		//Store this and get out
 		function_record->number_of_params = 0;
 		//Just for record keeping
-		initialize_scope(variable_symtab);
+		initialize_variable_scope(variable_symtab);
 		goto arrow_ident;
 	} else {
 		push_back_token(fl, lookahead2);
@@ -4335,7 +4331,7 @@ arrow_ident:
 	status = type_specifier(fl);
 
 	//We'll store this as the function return type
-	function_record->return_type = *active_type;
+	function_record->return_type = active_type;
 
 	//If it failed
 	if(status == 0){
@@ -4355,12 +4351,12 @@ arrow_ident:
 	}
 
 	//TODO what is this
-	finalize_scope(variable_symtab);
+	finalize_variable_scope(variable_symtab);
 
 	//Set this to null to avoid confusion
 	current_function = NULL;
 
-	free(active_type);
+	//Set to NULL for the next time around
 	active_type = NULL;
 
 	//All went well if we make it here
