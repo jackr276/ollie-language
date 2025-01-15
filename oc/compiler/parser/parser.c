@@ -234,7 +234,6 @@ static u_int8_t type_name(FILE* fl){
  * BNF Rule: <expression_prime> ::= , <assignment-expression><expression_prime>
  */
 static u_int8_t expression_prime(FILE* fl){
-	printf("HERE\n");
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -1915,24 +1914,58 @@ u_int8_t enumeration_list(FILE* fl){
 u_int8_t enumeration_specifier(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	Lexer_item l;
+	//Info array for error printing
+	char info[2000];
+
+	//Used for finding duplicates
+	symtab_type_record_t* type_record;
+
+	//The name of the enumerated type
+	char enumerated_name[MAX_TYPE_NAME_LENGTH];
+
+	//For grabbing tokens
+	Lexer_item lookahead;
+
+	//Copy the name in here
+	strcpy(enumerated_name, "enumerated ");
 
 	//We now have to see a valid identifier, since we've already seen the ENUMERATED keyword
+	//Stored here in current ident global variable
 	u_int8_t status = identifier(fl);
 
 	//If it's bad then we're done here
 	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid identifier in enumeration specifier", current_line);
 		num_errors++;
 		return 0;
 	}
+
+	//If we found a valid ident, we'll add it into the name
+	//Following this, we'll have the whole name of the enumerated type written out
+	strcat(enumerated_name, current_ident->lexeme);
 	
 	//Following this, if we see a right curly brace, we know that we have a list
-	l = get_next_token(fl, &parser_line_num);
+	lookahead = get_next_token(fl, &parser_line_num);
 
-	if(l.tok == L_CURLY){
+	//This means we're attempting to define
+	if(lookahead.tok == L_CURLY){
+		//Before we even go on, if this was already defined, we can't have it
+		type_record = lookup_type(type_symtab, enumerated_name);
+
+		//If it is already defined, we'll bail out
+		if(type_record != NULL){
+			//Automatic fail case
+			sprintf(info, "Illegal type redefinition. Enumerated type %s was already defined here:", enumerated_name);
+			print_parse_message(PARSE_ERROR, info, current_line); 
+			print_type_name(type_record);
+			return 0;
+		}
+
+		//TODO continue integration with SYMTAB
+
+		
+		
 		//Push onto the grouping stack for matching
-		push(grouping_stack, l);
+		push(grouping_stack, lookahead);
 
 		//We now must see a valid enumeration list
 		status = enumeration_list(fl);
@@ -1944,10 +1977,11 @@ u_int8_t enumeration_specifier(FILE* fl){
 			return 0;
 		}
 
-		l = get_next_token(fl, &parser_line_num);
+		//Must see a right curly
+		lookahead = get_next_token(fl, &parser_line_num);
 
 		//All of our fail cases here
-		if(l.tok != R_CURLY){
+		if(lookahead.tok != R_CURLY){
 			print_parse_message(PARSE_ERROR, "Right curly brace expected at end of enumeration list", current_line);
 			num_errors++;
 			return 0;
@@ -1965,28 +1999,24 @@ u_int8_t enumeration_specifier(FILE* fl){
 		
 	} else {
 		//Otherwise, push it back and let someone else handle it
-		push_back_token(fl, l);
+		push_back_token(fl, lookahead);
+
+		//This means that the type must have been defined, so we'll check
+		type_record = lookup_type(type_symtab, enumerated_name);
+
+		//If we couldn't find it
+		if(type_record == NULL){
+			sprintf(info, "Enumerated type \"%s\" is either not defined or being used before declaration", enumerated_name);
+			print_parse_message(PARSE_ERROR, info, current_line);
+			num_errors++;
+			return 0;
+		}
+
+		//Assign the active type
+		active_type = type_record->type;
+		
 		return 1;
 	}
-}
-
-
-/**
- * A user defined type is simply an ident with extra checks on it
- *
- * BNF Rule: <user-defined-type> ::= <ident>
- */
-static u_int8_t user_defined_type(FILE* fl){
-	u_int16_t current_line = parser_line_num;
-	u_int8_t status = identifier(fl);
-
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Unrecognized ident in user defined type",  current_line);
-		num_errors++;
-		return 0;
-	}
-
-	return 1;
 }
 
 
@@ -2018,6 +2048,7 @@ u_int8_t type_specifier(FILE* fl){
 	Lexer_item l = get_next_token(fl, &parser_line_num);
 	symtab_type_record_t* type_record;
 	u_int8_t status = 0;
+	char info[2000];
 
 	//In the case that we have one of the primitive types
 	if(l.tok == VOID || l.tok == U_INT8 || l.tok == S_INT8 || l.tok == U_INT16 || l.tok == S_INT16
@@ -2068,16 +2099,19 @@ u_int8_t type_specifier(FILE* fl){
 		return 1;
 
 	} else {
-		//We need to see some user defined type here
-		//Push it back and call user type
-		push_back_token(fl, l);
-		status = user_defined_type(fl);
+		//We need to see some user defined type here with the token
+		type_record = lookup_type(type_symtab, l.lexeme);
 
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid user defined type in type specifier",  current_line);
+		//If we can't find it, then it's bad
+		if(type_record == NULL){
+			sprintf(info, "Type %s must be defined by user before use", l.lexeme);
+			print_parse_message(PARSE_ERROR, info, current_line);
 			num_errors++;
 			return 0;
 		}
+		
+		//Otherwise, this is our active type
+		active_type = type_record->type;
 
 		//If we make it here it worked
 		return 1;
@@ -4180,6 +4214,8 @@ u_int8_t function_specifier(FILE* fl){
 u_int8_t function_declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//The ident that we have
+	Lexer_item ident;
 	u_int8_t status = 0;
 
 	//What is the function's storage class? Normal by default

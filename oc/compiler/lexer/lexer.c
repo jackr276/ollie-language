@@ -671,6 +671,10 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					lex_item.line_num = line_num;
 					lex_item.char_count = token_char_count;
 					return lex_item;
+				//Escape char
+				} else if (ch == '\\'){
+					//Consume the next character, whatever it is
+					is_ws(fgetc(fl), &line_num, parser_line_num);
 				} else {
 					//Otherwise we'll just keep adding here
 					//Just for line counting
