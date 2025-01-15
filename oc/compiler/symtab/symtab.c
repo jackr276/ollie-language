@@ -9,6 +9,7 @@
 #include <sys/types.h>
 
 #define LARGE_PRIME 611593
+static void print_generic_type(generic_type_t* type);
 
 
 /**
@@ -552,27 +553,47 @@ void print_variable_name(symtab_variable_record_t* record){
 	if(record->is_function_paramater == 1){
 		print_function_name(record->parent_function);
 		return;
-	}
-
-	//Line num
-	printf("\n---> %d | ", record->line_number);
-
-	//Declare or let
-	record->declare_or_let == 0 ? printf("declare ") : printf("let ");
-
-	//The type name
-	printf("%s ", record->type->type_name);
-
-	//The var name
-	printf("%s", record->var_name);
-
-	//We'll print out some abbreviated stuff with the let record
-	if(record->declare_or_let == 1){
-		printf(" := <initializer>;\n\n");
+	} else if(record->is_enumeration_member || record->is_construct_member){
+		print_generic_type(record->type);
+		//The var name
+		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name);
 	} else {
-		printf(";\n\n");
+		//Line num
+		printf("\n---> %d | ", record->line_number);
+
+		//Declare or let
+		record->declare_or_let == 0 ? printf("declare ") : printf("let ");
+
+		//The type name
+		printf("%s ", record->type->type_name);
+
+		//The var name
+		printf("%s", record->var_name);
+
+		//We'll print out some abbreviated stuff with the let record
+		if(record->declare_or_let == 1){
+			printf(" := <initializer>;\n\n");
+		} else {
+			printf(";\n\n");
+		}
 	}
 }
+
+/**
+ * Print a type name. Intended for error messages
+ */
+static void print_generic_type(generic_type_t* type){
+	//Print out where it was declared
+	if(type->type_class == TYPE_CLASS_BASIC){
+		printf("---> BASIC TYPE | ");
+	} else {
+		printf("---> %d | ", type->line_number);
+	}
+
+	//Then print out the name
+	printf("%s", type->type_name);
+}
+
 
 
 /**

@@ -1846,9 +1846,45 @@ u_int8_t enumerator(FILE* fl){
 		return 0;
 	}
 
+	//Let's check for type collisions finally
+	type_record = lookup_type(type_symtab, current_ident->lexeme); 
 
+	//Name collision here
+	if(type_record != NULL){
+		sprintf(info, "A type with the name \"%s\" was already defined. Enumeration members and types may not share names. First declared here:", current_ident->lexeme);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_type_name(type_record);
+		num_errors++;
+		return 0;
+	}
+
+	/**
+	 * Now if we make it here we'll have to construct a variable and place it in. For the needs of ollie lang, enumeration members are considered
+	 * a special kind of variable. These variables contain references to the fact that they are declared in enumerations
+	 */
+	variable_record = create_variable_record(current_ident->lexeme, STORAGE_CLASS_NORMAL);
+
+	printf("%s\n", current_ident->lexeme);
+	//This flag tells us where we are
+	variable_record->is_enumeration_member = 1;
+
+	//Assign the type to be the enumerated type
+	variable_record->type = active_type;
+	//It was initialized
+	variable_record->initialized = 1;
+	//Store the line num
+	variable_record->line_number = parser_line_num;
+
+	//Insert this into the symtab
+	insert_variable(variable_symtab, variable_record);
+
+	//We now link this in here
+	active_type->enumerated_type->tokens[active_type->enumerated_type->size] = variable_record;
+	//One more token
+	active_type->enumerated_type->size++;
+
+	return 1;
 }
-
 
 
 /**
@@ -1922,11 +1958,123 @@ u_int8_t enumeration_list(FILE* fl){
 
 
 /**
+ * An enumeration definition is where we see the actual definition of an enum
+ *
+ * NOTE: The actual addition into the symtable is handled by the caller
+ *
+ * BNF Rule: enumerated <identifier> { <enumerator-list> } 
+ */
+static u_int8_t enumeration_definer(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
+	//Info array for error printing
+	char info[2000];
+
+	//Used for finding duplicates
+	symtab_type_record_t* type_record;
+
+	//The name of the enumerated type
+	char enumerated_name[MAX_TYPE_NAME_LENGTH];
+
+	//For grabbing tokens
+	Lexer_item lookahead;
+
+	//Copy the name in here
+	strcpy(enumerated_name, "enumerated ");
+
+	//We now have to see a valid identifier, since we've already seen the ENUMERATED keyword
+	//Stored here in current ident global variable
+	u_int8_t status = identifier(fl);
+
+	//If it's bad then we're done here
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid enumeration name given in definition", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//If we found a valid ident, we'll add it into the name
+	//Following this, we'll have the whole name of the enumerated type written out
+	strcat(enumerated_name, current_ident->lexeme);
+
+	//This means that the type must have been defined, so we'll check
+	type_record = lookup_type(type_symtab, enumerated_name);
+
+	//If we couldn't find it
+	if(type_record != NULL){
+		sprintf(info, "Enumerated type \"%s\" has already been defined, redefinition is illegal", enumerated_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_type_name(type_record);
+		num_errors++;
+		return 0;
+	}
+
+	//Following this, if we see a right curly brace, we know that we have a list
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Enumeration defintion expected after the name is defined", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Push onto the grouping stack for matching
+	push(grouping_stack, lookahead);
+
+	//Before we even go on, if this was already defined, we can't have it
+	type_record = lookup_type(type_symtab, enumerated_name);
+
+	//If it is already defined, we'll bail out
+	if(type_record != NULL){
+		//Automatic fail case
+		sprintf(info, "Illegal type redefinition. Enumerated type %s was already defined here:", enumerated_name);
+		print_parse_message(PARSE_ERROR, info, current_line); 
+		print_type_name(type_record);
+		return 0;
+	}
+
+	//Once we get here we know that we're declaring so we can create
+	generic_type_t* type = create_enumerated_type(enumerated_name, current_line);
+
+	//This now is the active type
+	active_type = type;
+
+	//We now must see a valid enumeration list
+	status = enumeration_list(fl);
+
+	//If it's bad then we're done here
+	if(status == 0){
+		num_errors++;
+		return 0;
+	}
+
+	//Must see a right curly
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//All of our fail cases here
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Right curly brace expected at end of enumeration list", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Unmatched left curly
+	if(pop(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched right parenthesis", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise we should be fine when we get here, so we can return
+	return 1;
+}
+
+
+/**
  * An enumeration specifier will always start with enumerated
  * REMEMBER: Due to RL(1), by the time we get here ENUMERATED has already been seen
  *
- * BNF Rule: <enumator-specifier> ::= enumerated <identifier> { <enumerator-list> } 
- * 						  			| enumerated <identifier>
+ * BNF Rule: <enumeration-specifier> ::= enumerated <identifier>
  */
 u_int8_t enumeration_specifier(FILE* fl){
 	//Freeze the line number
@@ -1952,6 +2100,7 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 	//If it's bad then we're done here
 	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid enumeration name given in declaration", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1959,82 +2108,22 @@ u_int8_t enumeration_specifier(FILE* fl){
 	//If we found a valid ident, we'll add it into the name
 	//Following this, we'll have the whole name of the enumerated type written out
 	strcat(enumerated_name, current_ident->lexeme);
-	
-	//Following this, if we see a right curly brace, we know that we have a list
-	lookahead = get_next_token(fl, &parser_line_num);
 
-	//This means we're attempting to define
-	if(lookahead.tok == L_CURLY){
-		//Before we even go on, if this was already defined, we can't have it
-		type_record = lookup_type(type_symtab, enumerated_name);
+	//This means that the type must have been defined, so we'll check
+	type_record = lookup_type(type_symtab, enumerated_name);
 
-		//If it is already defined, we'll bail out
-		if(type_record != NULL){
-			//Automatic fail case
-			sprintf(info, "Illegal type redefinition. Enumerated type %s was already defined here:", enumerated_name);
-			print_parse_message(PARSE_ERROR, info, current_line); 
-			print_type_name(type_record);
-			return 0;
-		}
-		
-		//Push onto the grouping stack for matching
-		push(grouping_stack, lookahead);
-
-		//Once we get here we know that we're declaring so we can create
-		generic_type_t* type = create_enumerated_type(enumerated_name, current_line);
-
-		//This now is the active type
-		active_type = type;
-
-		//We now must see a valid enumeration list
-		status = enumeration_list(fl);
-
-		//If it's bad then we're done here
-		if(status == 0){
-			num_errors++;
-			return 0;
-		}
-
-		//Must see a right curly
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//All of our fail cases here
-		if(lookahead.tok != R_CURLY){
-			print_parse_message(PARSE_ERROR, "Right curly brace expected at end of enumeration list", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Unmatched left curly
-		if(pop(grouping_stack).tok != L_CURLY){
-			print_parse_message(PARSE_ERROR, "Unmatched right parenthesis", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise we should be fine when we get here, so we can return
-		return 1;
-		
-	} else {
-		//Otherwise, push it back and let someone else handle it
-		push_back_token(fl, lookahead);
-
-		//This means that the type must have been defined, so we'll check
-		type_record = lookup_type(type_symtab, enumerated_name);
-
-		//If we couldn't find it
-		if(type_record == NULL){
-			sprintf(info, "Enumerated type \"%s\" is either not defined or being used before declaration", enumerated_name);
-			print_parse_message(PARSE_ERROR, info, current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Assign the active type
-		active_type = type_record->type;
-		
-		return 1;
+	//If we couldn't find it
+	if(type_record == NULL){
+		sprintf(info, "Enumerated type \"%s\" is either not defined or being used before declaration", enumerated_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		num_errors++;
+		return 0;
 	}
+
+	//Assign the active type
+	active_type = type_record->type;
+	
+	return 1;
 }
 
 
@@ -3913,6 +4002,7 @@ static u_int8_t declarator(FILE* fl){
  * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator>; 
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator := <intializer>;
  *                           | define {constant} <storage-class-specifier>? <type-specifier> <pointer>? as <ident>;
+ *                           | define {constant} <storage-class-specifier>? <enumerated-specifier> {as <ident>}?;
  */
 static u_int8_t declaration(FILE* fl){
 	//Freeze the line number
@@ -4178,11 +4268,65 @@ static u_int8_t declaration(FILE* fl){
 
 		return 1;
 
-	//Handle type definition
+	//Handle type definition. This works for enum types and structure types as well as aliasing
 	} else if(lookahead.tok == DEFINE){
-		print_parse_message(PARSE_ERROR, "Define statement not yet implemented", current_line);
-		num_errors++;
-		return 0;
+		//We can optionally see the constant keyword here
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		//If it's constant we'll simply set the flag
+		if(lookahead.tok == CONSTANT){
+			is_constant = 1;
+			//Refresh lookahead
+			lookahead = get_next_token(fl, &parser_line_num);
+		}
+		//Otherwise we'll keep the same token for our uses
+
+		//Now we can optionally see storage class specifiers here
+		//If we see one here
+		if(lookahead.tok == STATIC){
+			storage_class = STORAGE_CLASS_STATIC;
+		//Would make no sense so fail out
+		} else if(lookahead.tok == EXTERNAL){
+			//TODO
+			print_parse_message(PARSE_ERROR, "External variables are not yet supported", current_line);
+			num_errors++;
+			return 0;
+		} else if(lookahead.tok == REGISTER){
+			storage_class = STORAGE_CLASS_REGISTER;
+		} else {
+			//Otherwise, put the token back and get out
+			push_back_token(fl, lookahead);
+			storage_class = STORAGE_CLASS_NORMAL;
+		}
+
+		//Now let's see what kind of definition that we have
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		if(lookahead.tok == ENUMERATED){
+			//Go through an do an enumeration defintion
+			status = enumeration_definer(fl);
+			
+			//Fail case
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid enumeration defintion given",  current_line);
+				num_errors++;
+				return 0;
+			}
+
+			//Otherwise we'll add into the symtable
+			insert_type(type_symtab, create_type_record(active_type));
+		}
+
+		//We must see a semicol to round things out
+		lookahead = get_next_token(fl, &parser_line_num);
+	
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of definition statement", parser_line_num);
+			num_errors++;
+			return 0;
+		}
+
+		return 1;
 
 	//We had some failure here
 	} else {

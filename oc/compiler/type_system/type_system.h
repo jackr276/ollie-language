@@ -165,11 +165,6 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number);
 
 /**
- * Add a member to an enumerated type, simple helper function
- */
-u_int8_t add_member_to_enum(enumerated_type_t* type, u_int32_t line_number);
-
-/**
  * Destroy a type that is no longer in use
 */
 void destroy_type(generic_type_t* type);

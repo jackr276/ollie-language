@@ -115,6 +115,10 @@ struct symtab_variable_record_t{
 	u_int8_t initialized;
 	//Is it a function parameter?
 	u_int8_t is_function_paramater;
+	//Is it an enumeration member?
+	u_int8_t is_enumeration_member;
+	//Is it a struct member?
+	u_int8_t is_construct_member;
 	//If it is, we'll store the function as a reference
 	symtab_function_record_t* parent_function;
 	//What's the storage class?
@@ -123,6 +127,8 @@ struct symtab_variable_record_t{
 	u_int8_t is_constant;
 	//What type is it?
 	generic_type_t* type;
+	//What struct was it defined in? For structs only
+	generic_type_t* struct_defined_in;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 	//The next hashtable record
