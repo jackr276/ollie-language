@@ -5,6 +5,7 @@
 #include "type_system.h"
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 /**
  * Are two types compatible?
@@ -79,14 +80,14 @@ generic_type_t* create_basic_type(char* type_name, Token basic_type){
  * Create a pointer type dynamically. In order to have a pointer type, we must also
  * have what it points to.
  */
-generic_type_t* create_pointer_type(generic_type_t* points_to){
+generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number){
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
 
 	//Pointer type class
 	type->type_class = TYPE_CLASS_POINTER;
 
-	//Defined line num is irrelevant here
-	type->line_number = -1;
+	//Where was it declared
+	type->line_number = line_number;
 
 	//Let's first copy the type name in
 	strcpy(type->type_name, points_to->type_name);
@@ -104,6 +105,31 @@ generic_type_t* create_pointer_type(generic_type_t* points_to){
 	type->pointer_type->size = 8;
 
 	return type;
+}
+
+
+/**
+ * Dynamically allocate and create an enumerated type
+ */
+generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number){
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Assign the class
+	type->type_class = TYPE_CLASS_ENUMERATED;
+	
+	//Where is the declaration?
+	type->line_number = line_number;
+
+
+
+}
+
+
+/**
+ * Add a new member into an enum type
+ */
+u_int8_t add_member_to_enum(enumerated_type_t* type){
+
 }
 
 

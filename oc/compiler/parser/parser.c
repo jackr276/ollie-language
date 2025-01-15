@@ -167,7 +167,7 @@ static u_int8_t pointer(FILE* fl){
 		insert_type(type_symtab, create_type_record(temp));
 		
 		//Create a pointer type that points to temp
-		active_type = create_pointer_type(temp);
+		active_type = create_pointer_type(temp, current_line);
 		
 		//Refresh the token, continue the search
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -1785,16 +1785,24 @@ u_int8_t structure_specifier(FILE* fl){
 
 
 /**
- * For an enumerator, we can see an ident or an assigned ident
+ * An enumerator here is simply an identifier. Ollie language does not support custom
+ * indexing for enumerated types
  *
  * BNF Rule: <enumerator> ::= <identifier> 
- * 			           	  | <identifier> := <constant-expression>
  */
 u_int8_t enumerator(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
-	u_int8_t status;
+	//For error printing
+	char info[2000];
+
+	//We will use these for checking duplicate names 
+	symtab_function_record_t* function_record;
+	symtab_type_record_t* type_record;
+	symtab_variable_record_t* variable_record;
+
+	u_int8_t status = 0;
 
 	//We must see a valid identifier here
 	status = identifier(fl);
@@ -1806,27 +1814,39 @@ u_int8_t enumerator(FILE* fl){
 		return 0;
 	}
 
-	//Let's see what's up ahead
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//We're now seeing a constant expression here
-	if(lookahead.tok == COLONEQ){
-		//We now must see a valid constant expression
-		status = constant_expression(fl);
-
-		//Get out if bad
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid constant expression in enumerator", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		return 1;
-	} else {
-		//Otherwise, push back and leave
-		push_back_token(fl, lookahead);
-		return 1;
+	//Something very strange if this happens
+	if(active_type->type_class != TYPE_CLASS_ENUMERATED){
+		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Enumerated type not active in enumerator", current_line);
+		num_errors++;
+		return 0;
 	}
+
+	//Otherwise it worked, so we now have a current IDENT that is valid
+	//However we aren't done, because we now must check for duplicates everywhere
+	function_record = lookup_function(function_symtab,  current_ident->lexeme);
+
+	//Name collision here
+	if(function_record != NULL){
+		sprintf(info, "A function with the name \"%s\" was already defined. Enumeration members and functions may not share names. First declared here:", current_ident->lexeme);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_function_name(function_record);
+		num_errors++;
+		return 0;
+	}
+
+	//Let's check for variable collisions
+	variable_record = lookup_variable(variable_symtab, current_ident->lexeme);
+		
+	//Name collision here
+	if(variable_record != NULL){
+		sprintf(info, "A variable with the name \"%s\" was already defined. Enumeration members and variables may not share names. First declared here:", current_ident->lexeme);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_variable_name(variable_record);
+		num_errors++;
+		return 0;
+	}
+
+
 }
 
 
@@ -1839,7 +1859,7 @@ u_int8_t enumerator(FILE* fl){
 u_int8_t enumeration_list_prime(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	Lexer_item l;
+	Lexer_item lookahead;
 	u_int8_t status = 0;
 
 	//We now need to see a valid enumerator
@@ -1853,14 +1873,14 @@ u_int8_t enumeration_list_prime(FILE* fl){
 	}
 
 	//Now if we see a comma, we know that we have an enumerator-list-prime
-	l = get_next_token(fl, &parser_line_num);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we see a comma, we'll use the helper
-	if(l.tok == COMMA){
+	if(lookahead.tok == COMMA){
 		return enumeration_list_prime(fl);
 	} else {
 		//Put it back and get out if no
-		push_back_token(fl, l);
+		push_back_token(fl, lookahead);
 		return 1;
 	}
 }
@@ -1874,7 +1894,7 @@ u_int8_t enumeration_list_prime(FILE* fl){
 u_int8_t enumeration_list(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	Lexer_item l;
+	Lexer_item lookahead;
 	u_int8_t status = 0;
 
 	//We need to see a valid enumerator
@@ -1888,14 +1908,14 @@ u_int8_t enumeration_list(FILE* fl){
 	}
 
 	//Now if we see a comma, we know that we have an enumerator-list-prime
-	l = get_next_token(fl, &parser_line_num);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we see a comma, we'll use the helper
-	if(l.tok == COMMA){
+	if(lookahead.tok == COMMA){
 		return enumeration_list_prime(fl);
 	} else {
 		//Put it back and get out if no
-		push_back_token(fl, l);
+		push_back_token(fl, lookahead);
 		return 1;
 	}
 }
@@ -1907,9 +1927,6 @@ u_int8_t enumeration_list(FILE* fl){
  *
  * BNF Rule: <enumator-specifier> ::= enumerated <identifier> { <enumerator-list> } 
  * 						  			| enumerated <identifier>
- *
- * TODO SYMTAB
- * 						  			
  */
 u_int8_t enumeration_specifier(FILE* fl){
 	//Freeze the line number
@@ -1959,20 +1976,21 @@ u_int8_t enumeration_specifier(FILE* fl){
 			print_type_name(type_record);
 			return 0;
 		}
-
-		//TODO continue integration with SYMTAB
-
-		
 		
 		//Push onto the grouping stack for matching
 		push(grouping_stack, lookahead);
+
+		//Once we get here we know that we're declaring so we can create
+		generic_type_t* type = create_enumerated_type(enumerated_name, current_line);
+
+		//This now is the active type
+		active_type = type;
 
 		//We now must see a valid enumeration list
 		status = enumeration_list(fl);
 
 		//If it's bad then we're done here
 		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid enumeration list in enumeration specifier", current_line);
 			num_errors++;
 			return 0;
 		}
@@ -1995,7 +2013,7 @@ u_int8_t enumeration_specifier(FILE* fl){
 		}
 
 		//Otherwise we should be fine when we get here, so we can return
-		return 0;
+		return 1;
 		
 	} else {
 		//Otherwise, push it back and let someone else handle it
