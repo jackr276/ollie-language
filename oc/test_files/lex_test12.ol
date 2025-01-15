@@ -11,13 +11,10 @@ define enumerated type_enum{
 	TYPE_STATIC,
 	TYPE_DEFINED,
 	TYPE_CHAR
-};
-
-//Alias statement
-alias enumerated type_enum as enum;
+} as enum;
 
 func:static main(char* argv, s_int8 argc) -> void{
-	let enumerated type_enum my_enum := 1;
+	let enum my_enum := 1;
 	//Should fail
 	let u_int32 TYPE_NORMAL := 1;
 	ret;

@@ -4323,6 +4323,7 @@ static u_int8_t declaration(FILE* fl){
 		} else if(lookahead.tok == CONSTRUCT){
 			//Go through and do a construct definition
 			status = structure_definer(fl);
+			//TODO not yet implemented
 		}
 
 		//We must see a semicol to round things out
@@ -4343,8 +4344,38 @@ static u_int8_t declaration(FILE* fl){
 			//Otherwise it worked, our ident is now stored in current_ident
 
 			//Let's do some checks to ensure that we don't have duplicate names
+			//Let's check if we can actually find it
+			symtab_variable_record_t* found = lookup_variable(variable_symtab, current_ident->lexeme);
 
+			if(found != NULL){
+				print_parse_message(PARSE_ERROR, "Aliases and variables may not share names. First defined here:", current_line);
+				print_variable_name(found);
+				num_errors++;
+				return 0;
+			}
 
+			//Ollie language also does not allow duplicate function names
+			symtab_function_record_t* found_func = lookup_function(function_symtab, current_ident->lexeme);
+
+			//Can we grab it
+			if(found_func != NULL){
+				print_parse_message(PARSE_ERROR, "Aliases may not share the same names as functions. First defined here:", current_line);
+				print_function_name(found_func);
+				num_errors++;
+				return 0;
+			}
+
+			//Ollie language also does not allow duplicated type names
+			symtab_type_record_t* found_type = lookup_type(type_symtab, current_ident->lexeme);
+
+			//Can we grab it
+			if(found_type != NULL){
+				print_parse_message(PARSE_ERROR, "Aliases may not share the same names as previously defined types/aliases. First defined here:", current_line);
+				print_type_name(found_type);
+				num_errors++;
+				return 0;
+			}
+			//Otherwise we're in the clear here
 			
 			//Store this for now
 			generic_type_t* temp = active_type;
@@ -4352,15 +4383,25 @@ static u_int8_t declaration(FILE* fl){
 			//Create the aliased type
 			active_type = create_aliased_type(current_ident->lexeme, temp, parser_line_num);
 
+			//Put into the symtab now
+			insert_type(type_symtab, create_type_record(active_type));
 
+		} else {
+			//Put it back, no alias
+			push_back_token(fl, lookahead);
 		}
 	
+		//Finally we need to see a semicol here
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Automatic fail case
 		if(lookahead.tok != SEMICOLON){
 			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of definition statement", parser_line_num);
 			num_errors++;
 			return 0;
 		}
 
+		//Otherwise it worked so we can leave
 		return 1;
 
 	//Alias statement
