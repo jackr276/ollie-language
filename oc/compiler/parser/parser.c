@@ -4009,8 +4009,8 @@ static u_int8_t declarator(FILE* fl){
  *
  * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator>; 
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator := <intializer>;
- *                           | define {constant} <storage-class-specifier>? <enumerated-definer> {as <ident>}?;
- *                           | define {constant} <storage-class-specifier>? <structure-definer> {as <ident>}?;
+ *                           | define <enumerated-definer> {as <ident>}?;
+ *                           | define <structure-definer> {as <ident>}?;
  *                           | alias {constant} <storage-class-specifier>? <type-specifier> as <ident>;
  */
 static u_int8_t declaration(FILE* fl){
@@ -4110,6 +4110,17 @@ static u_int8_t declaration(FILE* fl){
 			return 0;
 		}
 
+		//Ollie language also does not allow duplicated type names
+		symtab_type_record_t* found_type = lookup_type(type_symtab, current_ident->lexeme);
+
+		//Can we grab it
+		if(found_type != NULL){
+			print_parse_message(PARSE_ERROR, "Variables may not share the same names as types. First defined here:", current_line);
+			print_type_name(found_type);
+			num_errors++;
+			return 0;
+		}
+		//Otherwise we're in the clear here
 
 		//Otherwise all should have gone well here, so we can construct our declaration
 		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
@@ -4141,7 +4152,6 @@ static u_int8_t declaration(FILE* fl){
 		//Once we make it here, we know it worked
 		active_type = NULL;
 		free(current_ident);
-		active_type = NULL;
 		current_ident = NULL;
 
 		return 1;
@@ -4221,6 +4231,18 @@ static u_int8_t declaration(FILE* fl){
 			return 0;
 		}
 
+		//Ollie language also does not allow duplicated type names
+		symtab_type_record_t* found_type = lookup_type(type_symtab, current_ident->lexeme);
+
+		//Can we grab it
+		if(found_type != NULL){
+			print_parse_message(PARSE_ERROR, "Variables may not share the same names as types. First defined here:", current_line);
+			print_type_name(found_type);
+			num_errors++;
+			return 0;
+		}
+		//Otherwise we're in the clear here
+
 		//Otherwise all should have gone well here, so we can construct our declaration
 		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
 		//It should be initialized in this case
@@ -4277,40 +4299,12 @@ static u_int8_t declaration(FILE* fl){
 
 		return 1;
 
-	//Handle type definition. This works for enum types and structure types as well as aliasing
+	//Handle type definition. This works for enum types and structure types 
 	} else if(lookahead.tok == DEFINE){
-		//We can optionally see the constant keyword here
-		lookahead = get_next_token(fl, &parser_line_num);
-		
-		//If it's constant we'll simply set the flag
-		if(lookahead.tok == CONSTANT){
-			is_constant = 1;
-			//Refresh lookahead
-			lookahead = get_next_token(fl, &parser_line_num);
-		}
-		//Otherwise we'll keep the same token for our uses
-
-		//Now we can optionally see storage class specifiers here
-		//If we see one here
-		if(lookahead.tok == STATIC){
-			storage_class = STORAGE_CLASS_STATIC;
-		//Would make no sense so fail out
-		} else if(lookahead.tok == EXTERNAL){
-			//TODO
-			print_parse_message(PARSE_ERROR, "External variables are not yet supported", current_line);
-			num_errors++;
-			return 0;
-		} else if(lookahead.tok == REGISTER){
-			storage_class = STORAGE_CLASS_REGISTER;
-		} else {
-			//Otherwise, put the token back and get out
-			push_back_token(fl, lookahead);
-			storage_class = STORAGE_CLASS_NORMAL;
-		}
-
 		//Now let's see what kind of definition that we have
 		lookahead = get_next_token(fl, &parser_line_num);
 		
+		//Enumerated type
 		if(lookahead.tok == ENUMERATED){
 			//Go through an do an enumeration defintion
 			status = enumeration_definer(fl);
@@ -4324,10 +4318,42 @@ static u_int8_t declaration(FILE* fl){
 
 			//Otherwise we'll add into the symtable
 			insert_type(type_symtab, create_type_record(active_type));
+
+		//Constructed type
+		} else if(lookahead.tok == CONSTRUCT){
+			//Go through and do a construct definition
+			status = structure_definer(fl);
 		}
 
 		//We must see a semicol to round things out
 		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we see the as keyword, we are doing a type alias
+		//Ollie language supports type aliases immediately upon definition
+		if(lookahead.tok == AS){
+			//We now must see a valid IDENT
+			status = identifier(fl);
+
+			//If we don't see that, we're out of here
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
+				num_errors++;
+				return 0;
+			}
+			//Otherwise it worked, our ident is now stored in current_ident
+
+			//Let's do some checks to ensure that we don't have duplicate names
+
+
+			
+			//Store this for now
+			generic_type_t* temp = active_type;
+
+			//Create the aliased type
+			active_type = create_aliased_type(current_ident->lexeme, temp, parser_line_num);
+
+
+		}
 	
 		if(lookahead.tok != SEMICOLON){
 			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of definition statement", parser_line_num);
@@ -4337,9 +4363,14 @@ static u_int8_t declaration(FILE* fl){
 
 		return 1;
 
+	//Alias statement
+	} else if(lookahead.tok == ALIAS){
+
+		return 0;
+
 	//We had some failure here
 	} else {
-		print_parse_message(PARSE_ERROR, "Declare, let or define keyword expected in declaration block", current_line);
+		print_parse_message(PARSE_ERROR, "Declare, let, define or alias keyword expected in declaration block", current_line);
 		num_errors++;
 		return 0;
 	}
