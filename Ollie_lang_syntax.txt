@@ -21,6 +21,8 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 <function-specifier> ::= static
 					   | external
 
+<compound-statement> ::= { {<declaration>}* {<statement>}* }
+
 <parameter-list> ::= <parameter-declaration><parameter-list-prime>
 
 <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
@@ -63,6 +65,47 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 <construct-accessor-prime> ::= => <ident><construct-accessor-prime>
 						 	 | : <ident><construct-accessor-prime>
 							 | epsilon
+
+<statement> ::= <labeled-statement>
+			  | <expression-statement>
+			  | <compound-statement>
+			  | <if-statement>
+			  | <switch-statement>
+			  | <iterative-statement>
+			  | <branch-statement>
+
+<iterative-statement> ::= <while-statement>
+						| <do-while-statement>
+						| <for-statement>
+
+<while-statement> ::= while( <expression> ) do <compound-statement> 
+
+<do-while-statement> ::= do <compound-statement> while( <expression> );
+
+<for-statement> ::= for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
+ 
+<switch-statement> ::= switch on( <expression> ) {<labeled-statement>*}
+
+<branch-statement> ::= <jump-statement>
+					 | <continue-statement>
+					 | <break-statement>
+					 | <return-statement>
+
+<jump-statement> ::= jump <label-identifier>;
+
+<continue-statement> ::=  continue when({<conditional-expression>}?); 
+
+<break-statement> ::= break {when(<conditional-expression>)}?; 
+
+<return-statement> ::= ret {<conditional-expression>}?;
+
+<if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement | compound-statement>}*
+
+<labeled-statement> ::= @<label-identifier> <compound-statement>
+					  | case <constant-expression> <compound-statement>
+ 					  | default <compound-statement>
+
+<expression-statement> ::= {<expression>}?;
 
 #############################################################################################
 
