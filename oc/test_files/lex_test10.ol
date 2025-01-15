@@ -1,12 +1,12 @@
 /*
-declare construct {
+define construct my_struct{
 	u_int32 i := 3,
 	u_int32 j,
 	u_int32 prog
-} my_struct;
+};
 
-define structure my_struct as custom;
-define u_int8* as int_ptr;
+alias construct my_struct as custom;
+alias u_int8* as int_ptr;
 */
 
 func my_func(u_int32* error_code) -> u_int32{

@@ -1,0 +1,98 @@
+The final form of the Ollie language syntax, as implemented by this compiler.
+
+Rules are in no particular order. Nonterminals are enclosed inside of <>
+
+Epsilon means that no production is required for the rule. Essentially, it is a blank rule
+
+<program> ::= {<declaration-partition>}+
+
+<declaration-partition> ::= <function-defintion>
+						  | <declaration>
+
+<declaration> ::= <declare-statement>
+				| <let-statement>
+				| <define-statement>
+				| <alias-statement>
+
+################### Ollie language definition/declaration statements ########################
+
+<function-definition> ::= func {<function-specifier>}? <identifer> ({<parameter-list>}?) -> {constant}? <type-specifier> <compound-statement>
+
+<function-specifier> ::= static
+					   | external
+
+<parameter-list> ::= <parameter-declaration><parameter-list-prime>
+
+<parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
+						 | epsilon
+
+<parameter-declaration> ::= {constant}? {<function-storage-class-specifier>}? <type-specifier> <parameter-declarator>
+
+<parameter-declarator> ::= <identifier>
+						 | <identifier>{[{constant-expression}?]}*
+
+<declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <declarator>;
+
+<let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <declarator> := <initializer>;
+
+<storage-class-specifier> ::= static
+							| external
+							| register
+
+<define-statement ::= define <complex-type-definer> {as <alias-identifer>}?;
+
+<complex-type-definer> ::= <enumerated-definer>
+						 | <construct-definer>
+
+<alias-statement> ::= alias <type-specifier> as <alias-identifier>;
+
+<alias-identifer> ::= <identifier>
+
+<declarator> ::= <identifer>
+				 <identifer>{<array-accessor>}?
+				 <identifier>{<construct-accessor}?
+
+<array-accessor> ::= [ {constant-expression}? ]<array-accessor-prime>
+
+<array-accessor-prime> ::= [ {constant-expression}? ]<array-accessor-prime>
+						 | epsilon
+
+<construct-accessor> ::= => <ident><construct-accessor-prime>
+					   | : <ident><construct-accessor-prime>
+
+<construct-accessor-prime> ::= => <ident><construct-accessor-prime>
+						 	 | : <ident><construct-accessor-prime>
+							 | epsilon
+
+#############################################################################################
+
+########################## Ollie language type system #######################################
+
+<type-specifier> ::= <type-name>{address-specifier>}*
+
+{address-specifier} ::= [{constant-expression}?]
+					  | &
+
+<type-name> ::= void
+			  | u_int8
+			  | s_int8
+			  | u_int16
+			  | s_int16
+			  | u_int32
+			  | s_int32
+			  | u_int64
+			  | s_int64
+			  | float32
+			  | float64
+			  | char
+			  | <enumerated-type>
+			  | <construct-type>
+			  | <aliased-type>
+
+<enumerated-type> ::= enumerated <identifer>
+
+<construct-type> ::= construct <identifier>
+
+<aliased-type> ::= <identifier>
+
+#############################################################################################

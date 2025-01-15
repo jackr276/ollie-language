@@ -1622,7 +1622,7 @@ u_int8_t constant_expression(FILE* fl){
 /**
  * A structure declarator is grammatically identical to a regular declarator
  *
- * BNF Rule: <structure-declarator> ::= <declarator> 
+ * BNF Rule: <construct-declarator> ::= <declarator> 
  *
  */
 u_int8_t construct_declarator(FILE* fl){
@@ -4527,7 +4527,7 @@ u_int8_t function_specifier(FILE* fl){
  * BNF rule: <function-specifier> ::= static 
  *			        			  | external
  */
-u_int8_t function_declaration(FILE* fl){
+static u_int8_t function_declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//The ident that we have
