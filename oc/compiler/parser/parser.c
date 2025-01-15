@@ -1623,10 +1623,9 @@ u_int8_t constant_expression(FILE* fl){
  * A structure declarator is grammatically identical to a regular declarator
  *
  * BNF Rule: <structure-declarator> ::= <declarator> 
- * 									  | <declarator> := <constant-expression>
  *
  */
-u_int8_t structure_declarator(FILE* fl){
+u_int8_t construct_declarator(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -1635,35 +1634,18 @@ u_int8_t structure_declarator(FILE* fl){
 	//We can see a declarator
 	status = declarator(fl);
 
-	//Now we can optionally see the assignment opperator
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we don't see it we can leave
-	if(lookahead.tok != COLONEQ){
-		//Push back and leave
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-
-	//Otherwise we now have to see a valid constant expression
-	status = constant_expression(fl);
-
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid constant expression found in structure declarator", current_line);
-		num_errors++;
-		return 0;
-	}
+	//TODO by no means done
 
 	//Otherwise we're all set so return 1
 	return 1;
 }
 
 /**
- * A structure declaration can optionally be chained into a large list
+ * A construct declaration can optionally be chained into a large list
  *
- * BNF Rule: <structure-declaration> ::= {constant}? <type-specifier> <structure-declarator>
+ * BNF Rule: <construct-declaration> ::= {constant}? <type-specifier> <construct-declarator>
  */
-u_int8_t structure_declaration(FILE* fl){
+u_int8_t construct_declaration(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -1691,7 +1673,7 @@ u_int8_t structure_declaration(FILE* fl){
 	}
 
 	//Now we must see a valid structure declarator
-	status = structure_declarator(fl);
+	status = construct_declarator(fl);
 
 	//Fail out if bad
 	if(status == 0){
@@ -1705,51 +1687,79 @@ u_int8_t structure_declaration(FILE* fl){
 }
 
 /**
- * A structure definer is the definition of a structure
+ * A construct definer is the definition of a construct 
  *
- * BNF Rule: <structure-specifier> ::= structure { <structure-declaration> {, <strucutre-declaration>}* } 
+ * REMEMBER: By the time we get here, we've already seen the construct keyword
+ *
+ * NOTE: The caller will do the final insertion into the symbol table
+ *
+ * BNF Rule: <construct-specifier> ::= construct <ident> { <construct-declaration> {, <construct-declaration>}* } 
  */
-static u_int8_t structure_definer(FILE* fl){
-
-}
-
-
-/**
- * A strucutre specifier is the entry to a structure
- *
- * REMEMBER: By the time we get here, we've already seen the structure keyword
- *
- * BNF Rule: <structure-specifier> ::= structure { <structure-declaration> {, <strucutre-declaration>}* } 
- *                                   | structure <ident>
- */
-static u_int8_t structure_specifier(FILE* fl){
+static u_int8_t construct_definer(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
+	//For error printing
+	char info[2000];
 
-	//Now we can optionally see the curlies for a declaration
-	lookahead = get_next_token(fl, &parser_line_num); 
+	//The name of the construct type
+	char construct_name[MAX_TYPE_NAME_LENGTH];
 
-	if(lookahead.tok == IDENT){
-		//Handle the case where we have a struct IDENT
-		return 1;
+	//Copy the name in here
+	strcpy(construct_name, "construct ");
+
+	//We now have to see a valid identifier, since we've already seen the construct keyword
+	//Stored here in current ident global variable
+	status = identifier(fl);
+
+	//If we don't see an ident
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid identifier found in construct specifier", parser_line_num);
+		num_errors++;
+		return 0;
 	}
 
-	//Still worked but we aren't declaring, just leave
+	//Otherwise, we'll add this into our name
+	strcat(construct_name, current_ident->lexeme);
+
+	//Now in this case, it would be bad if it does exist
+	symtab_type_record_t* type = lookup_type(type_symtab, construct_name);
+
+	//If it does exist, we're done here 
+	if(type != NULL){
+		sprintf(info, "Constructed type with name \"%s\" already exists. First defined here:", construct_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_type_name(type);
+		num_errors++;
+		return 0;
+	}
+
+	//We now must see a left curly to officially start defining
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//Fail out here
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Opening curly brace exprected", current_line);
+		print_parse_message(PARSE_ERROR, "Raw definitions are not allowed, construct must be fully defined in definition statement", current_line);
+		num_errors++;
+		return 0;
 	}
 
 	//Otherwise we saw a left curly, so push to stack 
 	push(grouping_stack, lookahead);
 
+	//Create the type
+	generic_type_t* constructed_type = create_constructed_type(construct_name, current_line);
+
+	//Set the active type to be this type
+	active_type = constructed_type;
+
 	//Now we must see a valid structure declaration
-	status = structure_declaration(fl);
+	status = construct_declaration(fl);
 
 	//If we failed
 	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid strucutre declaration inside of structure specifier", current_line);
+		print_parse_message(PARSE_ERROR, "Invalid construct declaration inside of construct definition", current_line);
 		num_errors++;
 		return 0;
 	}
@@ -1760,11 +1770,11 @@ static u_int8_t structure_specifier(FILE* fl){
 	//As long as we see commas
 	while(lookahead.tok == COMMA){
 		//We must now see a valid declaration
-		status = structure_declaration(fl);
+		status = construct_declaration(fl);
 
 		//If we fail
 		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid strucutre declaration inside of structure specifier", current_line);
+			print_parse_message(PARSE_ERROR, "Invalid construct declaration inside of construct definition", current_line);
 			num_errors++;
 			return 0;
 		}	
@@ -1789,6 +1799,60 @@ static u_int8_t structure_specifier(FILE* fl){
 	}
 
 	//Otherwise it worked so
+	return 1;
+
+}
+
+
+/**
+ * A construct specifier is the entry to a construct 
+ *
+ * REMEMBER: By the time we get here, we've already seen the construct keyword
+ *
+ * BNF Rule: <construct-specifier> ::= construct <ident>
+ */
+static u_int8_t construct_specifier(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+	//For error printing
+	char info[2000];
+
+	//The name of the construct type
+	char construct_name[MAX_TYPE_NAME_LENGTH];
+
+	//Copy the name in here
+	strcpy(construct_name, "construct ");
+
+	//We now have to see a valid identifier, since we've already seen the construct keyword
+	//Stored here in current ident global variable
+	status = identifier(fl);
+
+	//If we don't see an ident
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid identifier found in construct specifier", parser_line_num);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we'll add this into our name
+	strcat(construct_name, current_ident->lexeme);
+
+	//Now once we get here, we need to check and see if this construct actually exists
+	symtab_type_record_t* type = lookup_type(type_symtab, construct_name);
+
+	//If it doesn't exist, we're done here 
+	if(type == NULL){
+		sprintf(info, "Constructed type with name \"%s\" does not exist", construct_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise we made it here and we're all clear
+	active_type = type->type;
+
 	return 1;
 }
 
@@ -2201,7 +2265,7 @@ u_int8_t type_specifier(FILE* fl){
 		//Otherwise it worked so return 1
 		return 1;
 	} else if (l.tok == CONSTRUCT){
-		status = structure_specifier(fl);
+		status = construct_specifier(fl);
 
 		//If it's bad then we're done here
 		if(status == 0){
@@ -4011,7 +4075,7 @@ static u_int8_t declarator(FILE* fl){
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator := <intializer>;
  *                           | define <enumerated-definer> {as <ident>}?;
  *                           | define <structure-definer> {as <ident>}?;
- *                           | alias {constant} <storage-class-specifier>? <type-specifier> as <ident>;
+ *                           | alias <type-specifier> {<pointer>}? as <ident>;
  */
 static u_int8_t declaration(FILE* fl){
 	//Freeze the line number
@@ -4322,8 +4386,17 @@ static u_int8_t declaration(FILE* fl){
 		//Constructed type
 		} else if(lookahead.tok == CONSTRUCT){
 			//Go through and do a construct definition
-			status = structure_definer(fl);
-			//TODO not yet implemented
+			status = construct_definer(fl);
+			
+			//Fail case
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid construct definition given",  current_line);
+				num_errors++;
+				return 0;
+			}
+
+			//Otherwise we'll add into the symtable
+			insert_type(type_symtab, create_type_record(active_type));
 		}
 
 		//We must see a semicol to round things out
@@ -4655,7 +4728,7 @@ arrow_ident:
 		return 0;
 	}
 
-	//TODO what is this
+	//Finalize the variable scope initialized in the param list
 	finalize_variable_scope(variable_symtab);
 
 	//Set this to null to avoid confusion

@@ -134,9 +134,23 @@ generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number){
  * Dynamically allocate and create a constructed type
  */
 generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number){
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
-	return NULL;
+	//Assign the class
+	type->type_class = TYPE_CLASS_CONSTRUCT;
+	
+	//Where is the declaration?
+	type->line_number = line_number;
+
+	//Copy the name
+	strcpy(type->type_name, type_name);
+
+	//Reserve space for this
+	type->construct_type = calloc(1, sizeof(constructed_type_t));
+
+	return type;
 }
+
 
 /**
  * Dynamically allocate and create an aliased type
