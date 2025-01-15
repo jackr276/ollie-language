@@ -120,24 +120,37 @@ generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number){
 	//Where is the declaration?
 	type->line_number = line_number;
 
+	//Copy the name
+	strcpy(type->type_name, type_name);
 
+	//Reserve space for this
+	type->enumerated_type = calloc(1, sizeof(enumerated_type_t));
 
-}
-
-
-/**
- * Add a new member into an enum type
- */
-u_int8_t add_member_to_enum(enumerated_type_t* type){
-
+	return type;
 }
 
 
 /**
  * Destroy a type that is no longer in use
+ * TODO NOT DONE
 */
 void destroy_type(generic_type_t* type){
+	//We will take action based on what kind of type that we have
+	//Just free type and leave
+	if(type->type_class == TYPE_CLASS_BASIC){
+		free(type->basic_type);
+		free(type);
+	} else if(type->type_class == TYPE_CLASS_ARRAY){
+		free(type->array_type);
+		free(type);
+	} else if(type->type_class == TYPE_CLASS_POINTER){
+		free(type->pointer_type);
+		free(type);
+	} else if(type->type_class == TYPE_CLASS_ENUMERATED){
 
+	} else {
+
+	}
 }
 
 

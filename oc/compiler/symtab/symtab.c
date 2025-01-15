@@ -662,8 +662,6 @@ void destroy_type_symtab(type_symtab_t* symtab){
 
 		//Now we'll free all non-null records
 		for(u_int16_t j = 0; j < KEYSPACE; j++){
-			record = cursor->records[j];
-
 			//We could have chaining here, so run through just in case
 			while(record != NULL){
 				temp = record;

@@ -120,20 +120,11 @@ struct pointer_type_t{
  */
 struct constructed_type_t{
 	//What types do we contain?
-	generic_type_t members[MAX_CONSTRUCT_MEMBERS];
+	void* members[MAX_ENUMERATED_MEMBERS];
 	//How many members are there?
 	u_int8_t num_members;
 	//What is the size?
 	u_int32_t size;
-};
-
-
-/**
- * Enumerated type tokens. Enumerated type token equality exists only
- * if there is exact string parity
- */
-struct enumerated_type_token_t{
-	char token_name[MAX_TYPE_NAME_LENGTH];
 };
 
 
@@ -143,8 +134,8 @@ struct enumerated_type_token_t{
 */
 struct enumerated_type_t{
 	//We need an array of enumerated type tokens
-	//We can have at most 500 of these
-	enumerated_type_token_t tokens[MAX_ENUMERATED_MEMBERS];
+	//We can have at most 500 of these. They are in reality variables
+	void* tokens[MAX_ENUMERATED_MEMBERS];
 	//The current number of tokens
 	u_int8_t token_num;
 	//The size of the type

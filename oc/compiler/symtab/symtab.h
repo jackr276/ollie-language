@@ -17,7 +17,7 @@
 
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
-#define KEYSPACE 4999 
+#define KEYSPACE 9999 
 //We figure that 200 separate lexical-levels is enough
 #define MAX_SHEAFS 200
 
