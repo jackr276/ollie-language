@@ -1704,6 +1704,15 @@ u_int8_t structure_declaration(FILE* fl){
 	return 1;
 }
 
+/**
+ * A structure definer is the definition of a structure
+ *
+ * BNF Rule: <structure-specifier> ::= structure { <structure-declaration> {, <strucutre-declaration>}* } 
+ */
+static u_int8_t structure_definer(FILE* fl){
+
+}
+
 
 /**
  * A strucutre specifier is the entry to a structure
@@ -1713,7 +1722,7 @@ u_int8_t structure_declaration(FILE* fl){
  * BNF Rule: <structure-specifier> ::= structure { <structure-declaration> {, <strucutre-declaration>}* } 
  *                                   | structure <ident>
  */
-u_int8_t structure_specifier(FILE* fl){
+static u_int8_t structure_specifier(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -1864,7 +1873,6 @@ u_int8_t enumerator(FILE* fl){
 	 */
 	variable_record = create_variable_record(current_ident->lexeme, STORAGE_CLASS_NORMAL);
 
-	printf("%s\n", current_ident->lexeme);
 	//This flag tells us where we are
 	variable_record->is_enumeration_member = 1;
 
@@ -4001,8 +4009,9 @@ static u_int8_t declarator(FILE* fl){
  *
  * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator>; 
  * 							 | let {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator := <intializer>;
- *                           | define {constant} <storage-class-specifier>? <type-specifier> <pointer>? as <ident>;
- *                           | define {constant} <storage-class-specifier>? <enumerated-specifier> {as <ident>}?;
+ *                           | define {constant} <storage-class-specifier>? <enumerated-definer> {as <ident>}?;
+ *                           | define {constant} <storage-class-specifier>? <structure-definer> {as <ident>}?;
+ *                           | alias {constant} <storage-class-specifier>? <type-specifier> as <ident>;
  */
 static u_int8_t declaration(FILE* fl){
 	//Freeze the line number

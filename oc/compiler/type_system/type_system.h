@@ -31,8 +31,8 @@ typedef struct pointer_type_t pointer_type_t;
 typedef struct enumerated_type_t enumerated_type_t;
 //A constructed type
 typedef struct constructed_type_t constructed_type_t;
-//The tokens of an enumerated type
-typedef struct enumerated_type_token_t enumerated_type_token_t;
+//An aliased type
+typedef struct aliased_type_t aliased_type_t;
 
 
 /**
@@ -43,7 +43,8 @@ typedef enum TYPE_CLASS{
 	TYPE_CLASS_ARRAY,
 	TYPE_CLASS_CONSTRUCT,
 	TYPE_CLASS_ENUMERATED,
-	TYPE_CLASS_POINTER
+	TYPE_CLASS_POINTER,
+	TYPE_CLASS_ALIAS /* Alias types */
 } TYPE_CLASS;
 
 
@@ -60,9 +61,6 @@ struct generic_type_t{
 	TYPE_CLASS type_class;
 	//When was it defined: -1 = generic type
 	int32_t line_number;
-	//We allows types to be aliased ONCE. Once a type has been aliased once, it may not
-	//be aliased again
-	char alias_name[MAX_TYPE_NAME_LENGTH];
 
 	/**
 	 * The following pointers will be null except for the one that the type class
@@ -73,6 +71,7 @@ struct generic_type_t{
 	pointer_type_t* pointer_type;
 	constructed_type_t* construct_type;
 	enumerated_type_t* enumerated_type;
+	aliased_type_t* aliased_type;
 };
 
 
@@ -119,8 +118,9 @@ struct pointer_type_t{
  * As such, the type here contains an array of generic types of at most 100
  */
 struct constructed_type_t{
-	//What types do we contain?
-	void* members[MAX_ENUMERATED_MEMBERS];
+	//What types do we contain?.
+	//Each pointer in here refers to a variable
+	void* members[MAX_CONSTRUCT_MEMBERS];
 	//How many members are there?
 	u_int8_t num_members;
 	//What is the size?
@@ -144,6 +144,16 @@ struct enumerated_type_t{
 
 
 /**
+ * An aliased type is quite simply a name that points to the real type. This can
+ * be used by the programmer to define simpler names for themselves
+ */
+struct aliased_type_t{
+	//What does it point to?
+	generic_type_t* aliased_type;
+};
+
+
+/**
  * Are two types equivalent?
  */
 u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB);
@@ -163,6 +173,16 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  * Dynamically allocate and create an enumerated type
  */
 generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number);
+
+/**
+ * Dynamically allocate and create a constructed type
+ */
+generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
+
+/**
+ * Dynamically allocate and create an aliased type
+ */
+generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_type, u_int32_t line_number);
 
 /**
  * Destroy a type that is no longer in use
