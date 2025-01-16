@@ -4716,29 +4716,26 @@ static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
- * BNF Rule: <function-definition> ::= func {<function-specifier>}? <identifer> ({<parameter-list>}?) -> {constant}? <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= func {:<function-specifier>}? <identifer> ({<parameter-list>}?) -> <type-specifier> <compound-statement>
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
 static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 	//This will be used for error printing
 	char info[2000];
-	
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//The status tracker
 	u_int8_t status = 0;
 	//Lookahead token
 	Lexer_item lookahead;
+	//We will define a cursor that we will use to walk the children of the function node
+	//as the function's subtree is built. This will allow us to incrementally move up
+	//as opposed to doing it all at once
+	generic_ast_node_t* cursor = NULL;
 
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class;
-
-	//What is the functions return type?
-	generic_type_t* return_type;
-	
-	//The function record -- not initialized until IDENT
-	symtab_function_record_t* function_record;
 
 	//We also have the AST function node, this will be intialized immediately
 	//It also requires a symtab record of the function, but this will be assigned
@@ -4764,9 +4761,18 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 
 		//Refresh current line
 		current_line = parser_line_num;
+		
+		//At this point we can initialize the cursor
+		cursor = function_node->first_child;
+
+		//Largely for dev usage
+		if(cursor == NULL || cursor->CLASS != AST_NODE_CLASS_FUNC_SPECIFIER){
+			print_parse_message(PARSE_ERROR, "Fatal internal parse error. Expected function specifier node as child", current_line);
+			return 0;
+		}
 
 		//Also stash this for later use
-		storage_class = ((func_specifier_ast_node_t*)(function_node->first_child->node))->function_storage_class;
+		storage_class = ((func_specifier_ast_node_t*)(cursor->node))->function_storage_class;
 
 	//Otherwise it's a plain function so put the token back
 	} else {
@@ -4785,6 +4791,58 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 		num_errors++;
 		return 0;
 	}
+
+	//Now we can actually grab the identifier out. This next sibling should be an ident
+	cursor = cursor->next_sibling;
+	
+	//For dev use
+	if(cursor == NULL || cursor->CLASS != AST_NODE_CLASS_IDENTIFER){
+		print_parse_message(PARSE_ERROR, "Fatal internal parse error. Expected identifier node as next sibling", current_line);
+		return 0;
+	}
+
+	//This in theory should be an ident node
+	identifier_ast_node_t* ident = cursor->node;
+
+	//Let's now do all of our checks for duplication before we go any further. This can
+	//save us time if it ends up being bad
+	
+	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
+	symtab_function_record_t* found_function = lookup_function(function_symtab, ident->identifier); 
+
+	if(found_function != NULL){
+		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_function_name(found_function);
+		num_errors++;
+		return 0;
+	}
+
+	//Check for duplicated variables
+	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, ident->identifier); 
+
+	if(found_variable != NULL){
+		sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_variable_name(found_variable);
+		num_errors++;
+		return 0;
+	}
+
+	//Check for duplicated type names
+	symtab_type_record_t* found_type = lookup_type(type_symtab, ident->identifier); 
+
+	if(found_type != NULL){
+		sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_type_name(found_type);
+		num_errors++;
+		return 0;
+	}
+
+	//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start
+	//it
+	symtab_function_record_t* function_record = create_function_record(ident->identifier, storage_class);
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4828,105 +4886,75 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 		return 0;
 	}
 
-	//We will handle all type checking at the end of the function, after we've parsed the top level declaration
+	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
+	//now parse the param_list and store records to it	
+	//Advance the cursor to its next sibling
+	
+	//If it's not null, there is a parameter list
+	if(cursor->next_sibling != NULL){
+		//Advance the cursor
+		cursor = cursor->next_sibling;
 
-	//Let's see if we have duplicate function names
-	symtab_function_record_t* func_record = lookup_function(function_symtab, current_ident->lexeme);
+		//Some very weird error here
+		if(cursor->CLASS != AST_NODE_CLASS_PARAM_LIST){
+			print_parse_message(PARSE_ERROR, "Fatal internal parse error. Expected parameter list node as next sibling", current_line);
+			return 0;
+		}
 
-	//If we can find it we have a duplicate function
-	if(func_record != NULL && func_record->defined == 1){
-		print_parse_message(PARSE_ERROR, "Illegal redefinition of function. First defined here: ", current_line);
-		print_function_name(func_record);
-		num_errors++;
-		return 0;
+		//The actual parameters are children of the param list cursor
+		generic_ast_node_t* param_cursor = cursor->first_child;
+
+		//Now we'll walk the param list
+		while(param_cursor != NULL){
+			function_record->func_params[function_record->number_of_params] = ((param_decl_ast_node_t*)(param_cursor->node))->param_record;
+			function_record->number_of_params++;
+			
+			//If this happens get out
+			if(function_record->number_of_params > 6){
+				print_parse_message(PARSE_ERROR, "Ollie language restricts parameter numbers to 6 due to register constraints", current_line);
+				num_errors++;
+				return 0;
+			}
+			//Move it up
+			param_cursor = param_cursor->next_sibling;
+		}
 	}
-
-	//Let's see if we're trying to redefine variable names
-	symtab_variable_record_t* var_record = lookup_variable(variable_symtab, current_ident->lexeme);
-
-	//If we can find it we have a duplicate function
-	if(var_record != NULL){
-		print_parse_message(PARSE_ERROR, "Functions and variables may not share names. First defined here:", current_line);
-		print_variable_name(var_record);
-		num_errors++;
-		return 0;
-	}
-
-	//Let's see if we're trying to redefine a custom type name
-	symtab_type_record_t* type_record = lookup_type(type_symtab, current_ident->lexeme);
-
-	//If we can find it we have a duplicate function
-	if(type_record != NULL){
-		print_parse_message(PARSE_ERROR, "Functions and types may not share the same name. First defined here:", current_line);
-		print_type_name(type_record);
-		num_errors++;
-		return 0;
-	}
-
-	//Officially make the function record
-	function_record = create_function_record(current_ident->lexeme, storage_class);
-	//Store the line number too
-	function_record->line_number = current_line;
-
-	//Now that we're done using these we can free them
-	free(current_ident);
-	current_ident = NULL;
-
-	//Set these equal here
-	current_function = function_record;
-
-	//Insert this into the function symtab
-	insert_function(function_symtab, function_record);
-
-	//Past the point where we've seen the param_list
-arrow_ident:
-	//Grab the next one
+	
+	//Once we get down here, the cursor should be precisely poised
+	
+	//Semantics here, we now must see a valid arrow symbol
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//We absolutely must see an arrow here
+	//If it isn't an arrow, we're out of here
 	if(lookahead.tok != ARROW){
-		print_parse_message(PARSE_ERROR, "Arrow expected after function declaration", current_line);
+		print_parse_message(PARSE_ERROR, "Arrow(->) required after parameter-list in function", parser_line_num);
 		num_errors++;
 		return 0;
 	}
 
-	//After the arrow we must see a valid type specifier
-	status = type_specifier(fl);
+	//Now if we get here, we must see a valid type specifier
+	//The parent of this will be the function node
+	status = type_specifier(fl, function_node);
 
-	//If it failed
+	//If we failed, bail out
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid return type given to function", current_line);
+		print_parse_message(PARSE_ERROR, "Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
 		num_errors++;
 		return 0;
 	}
 
-	//We can also see pointers here--status is irrelevant this is just for type information
-	pointer(fl);
+	//Next sibling must be a type_specifier node
+	cursor = cursor->next_sibling;
 
-	//We'll store this as the function return type
-	function_record->return_type = active_type;
-
-	//Now we must see a compound statement
-	status = compound_statement(fl);
-
-	//If we fail here
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid compound statement in function", current_line);
-		num_errors++;
+	//Dev uses only
+	if(cursor == NULL || cursor->CLASS != AST_NODE_CLASS_TYPE_SPECIFIER){
+		print_parse_message(PARSE_ERROR, "Fatal internal parse error. Expected type specifier node as next sibling", parser_line_num);
 		return 0;
 	}
 
-	//Finalize the variable scope initialized in the param list
-	finalize_variable_scope(variable_symtab);
 
-	//Set this to null to avoid confusion
-	current_function = NULL;
+	//TODO RETURN TYPE
 
-	//Set to NULL for the next time around
-	active_type = NULL;
-
-	//All went well if we make it here
-	return 1;
 }
 
 

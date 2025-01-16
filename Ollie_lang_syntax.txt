@@ -18,7 +18,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 ################### Ollie language definition/declaration statements ########################
 
-<function-definition> ::= func {<function-specifier>}? <identifer> ({<parameter-list>}?) -> {constant}? <type-specifier> <compound-statement>
+<function-definition> ::= func {:<function-specifier>}? <identifer> ({<parameter-list>}?) ->  <type-specifier> <compound-statement>
 
 <function-specifier> ::= static
 					   | external

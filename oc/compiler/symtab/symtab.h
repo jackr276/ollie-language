@@ -40,8 +40,6 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 //The records in a type symtab
 typedef struct symtab_type_record_t symtab_type_record_t;
 
-//Parameter lists for functions
-typedef struct parameter_list_t parameter_list_t;
 //Parameter type
 typedef struct parameter_t parameter_t;
 
