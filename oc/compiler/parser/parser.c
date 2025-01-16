@@ -47,7 +47,7 @@ Lexer_item* current_ident = NULL;
 generic_type_t* active_type = NULL;
 
 //The root of the entire tree
-prog_ast_node_t* ast_root = NULL;
+generic_ast_node_t* ast_root = NULL;
 
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
@@ -4519,26 +4519,48 @@ u_int8_t function_specifier(FILE* fl){
 
 
 /**
+ * A function specifier has two options, the rule merely exists for AST integration
+ */
+static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
+
+	//We need to see static or external keywords here
+	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
+	
+	//IF we got here, we need to see static or external
+	if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL){
+		//Create a new node
+		generic_ast_node_t* node = ast_node_alloc(AST_NODE_CLASS_FUNC_SPECIFIER);
+	
+		//Assign the token here and attach it to the tree
+		((func_specifier_ast_node_t*)(node->node))->funcion_storage_class = lookahead.tok;
+
+		//This node is always a child of a parent node. Accordingly so, we'll use the
+		//helper function to attach it
+
+	//Fail case here
+	} else {
+		print_parse_message(PARSE_ERROR, "STATIC or EXTERNAL keywords expected after colon in function declaration", parser_line_num);
+		num_errors++;
+		return 0;
+	}
+}
+
+
+/**
  * Handle the case where we declare a function
  *
  * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> (<parameter-list>?) -> <type-specifier> {pointer}? <compound-statement>
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
- *
- * We will also handle function specifiers internally, an additional method would be silly
- *
- * BNF rule: <function-specifier> ::= static 
- *			        			  | external
  */
-static u_int8_t function_declaration(FILE* fl){
+static u_int8_t function_declaration(FILE* fl, generic_ast_node_t* parent_node){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	//The ident that we have
-	Lexer_item ident;
+	//The status tracker
 	u_int8_t status = 0;
 
 	//What is the function's storage class? Normal by default
-	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
+	STORAGE_CLASS_T storage_class;
 	
 	//The function record -- not initialized until IDENT
 	symtab_function_record_t* function_record;
@@ -4572,11 +4594,12 @@ static u_int8_t function_declaration(FILE* fl){
 			num_errors++;
 			return 0;
 		}
-
 	//Otherwise it's a plain function so put the token back
 	} else {
 		//Otherwise put the token back in the stream
 		push_back_token(fl, lookahead);
+		//Normal storage class
+		storage_class = STORAGE_CLASS_NORMAL;
 	}
 
 	//Now we must see an identifer
@@ -4754,7 +4777,7 @@ arrow_ident:
  * <declaration-partition>::= <function-definition>
  *                        	| <declaration>
  */
-u_int8_t declaration_partition(FILE* fl, void* parent_node){
+static u_int8_t declaration_partition(FILE* fl, generic_ast_node_t* parent_node){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -4766,20 +4789,25 @@ u_int8_t declaration_partition(FILE* fl, void* parent_node){
 	//We know that we have a function here
 	if(lookahead.tok == FUNC){
 		//Otherwise our status is just whatever the function returns
-		status = function_declaration(fl);
+		status = function_declaration(fl, parent_node);
+
+		//Something failed
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid function definition", current_line);
+			return 0;
+		}
 
 	} else {
 		//Push it back
 		push_back_token(fl, lookahead);
 		//Otherwise, the only other option is a declaration
 		status = declaration(fl);
-	}
-	
-	//Something failed
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid declaration or function definition", current_line);
-		num_errors++;
-		return 0;
+
+		//Something failed
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid top-level declaration", current_line);
+			return 0;
+		}
 	}
 	
 	//If we get here it worked
@@ -4807,7 +4835,7 @@ static u_int8_t program(FILE* fl){
 	//Create the ROOT of the tree
 	ast_root = ast_node_alloc(AST_NODE_CLASS_PROG);
 	//Assign the lexer item to it for completeness
-	ast_root->lex = start;
+	((prog_ast_node_t*)(ast_root->node))->lex = start;
 
 	//As long as we aren't done
 	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
@@ -4817,10 +4845,8 @@ static u_int8_t program(FILE* fl){
 		//Pass along and let the rest handle
 		status = declaration_partition(fl, ast_root);
 		
-		//If we have an error then we'll print it out
+		//No need for error printing here, should be handled by bottom level prog
 		if(status == 0){
-			num_errors++;
-			//If we have but one failure, the whole thing is toast
 			return 0;
 		}
 	}
@@ -4847,6 +4873,9 @@ u_int8_t parse(FILE* fl){
 	variable_symtab = initialize_variable_symtab();
 	type_symtab = initialize_type_symtab();
 
+	//For the type and variable symtabs, their scope needs to be initialized before
+	//anything else happens
+	
 	//Initialize the variable scope
 	initialize_variable_scope(variable_symtab);
 	//Global variable scope here
@@ -4888,5 +4917,8 @@ u_int8_t parse(FILE* fl){
 	destroy_variable_symtab(variable_symtab);
 	destroy_type_symtab(type_symtab);
 	
+	//Deallocate the AST
+	deallocate_ast(ast_root);
+
 	return status;
 }
