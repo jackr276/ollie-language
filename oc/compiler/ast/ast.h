@@ -10,6 +10,7 @@
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
 #include "../symtab/symtab.h"
+#include <sys/types.h>
 
 /**
  * All nodes here are N-ary trees. This means that, in addition
@@ -26,6 +27,10 @@ typedef struct prog_ast_node_t prog_ast_node_t;
 typedef struct func_def_ast_node_t func_def_ast_node_t;
 //A function specifier node
 typedef struct func_specifier_ast_node_t func_specifier_ast_node_t;
+//A parameter list node
+typedef struct param_list_ast_node_t param_list_ast_node_t;
+//A parameter node
+typedef struct param_decl_ast_node_t param_decl_ast_node_t;
 //An identifier node
 typedef struct identifier_ast_node_t identifier_ast_node_t;
 //A declaration AST node
@@ -37,10 +42,12 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PROG,
 	AST_NODE_CLASS_FUNC_DEF,
 	AST_NODE_CLASS_FUNC_SPECIFIER,
+	AST_NODE_CLASS_PARAM_LIST,
 	AST_NODE_CLASS_INT_CONST,
 	AST_NODE_CLASS_FLOAT_CONST,
 	AST_NODE_CLASS_CHAR_CONST,
 	AST_NODE_CLASS_STRING_CONST,
+	AST_NODE_CLASS_PARAM_DECL,
 	AST_NODE_CLASS_IDENTIFER
 } ast_note_class_t;
 
@@ -84,10 +91,26 @@ struct func_specifier_ast_node_t{
 };
 
 
+//Holds references to our parameter list
+struct param_list_ast_node_t{
+	//Hold how many params that we actually have
+	//This is all we really care about here
+	u_int8_t num_params;
+};
+
+
 //Holds information about an identifier that's been seen
 struct identifier_ast_node_t{
 	//Holds the lexeme of the identifer: max size 1000 bytes(may change)
 	char identifier[1000];
+};
+
+
+//Holds information about a parameter declaration. This will also hold 
+//a reference to the associated record in the symtab
+struct param_decl_ast_node_t{
+	//Holds a reference to the symtab record
+	symtab_variable_record_t* param_record;
 };
 
 

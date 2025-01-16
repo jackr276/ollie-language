@@ -90,34 +90,36 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 
 
 /**
- * Do we have an identifier or not?
+ * An identifier itself is always a child, never a parent. As such, we can
+ * handle the node attachment here
+ *
+ * BNF "Rule": <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
+ * Note all actual string parsing and validation is handled by the lexer
  */
-static u_int8_t identifier(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	//Grab the next token
-	Lexer_item l = get_next_token(fl, &parser_line_num);
+static u_int8_t identifier(FILE* fl, generic_ast_node_t* parent_node){
+	//In case of error printing
 	char info[2000];
+
+	//Grab the next token
+	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
 	
 	//If we can't find it that's bad
-	if(l.tok != IDENT){
-		sprintf(info, "String %s is not a valid identifier", l.lexeme);
-		print_parse_message(PARSE_ERROR, info, current_line);
+	if(lookahead.tok != IDENT){
+		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return 0;
 	}
 
-	//Global save for current ident
-	current_ident = calloc(1, sizeof(Lexer_item));
-	current_ident->tok = l.tok;
-	strcpy(current_ident->lexeme, l.lexeme);
-	current_ident->char_count = l.char_count;
-	current_ident->line_num = l.line_num;
+	//Create the identifier node
+	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFER);
 
+	//Add the identifier into the node itself
+	strcpy(((identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
 
-	//We'll push this ident onto the stack and let whoever called(function/variable etc.) deal with it
-	//We have no need to search the symtable in this function because we are unable to context-sensitive
-	//analysis here
+	//Add this into the tree
+	add_child_node(parent_node, ident_node);
+
 	return 1;
 }
 
@@ -2397,11 +2399,13 @@ static u_int8_t parameter_direct_declarator(FILE* fl){
 
 
 /**
- * For a parameter declaration, we can see this items in order
+ * A parameter declaration is always a child of a parameter list node. It can optionally
+ * be made constant. The register keyword is not needed here. Ollie lang restricts the 
+ * number of parameters to 6 so that they all may be kept in registers ideally(minus large structs)
  *
- * BNF Rule: <parameter-declaration> ::= (constant)? (<storage-class-specifier>)? <type-specifier> {<pointer>}? <parameter-direct-declarator>
+ * <parameter-declaration> ::= {constant}? <type-specifier> <parameter-declarator>
  */
-static u_int8_t parameter_declaration(FILE* fl){
+static u_int8_t parameter_declaration(FILE* fl, generic_ast_node_t* parameter_list_node){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Normal storage class is default
@@ -2507,51 +2511,78 @@ static u_int8_t parameter_declaration(FILE* fl){
  * REMEMBER: By the time that we get here, we've already seen a comma
  *
  * BNF Rule: <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
+ * 									  | epsilon
  */
-u_int8_t parameter_list_prime(FILE* fl){
+u_int8_t parameter_list_prime(FILE* fl, generic_ast_node_t* param_list_node){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
-	//We must see a valid declaration
-	status = parameter_declaration(fl);
+	//If we see a comma, we will proceed
+	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Fail out if so
+	//If there's no comma, we'll just bail out
+	if(lookahead.tok != COMMA){
+		//This is our "epsilon" case
+		return 1;
+	}
+
+	//Otherwise, we can now see a valid declaration
+	//This declarations parent will be the parameter list that 
+	//was carried through here
+	status = parameter_declaration(fl, param_list_node);
+
+	//If we didn't see a valid one
 	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list", current_line);
+		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list", current_line);
 		num_errors++;
 		return 0;
 	}
 
-	//Otherwise, we can optionally see a comma
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a comma
-	if(lookahead.tok == COMMA){
-		return parameter_list_prime(fl);
-	} else {
-		//Otherwise, we can get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
+	//We can keep going as long as there are parameters
+	return parameter_list_prime(fl, param_list_node);
 }
 
 
 /**
- * BNF Rule: <parameter-list> ::= <parameter-declaration>(<parameter-list-prime>)?
+ * A parameter list will always be the child of a function node
+ *
+ * <parameter-list> ::= <parameter-declaration><parameter-list-prime>
+ * 					  | epsilon
  */
-u_int8_t parameter_list(FILE* fl){
-	//Initialize the scope for variables
-	initialize_variable_scope(variable_symtab);
-
+u_int8_t parameter_list(FILE* fl, generic_ast_node_t* parent){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//Lookahead token
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
-	//First, we must see a valid parameter declaration
-	status = parameter_declaration(fl);
+	//We initialize this scope automatically, even if there is no param list.
+	//It will just be empty if this is the case, no big issue
+	initialize_variable_scope(variable_symtab);
+
+	//Let's now create the parameter list node and add it into the tree
+	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST);
+
+	//This will be the child of the function node
+	add_child_node(parent, param_list_node);
+
+	//There are two options that we have here. We can have an entirely blank
+	//parameter list. 
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see an R_PAREN, it's blank so we'll just leave
+	if(lookahead.tok == R_PAREN){
+		return 1;
+	} else {
+		//Otherwise we'll put the token back and keep going
+		push_back_token(fl, lookahead);
+	}
+
+	//First, we must see a valid parameter declaration. Here, the parent will be the
+	//parameter list
+	status = parameter_declaration(fl, param_list_node);
 	
 	//If we didn't see a valid one
 	if(status == 0){
@@ -2560,17 +2591,8 @@ u_int8_t parameter_list(FILE* fl){
 		return 0;
 	}
 
-	//Let's see if we find a comma, if we do, we have a parameter list prime
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see one, send it to the prime rule
-	if(lookahead.tok == COMMA){
-		return parameter_list_prime(fl);
-	} else {
-		//Otherwise, push it back and leave
-		push_back_token(fl, lookahead);
-		return 1;
-	}
+	//Again here the parent is the parameter list node
+	return parameter_list_prime(fl, param_list_node);
 }
 
 
@@ -4550,6 +4572,8 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 	u_int16_t current_line = parser_line_num;
 	//The status tracker
 	u_int8_t status = 0;
+	//Lookahead token
+	Lexer_item lookahead;
 
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class;
@@ -4564,9 +4588,6 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 
 	//The function node will be a child of the parent, so we'll add it in as such
 	add_child_node(parent_node, function_node);
-
-	Lexer_item lookahead;
-	Lexer_item lookahead2;
 
 	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4596,16 +4617,61 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 		storage_class = STORAGE_CLASS_NORMAL;
 	}
 
-
 	//Now we must see an identifer
-	status = identifier(fl);
+	status = identifier(fl, function_node);
 
 	//We have no identifier, so we must quit
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "No valid identifier found", current_line);
+		print_parse_message(PARSE_ERROR, "No valid identifier found for function", current_line);
 		num_errors++;
 		return 0;
 	}
+
+	//We'll deal with assembling the function record later on
+	
+	//Now we need to see a valid parentheis
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we didn't find it, no point in going further
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise, we'll push this onto the list to check for later
+	push(grouping_stack, lookahead);
+	
+	//Now we must ensure that we see a valid parameter list. It is important to note that
+	//parameter lists can be empty, but whatever we have here we'll have to add in
+	//Parameter list parent is the function node
+	status = parameter_list(fl, function_node);
+
+	//We have a bad parameter list
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "No valid parameter list found for function", current_line);
+		num_errors++;
+		return 0;
+	}
+	
+	//Now we need to see a valid closing parenthesis
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't have an R_Paren that's an issue
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected", current_line);
+		num_errors++;
+		return 0;
+	}
+	
+	//If this happens, then we have some unmatched parenthesis
+	if(pop(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis found", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//We will handle all type checking at the end of the function, after we've parsed the top level declaration
 
 	//Let's see if we have duplicate function names
 	symtab_function_record_t* func_record = lookup_function(function_symtab, current_ident->lexeme);
@@ -4654,62 +4720,6 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 
 	//Insert this into the function symtab
 	insert_function(function_symtab, function_record);
-	
-	//Now we need to see a valid parentheis
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we didn't find it, no point in going further
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//SPECIAL CASE -- we could have a blank parameter list, in which case we're done
-	lookahead2 = get_next_token(fl, &parser_line_num);
-	
-	//If we get here, we have a blank parameter list
-	if(lookahead2.tok == R_PAREN){
-		//Store this and get out
-		function_record->number_of_params = 0;
-		//Just for record keeping
-		initialize_variable_scope(variable_symtab);
-		goto arrow_ident;
-	} else {
-		push_back_token(fl, lookahead2);
-	}
-	
-	//Otherwise we'll push this onto the grouping stack to check later
-	push(grouping_stack, lookahead);
-	
-	//We'll deal with our storage of the function's name later, but at least now we know it's unique
-	//We must now see a valid parameter list
-	//TODO all parameters must be handled in here
-	status = parameter_list(fl);
-
-	//We have a bad parameter list
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "No valid parameter list found for function", current_line);
-		num_errors++;
-		return 0;
-	}
-	
-	//Now we need to see a valid closing parenthesis
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we don't have an R_Paren that's an issue
-	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected", current_line);
-		num_errors++;
-		return 0;
-	}
-	
-	//If this happens, then we have some unmatched parenthesis
-	if(pop(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis found", current_line);
-		num_errors++;
-		return 0;
-	}
 
 	//Past the point where we've seen the param_list
 arrow_ident:

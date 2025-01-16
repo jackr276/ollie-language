@@ -26,11 +26,12 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 <compound-statement> ::= { {<declaration>}* {<statement>}* }
 
 <parameter-list> ::= <parameter-declaration><parameter-list-prime>
+					| epsilon
 
 <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
 						 | epsilon
 
-<parameter-declaration> ::= {constant}? {<function-storage-class-specifier>}? <type-specifier> <parameter-declarator>
+<parameter-declaration> ::= {constant}? <type-specifier> <parameter-declarator>
 
 <parameter-declarator> ::= <identifier>
 						 | <identifier>{[{constant-expression}?]}*

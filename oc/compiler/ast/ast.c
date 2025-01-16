@@ -43,10 +43,22 @@ generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_FUNC_DEF;
 			break;
 
+		//The function specifier AST node
+		case AST_NODE_CLASS_PARAM_LIST:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(param_list_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_PARAM_LIST;
+
+			//Initialize this here, although in theory calloc should've
+			((param_list_ast_node_t*)(node->node))->num_params = 0;
+
+			break;
+
 		case AST_NODE_CLASS_IDENTIFER:
 			//Just allocate the proper size and set the class
 			node->node = calloc(1, sizeof(identifier_ast_node_t));
 			node->CLASS = AST_NODE_CLASS_IDENTIFER;
+
 			break;
 
 		default:
