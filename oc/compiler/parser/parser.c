@@ -55,7 +55,7 @@ static u_int8_t cast_expression(FILE* fl);
 static u_int8_t assignment_expression(FILE* fl);
 static u_int8_t conditional_expression(FILE* fl);
 static u_int8_t unary_expression(FILE* fl);
-static u_int8_t type_specifier(FILE* fl);
+static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent);
 static u_int8_t declaration(FILE* fl);
 static u_int8_t compound_statement(FILE* fl);
 static u_int8_t statement(FILE* fl);
@@ -221,15 +221,6 @@ static u_int8_t constant(FILE* fl){
 	num_errors++;
 	return 0;
 }
-
-
-
-static u_int8_t type_name(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	return 0;
-}
-
 
 /**
  * A prime rule that allows for comma chaining and avoids right recursion
@@ -2205,195 +2196,93 @@ u_int8_t enumeration_specifier(FILE* fl){
 
 
 /**
- * Type specifiers can be the set of primitives or user defined types
- * TODO SYMTAB stuff
+ * A type name node is always a child of a type specifier. It consists
+ * of all of our primitive types and any defined construct or
+ * aliased types that we may have. It is important to note that any
+ * non-primitive type needs to have been previously defined for it to be
+ * valid
  *
- * BNF Rule:  <type-specifier> ::= void
- * 								 | u_int8
- * 								 | s_int8
- * 								 | u_int16
- * 								 | s_int16
- * 								 | u_int32
- * 								 | s_int32
- * 								 | u_int64
- * 								 | s_int64
- * 								 | float32
- * 								 | float64
- * 								 | char
- * 								 | str
- * 								 | <enumeration-specifier>
- * 								 | <structure-specifier>
- * 								 | <user-defined-type>
+ * BNF Rule: <type-name> ::= void 
+ * 						   | u_int8 
+ * 						   | s_int8 
+ * 						   | u_int16 
+ * 						   | s_int16 
+ * 						   | u_int32 
+ * 						   | s_int32 
+ * 						   | u_int64 
+ * 						   | s_int64 
+ * 						   | float32 
+ * 						   | float64 
+ * 						   | char 
+ * 						   | enumerated <identifer>
+ * 						   | construct <identifier>
+ * 						   | <identifier>
  */
-u_int8_t type_specifier(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	//Grab the next token
-	Lexer_item l = get_next_token(fl, &parser_line_num);
-	symtab_type_record_t* type_record;
-	u_int8_t status = 0;
-	char info[2000];
+static u_int8_t type_name(FILE* fl, generic_ast_node_t* type_specifier){
 
-	//In the case that we have one of the primitive types
-	if(l.tok == VOID || l.tok == U_INT8 || l.tok == S_INT8 || l.tok == U_INT16 || l.tok == S_INT16
-	  || l.tok == U_INT32 || l.tok == S_INT32 || l.tok == U_INT64 || l.tok == S_INT64 || l.tok == FLOAT32
-	  || l.tok == FLOAT64 || l.tok == CHAR){
-
-		//We should be able to find this in the type symtab
-		type_record = lookup_type(type_symtab, l.lexeme);
-
-		//Immediate exit, something is very wrong if this happens
-		if(type_record == NULL){
-			print_parse_message(PARSE_ERROR, "Fatal compiler error: Basic type was not in the type symtable", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise set the active type to be what we found
-		active_type = type_record->type;
-
-		return 1;
-	}
-
-	//Otherwise, we still have some options here
-	//If we see enumerated, we know it's an enumerated type
-	if(l.tok == ENUMERATED){
-		status = enumeration_specifier(fl);
-
-		//If it's bad then we're done here
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid enumeration specifier in type specifier", current_line);
-			num_errors++;
-			return 0;
-		}	
-
-		//Otherwise it worked so return 1
-		return 1;
-	} else if (l.tok == CONSTRUCT){
-		status = construct_specifier(fl);
-
-		//If it's bad then we're done here
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid structure specifier in type specifier", current_line);
-			num_errors++;
-			return 0;
-		}	
-
-		//Otherwise it worked so return 1
-		return 1;
-
-	} else {
-		//We need to see some user defined type here with the token
-		type_record = lookup_type(type_symtab, l.lexeme);
-
-		//If we can't find it, then it's bad
-		if(type_record == NULL){
-			sprintf(info, "Type %s must be defined by user before use", l.lexeme);
-			print_parse_message(PARSE_ERROR, info, current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise, this is our active type
-		active_type = type_record->type;
-
-		//If we make it here it worked
-		return 1;
-	}
 }
 
 
+
 /**
- * For parameter  direct declarators. This is done to avoid confusion with regular direct declarators, but the rules are nearly identical with some restrictions
+ * A type specifier is a type name that is then followed by an address specifier, this being  
+ * the array brackets or address indicator. A type specifier is always the child of some
+ * global parent
  *
- * BNF Rule: <parameter-direct-declarator> ::= <identifier> 
- * 											 | <identifier> {[ {constant-expression}? ]}* 
+ * The type specifier itself is comprised of some type name and potential address specifiers
+ *
+ * BNF Rule: <type-specifier> ::= <type-name>{<type-address-specifier>}*
  */
-static u_int8_t parameter_direct_declarator(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
+	//For error printing
+	char info[2000];
+	//Freeze the current line
+	u_int8_t current_line = parser_line_num;
+	//Global status var
 	u_int8_t status = 0;
-	Lexer_item lookahead;
-	Lexer_item lookahead2;
 
-	//We must first see a valid identifier
-	status = identifier(fl);
+	//We'll first create and attach the type specifier node
+	//At this point the node will be entirely blank
+	generic_ast_node_t* type_spec_node = ast_node_alloc(AST_NODE_CLASS_TYPE_SPECIFIER);
 
-	//If we don't see this then fail out
+	//We'll attach it as a child to the parent
+	add_child_node(parent, type_spec_node);
+
+	//Now we'll hand off the rule to the <type-name> function. The type name function will
+	//add a new child node to the type_spec_node, which we will later use in the type
+	//record creation
+	status = type_name(fl, type_spec_node);
+
+	//Throw and get out
 	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given to parameter declaration", current_line);
+		print_parse_message(PARSE_ERROR, "Invalid type name given to type specifier", current_line);
+		return 0;
+	}
+
+	//Just for convenience, we'll store this locally
+	char type_name[MAX_TYPE_NAME_LENGTH];
+	strcpy(type_name, ((type_name_ast_node_t*)(type_spec_node->node))->type_name);
+
+	//We'll now lookup the type that we have and keep it as a temporary reference
+	//We're also checking for existence. If this type does not exist, then that's bad
+	symtab_type_record_t* current_type = lookup_type(type_symtab, type_name);
+
+	//This is a "leaf-level" error
+	if(current_type == NULL){
+		sprintf(info, "Type with name: \"%s\" does not exist in the current scope.", type_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
 		num_errors++;
 		return 0;
 	}
 
-	//So we see an ident, but certain stuff could come next
-	lookahead = get_next_token(fl, &parser_line_num);
+	//Now if we make it here, we know that the type exists in the system, and we have a record of it
+	//in our hands
 
-	//We have an array subscript here
-	if(lookahead.tok == L_BRACKET){
-		//We can keep seeing l_brackets here
-		while(lookahead.tok == L_BRACKET){
-			//Push it onto the stack
-			push(grouping_stack, lookahead);
+	
 
-			//Special case, we can see empty ones here
-			lookahead2 = get_next_token(fl, &parser_line_num);
 
-			//If we have an empty set here
-			if(lookahead2.tok == R_BRACKET){
-				//TODO Handle empty brackets
-				//Clear this up
-				pop(grouping_stack);
 
-				//Keep going through the list
-				lookahead = get_next_token(fl, &parser_line_num);
 
-			//Otherwise we need a constant expression here
-			} else {
-				//Put it back
-				push_back_token(fl, lookahead2);
-
-				//See if it works
-				status = constant_expression(fl);
-
-				//Fail out if so
-				if(status == 0){
-					print_parse_message(PARSE_ERROR, "Invalid constant expression in array subscript", current_line);
-					return 0;
-				}
-
-				//Otherwise, we now have to see an R_BRACKET
-				lookahead = get_next_token(fl, &parser_line_num);
-
-				//If we don't see a ]
-				if(lookahead.tok != R_BRACKET){
-					print_parse_message(PARSE_ERROR, "Right bracket expected to close array subscript", current_line);
-					num_errors++;
-					return 0;
-				}
-
-				//If they don't match
-				if(pop(grouping_stack).tok != L_BRACKET){
-					print_parse_message(PARSE_ERROR, "Unmatched brackets detected", current_line);
-					num_errors++;
-					return 0;
-				}
-
-				//Otherwise, if we make it all the way here, we will refresh the token
-				lookahead = get_next_token(fl, &parser_line_num);
-			}
-		}
-
-		//If we make it here, lookahead is not an L_Bracket
-		//Put it back
-		push_back_token(fl, lookahead);
-		//Everything worked so success
-		return 1;
-	} else {
-		//Push back and leave
-		push_back_token(fl,  lookahead);
-		return 1;
-	}
 }
 
 
@@ -2403,25 +2292,36 @@ static u_int8_t parameter_direct_declarator(FILE* fl){
  * be made constant. The register keyword is not needed here. Ollie lang restricts the 
  * number of parameters to 6 so that they all may be kept in registers ideally(minus large structs)
  *
- * <parameter-declaration> ::= {constant}? <type-specifier> <parameter-declarator>
+ * A parameter declaration is always a parent to other nodes
+ *
+ * BNF Rule: <parameter-declaration> ::= {constant}? <type-specifier> <identifier>
  */
 static u_int8_t parameter_declaration(FILE* fl, generic_ast_node_t* parameter_list_node){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	//Normal storage class is default
-	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
-	//Is it constant?
+
+	//Is it constant? No by default
 	u_int8_t is_constant = 0;
+
 	//Lookahead for peeking
 	Lexer_item lookahead;
+
 	//General status var
 	u_int8_t status = 0;
-	//Set this so we can see it
+
+	//We'll first create and attach the actual parameter declaration node
+	generic_ast_node_t* parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_PARAM_DECL);
+
+	//This node will always be a child of the parent level parameter list
+	add_child_node(parameter_list_node, parameter_decl_node);
+
+	//Increment the parameter list node count
+	((param_list_ast_node_t*)(parameter_list_node->node))->num_params++;
 
 	//Now we can optionally see constant here
 	lookahead = get_next_token(fl, &parser_line_num);
 	
-	//We'll flag this for now TODO must go in symtab
+	//Is this parameter constant? If so we'll just set a flag for later
 	if(lookahead.tok == CONSTANT){
 		is_constant = 1;
 	} else {
@@ -2430,38 +2330,14 @@ static u_int8_t parameter_declaration(FILE* fl, generic_ast_node_t* parameter_li
 		is_constant = 0;
 	}
 
-	//Grab the next token, we may see a storage class
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see one here
-	if(lookahead.tok == STATIC){
-		storage_class = STORAGE_CLASS_STATIC;
-	//Would make no sense so fail out
-	} else if(lookahead.tok == EXTERNAL){
-		print_parse_message(PARSE_ERROR, "External variable declarations are not supported in function parameters", current_line);
-		num_errors++;
-		return 0;
-	} else if(lookahead.tok == REGISTER){
-		storage_class = STORAGE_CLASS_REGISTER;
-	} else {
-		//Otherwise, put the token back and get out
-		push_back_token(fl, lookahead);
-		//Just to reaffirm
-		storage_class = STORAGE_CLASS_NORMAL;
-	}
-
 	//Now we must see a valid type specifier
-	status = type_specifier(fl);
+	status = type_specifier(fl, parameter_decl_node);
 	
 	//If it's bad then we're done here
 	if(status == 0){
 		num_errors++;
 		return 0;
 	}
-
-	//We can now see pointers
-	//TODO HANDLE ME
-	status = pointer(fl);
 
 	//Finally, we must see a direct declarator that is valid
 	status = parameter_direct_declarator(fl);

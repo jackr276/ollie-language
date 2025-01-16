@@ -31,10 +31,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
 						 | epsilon
 
-<parameter-declaration> ::= {constant}? <type-specifier> <parameter-declarator>
-
-<parameter-declarator> ::= <identifier>
-						 | <identifier>{[{constant-expression}?]}*
+<parameter-declaration> ::= {constant}? <type-specifier> <identifier>
 
 <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <declarator>;
 
@@ -187,8 +184,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 					 | ++<unary-expression> 
 					 | --<unary-expression> 
 					 | <unary-operator> <cast-expression>
-					 | size(<unary-expression>) 
-					 | typesize(<type-name>)
+					 | typesize(<type-specifier>)
 
 <unary-operator> ::= & 
 				   | * 
@@ -218,10 +214,10 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 ########################## Ollie language type system #######################################
 
-<type-specifier> ::= <type-name>{address-specifier>}*
+<type-specifier> ::= <type-name>{<type-address-specifier>}*
 
-{address-specifier} ::= [{constant-expression}?]
-					  | &
+{type-address-specifier} ::= [{constant-expression}?]
+						    | &
 
 <type-name> ::= void
 			  | u_int8
