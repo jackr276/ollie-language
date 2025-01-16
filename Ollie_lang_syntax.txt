@@ -153,10 +153,8 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 <and-expression-prime> ::= <equality-expression><and-expression-prime>
 
 <equality-expression> ::= <relational-expression> 
-						| <relational-expression><equality-expression-prime>
-
-<equality-expression-prime> ::= ==<relational-expression><equality-expression-prime>
-							 |	!=<relational-expression><equality-expression-prime>
+						| <relational-expression> == <relational-expression>
+						| <relational-expression> != <relational-expression>
 
 <relational-expression> ::= <shift-expression>
 					 	  | <shift-expression> > <shift-expression>

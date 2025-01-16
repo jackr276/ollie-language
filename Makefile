@@ -7,9 +7,9 @@ STACK_PATH = ./oc/compiler/stack
 SYMTAB_PATH = ./oc/compiler/symtab
 PARSER_PATH = ./oc/compiler/parser
 TYPE_SYSTEM_PATH = ./oc/compiler/type_system
+AST_PATH = ./oc/compiler/ast
 OUT = ./oc/out
 PROGS = lexer_test symtab_test parser_test
-
 
 all: $(PROGS)
 
@@ -35,6 +35,12 @@ stack.o: $(STACK_PATH)/stack.c
 
 stackd.o: $(STACK_PATH)/stack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/stack.c -o $(OUT)/stackd.o
+
+ast.o: $(AST_PATH)/ast.c
+	$(CC) $(CFLAGS) $(AST_PATH)/ast.c -o $(OUT)/ast.o
+
+astd.o: $(AST_PATH)/ast.c
+	$(CC) -g $(CFLAGS) $(AST_PATH)/ast.c -o $(OUT)/astd.o
 
 symtab.o: $(SYMTAB_PATH)/symtab.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT)/symtab.o
@@ -66,11 +72,11 @@ parser_test.o: $(PARSER_PATH)/parser_test.c
 parser_testd.o: $(PARSER_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(PARSER_PATH)/parser_test.c -o $(OUT)/parser_testd.o
 
-parser_test: parser.o lexer.o parser_test.o symtab.o stack.o type_system.o
-	$(CC) -o $(OUT)/parser_test $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o $(OUT)/type_system.o
+parser_test: parser.o lexer.o parser_test.o symtab.o stack.o type_system.o ast.o
+	$(CC) -o $(OUT)/parser_test $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o
 
-parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o stackd.o type_systemd.o
-	$(CC) -g -o $(OUT)/debug $(OUT)/parser_testd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/stackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o
+parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o stackd.o type_systemd.o astd.o
+	$(CC) -g -o $(OUT)/debug $(OUT)/parser_testd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/stackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/astd.o
 
 symtab_test: symtab.o symtab_test.o lexer.o type_system.o
 	$(CC) -o $(OUT)/symtab_test $(OUT)/lexer.o $(OUT)/symtab_test.o $(OUT)/symtab.o $(OUT)/type_system.o
