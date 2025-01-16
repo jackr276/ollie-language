@@ -42,8 +42,15 @@ generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
 			node->node = calloc(1, sizeof(func_def_ast_node_t));
 			node->CLASS = AST_NODE_CLASS_FUNC_DEF;
 			break;
-		
+
+		case AST_NODE_CLASS_IDENTIFER:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(identifier_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_IDENTIFER;
+			break;
+
 		default:
+			printf("YOU DID NOT IMPLEMENT THIS ONE\n");
 			return NULL;
 	}
 

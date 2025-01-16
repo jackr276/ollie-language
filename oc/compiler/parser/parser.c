@@ -4510,7 +4510,14 @@ static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
 		generic_ast_node_t* node = ast_node_alloc(AST_NODE_CLASS_FUNC_SPECIFIER);
 	
 		//Assign the token here and attach it to the tree
-		((func_specifier_ast_node_t*)(node->node))->funcion_storage_class = lookahead.tok;
+		((func_specifier_ast_node_t*)(node->node))->funcion_storage_class_tok = lookahead.tok;
+
+		//Assign these for ease of use later in the parse tree
+		if(lookahead.tok == STATIC){
+			((func_specifier_ast_node_t*)(node->node))->function_storage_class = STORAGE_CLASS_STATIC;
+		} else {
+			((func_specifier_ast_node_t*)(node->node))->function_storage_class = STORAGE_CLASS_EXTERNAL;
+		}
 
 		//This node is always a child of a parent node. Accordingly so, we'll use the
 		//helper function to attach it
@@ -4569,6 +4576,18 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 		//If we see this, we must then see a valid function specifier
 		status = function_specifier(fl, function_node);
 
+		//Invalid function specifier -- error out
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Invalid function specifier seen after \":\"",  current_line);
+			return 0;
+		}
+
+		//Refresh current line
+		current_line = parser_line_num;
+
+		//Also stash this for later use
+		storage_class = ((func_specifier_ast_node_t*)(function_node->first_child->node))->function_storage_class;
+
 	//Otherwise it's a plain function so put the token back
 	} else {
 		//Otherwise put the token back in the stream
@@ -4576,6 +4595,7 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 		//Normal storage class
 		storage_class = STORAGE_CLASS_NORMAL;
 	}
+
 
 	//Now we must see an identifer
 	status = identifier(fl);

@@ -26,6 +26,8 @@ typedef struct prog_ast_node_t prog_ast_node_t;
 typedef struct func_def_ast_node_t func_def_ast_node_t;
 //A function specifier node
 typedef struct func_specifier_ast_node_t func_specifier_ast_node_t;
+//An identifier node
+typedef struct identifier_ast_node_t identifier_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -66,6 +68,7 @@ struct prog_ast_node_t{
 	Lexer_item lex;
 };
 
+
 //Represents a top level function definition
 struct func_def_ast_node_t{
 	//The symtable function record that is created in parallel
@@ -76,7 +79,15 @@ struct func_def_ast_node_t{
 //Holds the static or external keywords for a function
 struct func_specifier_ast_node_t{
 	//Just holds a token for us
-	Token funcion_storage_class;
+	Token funcion_storage_class_tok;
+	STORAGE_CLASS_T function_storage_class;
+};
+
+
+//Holds information about an identifier that's been seen
+struct identifier_ast_node_t{
+	//Holds the lexeme of the identifer: max size 1000 bytes(may change)
+	char identifier[1000];
 };
 
 
