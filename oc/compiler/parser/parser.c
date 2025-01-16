@@ -40,9 +40,6 @@ u_int8_t in_param_list = 0;
 //What's the function that we're in currently?
 symtab_function_record_t* current_function = NULL;
 
-//The current IDENT that we are tracking
-Lexer_item* current_ident = NULL;
-
 //The current type. Used for global access
 generic_type_t* active_type = NULL;
 
@@ -2514,6 +2511,9 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
  * BNF Rule: <parameter-declaration> ::= {constant}? <type-specifier> <identifier>
  */
 static u_int8_t parameter_declaration(FILE* fl, generic_ast_node_t* parameter_list_node){
+	//For any needed error printing
+	char info[2000];
+
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
@@ -2556,13 +2556,105 @@ static u_int8_t parameter_declaration(FILE* fl, generic_ast_node_t* parameter_li
 		return 0;
 	}
 
-	//TODO NOT DONE
+	//We are now required to see a valid identifier for the function
+	status = identifier(fl, parameter_decl_node);
 
+	//Again if it's bad bail
+	if(status == 0){
+		num_errors++;
+		return 0;
+	}
+
+	//Once we get here, we have actually seen an entire valid parameter 
+	//declaration. It is now incumbent on us to store it in the variable 
+	//symbol table
+
+	//Define a cursor for tree walking
+	generic_ast_node_t* cursor = parameter_decl_node;
+
+	//We'll now walk the subtree that parameter-decl has in order. We expect
+	//to first see the type specifier
+	cursor = cursor->first_child;
+	
+	//Fatal error, debug message for dev only
+	if(cursor->CLASS != AST_NODE_CLASS_TYPE_SPECIFIER){
+		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected type specifier in parameter declaration", parser_line_num);
+		return 0;
+	}
+
+	//Grab the type record reference
+	symtab_type_record_t* parameter_type = ((type_spec_ast_node_t*)(cursor->node))->type_record;
+
+	//Now walk to the next child. If all is correct, this should be an identifier
+	cursor = cursor->next_sibling;
+
+	//Again this needs to be an identifier
+	if(cursor->CLASS != AST_NODE_CLASS_IDENTIFER){
+		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected identifier in parameter declaration", parser_line_num);
+		return 0;
+	}
+
+	//Grab the ident record
+	identifier_ast_node_t* ident = cursor->node;
+
+	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
+	symtab_function_record_t* found_function = lookup_function(function_symtab, ident->identifier); 
+
+	if(found_function != NULL){
+		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_function_name(found_function);
+		num_errors++;
+		return 0;
+	}
+
+	//Check for duplicated variables
+	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, ident->identifier); 
+
+	if(found_variable != NULL){
+		sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_variable_name(found_variable);
+		num_errors++;
+		return 0;
+	}
+
+	//Check for duplicated type names
+	symtab_type_record_t* found_type = lookup_type(type_symtab, ident->identifier); 
+
+	if(found_type != NULL){
+		sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		print_type_name(found_type);
+		num_errors++;
+		return 0;
+	}
+
+	//If we make it here we've passed all of the checks
+
+	//Now we have the identifier and the type, we can build our record
+	symtab_variable_record_t* param = create_variable_record(ident->identifier, STORAGE_CLASS_NORMAL);
+	//Assign the parameter type
+	param->type = parameter_type->type;
+	//Constant status
+	param->is_constant = is_constant;
+	//It is a function parameter
+	param->is_function_paramater = 1;
+
+	//Insert into the symbol table
+	insert_variable(variable_symtab, param);
+
+	//And, we'll hold a reference to it inside of the node as well
+	((param_decl_ast_node_t*)(parameter_decl_node->node))->param_record = param;
+
+	//All went well
+	return 1;
 }
 
 
 /**
- * Optional repetition allowed with our parameter list
+ * Optional repetition allowed with our parameter list. Merely a passthrough function,
+ * no nodes created directly
  *
  * REMEMBER: By the time that we get here, we've already seen a comma
  *
@@ -2580,6 +2672,8 @@ u_int8_t parameter_list_prime(FILE* fl, generic_ast_node_t* param_list_node){
 
 	//If there's no comma, we'll just bail out
 	if(lookahead.tok != COMMA){
+		//Whatever it was, we don't want it so put it back
+		push_back_token(fl, lookahead);
 		//This is our "epsilon" case
 		return 1;
 	}
@@ -2602,7 +2696,10 @@ u_int8_t parameter_list_prime(FILE* fl, generic_ast_node_t* param_list_node){
 
 
 /**
- * A parameter list will always be the child of a function node
+ * A parameter list will always be the child of a function node. It is important to note
+ * that the <parameter-declaration> function is responsible for verifying and storing
+ * each individual parameter in the parameter list, this function does not perform
+ * that duty
  *
  * <parameter-list> ::= <parameter-declaration><parameter-list-prime>
  * 					  | epsilon
@@ -2630,6 +2727,8 @@ u_int8_t parameter_list(FILE* fl, generic_ast_node_t* parent){
 
 	//If we see an R_PAREN, it's blank so we'll just leave
 	if(lookahead.tok == R_PAREN){
+		//Put it back for checking by the caller
+		push_back_token(fl, lookahead);
 		return 1;
 	} else {
 		//Otherwise we'll put the token back and keep going
@@ -4614,7 +4713,8 @@ static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
 
 
 /**
- * Handle the case where we declare a function
+ * Handle the case where we declare a function. A function will always be one of the children of a declaration
+ * partition
  *
  * BNF Rule: <function-definition> ::= func {<function-specifier>}? <identifer> ({<parameter-list>}?) -> {constant}? <type-specifier> <compound-statement>
  *
@@ -4633,6 +4733,9 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class;
+
+	//What is the functions return type?
+	generic_type_t* return_type;
 	
 	//The function record -- not initialized until IDENT
 	symtab_function_record_t* function_record;
@@ -4683,8 +4786,6 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 		return 0;
 	}
 
-	//We'll deal with assembling the function record later on
-	
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
 
