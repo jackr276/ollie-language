@@ -2195,12 +2195,22 @@ u_int8_t enumeration_specifier(FILE* fl){
 }
 
 
+
+static u_int8_t type_address_specifier(FILE* fl, generic_ast_node_t* type_specifier, symtab_type_record_t** current_record){
+
+}
+
+
+
 /**
  * A type name node is always a child of a type specifier. It consists
  * of all of our primitive types and any defined construct or
  * aliased types that we may have. It is important to note that any
  * non-primitive type needs to have been previously defined for it to be
  * valid
+ * 
+ * Also note that no checking against the type symbol table will be done in
+ * this function
  *
  * BNF Rule: <type-name> ::= void 
  * 						   | u_int8 
@@ -2219,7 +2229,94 @@ u_int8_t enumeration_specifier(FILE* fl){
  * 						   | <identifier>
  */
 static u_int8_t type_name(FILE* fl, generic_ast_node_t* type_specifier){
+	//Global status
+	u_int8_t status = 0;
+	//Lookahead token
+	Lexer_item lookahead;
 
+	//Let's create the type name node
+	generic_ast_node_t* type_name = ast_node_alloc(AST_NODE_CLASS_TYPE_NAME);
+
+	//It will always be a child of the type specifier node
+	add_child_node(type_specifier,  type_name);
+
+	//Let's see what we have
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//These are all of our basic types
+	if(lookahead.tok == VOID || lookahead.tok == U_INT8 || lookahead.tok == S_INT8 || lookahead.tok == U_INT16
+	   || lookahead.tok == S_INT16 || lookahead.tok == U_INT32 || lookahead.tok == S_INT32 || lookahead.tok == U_INT64
+	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == CHAR){
+
+		//Copy the lexeme into the node
+		strcpy(((type_name_ast_node_t*)type_name->node)->type_name, lookahead.lexeme);
+
+		//This one is all set now
+		return 1;
+
+	//Otherwise we may have an enumerated type
+	} else if(lookahead.tok == ENUMERATED){
+		//Add in the enumerated keyword
+		strcpy(((type_name_ast_node_t*)type_name->node)->type_name, "enumerated ");
+
+		//Now we have to see a valid identifier. The parent of this identifer
+		//Will itself be the type_name node
+		status = identifier(fl, type_name);
+
+		//If this is the case we'll fail out, no need for a message
+		if(status == 0){
+			return 0;
+		}
+
+		//If we make it here we know that it's valid, so we'll grab the identifier name
+		//and add it to our name
+		strcat(((type_name_ast_node_t*)type_name->node)->type_name, ((identifier_ast_node_t*)type_name->first_child->node)->identifier);
+
+		//Once we have this, we're out of here
+		return 1;
+
+	//Construct names are pretty much the same as enumerated names
+	} else if(lookahead.tok == CONSTRUCT){
+		//Add in the enumerated keyword
+		strcpy(((type_name_ast_node_t*)type_name->node)->type_name, "construct ");
+
+		//Now we have to see a valid identifier. The parent of this identifer
+		//Will itself be the type_name node
+		status = identifier(fl, type_name);
+
+		//If this is the case we'll fail out, no need for a message
+		if(status == 0){
+			return 0;
+		}
+
+		//If we make it here we know that it's valid, so we'll grab the identifier name
+		//and add it to our name
+		strcat(((type_name_ast_node_t*)type_name->node)->type_name, ((identifier_ast_node_t*)type_name->first_child->node)->identifier);
+
+		//Once we have this, we're out of here
+		return 1;
+	
+	//If this is the case then we have to see some user defined name, which is an ident
+	} else {
+		//We'll put this token back into the stream
+		push_back_token(fl, lookahead);
+
+		//Now we have to see a valid identifier. The parent of this identifer
+		//Will itself be the type_name node
+		status = identifier(fl, type_name);
+
+		//If this is the case we'll fail out, no need for a message
+		if(status == 0){
+			return 0;
+		}
+
+		//If we make it here we know that it's valid, so we'll grab the identifier name
+		//and add it to our name
+		strcat(((type_name_ast_node_t*)type_name->node)->type_name, ((identifier_ast_node_t*)type_name->first_child->node)->identifier);
+
+		//Once we have this, we're out of here
+		return 1;
+	}
 }
 
 
@@ -2261,7 +2358,8 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
 
 	//Just for convenience, we'll store this locally
 	char type_name[MAX_TYPE_NAME_LENGTH];
-	strcpy(type_name, ((type_name_ast_node_t*)(type_spec_node->node))->type_name);
+	//The name will be in the type_spec_nodes first child
+	strcpy(type_name, ((type_name_ast_node_t*)((type_spec_node->first_child)->node))->type_name);
 
 	//We'll now lookup the type that we have and keep it as a temporary reference
 	//We're also checking for existence. If this type does not exist, then that's bad
@@ -2276,7 +2374,15 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
 	}
 
 	//Now if we make it here, we know that the type exists in the system, and we have a record of it
-	//in our hands
+	//in our hands. We can now optionally see some type-address-specifiers. These take the form of
+	//array brackets or address operators(&)
+	//
+	//The type-address-specifier function works uniquely compared to other functions. It will actively
+	//modify the type that we have currently active. When it's done, our "current_type" reference should
+	//in theory be fully done with arrays
+	//
+	//Just like before, this node is the child of the type-spec-node
+	status = type_address_specifier(fl, type_spec_node, &current_type);
 
 	
 
