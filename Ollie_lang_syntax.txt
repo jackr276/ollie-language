@@ -4,6 +4,8 @@ Rules are in no particular order. Nonterminals are enclosed inside of <>
 
 Epsilon means that no production is required for the rule. Essentially, it is a blank rule
 
+######################## Ollie language top level statements ##############################
+
 <program> ::= {<declaration-partition>}+
 
 <declaration-partition> ::= <function-defintion>
@@ -45,6 +47,21 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <complex-type-definer> ::= <enumerated-definer>
 						 | <construct-definer>
+
+<enumerated-definer> ::= define enumerated <identifier> { <enumerator><enumerator-list-prime> } as <identifier>;
+
+<construct-definer> ::= define construct <identifier> { <construct-member-list> }
+
+<construct-member-list> ::= <construct-member><construct-member-list-prime>
+
+<construct-member-list-prime> ::= , <construct-member><construct-member-list-prime>
+
+<construct-member> ::= {constant}? <type-specifier> <identifier>
+
+<enumerator-list-prime> ::= , <enumerator><enumerator-list-prime>
+						  | epsilon
+
+<enumerator> ::= <identifier>
 
 <alias-statement> ::= alias <type-specifier> as <alias-identifier>;
 
@@ -107,7 +124,98 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <expression-statement> ::= {<expression>}?;
 
-#############################################################################################
+########################## Ollie language expression rules ##################################
+
+<constant-expression> ::= <conditional-expression> 
+
+<conditional-expression> ::= <logical-or-expression>
+
+<logical-or-expression> ::= <logical-and-expression><logical-or-expression-prime>
+
+<logical-or-expression-prime ::= ||<logical-and-expression><logical-or-expression-prime>
+
+<logical-and-expression> ::= <inclusive-or-expression><logical-and-expression-prime>
+
+<logical-and-expression-prime> ::= &&<inclusive-or-expression><logical-and-expression-prime>
+
+<inclusive-or-expression> ::= <exclusive-or-expression><inclusive-or-expression-prime>
+
+<inclusive-or-expression-prime> ::= |<exclusive-or-expression><inclusive-or-expression-prime>
+
+<exclusive-or-expression> ::= <and-expression> 
+							| <and_expression><exclusive-or-expression-prime>
+
+<exclusive-or-expression-prime> ::= ^<and_expression><exlcusive-or-expression-prime>
+
+<and-expression> ::= <equality-expression> 
+				   | <equality-expression><and-expression-prime>
+
+<and-expression-prime> ::= <equality-expression><and-expression-prime>
+
+<equality-expression> ::= <relational-expression> 
+						| <relational-expression><equality-expression-prime>
+
+<equality-expression-prime> ::= ==<relational-expression><equality-expression-prime>
+							 |	!=<relational-expression><equality-expression-prime>
+
+<relational-expression> ::= <shift-expression>
+					 	  | <shift-expression> > <shift-expression>
+					  	  | <shift-expression> < <shift-expression>
+						  | <shift-expression> >= <shift-expression>
+						  | <shift-expression> <= <shift-expression>
+
+<shift-expression> ::= <additive-expression> 
+				   	|  <additive-expression> << <additive-expression> 
+					|  <additive-expression> >> <additive-expression>
+
+<additive-expression> ::= <multiplicative-expression> 
+					  	| <multiplicative-expression><additive-expression-prime>
+	
+<additive-expression-prime> ::= + <multiplicative-expression><additive-expression-prime>
+							  | - <multiplicative-expression><additive-expression-prime>
+
+<multiplicative-expression> ::= <cast-expression>
+							  | <cast-expression><multiplicative-expression-prime>
+
+<multiplicative-expression-prime> ::= *<cast-expression><multiplicative-expression-prime>
+									| /<cast-expression><multiplicative-expression-prime>
+									| %<cast-expression><multiplicative-expression-prime>
+
+<cast-expression> ::= <unary-expression> 
+					| < <type-name> > <unary-expression>
+
+<unary-expression> ::= <postfix-expression>
+					 | ++<unary-expression> 
+					 | --<unary-expression> 
+					 | <unary-operator> <cast-expression>
+					 | size(<unary-expression>) 
+					 | typesize(<type-name>)
+
+<unary-operator> ::= & 
+				   | * 
+				   | + 
+				   | - 
+				   | ~ 
+				   | ! 
+
+<postfix-expression> ::= <primary-expression>
+					   | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
+					   | <function-call>
+
+<function-call> ::= !<identifier>({conditional-expression}*)
+					   
+<primary-expression> ::= <identifier>
+                       | <constant>
+                       | ( <expression> )
+
+<expression> ::= <assignment-expression>
+			   | <assignment-expression><expression_prime>
+
+<expression_prime> ::= , <assignment-expression><expression_prime>
+
+<assignment-expression> ::= <conditional-expression>
+						  | asn <unary-expression> := <conditional_expression>
+
 
 ########################## Ollie language type system #######################################
 
