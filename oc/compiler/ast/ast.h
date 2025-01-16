@@ -66,6 +66,13 @@ struct prog_ast_node_t{
 	Lexer_item lex;
 };
 
+//Represents a top level function definition
+struct func_def_ast_node_t{
+	//The symtable function record that is created in parallel
+	symtab_function_record_t* func_record;
+};
+
+
 //Holds the static or external keywords for a function
 struct func_specifier_ast_node_t{
 	//Just holds a token for us
@@ -77,6 +84,13 @@ struct func_specifier_ast_node_t{
  * Global node allocation function
  */
 generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS);
+
+
+/**
+ * A helper function that will appropriately add a child node into the parent
+ */
+void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child);
+
 
 /**
  * Global tree deallocation function

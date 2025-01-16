@@ -36,6 +36,12 @@ generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_FUNC_SPECIFIER;
 			break;
 				
+		//The function specifier AST node
+		case AST_NODE_CLASS_FUNC_DEF:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(func_def_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_FUNC_DEF;
+			break;
 		
 		default:
 			return NULL;
@@ -44,6 +50,35 @@ generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
 
 	return node;
 }
+
+
+/**
+ * A helper function that will appropriately add a child node into the parent
+ */
+void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child){
+	//We first deal with a special case -> if this is the first child
+	//If so, we just add it in and leave
+	if(parent->first_child == NULL){
+		parent->first_child = child;
+		return;
+	}
+
+	/**
+	 * But if we make it here, we now know that there are other children. As such,
+	 * we need to move to the end of the child linked list and append it there
+	 */
+	generic_ast_node_t* cursor = child;
+
+	//As long as there are more siblings
+	while(cursor->next_sibling != NULL){
+		cursor = cursor->next_sibling;
+	}
+
+	//When we get here, we know that we're at the very last child, so
+	//we'll add it in and be finished
+	cursor->next_sibling = child;
+}
+
 
 /**
  * Global tree deallocation function

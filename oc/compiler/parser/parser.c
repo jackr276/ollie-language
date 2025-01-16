@@ -4495,31 +4495,9 @@ static u_int8_t declaration(FILE* fl){
 
 
 /**
- * A function specifier can be either a STATIC or an EXTERNAL definition
- *
- * BNF rule: <function-specifier> ::= static 
- *			        			  | external
- */
-u_int8_t function_specifier(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	//Grab the next token
-	Lexer_item l = get_next_token(fl, &parser_line_num);
-	
-	//If we find one of these, push it to the stack and return 1
-	if(l.tok == STATIC || l.tok == EXTERNAL){
-		//Push to the stack and let the caller decide how to handle
-		//TODO handle me
-		return 1;
-	}
-
-	//This isn't a necessity so no error
-	return 0;
-}
-
-
-/**
  * A function specifier has two options, the rule merely exists for AST integration
+ *
+ * ALWAYS A CHILD
  */
 static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
 
@@ -4536,6 +4514,10 @@ static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
 
 		//This node is always a child of a parent node. Accordingly so, we'll use the
 		//helper function to attach it
+		add_child_node(parent_node, node);
+
+		//Succeeded
+		return 1;
 
 	//Fail case here
 	} else {
@@ -4549,11 +4531,14 @@ static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
 /**
  * Handle the case where we declare a function
  *
- * BNF Rule: <function-definition> ::= func (<function-specifier>)? <identifier> (<parameter-list>?) -> <type-specifier> {pointer}? <compound-statement>
+ * BNF Rule: <function-definition> ::= func {<function-specifier>}? <identifer> ({<parameter-list>}?) -> {constant}? <type-specifier> <compound-statement>
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
-static u_int8_t function_declaration(FILE* fl, generic_ast_node_t* parent_node){
+static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
+	//This will be used for error printing
+	char info[2000];
+	
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//The status tracker
@@ -4565,35 +4550,25 @@ static u_int8_t function_declaration(FILE* fl, generic_ast_node_t* parent_node){
 	//The function record -- not initialized until IDENT
 	symtab_function_record_t* function_record;
 
+	//We also have the AST function node, this will be intialized immediately
+	//It also requires a symtab record of the function, but this will be assigned
+	//later once we have it
+	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF);
+
+	//The function node will be a child of the parent, so we'll add it in as such
+	add_child_node(parent_node, function_node);
+
 	Lexer_item lookahead;
 	Lexer_item lookahead2;
 
-	//This will be used for error printing
-	char info[2000];
-	
 	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
 	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//We've seen the option function specifier
 	if(lookahead.tok == COLON){
-		//Let's find a function specifier
-		lookahead = get_next_token(fl, &parser_line_num);
-		
-		//Store it if we have something here
-		if(lookahead.tok == STATIC){
-			storage_class = STORAGE_CLASS_STATIC;
-		//NOT YET SUPPORTED
-		} else if(lookahead.tok == EXTERNAL){
-			storage_class = STORAGE_CLASS_EXTERNAL;
-			//Not yet supported TODO
-			print_parse_message(PARSE_ERROR, "External storage class is not yet supported",  current_line);
-			num_errors++;
-			return 0;
-		} else {
-			print_parse_message(PARSE_ERROR, "Function specifier STATIC or EXTERNAL expected after colon", current_line);
-			num_errors++;
-			return 0;
-		}
+		//If we see this, we must then see a valid function specifier
+		status = function_specifier(fl, function_node);
+
 	//Otherwise it's a plain function so put the token back
 	} else {
 		//Otherwise put the token back in the stream
@@ -4789,7 +4764,7 @@ static u_int8_t declaration_partition(FILE* fl, generic_ast_node_t* parent_node)
 	//We know that we have a function here
 	if(lookahead.tok == FUNC){
 		//Otherwise our status is just whatever the function returns
-		status = function_declaration(fl, parent_node);
+		status = function_definition(fl, parent_node);
 
 		//Something failed
 		if(status == 0){
