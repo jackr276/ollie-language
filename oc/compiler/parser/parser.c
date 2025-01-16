@@ -2211,7 +2211,8 @@ static u_int8_t type_address_specifier(FILE* fl, generic_ast_node_t* type_specif
 	u_int8_t status = 0;
 	//Lookahead token
 	Lexer_item lookahead;
-	//The current type that we have
+	//A node that we'll be adding to the parent if we see something
+	generic_ast_node_t* node;
 
 	//Let's see what we have here
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -2219,10 +2220,37 @@ static u_int8_t type_address_specifier(FILE* fl, generic_ast_node_t* type_specif
 	//What type do we have
 	//Single and sign(&) means pointer
 	if(lookahead.tok == AND){
-		current_type = create_pointer_type(j, u_int32_t line_number)
+		//Allocate it
+		node = ast_node_alloc(AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER);
 
+		//Copy this in for storage
+		strcpy(((type_address_specifier_ast_node_t*)(node->node))->address_specifer, "&");
+
+		//This node will always be the child of a type specifier node
+		add_child_node(type_specifier, node);
+
+		//We'll make a new pointer type that points back to the original type
+		*current_type = create_pointer_type(*current_type, parser_line_num);
+
+		//We'll see if we need to keep going
+		return type_address_specifier(fl, type_specifier, current_type);
 
 	} else if(lookahead.tok == L_BRACKET){
+		//Push the L_Bracket onto the stack for matching
+		push(grouping_stack, lookahead);
+
+		//Allocate it
+		node = ast_node_alloc(AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER);
+
+		//Copy this in for storage
+		strcpy(((type_address_specifier_ast_node_t*)(node->node))->address_specifer, "[]");
+
+		//This node will always be the child of a type specifier node
+		add_child_node(type_specifier, node);
+
+		status = constant(fl, type_specifier);
+
+		//TODO FINISH
 
 	//This is our epsilon area, we'll just put it back and leave
 	} else {
@@ -2419,9 +2447,45 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
 		//in theory be fully done with arrays
 		//
 		//Just like before, this node is the child of the type-spec-node
-	
-		
 
+		//We'll first push the token back
+		push_back_token(fl, lookahead);
+
+		//Now we expect to have some new types made
+		generic_type_t* current_type = current_type_record->type;
+
+		//We'll now let this do it's thing. By the time we come back, current_type
+		//will automagically be the complete type
+		status = type_address_specifier(fl, type_spec_node, &current_type);
+
+		//Non-leaf error here, no need to print anything
+		if(status == 0){
+			return 0;
+		}
+		
+		//Let's now search to see if this type name has ever appeared before. If it has, there
+		//is no issue with that. Duplicated pointer and array types are of no concern, as they are
+		//universal
+		current_type_record = lookup_type(type_symtab, current_type->type_name);
+
+		//If we actually found it, we'll just reuse that same record
+		if(current_type_record != NULL){
+			//We no longer need this type
+			destroy_type(current_type);
+			//Assign this and get out
+			((type_spec_ast_node_t*)(type_spec_node->node))->type_record = current_type_record;
+			return 1;
+		//Otherwise we'll make a totally new type record
+		} else {
+			current_type_record = create_type_record(current_type);
+			//Put into symtab
+			insert_type(type_symtab, current_type_record);
+
+			//Assign this and get out
+			((type_spec_ast_node_t*)(type_spec_node->node))->type_record = current_type_record;
+
+			return 1;
+		}
 
 	} else {
 		//If we make it here, there will be no type modifications or potential new types made. The pointer
@@ -2436,13 +2500,6 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
 
 		return 1;
 	}
-
-
-	
-
-
-
-
 }
 
 

@@ -74,6 +74,13 @@ generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_TYPE_NAME;
 			break;
 
+		//The type address specifier node
+		case AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(type_address_specifier_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER;
+			break;
+
 		case AST_NODE_CLASS_IDENTIFER:
 			//Just allocate the proper size and set the class
 			node->node = calloc(1, sizeof(identifier_ast_node_t));

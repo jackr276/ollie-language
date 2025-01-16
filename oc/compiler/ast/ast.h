@@ -37,6 +37,8 @@ typedef struct identifier_ast_node_t identifier_ast_node_t;
 typedef struct type_spec_ast_node_t type_spec_ast_node_t;
 //A type name node
 typedef struct type_name_ast_node_t type_name_ast_node_t;
+//Type address specifier node
+typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -54,6 +56,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PARAM_DECL,
 	AST_NODE_CLASS_IDENTIFER,
 	AST_NODE_CLASS_TYPE_SPECIFIER,
+	AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER,
 	AST_NODE_CLASS_TYPE_NAME,
 } ast_note_class_t;
 
@@ -126,10 +129,20 @@ struct type_spec_ast_node_t{
 	symtab_type_record_t* type_record;
 };
 
+
 //Simply holds a name that we get for a type
 struct type_name_ast_node_t{
 	char type_name[MAX_TYPE_NAME_LENGTH];
 };
+
+
+//Hold the address specifier
+struct type_address_specifier_ast_node_t{
+	//Either see an & or array brackets
+	char address_specifer[10];
+};
+
+
 
 
 /**
