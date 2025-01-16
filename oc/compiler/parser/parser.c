@@ -65,7 +65,7 @@ static u_int8_t direct_declarator(FILE* fl);
 /**
  * Simply prints a parse message in a nice formatted way
 */
-void print_parse_message(parse_message_type_t message_type, char* info, u_int16_t line_num){
+static void print_parse_message(parse_message_type_t message_type, char* info, u_int16_t line_num){
 	//Build and populate the message
 	parse_message_t parse_message;
 	parse_message.message = message_type;
@@ -122,102 +122,93 @@ static u_int8_t identifier(FILE* fl, generic_ast_node_t* parent_node){
 
 
 /**
- * Do we have a label identifier or not?
+ * A label identifier will always be a child of some other node. As such, it will be
+ * added on as a child of that node once created
+ *
+ * No symbol table or collision checking will be handled in this function
+ *
+ * BNF "Rule": <label_identifier> ::= ${(<letter>) | <digit> | _ | $}*
  */
-static u_int8_t label_identifier(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	//Grab the next token
-	Lexer_item l = get_next_token(fl, &parser_line_num);
+static u_int8_t label_identifier(FILE* fl, generic_ast_node_t* parent_node){
+	//In case of error printing
 	char info[2000];
+
+	//Grab the next token
+	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
 	
 	//If we can't find it that's bad
-	if(l.tok != LABEL_IDENT){
-		sprintf(info, "String %s is not a valid label identifier", l.lexeme);
-		print_parse_message(PARSE_ERROR, info, current_line);
+	if(lookahead.tok != LABEL_IDENT){
+		sprintf(info, "String %s is not a valid label-specific identifier", lookahead.lexeme);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return 0;
 	}
 
-	//We'll push this ident onto the stack and let whoever called(function/variable etc.) deal with it
-	//We have no need to search the symtable in this function because we are unable to context-sensitive
-	//analysis here
+	//Create the label identifier node
+	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_LABEL_IDENTIFIER);
+
+	//Add the identifier into the node itself
+	strcpy(((label_identifier_ast_node_t*)(label_ident_node->node))->label_identifier, lookahead.lexeme);
+
+	//Add this into the tree
+	add_child_node(parent_node, label_ident_node);
+
 	return 1;
 }
 
 
 /**
- * Pointers can be chained(several *'s at once)
- *
- * BNF Rule: <pointer> ::= * {<pointer>}?
- */
-static u_int8_t pointer(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	generic_type_t* temp;
-
-	//Grab the star
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	if(lookahead.tok == STAR){
-		//We've seen a pointer, so now we need to handle a pointer
-		//Save the reference
-		temp = active_type;
-
-		//We'll also store the active type in the symtable to maintain it's information
-		insert_type(type_symtab, create_type_record(temp));
-		
-		//Create a pointer type that points to temp
-		active_type = create_pointer_type(temp, current_line);
-		
-		//Refresh the token, continue the search
-		lookahead = get_next_token(fl, &parser_line_num);
-		//If we see another pointer, handle it
-		if(lookahead.tok == STAR){
-			//Put it back for the next rule to handle
-			push_back_token(fl, lookahead);
-			return pointer(fl);
-		} else {
-			//Put back and leave
-			push_back_token(fl, lookahead);
-			return 1;
-		}
-
-	} else {
-		//Put it back and get out, it's not catastrophic if we don't see it
-		push_back_token(fl, lookahead);
-		return 0;
-	}
-}
-
-
-/**
- * Handle a constant. There are 4 main types of constant, all handled by this function
+ * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
+ * is always the child of some parent node. As such, it will be added as a child to the parent node
+ * passed in
  *
  * BNF Rule: <constant> ::= <integer-constant> 
  * 						  | <string-constant> 
  * 						  | <float-constant> 
  * 						  | <char-constant>
  */
-static u_int8_t constant(FILE* fl){
+static u_int8_t constant(FILE* fl, generic_ast_node_t* parent_node){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	Lexer_item l;
+	Lexer_item lookahead;
 	
 	//We should see one of the 4 constants here
-	l = get_next_token(fl, &parser_line_num);
+	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Do this for now, later on we'll need symtable integration
-	if(l.tok == INT_CONST || l.tok == STR_CONST || l.tok == CHAR_CONST || l.tok == FLOAT_CONST ){
-		return 1;
+	//Create our constant node
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+
+	//We'll go based on what kind of constant that we have
+	switch(lookahead.tok){
+		case INT_CONST:
+			((constant_ast_node_t*)constant_node->node)->constant_type = INT_CONST;
+			break;
+		case FLOAT_CONST:
+			((constant_ast_node_t*)constant_node->node)->constant_type = FLOAT_CONST;
+			break;
+		case CHAR_CONST:
+			((constant_ast_node_t*)constant_node->node)->constant_type = CHAR_CONST;
+			break;
+		case STR_CONST:
+			((constant_ast_node_t*)constant_node->node)->constant_type = STR_CONST;
+			break;
+		default:
+			print_parse_message(PARSE_ERROR, "Invalid constant given", parser_line_num);
+			num_errors++;
+			return 0;
 	}
 
-	//Otherwise here, we have an error
-	print_parse_message(PARSE_ERROR, "Invalid constant found", current_line);
-	num_errors++;
-	return 0;
+	//If we made it here, then we know that we have a valid constant
+	//We'll now copy the lexeme that we saw in here to the constant
+	strcpy(((constant_ast_node_t*)constant_node->node)->constant, lookahead.lexeme);
+
+	//Once the entire node has been made, we'll add it to the tree
+	add_child_node(parent_node, constant_node);
+
+	//All went well so
+	return 1;
 }
+
 
 /**
  * A prime rule that allows for comma chaining and avoids right recursion
@@ -4843,6 +4834,8 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 	//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start
 	//it
 	symtab_function_record_t* function_record = create_function_record(ident->identifier, storage_class);
+	//Associate this with the function node
+	((func_def_ast_node_t*)function_node->node)->func_record = function_record;
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4952,9 +4945,17 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 		return 0;
 	}
 
+	//Grab the type record. A reference to this will be stored in the function symbol table
+	symtab_type_record_t* type = ((type_spec_ast_node_t*)(cursor->node))->type_record;
 
-	//TODO RETURN TYPE
+	//Store the return type
+	function_record->return_type = type;
 
+	//Finally, we'll put the function into the symbol table
+	insert_function(function_symtab, function_record);
+
+	//All good so we can get out
+	return 1;
 }
 
 

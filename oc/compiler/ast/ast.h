@@ -33,6 +33,10 @@ typedef struct param_list_ast_node_t param_list_ast_node_t;
 typedef struct param_decl_ast_node_t param_decl_ast_node_t;
 //An identifier node
 typedef struct identifier_ast_node_t identifier_ast_node_t;
+//A label identifier node. Label identifiers always begin with dollar signs
+typedef struct label_identifier_ast_node_t label_identifier_ast_node_t;
+//A constant node. Can represent any of the four kinds of constant
+typedef struct constant_ast_node_t constant_ast_node_t;
 //A type specifier node
 typedef struct type_spec_ast_node_t type_spec_ast_node_t;
 //A type name node
@@ -49,12 +53,10 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_FUNC_DEF,
 	AST_NODE_CLASS_FUNC_SPECIFIER,
 	AST_NODE_CLASS_PARAM_LIST,
-	AST_NODE_CLASS_INT_CONST,
-	AST_NODE_CLASS_FLOAT_CONST,
-	AST_NODE_CLASS_CHAR_CONST,
-	AST_NODE_CLASS_STRING_CONST,
+	AST_NODE_CLASS_CONSTANT,
 	AST_NODE_CLASS_PARAM_DECL,
 	AST_NODE_CLASS_IDENTIFER,
+	AST_NODE_CLASS_LABEL_IDENTIFIER,
 	AST_NODE_CLASS_TYPE_SPECIFIER,
 	AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER,
 	AST_NODE_CLASS_TYPE_NAME,
@@ -114,6 +116,19 @@ struct identifier_ast_node_t{
 	char identifier[1000];
 };
 
+//Holds information about an identifier that's been seen
+struct label_identifier_ast_node_t{
+	//Holds the lexeme of the label identifier
+	char label_identifier[1000];
+};
+
+//Holds information about a constant
+struct constant_ast_node_t{
+	//Holds the token for what kind of constant it is
+	Token constant_type;
+	//Holds the intialized value of the constant
+	char constant[1000];
+};
 
 //Holds information about a parameter declaration. This will also hold 
 //a reference to the associated record in the symtab

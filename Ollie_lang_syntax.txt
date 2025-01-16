@@ -241,4 +241,9 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <aliased-type> ::= <identifier>
 
+<constant> ::= <integer-constant>
+			 | <string-constant>
+			 | <float-constant>
+			 | <char-constant>
+
 #############################################################################################
