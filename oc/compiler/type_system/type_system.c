@@ -109,6 +109,41 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 
 
 /**
+ * Create an array type dynamically. In order to have an array type, we must also know
+ * what type its memebers are and the size of the array
+ *
+ * In ollie language, static arrays must have their overall size known at compile time.
+ */
+generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members){
+	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
+
+	//Pointer type class
+	type->type_class = TYPE_CLASS_ARRAY;
+
+	//Where was it declared
+	type->line_number = line_number;
+
+	//Let's first copy the type name in
+	strcpy(type->type_name, points_to->type_name);
+
+	//And then we add a pointer onto the end of it
+	strcat(type->type_name, "[]");
+
+	//Now we'll make the actual pointer type
+	type->pointer_type = calloc(1, sizeof(array_type_t));
+
+	//Store what it points to
+	type->pointer_type->points_to = points_to;
+
+	//A pointer is always 8 bytes(Ollie lang is for x86-64 only)
+	//TODO FIXME
+	type->pointer_type->size = 100;
+
+	return type;
+}
+
+
+/**
  * Dynamically allocate and create an enumerated type
  */
 generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number){
@@ -199,5 +234,3 @@ void destroy_type(generic_type_t* type){
 
 	}
 }
-
-

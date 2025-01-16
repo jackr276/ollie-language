@@ -2195,9 +2195,40 @@ u_int8_t enumeration_specifier(FILE* fl){
 }
 
 
+/**
+ * A type address specifier allows us to specify that a type is actually an address(&) or some kind of array of these types
+ * There is no limit to how deep the array or address manipulation can go, so this rule is recursive. This rule actively
+ * modifies the current_record type record that it has, updating it to support whatever type we have
+ *
+ * In the interest of memory safety, ollie language requires array bounds for static arrays to be known at compile time
+ *
+ * BNF Rule: {type-address-specifier} ::= [<constant>]{type-address-specifier}
+ * 										| &{type-address-specifier}
+ * 										| epsilon
+ */
+static u_int8_t type_address_specifier(FILE* fl, generic_ast_node_t* type_specifier, generic_type_t** current_type){
+	//Status checker
+	u_int8_t status = 0;
+	//Lookahead token
+	Lexer_item lookahead;
+	//The current type that we have
 
-static u_int8_t type_address_specifier(FILE* fl, generic_ast_node_t* type_specifier, symtab_type_record_t** current_record){
+	//Let's see what we have here
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//What type do we have
+	//Single and sign(&) means pointer
+	if(lookahead.tok == AND){
+		current_type = create_pointer_type(j, u_int32_t line_number)
 
+
+	} else if(lookahead.tok == L_BRACKET){
+
+	//This is our epsilon area, we'll just put it back and leave
+	} else {
+		push_back_token(fl, lookahead);
+		return 1;
+	}
 }
 
 
@@ -2337,6 +2368,8 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
 	u_int8_t current_line = parser_line_num;
 	//Global status var
 	u_int8_t status = 0;
+	//Lookahead var
+	Lexer_item lookahead;
 
 	//We'll first create and attach the type specifier node
 	//At this point the node will be entirely blank
@@ -2363,26 +2396,47 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
 
 	//We'll now lookup the type that we have and keep it as a temporary reference
 	//We're also checking for existence. If this type does not exist, then that's bad
-	symtab_type_record_t* current_type = lookup_type(type_symtab, type_name);
+	symtab_type_record_t* current_type_record = lookup_type(type_symtab, type_name);
 
 	//This is a "leaf-level" error
-	if(current_type == NULL){
+	if(current_type_record == NULL){
 		sprintf(info, "Type with name: \"%s\" does not exist in the current scope.", type_name);
 		print_parse_message(PARSE_ERROR, info, current_line);
 		num_errors++;
 		return 0;
 	}
 
-	//Now if we make it here, we know that the type exists in the system, and we have a record of it
-	//in our hands. We can now optionally see some type-address-specifiers. These take the form of
-	//array brackets or address operators(&)
-	//
-	//The type-address-specifier function works uniquely compared to other functions. It will actively
-	//modify the type that we have currently active. When it's done, our "current_type" reference should
-	//in theory be fully done with arrays
-	//
-	//Just like before, this node is the child of the type-spec-node
-	status = type_address_specifier(fl, type_spec_node, &current_type);
+	//Let's see where we go from here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok == AND || lookahead.tok == L_BRACKET){
+		//Now if we make it here, we know that the type exists in the system, and we have a record of it
+		//in our hands. We can now optionally see some type-address-specifiers. These take the form of
+		//array brackets or address operators(&)
+		//
+		//The type-address-specifier function works uniquely compared to other functions. It will actively
+		//modify the type that we have currently active. When it's done, our "current_type" reference should
+		//in theory be fully done with arrays
+		//
+		//Just like before, this node is the child of the type-spec-node
+	
+		
+
+
+	} else {
+		//If we make it here, there will be no type modifications or potential new types made. The pointer
+		//to the type record that we already have is actually completely valid, and as such we'll just
+		//stash it and get out
+
+		//Put whatever we saw back
+		push_back_token(fl, lookahead);
+
+		//Store the reference to the type that we have here
+		((type_spec_ast_node_t*)(type_spec_node->node))->type_record = current_type_record;
+
+		return 1;
+	}
+
 
 	
 
@@ -2445,45 +2499,8 @@ static u_int8_t parameter_declaration(FILE* fl, generic_ast_node_t* parameter_li
 		return 0;
 	}
 
-	//Finally, we must see a direct declarator that is valid
-	status = parameter_direct_declarator(fl);
+	//TODO NOT DONE
 
-	//If it's bad then we're done here
-	if(status == 0){
-		num_errors++;
-		return 0;
-	}
-
-	//After this call we should have the name of the ident that the parameter is
-	symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
-	//Store the active type
-	var->type = active_type;
-	//This is a function param so we'll keep it here
-	var->parent_function = current_function;
-	var->is_function_paramater = 1;
-
-	//Store in the symtab
-	insert_variable(variable_symtab, var);
-	
-	//One more parameter
-	if(current_function == NULL){
-		print_parse_message(PARSE_ERROR,  "Internal parse error at parameter declaration", current_line);
-		num_errors++;
-		//Cleanup here
-		free(current_ident);
-		return 0;
-	}
-
-	//We'll also link this in with the function
-	current_function->func_params[current_function->number_of_params].associate_var = var;
-	//Increment for us
-	(current_function->number_of_params)++;
-
-	//Cleanup here
-	free(current_ident);
-	active_type = NULL;
-
-	return 1;
 }
 
 

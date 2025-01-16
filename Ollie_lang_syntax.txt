@@ -216,7 +216,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <type-specifier> ::= <type-name>{<type-address-specifier>}*
 
-{type-address-specifier} ::= [{constant-expression}?]
+{type-address-specifier} ::= [<constant>]
 						    | &
 
 <type-name> ::= void
