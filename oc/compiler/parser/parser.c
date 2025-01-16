@@ -54,7 +54,7 @@ static u_int8_t conditional_expression(FILE* fl);
 static u_int8_t unary_expression(FILE* fl);
 static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent);
 static u_int8_t declaration(FILE* fl);
-static u_int8_t compound_statement(FILE* fl);
+static u_int8_t compound_statement(FILE* fl, generic_ast_node_t* parent);
 static u_int8_t statement(FILE* fl);
 static u_int8_t expression(FILE* fl);
 static u_int8_t initializer(FILE* fl);
@@ -109,9 +109,7 @@ static u_int8_t identifier(FILE* fl, generic_ast_node_t* parent_node){
 	}
 
 	//Create the identifier node
-	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFER);
-
-	//Add the identifier into the node itself
+	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFER); //Add the identifier into the node itself
 	strcpy(((identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
 
 	//Add this into the tree
@@ -2702,10 +2700,6 @@ u_int8_t parameter_list(FILE* fl, generic_ast_node_t* parent){
 	Lexer_item lookahead;
 	u_int8_t status = 0;
 
-	//We initialize this scope automatically, even if there is no param list.
-	//It will just be empty if this is the case, no big issue
-	initialize_variable_scope(variable_symtab);
-
 	//Let's now create the parameter list node and add it into the tree
 	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST);
 
@@ -4240,13 +4234,62 @@ static u_int8_t declarator(FILE* fl){
 
 
 /**
- * A declaration is the other main kind of block that we can see other than functions
+ * A declare statement is always the child of an overall declaration statement, so it will
+ * be added as the child of the given parent node. A declare statement also performs all
+ * needed type/repetition checks 
  *
- * BNF Rule: <declaration> ::= declare {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator>; 
- * 							 | let {constant}? <storage-class-specifier>? <type-specifier> {<pointer>}? <direct-declarator := <intializer>;
- *                           | define <enumerated-definer> {as <ident>}?;
- *                           | define <structure-definer> {as <ident>}?;
- *                           | alias <type-specifier> {<pointer>}? as <ident>;
+ * BNF Rule: <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <declarator>;
+ */
+static u_int8_t declare_statement(FILE* fl, generic_ast_node_t* parent_node){
+
+}
+
+
+/**
+ * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
+ * performs type checking and inference and all needed symbol table manipulation
+ *
+ * BNF Rule: <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <declarator> := <initializer>;
+ */
+static u_int8_t let_statement(FILE* fl, generic_ast_node_t* parent_node){
+
+}
+
+
+/**
+ * A define statement allows users to define complex types like enumerateds and constructs and give them aliases
+ * inline(there is also a separate aliasing feature). Just like any other declaration, this function performs 
+ * all type checking and name checking and symbol table manipulation. It is also always the child of some given
+ * node
+ *
+ * BNF Rule: <define-statement> ::= define <complex-type-definer> {as <alias-identifer>}?;
+ */
+static u_int8_t define_statement(FILE* fl, generic_ast_node_t* parent_node){
+
+}
+
+
+/**
+ * An alias statement allows us to redefine any currently defined type as some other type. It is probably the
+ * simplest of any of these rules, but it still performs all type checking and symbol table manipulation. It is
+ * always the child of a parent node
+ *
+ * BNF Rule: *<alias-statement> ::= alias <type-specifier> as <identifier>;
+ */
+static u_int8_t alias_statement(FILE* fl, generic_ast_node_t* parent_node){
+
+}
+
+
+/**
+ * A declaration is a pass through rule that does not itself initialize a node. Instead, it will pass down to
+ * the appropriate rule here and let them initialize the rule. The declaration itself does have a parent node,
+ * so it will need to pass that parent node down through to these rules here
+ *
+ * <declaration> ::= <declare-statement> 
+ * 				   | <let-statement> 
+ * 				   | <define-statement> 
+ * 				   | <alias-statement>
  */
 static u_int8_t declaration(FILE* fl){
 	//Freeze the line number
@@ -4849,7 +4892,11 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 
 	//Otherwise, we'll push this onto the list to check for later
 	push(grouping_stack, lookahead);
-	
+
+	//We initialize this scope automatically, even if there is no param list.
+	//It will just be empty if this is the case, no big issue
+	initialize_variable_scope(variable_symtab);
+
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
@@ -4951,8 +4998,21 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 	//Store the return type
 	function_record->return_type = type;
 
+	//Once we get here, we must see a valid compound statement. The function node
+	//will be considered the parent of the compound statement
+	status = compound_statement(fl, function_node);
+
+	//Not a leaf error, we can just leave
+	if(status == 0){
+		return 0;
+	}
+
 	//Finally, we'll put the function into the symbol table
+	//since we now know that everything worked
 	insert_function(function_symtab, function_record);
+
+	//Finalize the variable scope for the parameter list
+	finalize_variable_scope(variable_symtab);
 
 	//All good so we can get out
 	return 1;
@@ -4988,6 +5048,7 @@ static u_int8_t declaration_partition(FILE* fl, generic_ast_node_t* parent_node)
 			return 0;
 		}
 
+	//Otherwise it must be a declaration
 	} else {
 		//Push it back
 		push_back_token(fl, lookahead);

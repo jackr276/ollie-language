@@ -61,9 +61,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <enumerator> ::= <identifier>
 
-<alias-statement> ::= alias <type-specifier> as <alias-identifier>;
-
-<alias-identifer> ::= <identifier>
+<alias-statement> ::= alias <type-specifier> as <identifier>;
 
 <declarator> ::= <identifer>
 				 <identifer>{<array-accessor>}?
@@ -116,7 +114,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement | compound-statement>}*
 
-<labeled-statement> ::= @<label-identifier> <compound-statement>
+<labeled-statement> ::= <label-identifier> <compound-statement>
 					  | case <constant-expression> <compound-statement>
  					  | default <compound-statement>
 
