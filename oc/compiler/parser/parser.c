@@ -46,6 +46,9 @@ Lexer_item* current_ident = NULL;
 //The current type. Used for global access
 generic_type_t* active_type = NULL;
 
+//The root of the entire tree
+prog_ast_node_t* ast_root = NULL;
+
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static u_int8_t cast_expression(FILE* fl);
@@ -4745,10 +4748,13 @@ arrow_ident:
 /**
  * Here we can either have a function definition or a declaration
  *
+ * The AST will not be modified in this function, as these are pass through
+ * rules that have no nonterminals
+ *
  * <declaration-partition>::= <function-definition>
  *                        	| <declaration>
  */
-u_int8_t declaration_partition(FILE* fl){
+u_int8_t declaration_partition(FILE* fl, void* parent_node){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -4788,16 +4794,28 @@ u_int8_t declaration_partition(FILE* fl){
  */
 static u_int8_t program(FILE* fl){
 	//Freeze the line number
-	Lexer_item l;
+	Lexer_item lookahead;
 	u_int8_t status = 0;
 
+	//We first symbolically "see" the START token. The start token
+	//is the lexer symbol that the top level node holds
+	Lexer_item start;
+
+	//We really only care about the tok here
+	start.tok = START;
+	
+	//Create the ROOT of the tree
+	ast_root = ast_node_alloc(AST_NODE_CLASS_PROG);
+	//Assign the lexer item to it for completeness
+	ast_root->lex = start;
+
 	//As long as we aren't done
-	while((l = get_next_token(fl, &parser_line_num)).tok != DONE){
+	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
 		//Put the token back
-		push_back_token(fl, l);
+		push_back_token(fl, lookahead);
 
 		//Pass along and let the rest handle
-		status = declaration_partition(fl);
+		status = declaration_partition(fl, ast_root);
 		
 		//If we have an error then we'll print it out
 		if(status == 0){
@@ -4807,7 +4825,8 @@ static u_int8_t program(FILE* fl){
 		}
 	}
 
-	return status;
+	//All went well if we get here
+	return 1;
 }
 
 

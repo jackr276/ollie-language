@@ -21,7 +21,7 @@
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
-	START,
+	IN_START,
 	IN_IDENT,
 	IN_INT,
 	IN_FLOAT,
@@ -137,8 +137,9 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 		*parser_line_num = 1;
 	}
 
+
 	//We begin in the start state
-	Lex_state current_state = START;
+	Lex_state current_state = IN_START;
 
 	//Whenever we're in start we're automatically at 0
 	token_char_count = 0;
@@ -155,7 +156,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 	while((ch = get_next_char(fl)) != EOF){
 		//Switch on the current state
 		switch(current_state){
-			case START:
+			case IN_START:
 				//We've seen 1 token to be here
 				token_char_count = 1;
 
@@ -179,7 +180,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_SINGLE_COMMENT;
 							break;
 						} else {
-							current_state = START;
+							current_state = IN_START;
 							//"Put back" the char
 							put_back_char(fl);
 
@@ -196,7 +197,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						
 						//We could see++
 						if(ch2 == '+'){
-							current_state = START;
+							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = PLUSPLUS;
 							strcpy(lex_item.lexeme, "++");
@@ -204,7 +205,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else {
-							current_state = START;
+							current_state = IN_START;
 							//"Put back" the char
 							put_back_char(fl);	
 
@@ -219,7 +220,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						ch2 = get_next_char(fl);
 
 						if(ch2 == '-'){
-							current_state = START;
+							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = MINUSMINUS;
 							strcpy(lex_item.lexeme, "--");
@@ -228,7 +229,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							return lex_item;
 						//We can also have an arrow
 						} else if(ch2 == '>'){
-							current_state = START;
+							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = ARROW;
 							strcpy(lex_item.lexeme, "->");
@@ -236,7 +237,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else {
-							current_state = START;
+							current_state = IN_START;
 							//"Put back" the char
 							put_back_char(fl);
 
@@ -248,7 +249,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						}
 
 					case '*':
-						current_state = START;
+						current_state = IN_START;
 						lex_item.tok = STAR;
 						strcpy(lex_item.lexeme, "*");
 						lex_item.line_num = line_num;
@@ -260,7 +261,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						
 						//If we get this then it's +=
 						if(ch2 == '='){
-							current_state = START;
+							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = D_EQUALS;
 							strcpy(lex_item.lexeme, "==");
@@ -268,7 +269,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else {
-							current_state = START;
+							current_state = IN_START;
 							//"Put back" the char
 							put_back_char(fl);
 
@@ -284,7 +285,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 						//If we get this then it's +=
 						if(ch2 == '&'){
-							current_state = START;
+							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = DOUBLE_AND;
 							strcpy(lex_item.lexeme, "&&");
@@ -292,7 +293,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else {
-							current_state = START;
+							current_state = IN_START;
 							//"Put back" the char
 							put_back_char(fl);
 
@@ -307,7 +308,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						ch2 = get_next_char(fl);
 						//If we get this then it's +=
 						if(ch2 == '|'){
-							current_state = START;
+							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = DOUBLE_OR;
 							strcpy(lex_item.lexeme, "||");
@@ -315,7 +316,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else {
-							current_state = START;
+							current_state = IN_START;
 							//"Put back" the char
 							put_back_char(fl);
 							lex_item.tok = OR;
@@ -333,7 +334,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						return lex_item;
 
 					case '%':
-						current_state = START;
+						current_state = IN_START;
 						lex_item.tok = MOD;
 						strcpy(lex_item.lexeme, "%");
 						lex_item.line_num = line_num;
@@ -343,7 +344,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					case ':':
 						ch2 = get_next_char(fl);
 						if(ch2 == ':'){
-							current_state = START;
+							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = DOUBLE_COLON;
 							strcpy(lex_item.lexeme, "::");
@@ -352,7 +353,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							return lex_item;
 						//We have a ":="
 						} else if(ch2 == '='){
-							current_state = START;
+							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = COLONEQ;
 							strcpy(lex_item.lexeme, ":=");
@@ -360,7 +361,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else {
-							current_state = START;
+							current_state = IN_START;
 							//Put it back
 							put_back_char(fl);
 							lex_item.tok = COLON;
@@ -604,7 +605,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					//We'll put this back as we went too far
 					put_back_char(fl);
 					//Restart the state
-					current_state = START;
+					current_state = IN_START;
 					//Return if we have ident or keyword
 					return identifier_or_keyword(lexeme, line_num);
 				}
@@ -626,7 +627,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					//"Put back" the char
 					put_back_char(fl);
 					//Reset the state
-					current_state = START;
+					current_state = IN_START;
 
 					//Populate and return
 					lex_item.tok = INT_CONST;
@@ -647,7 +648,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					//Put back the char
 					put_back_char(fl);
 					//Reset the state
-					current_state = START;
+					current_state = IN_START;
 					
 					//We'll give this back now
 					lex_item.tok = FLOAT_CONST;
@@ -663,7 +664,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 				//If we see the end of the string
 				if(ch == '"'){ 
 					//Reset the search
-					current_state = START;
+					current_state = IN_START;
 					//Set the token
 					lex_item.tok = STR_CONST;
 					//Set the lexeme & line num
@@ -692,7 +693,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					ch2 = fgetc(fl);	
 					if(ch2 == '/'){
 						//We are now out of the comment
-						current_state = START;
+						current_state = IN_START;
 						break;
 					} else {
 						//"Put back" char2
@@ -711,7 +712,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 				if(ch == '\n'){
 					line_num++;
 					(*parser_line_num)++;
-					current_state = START;
+					current_state = IN_START;
 				} 
 				//Otherwise just go forward
 				break;

@@ -13,6 +13,7 @@
 //This list may grow as we go forward
 typedef enum {
 	BLANK = 0,
+	START, /* start token */
 	LET,
 	DECLARE,
 	ALIAS,

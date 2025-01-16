@@ -20,7 +20,7 @@
 //A generic AST node can be any AST node
 typedef struct generic_ast_node_t generic_ast_node_t;
 //The starting AST node
-typedef struct starting_ast_node_t starting_ast_node_t;
+typedef struct prog_ast_node_t prog_ast_node_t;
 //A function definition AST node
 typedef struct func_def_ast_node_t func_def_ast_node_t;
 //A declaration AST node
@@ -29,7 +29,7 @@ typedef struct decl_ast_node_t decl_ast_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
-	AST_NODE_CLASS_START,
+	AST_NODE_CLASS_PROG,
 	AST_NODE_CLASS_INT_CONST,
 	AST_NODE_CLASS_FLOAT_CONST,
 	AST_NODE_CLASS_CHAR_CONST,
@@ -39,12 +39,14 @@ typedef enum ast_node_class_t{
 
 
 //The starting AST node really only exists to hold the tree root
-struct starting_ast_node_t{
+struct prog_ast_node_t{
 	//This node has no "next sibling", it only has a "first child"
 	func_def_ast_node_t* first_child_func; //If the first child is a function definition
 	decl_ast_node_t* first_child_decl; //If the first child is a declaration
 	//What class of node is it(only two options here)
 	ast_note_class_t CLASS;
+	//The lexer item, really a formality
+	Lexer_item lex;
 };
 
 
@@ -52,7 +54,6 @@ struct starting_ast_node_t{
  * Global node allocation function
  */
 void* ast_node_alloc(ast_note_class_t CLASS);
-
 
 /**
  * Current implementation is an N-ary tree. Each node holds pointers to its
