@@ -13,6 +13,7 @@
 */
 
 #include "parser.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -329,8 +330,12 @@ static u_int8_t primary_expression(FILE* fl, generic_ast_node_t* parent_node){
  *
  * BNF Rule: <assignment-expression> ::= <conditional-expression> 
  * 									   | asn <unary-expression> := <conditional-expression>
+ *
+ * TODO TYPE CHECKING REQUIRED
  */
 static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node){
+	//Info array for error printing
+	char info[2000];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -341,6 +346,66 @@ static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node)
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
 
+	//If we don't see an assign keyword, we know that 
+	//we're just passing through to a conditional expression
+	if(lookahead.tok != ASN){
+		//Put the token back
+		push_back_token(fl, lookahead);
+
+		//Pass through with the exact same parent node
+		status = conditional_expression(fl, parent_node);
+
+		//Not a "leaf error", just bail out
+		if(status == 0){
+			return 0;
+		}
+
+		//Otherwise it all worked here so
+		return 1;
+	}
+
+	//If we make it here however, that means that we did see the assign keyword. Since
+	//this is the case, we'll make a new assignment node and take the appropriate actions here 
+	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_CLASS_ASNMNT_EXPR);	
+
+	//This will be a child of whomever the parent is
+	add_child_node(parent_node, asn_expr_node);
+
+	//Now we must see a valid unary expression. The unary expression's parent
+	//will itself be the assignment expression node
+	
+	//We'll let this rule handle it
+	status = unary_expression(fl, asn_expr_node);
+
+	//Fail out here
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid left hand side given to assignment expression", current_line);
+		return 0;
+	}
+
+	//Now we are required to see the := terminal
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//Fail case here
+	if(lookahead.tok != COLONEQ){
+		sprintf(info, "Expected := symbol in assignment expression, instead got %s", lookahead.lexeme);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return 0;
+	}
+
+	//Now that we're here we must see a valid conditional expression
+	status = conditional_expression(fl, asn_expr_node);
+
+	//Fail case here
+	if(status == 0){
+		print_parse_message(PARSE_ERROR, "Invalid right hand side given to assignment expression", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise it all worked so
+	return 0;
 }
 
 
@@ -1456,50 +1521,18 @@ u_int8_t logical_or_expression(FILE* fl){
  * A conditional expression is simply used as a passthrough for a logical or expression,
  * but some important checks may be done here so we'll use it
  *
- * A CONDITIONAL EXPRESSiON IS THE TOP LEVEL EXPRESSION
- *
  * BNF Rule: <conditional-expression> ::= <logical-or-expression>
  */
-u_int8_t conditional_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	//Pass through to the logical or expression expression
-	u_int8_t status = logical_or_expression(fl);
+u_int8_t conditional_expression(FILE* fl, generic_ast_node_t* parent_node){
+	//Status var
+	u_int8_t status = 0;
 
-	//Create the top-level expression node
-	generic_ast_node_t* expr_node = ast_node_alloc(AST_NODE_CLASS_TOP_LEVEL_EXPR);
-	
-	//Add it into the tree as a child
-	add_child_node(parent_node, expr_node);
+	//We'll now hand the entire thing off to the logical-or-expression node
+	//The expression node that we made here is the parent
+	status = logical_or_expression(fl, parent_node);
 
-
-	//Something failed
+	//Something failed, but we don't have a leaf error so just leave
 	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid logical or expression found in conditional expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise we're all set
-	return 1;
-}
-
-
-/**
- * A constant expression is simply used as a passthrough for a conditional expression,
- * but some important checks may be performed here so that's why we have it
- * BNF Rule: <constant-expression> ::= <conditional-expression> 
- */
-u_int8_t constant_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	//Pass through to the conditional expression
-	u_int8_t status = conditional_expression(fl);
-
-	//Something failed
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid conditional expression found in constant expression", current_line);
-		num_errors++;
 		return 0;
 	}
 

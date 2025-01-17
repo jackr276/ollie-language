@@ -122,8 +122,6 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 ########################## Ollie language expression rules ##################################
 
-<constant-expression> ::= <conditional-expression> 
-
 <conditional-expression> ::= <logical-or-expression>
 
 <logical-or-expression> ::= <logical-and-expression><logical-or-expression-prime>
