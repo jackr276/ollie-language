@@ -1153,293 +1153,280 @@ static u_int8_t equality_expression(FILE* fl){
 
 
 /**
- * A prime rule that we use to avoid direct left recursion
+ * An and-expression descends into an equality expression and can be chained. This function
+ * will always return a pointer to the root of the subtree, whether that subtree is made here or
+ * at a rule lower down on the tree
  *
- * REMEMBER: By the time that we get here, we've already seen a '&'
- * 
- * BNF Rule: <and-expression-prime> ::= &<equality-expression><and-expression-prime>
+ * BNF Rule: <and-expression> ::= <equality-expression>{& <equality-expression>}* 
  */
-static u_int8_t and_expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* and_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We must first see a valid equality-expression
-	status = equality_expression(fl);
+	//No matter what, we do need to first see a valid equality expression
+	generic_ast_node_t* sub_tree_root = equality_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
+	}
 	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the double && here to chain
+	//There are now two options. If we do not see any ^'s, we just add 
+	//this node in as the child and move along. But if we do see ^ symbols, 
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//As long as we have a single and(&) 
+	while(lookahead.tok == AND){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
 
-	//If we have see an and(&) we can make the recursive call
-	if(lookahead.tok == AND){
-		return and_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid equality expression again
+		right_child = equality_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		//"sub-tree root". We'll now refresh the token to keep looking
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
+	//the token back and return our subtree
+	push_back_token(fl, lookahead);
+
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 
 /**
- * An and-expression descends into an equality expression and can be chained
+ * An exclusive or expression can be chained, and descends into an and-expression. It will always return
+ * a node pointer to the root of the subtree, whether that subtree is made here or in a rule lower down
+ * the chain
  *
- * BNF Rule: <and-expression> ::= <equality-expression> 
- * 								| <equality-expression><and-expression-prime>
+ * BNF Rule: <exclusive-or-expression> ::= <and-expression>{^ <and-expression}*
  */
-static u_int8_t and_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* exclusive_or_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We must first see a valid equality-expression
-	status = equality_expression(fl);
+	//No matter what, we do need to first see a valid and expression
+	generic_ast_node_t* sub_tree_root = and_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
+	}
 	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid equality expression found in and expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the double && here to chain
+	//There are now two options. If we do not see any ^'s, we just add 
+	//this node in as the child and move along. But if we do see ^ symbols, 
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//As long as we have a single xor(^)
+	while(lookahead.tok == CARROT){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
 
-	//If we have see an and(&) we can make the recursive call
-	if(lookahead.tok == AND){
-		return and_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid and expression again
+		right_child = and_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		//"sub-tree root". We'll now refresh the token to keep looking
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
+	//the token back and return our subtree
+	push_back_token(fl, lookahead);
+
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 
 /**
- * A prime rule to avoid direct left recursion
+ * An inclusive or expression will always return a reference to the root node of it's subtree. That node
+ * could be an operator or it could be a passthrough
  *
- * Remember, by the time that we've gotten here, we've already seen the ^ operator
- *
- * BNF Rule: <exclusive-or-expression-prime> ::= ^<and_expression><exlcusive-or-expression-prime>
+ * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression>{ | <exclusive-or-expression>}*
  */
-static u_int8_t exclusive_or_expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* inclusive_or_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We must first see a valid and-expression
-	status = and_expression(fl);
+	//No matter what, we do need to first see a valid exclusive or expression
+	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
+	}
 	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the double && here to chain
+	//There are now two options. If we do not see any |'s, we just add 
+	//this node in as the child and move along. But if we do see | symbols, 
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//As long as we have a single or(|)
+	while(lookahead.tok == OR){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
 
-	//If we have see a carrot(^) we can make the recursive call
-	if(lookahead.tok == CARROT){
-		return exclusive_or_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid exclusive or expression again
+		right_child = exclusive_or_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		//"sub-tree root". We'll now refresh the token to keep looking
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
+	//the token back and return our subtree
+	push_back_token(fl, lookahead);
+
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 
 /**
- * An exclusive or expression can be chained, and descends into an and-expression
+ * A logical-and-expression will always return a reference to the root node of its subtree. That
+ * root node can very well be an operator or it could just be a pass through
  *
- * BNF Rule: <exclusive-or-expression> ::= <and-expression> 
- * 										 | <and_expression><exclusive-or-expression-prime>
+ * BNF Rule: <logical-and-expression> ::= <inclusive-or-expression>{&&<inclusive-or-expression>}*
  */
-static u_int8_t exclusive_or_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* logical_and_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We must first see a valid and-expression
-	status = and_expression(fl);
+	//No matter what, we do need to first see a valid inclusive or expression
+	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
+	}
 	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid and expression found in exclusive or expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the carrot(^) here to chain
+	//There are now two options. If we do not see any &&'s, we just add 
+	//this node in as the child and move along. But if we do see && symbols, 
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we have see a carrot(^) we can make the recursive call
-	if(lookahead.tok == CARROT){
-		return exclusive_or_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
- * A prime rule to avoid direct left recursion
- *
- * REMEMBER: By the time that we've gotten here, we've already seen the (|) terminal
- *
- * BNF Rule: <inclusive-or-expression-prime> ::= |<exclusive-or-expression><inclusive-or-expression-prime>
- */
-u_int8_t inclusive_or_expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We must first see a valid exclusive or expression
-	status = exclusive_or_expression(fl);
 	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression", current_line);
-		num_errors++;
-		return 0;
+	//As long as we have a double and 
+	while(lookahead.tok == DOUBLE_AND){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid inclusive or expression again
+		right_child = inclusive_or_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		//"sub-tree root". We'll now refresh the token to keep looking
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
-	//Otherwise, we may be able to see the double && here to chain
-	lookahead = get_next_token(fl, &parser_line_num);
+	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
+	//the token back and return our subtree
+	push_back_token(fl, lookahead);
 
-	//If we have see a pipe(|) we can make the recursive call
-	if(lookahead.tok == OR){
-		return inclusive_or_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
- * An inclusive or expression can be chained, and descends into an exclusive or
- * expression
- *
- * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression><inclusive-or-expression-prime>
- */
-static u_int8_t inclusive_or_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We must first see a valid inclusive or expression
-	status = exclusive_or_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid exclusive or expression found in inclusive or expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the double && here to chain
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we have see a pipe(|) we can make the recursive call
-	if(lookahead.tok == OR){
-		return inclusive_or_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
- * A prime nonterminal that will allow us to avoid left recursion
- *
- * REMEMBER: By the time that we get here, we've already seen the "&&" terminal
- *
- * BNF Rule: <logical-and-expression-prime> ::= &&<inclusive-or-expression><logical-and-expression-prime>
- */
-u_int8_t logical_and_expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We must first see a valid inclusive or expression
-	status = inclusive_or_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical and expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the double && here to chain
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we have a double and we'll make a recursive call
-	if(lookahead.tok == DOUBLE_AND){
-		return logical_and_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
- *
- *
- * BNF Rule: <logical-and-expression> ::= <logical-and-expression> ::= <inclusive-or-expression>{&&<inclusive-or-expression>}
- */
-generic_ast_node_t* logical_and_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We must first see a valid inclusive or expression
-	status = inclusive_or_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid inclusive or expression found in logical expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the double && here to chain
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we have a double and we'll make a recursive call
-	if(lookahead.tok == DOUBLE_AND){
-		return logical_and_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 
@@ -1451,9 +1438,7 @@ generic_ast_node_t* logical_and_expression(FILE* fl){
  *
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
-u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node){
-	//Generic status var
-	u_int8_t status = 0;
+static u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node){
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -1522,7 +1507,7 @@ u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node){
  *
  * BNF Rule: <conditional-expression> ::= <logical-or-expression>
  */
-u_int8_t conditional_expression(FILE* fl, generic_ast_node_t* parent_node){
+static u_int8_t conditional_expression(FILE* fl, generic_ast_node_t* parent_node){
 	//Status var
 	u_int8_t status = 0;
 
