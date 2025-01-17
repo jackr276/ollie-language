@@ -853,45 +853,6 @@ static u_int8_t cast_expression(FILE* fl){
 
 
 /**
- * A prime rule that allows us to avoid direct left recursion
- *
- * REMEMBER: By the time that we get here, we've already seen a *, / or %
- *
- * BNF Rule: <multiplicative-expression-prime> ::= *<cast-expression><multiplicative-expression-prime> 
- * 												 | /<cast-expression><multiplicative-expression-prime> 
- * 												 | %<cast-expression><multiplicative-expression-prime>
- */
-static u_int8_t multiplicative_expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We must first see a valid cast expression
-	status = cast_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see *, /  or % here
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a + or a - we can make a recursive call
-	if(lookahead.tok == STAR || lookahead.tok == MOD || lookahead.tok == F_SLASH){
-		return multiplicative_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
  * A multiplicative expression can be chained and decays into a cast expression
  *
  * BNF Rule: <multiplicative-expression> ::= <cast-expression> 
@@ -928,77 +889,71 @@ static u_int8_t multiplicative_expression(FILE* fl){
 
 
 /**
- * A prime rule to avoid left recursion
+ * Additive expressions can be chained like some of the other expressions that we see below. It is guaranteed
+ * to return a pointer to a sub-tree, whether that subtree is created here or elsewhere.
  *
- * REMEMBER: By the time we get here, we've already seen a plus or minus
- *
- * BNF Rule: <additive-expression-prime> ::= + <multiplicative-expression><additive-expression-prime> 
- * 										   | - <multiplicative-expression><additive-expression-prime>
+ * BNF Rule: <additive-expression> ::= <multiplicative-expression>{ (+ | -) <multiplicative-expression>}*
  */
-static u_int8_t additive_expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* additive_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//First we must see a valid multiplicative expression
-	status = multiplicative_expression(fl);
+	//No matter what, we do need to first see a valid relational expression
+	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
+	}
 	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid mutliplicative expression found in additive expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see * or / here
+	//There are now two options. If we do not see any +'s or -'s, we just add 
+	//this node in as the child and move along. But if we do see + or - symbols,
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a + or a - we can make a recursive call
-	if(lookahead.tok == MINUS || lookahead.tok == PLUS){
-		return additive_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
- * Additive expression can be chained and as such require a prime rule. They decay into multiplicative
- * expressions
- *
- * BNF Rule: <additive-expression> ::= <multiplicative-expression> 
- * 									 | <multiplicative-expression><additive-expression-prime>
- */
-static u_int8_t additive_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//First we must see a valid multiplicative expression
-	status = multiplicative_expression(fl);
 	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid multiplicative expression found in additive expression", current_line);
-		num_errors++;
-		return 0;
+	//As long as we have a relational operators(+ or -) 
+	while(lookahead.tok == PLUS || lookahead.tok == MINUS){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid relational expression again
+		right_child = multiplicative_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		//"sub-tree root". We'll now refresh the token to keep looking
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
-	//Otherwise, we may be able to see * or / here
-	lookahead = get_next_token(fl, &parser_line_num);
+	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
+	//the token back and return our subtree
+	push_back_token(fl, lookahead);
 
-	//If we see a + or a - we can make a recursive call
-	if(lookahead.tok == MINUS || lookahead.tok == PLUS){
-		return additive_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 

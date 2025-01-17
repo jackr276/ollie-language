@@ -146,7 +146,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 				   	|  <additive-expression> << <additive-expression> 
 					|  <additive-expression> >> <additive-expression>
 
-<additive-expression> ::= <multiplicative-expression>{+ <multiplicative-expression>}*
+<additive-expression> ::= <multiplicative-expression>{ (+|-) <multiplicative-expression>}*
 
 <multiplicative-expression> ::= <cast-expression>
 							  | <cast-expression><multiplicative-expression-prime>
