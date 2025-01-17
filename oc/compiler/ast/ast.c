@@ -102,6 +102,13 @@ generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_CONSTANT;
 			break;
 
+		//Top level expression node case
+		case AST_NODE_CLASS_TOP_LEVEL_EXPR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(top_level_expr_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_TOP_LEVEL_EXPR;
+			break;
+
 		default:
 			printf("YOU DID NOT IMPLEMENT THIS ONE\n");
 			return NULL;

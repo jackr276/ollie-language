@@ -56,10 +56,9 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent);
 static u_int8_t declaration(FILE* fl);
 static u_int8_t compound_statement(FILE* fl, generic_ast_node_t* parent);
 static u_int8_t statement(FILE* fl);
-static u_int8_t expression(FILE* fl);
+static u_int8_t expression(FILE* fl, generic_ast_node_t* parent);
 static u_int8_t initializer(FILE* fl);
 static u_int8_t declarator(FILE* fl);
-static u_int8_t direct_declarator(FILE* fl);
 
 
 /**
@@ -209,17 +208,16 @@ static u_int8_t constant(FILE* fl, generic_ast_node_t* parent_node){
 
 
 /**
- * A prime rule that allows for comma chaining and avoids right recursion
- *
- * REMEMBER: by the time that we've gotten here, we've already seen a comma
+ * A prime rule that allows for comma chaining and avoids right recursion. Just like a regular expression, this will always
+ * be the child of some other node and will always produce children itself
  *
  * BNF Rule: <expression_prime> ::= , <assignment-expression><expression_prime>
  */
 static u_int8_t expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	//The lookahead token
 	Lexer_item lookahead;
-	u_int8_t status;
+	//Retvalue status
+	u_int8_t status = 0;
 
 	//We must first see a valid assignment-expression
 	status = assignment_expression(fl);
@@ -246,38 +244,35 @@ static u_int8_t expression_prime(FILE* fl){
 
 
 /**
- * An expression decays into an assignment expression and can be chained using commas
+ * An expression decays into an assignment expression and can be chained using commas. An expression
+ * itself will always be the child of some given parent node, and it will always have children itself
+ * In fact, the top-level <expression> node will be used for all of our type inference
  *
- * BNF Rule: <expression> ::= <assignment-expression> 
- * 							| <assignment-expression><expression_prime>
+ * BNF Rule: <expression> ::= <assignment-expression><expression_prime>
  */
-static u_int8_t expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static u_int8_t expression(FILE* fl, generic_ast_node_t* parent_node){
+	//The lookahead token
 	Lexer_item lookahead;
-	u_int8_t status;
+	//Retvalue status
+	u_int8_t status = 0;
 
-	//We must first see a valid assignment-expression
-	status = assignment_expression(fl);
+	//Create the top-level expression node
+	generic_ast_node_t* expr_node = ast_node_alloc(AST_NODE_CLASS_TOP_LEVEL_EXPR);
 	
-	//It failed
+	//Add it into the tree as a child
+	add_child_node(parent_node, expr_node);
+
+	//We will start at the chain with an assignment expression
+	status = assignment_expression(fl, expr_node);
+	
+	//Not a leaf-level error so we'll bail out here
 	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression", current_line);
-		num_errors++;
 		return 0;
 	}
 
-	//If we see a comma now, we know that we've triggered the prime rule
-	lookahead = get_next_token(fl, &parser_line_num);
+	//Otherwise we'll simply let the prime rule handle itself
+	return expression_prime(fl, parent_node);
 
-	//Go on to the prime rule
-	if(lookahead.tok == COMMA && in_param_list == 0){
-		return expression_prime(fl);
-	} else {
-		//Put it back and bail out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
 }
 
 
@@ -3834,234 +3829,6 @@ static u_int8_t compound_statement(FILE* fl){
 
 
 /**
- * A direct declarator can descend into many different forms
- *
- * BNF Rule: <direct-declarator> ::= <identifier> 
- * 								  | ( <declarator> ) 
- * 								  | <identifier> {[ {constant-expression}? ]}*
- * 								  | <identifier> ( <parameter-type-list>? ) 
- * 								  | <identifier> ( {<identifier>}{, <identifier>}* )
- */
-u_int8_t direct_declarator(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	Lexer_item lookahead2;
-	u_int8_t status = 0;
-
-	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num);
-	
-	//We can see a declarator inside of here
-	if(lookahead.tok == L_PAREN){
-		//Save for later
-		push(grouping_stack, lookahead);
-
-		//Now we must see a valid declarator inside of here
-		status = declarator(fl);
-
-		//If bad get out
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid declarator found inside of direct declarator", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we must see a valid closing paren
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//No closing paren
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Closing parenthesis expected after declarator", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Unmatched grouping operator
-		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise if we get here we're set
-		return 1;
-
-	//The other option, we have an ident
-	} else if(lookahead.tok == IDENT){
-		//Put it back and call ident
-		push_back_token(fl,  lookahead);
-		//Call ident just to do handling
-		status = identifier(fl);
-
-		if(status == 0){
-			print_parse_message(PARSE_ERROR,  "Invalid identifier found in direct declarator", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//So we see an ident, but certain stuff could come next
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//We have an array subscript here
-		if(lookahead.tok == L_BRACKET){
-			//We can keep seeing l_brackets here
-			while(lookahead.tok == L_BRACKET){
-				//Push it onto the stack
-				push(grouping_stack, lookahead);
-
-				//Special case, we can see empty ones here
-				lookahead2 = get_next_token(fl, &parser_line_num);
-
-				//If we have an empty set here
-				if(lookahead2.tok == R_BRACKET){
-					//TODO Handle empty brackets
-					//Clear this up
-					pop(grouping_stack);
-
-					//Keep going through the list
-					lookahead = get_next_token(fl, &parser_line_num);
-
-				//Otherwise we need a constant expression here
-				} else {
-					//Put it back
-					push_back_token(fl, lookahead2);
-
-					//See if it works
-					status = constant_expression(fl);
-
-					//Fail out if so
-					if(status == 0){
-						print_parse_message(PARSE_ERROR, "Invalid constant expression in array subscript", current_line);
-						return 0;
-					}
-
-					//Otherwise, we now have to see an R_BRACKET
-					lookahead = get_next_token(fl, &parser_line_num);
-
-					//If we don't see a ]
-					if(lookahead.tok != R_BRACKET){
-						print_parse_message(PARSE_ERROR, "Right bracket expected to close array subscript", current_line);
-						num_errors++;
-						return 0;
-					}
-
-					//If they don't match
-					if(pop(grouping_stack).tok != L_BRACKET){
-						print_parse_message(PARSE_ERROR, "Unmatched brackets detected", current_line);
-						num_errors++;
-						return 0;
-					}
-
-					//Otherwise, if we make it all the way here, we will refresh the token
-					lookahead = get_next_token(fl, &parser_line_num);
-				}
-			}
-
-			//If we make it here, lookahead is not an L_Bracket
-			//Put it back
-			push_back_token(fl, lookahead);
-			//Everything worked so success
-			return 1;
-
-		//There are two things that could happen if we see an L_PAREN
-		} else if(lookahead.tok == L_PAREN){
-			//Put this on for matching reasons
-			push(grouping_stack, lookahead);
-			
-			//Handle the special case where it's empty
-			lookahead2 = get_next_token(fl, &parser_line_num);
-
-			//If we see this then we're done
-			if(lookahead2.tok == R_PAREN){
-				//TODO handle accordingly
-				//Clean up the stack
-				pop(grouping_stack);
-				return 1;
-			}
-
-			//Otherwise we weren't so lucky
-			//Not really needed, but for our sanity
-			lookahead = lookahead2;
-
-			//We can see a list of idents here
-			if(lookahead.tok == IDENT){
-				//TODO handle ident here
-
-				//Grab the next one
-				lookahead = get_next_token(fl, &parser_line_num);
-
-				//Handle our list here
-				while(lookahead.tok == COMMA){
-					//We now need to see another ident
-					lookahead = get_next_token(fl, &parser_line_num);
-					
-					//If it isn't one, that's bad
-					if(lookahead.tok != IDENT){
-						print_parse_message(PARSE_ERROR, "Identifier expected after comma in identifier list", current_line);
-						num_errors++;
-						return 0;
-					}
-
-					//Otherwise handle the ident TODO
-
-					//Refresh the search
-					lookahead = get_next_token(fl, &parser_line_num);
-				}
-
-				//We didn't see a comma so bail out
-				push_back_token(fl, lookahead);
-				//We'll check the parenthesis status at the end
-			} else {
-				//The associated variable for a parameter, since a parameter is a variable
-				//If not, we have to see this
-				status = parameter_list(fl);
-				
-				//If it failed
-				if(status == 0){
-					//print_parse_message(PARSE_ERROR, "Invalid parameter list in function declarative", current_line);
-					num_errors++;
-					return 0;
-				}
-			}
-
-			//Whatever happened, we need to see a closing paren here
-			lookahead = get_next_token(fl, &parser_line_num);
-
-			//If we don't see a )
-			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Right parenthesis expected", current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//If they don't match
-			if(pop(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//If we made it here it worked
-			return 1;
-
-		//Regular ident then
-		} else {
-			//Put it back and get out
-			push_back_token(fl, lookahead);
-			return 1;
-		}
-
-	//If we get here it failed
-	} else {
-		//print_parse_message(PARSE_ERROR, "Identifier or declarator expected in direct declarator", current_line);
-		num_errors++;
-		return 0;
-	}
-}
-
-
-/**
  * A prime rule that allows us to avoid left recursion
  * 
  * REMEMBER: By the time we arrive here, we've already seen the comma
@@ -4750,6 +4517,8 @@ static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
+ * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
+ *
  * BNF Rule: <function-definition> ::= func {:<function-specifier>}? <identifer> ({<parameter-list>}?) -> <type-specifier> <compound-statement>
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
@@ -5038,6 +4807,7 @@ static u_int8_t declaration_partition(FILE* fl, generic_ast_node_t* parent_node)
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//We know that we have a function here
+	//We consume the function token here, NOT in the function rule
 	if(lookahead.tok == FUNC){
 		//Otherwise our status is just whatever the function returns
 		status = function_definition(fl, parent_node);

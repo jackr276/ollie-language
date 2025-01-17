@@ -201,10 +201,10 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
                        | <constant>
                        | ( <expression> )
 
-<expression> ::= <assignment-expression>
-			   | <assignment-expression><expression_prime>
+<expression> ::= <assignment-expression><expression_prime>
 
 <expression_prime> ::= , <assignment-expression><expression_prime>
+					 | epsilon
 
 <assignment-expression> ::= <conditional-expression>
 						  | asn <unary-expression> := <conditional_expression>

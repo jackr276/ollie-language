@@ -43,6 +43,8 @@ typedef struct type_spec_ast_node_t type_spec_ast_node_t;
 typedef struct type_name_ast_node_t type_name_ast_node_t;
 //Type address specifier node
 typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node_t;
+//The top level node for expressions
+typedef struct top_level_expr_ast_node_t top_level_expr_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -60,6 +62,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_TYPE_SPECIFIER,
 	AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER,
 	AST_NODE_CLASS_TYPE_NAME,
+	AST_NODE_CLASS_TOP_LEVEL_EXPR,
 } ast_note_class_t;
 
 
@@ -157,7 +160,12 @@ struct type_address_specifier_ast_node_t{
 	char address_specifer[10];
 };
 
-
+//Hold information about the top level expression.
+//This is where we will try to infer the type of the 
+//expression
+struct top_level_expr_ast_node_t{
+	generic_type_t* inferred_type;
+};
 
 
 /**
