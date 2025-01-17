@@ -317,6 +317,17 @@ static generic_ast_node_t* expression(FILE* fl){
 	return expression_node;
 }
 
+
+/**
+ * A function call looks for a very specific kind of identifer followed by
+ * parenthesis and the appropriate number of parameters for the function, each of
+ * the appropriate type
+ * 
+ * By the time we get here, we will have already consumed the "@" token
+ *
+ * BNF Rule: <function-call> ::= @<function-identifier>({conditional-expression}*)
+ *
+ */
 static generic_ast_node_t* function_call(FILE* fl){
 
 }
@@ -344,7 +355,9 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//We've seen an ident, so we'll put it back and let
-	//that rule handle it
+	//that rule handle it. This identifier will always be 
+	//a variable. It must also be a variable that has been initialized.
+	//We will check that it was initialized here
 	if(lookahead.tok == IDENT){
 		//Put it back
 		push_back_token(fl, lookahead);
@@ -352,38 +365,35 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//We will let the identifier rule actually grab the ident. In this case
 		//the identifier will be a variable of some sort, that we'll need to check
 		//against the symbol table
-		generic_ast_node_t* ident_node = identifier(fl);
+		generic_ast_node_t* variable = variable_identifier(fl);
 
 		//If there was a failure of some kind, we'll allow it to propogate up
-		if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return ident_node;
+		if(variable->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return variable;
 		}
 
-		//Otherwise we now must check for symtab viability
-		char* ident_name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
+		//We now must see a variable that was intialized. If it was not
+		//initialized, then we have an issue
+		if(((variable_identifier_ast_node_t*)(variable)->node)->variable_record == NULL){
+			sprintf(info, "Variable \"%s\" has not been declared", ((variable_identifier_ast_node_t*)(variable)->node)->identifier);
+			print_parse_message(PARSE_ERROR, info, current_line);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 
-		//We'll see if we can find this in the symtab
-		symtab_variable_record_t* var_record = 
+		//Otherwise, we will just return the node that we got
+		return variable;
 
-
-		//Otherwise it all went well so
-		return 1;
-
-	//If we see a constant
+	//We can also see a constant
 	} else if (lookahead.tok == CONSTANT){
 		//Again put the token back
 		push_back_token(fl, lookahead);
 
-		//Call the constant rule
-		status = constant(fl, parent_node);
+		//Call the constant rule to grab the constant node
+		generic_ast_node_t* constant_node = constant(fl);
 
-		//Not a "leaf error", just bail out
-		if(status == 0){
-			return 0;
-		}
-		
-		//Otherwise it all went well so
-		return 1;
+		//Whether it's null or not, we'll just give it back to the caller to handle
+		return constant_node;
 
 	//This is the case where we are putting the expression
 	//In parens
@@ -392,11 +402,11 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		push(grouping_stack, lookahead);
 
 		//We are now required to see a valid expression
-		status = expression(fl, parent_node);
+		generic_ast_node_t* expr = expression(fl);
 
-		//Not a "leaf level" error so we'll leave it
-		if(status == 0){
-			return 0;
+		//If it's an error, just give the node back
+		if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return expr;
 		}
 
 		//Otherwise it worked, but we're still not done. We now must see the R_PAREN and
@@ -417,8 +427,16 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			return 0;
 		}
 
-		//Otherwise if we make it here then
-		return 1;
+		//If we make it here, return the expression node
+		return expr;
+	
+	//Otherwise, if we see an @ symbol, we know it's a function call
+	} else if(lookahead.tok == AT){
+		//We will let this rule handle the function call
+		generic_ast_node_t* func_call = function_call(fl);
+
+		//Whatever it ends up being, we'll just return it
+		return func_call;
 
 	//Generic fail case
 	} else {
