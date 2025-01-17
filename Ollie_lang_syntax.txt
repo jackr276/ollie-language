@@ -18,7 +18,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 ################### Ollie language definition/declaration statements ########################
 
-<function-definition> ::= func {:<function-specifier>}? <identifer> ({<parameter-list>}?) ->  <type-specifier> <compound-statement>
+<function-definition> ::= func {:<function-specifier>}? <function-identifer> ({<parameter-list>}?) ->  <type-specifier> <compound-statement>
 
 <function-specifier> ::= static
 					   | external
@@ -168,13 +168,13 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <postfix-expression> ::= <primary-expression>
 					   | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
-					   | <function-call>
 
-<function-call> ::= @<identifier>({conditional-expression}*)
-					   
-<primary-expression> ::= <identifier>
+<primary-expression> ::= <variable-identifier>
                        | <constant>
                        | ( <expression> )
+					   | <function-call>
+
+<function-call> ::= @<function-identifier>({conditional-expression}*)
 
 <expression> ::= <assignment-expression>
 
@@ -205,11 +205,11 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 			  | <construct-type>
 			  | <aliased-type>
 
-<enumerated-type> ::= enumerated <identifer>
+<enumerated-type> ::= enumerated <type-identifier>
 
-<construct-type> ::= construct <identifier>
+<construct-type> ::= construct <type-identifier>
 
-<aliased-type> ::= <identifier>
+<aliased-type> ::= <type-identifier>
 
 <constant> ::= <integer-constant>
 			 | <string-constant>

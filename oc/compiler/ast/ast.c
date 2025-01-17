@@ -81,11 +81,25 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER;
 			break;
 
-		//Regular identifier(separate from label ident)
-		case AST_NODE_CLASS_IDENTIFER:
+		//Function identifier
+		case AST_NODE_CLASS_FUNCTION_IDENTIFIER:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(identifier_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_IDENTIFER;
+			node->node = calloc(1, sizeof(function_identifier_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_FUNCTION_IDENTIFIER;
+			break;
+
+		//Variable identifier
+		case AST_NODE_CLASS_VARIABLE_IDENTIFIER:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(variable_identifier_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_VARIABLE_IDENTIFIER;
+			break;
+
+		//Type identifier
+		case AST_NODE_CLASS_TYPE_IDENTIFIER:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(type_identifier_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_TYPE_IDENTIFIER;
 			break;
 
 		//Label identifier case

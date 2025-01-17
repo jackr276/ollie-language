@@ -41,15 +41,15 @@ generic_ast_node_t* ast_root = NULL;
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
 static generic_ast_node_t* type_specifier(FILE* fl);
-static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t conditional_expression(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t unary_expression(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t declaration(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t compound_statement(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t statement(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t expression(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t initializer(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t declarator(FILE* fl, generic_ast_node_t* parent_node);
+static generic_ast_node_t* assignment_expression(FILE* fl);
+static generic_ast_node_t* conditional_expression(FILE* fl);
+static generic_ast_node_t* unary_expression(FILE* fl);
+static generic_ast_node_t* declaration(FILE* fl);
+static generic_ast_node_t* compound_statement(FILE* fl);
+static generic_ast_node_t* statement(FILE* fl);
+static generic_ast_node_t* expression(FILE* fl);
+static generic_ast_node_t* initializer(FILE* fl);
+static generic_ast_node_t* declarator(FILE* fl);
 
 
 /**
@@ -77,13 +77,14 @@ static void print_parse_message(parse_message_type_t message_type, char* info, u
 
 
 /**
- * An identifier itself is always a child, never a parent. As such, we can
- * handle the node attachment here
+ * We will always return a pointer to the node holding the identifier. Due to the times when
+ * this will be called, we can not do any symbol table validation here. We will do a quick query and 
+ * see if it is some defined variable
  *
- * BNF "Rule": <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
+ * BNF "Rule": <variable-identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
  * Note all actual string parsing and validation is handled by the lexer
  */
-static u_int8_t identifier(FILE* fl, generic_ast_node_t* parent_node){
+static generic_ast_node_t* variable_identifier(FILE* fl){
 	//In case of error printing
 	char info[2000];
 
@@ -95,29 +96,38 @@ static u_int8_t identifier(FILE* fl, generic_ast_node_t* parent_node){
 		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		//Create and return an error node that will be sent up the chain
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Create the identifier node
-	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFER); //Add the identifier into the node itself
-	strcpy(((identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
+	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_VARIABLE_IDENTIFIER); //Add the identifier into the node itself
+	//Copy the string we got into it
+	strcpy(((variable_identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
 
-	//Add this into the tree
-	add_child_node(parent_node, ident_node);
+	//Now we can look this up in the symbol table. Although we cannot make any value judgements about this here, we
+	//can at least say if it's been defined or not
+	symtab_variable_record_t* found = lookup_variable(variable_symtab, lookahead.lexeme);
 
-	return 1;
+	//This will either be NULL or it will be the record. In either case, we'll simply populate the record in the 
+	//node and give it back
+	((variable_identifier_ast_node_t*)(ident_node->node))->variable_record = found;
+
+	//Return our reference to the node
+	return ident_node;
 }
 
 
 /**
  * A label identifier will always be a child of some other node. As such, it will be
- * added on as a child of that node once created
+ * added on as a child of that node once created. We will return a reference to the 
+ * node that was made here
  *
- * No symbol table or collision checking will be handled in this function
- *
+ * Although we cannot make any label judgments about whether or not it was defined in the 
+ * symbol table, we can at least look to see if it was
  * BNF "Rule": <label_identifier> ::= ${(<letter>) | <digit> | _ | $}*
  */
-static u_int8_t label_identifier(FILE* fl, generic_ast_node_t* parent_node){
+static generic_ast_node_t* label_identifier(FILE* fl){
 	//In case of error printing
 	char info[2000];
 
@@ -129,33 +139,122 @@ static u_int8_t label_identifier(FILE* fl, generic_ast_node_t* parent_node){
 		sprintf(info, "String %s is not a valid label-specific identifier", lookahead.lexeme);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		//Create and return an error node to be propagated up the chain
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Create the label identifier node
 	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_LABEL_IDENTIFIER);
 
 	//Add the identifier into the node itself
-	strcpy(((label_identifier_ast_node_t*)(label_ident_node->node))->label_identifier, lookahead.lexeme);
+	strcpy(((label_identifier_ast_node_t*)(label_ident_node->node))->identifier, lookahead.lexeme);
 
-	//Add this into the tree
-	add_child_node(parent_node, label_ident_node);
+	//Now we will hunt to see if we could actually find the label in the symbol table
+	symtab_variable_record_t* found = lookup_variable(variable_symtab, lookahead.lexeme); 
 
-	return 1;
+	//If we didn't find anything, found will just be null, so either way we'll assign it here
+	((label_identifier_ast_node_t*)(label_ident_node->node))->label_record = found;
+
+	//Return the reference to the node that we made
+	return label_ident_node;
+}
+
+
+/**
+ * We will always return a pointer to the node holding the identifier. Due to the times when
+ * this will be called, we can not do any symbol table validation here. We will do a quick query and 
+ * see if it is some defined variable
+ *
+ * BNF "Rule": <function-identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
+ * Note all actual string parsing and validation is handled by the lexer
+ */
+static generic_ast_node_t* function_identifier(FILE* fl){
+	//In case of error printing
+	char info[2000];
+
+	//Grab the next token
+	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
+	
+	//If we can't find it that's bad
+	if(lookahead.tok != IDENT){
+		sprintf(info, "String %s is not a valid function identifier", lookahead.lexeme);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		//Create and return an error node that will be sent up the chain
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Create the identifier node
+	generic_ast_node_t* function_ident_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_IDENTIFIER); //Add the identifier into the node itself
+	//Copy the string we got into it
+	strcpy(((function_identifier_ast_node_t*)(function_ident_node->node))->identifier, lookahead.lexeme);
+
+	//Now we can look this up in the symbol table. Although we cannot make any value judgements about this here, we
+	//can at least say if it's been defined or not
+	symtab_function_record_t* found = lookup_function(function_symtab, lookahead.lexeme);
+
+	//This will either be NULL or it will be the record. In either case, we'll simply populate the record in the 
+	//node and give it back
+	((function_identifier_ast_node_t*)(function_ident_node->node))->func_record = found;
+
+	//Return our reference to the node
+	return function_ident_node;
+}
+
+
+/**
+ * We will always return a pointer to the node holding the identifier. Due to the times when
+ * this will be called, we can not do any symbol table validation here. We will do a quick query and 
+ * see if it is some defined variable
+ *
+ * BNF "Rule": <type-identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
+ * Note all actual string parsing and validation is handled by the lexer
+ */
+static generic_ast_node_t* type_identifier(FILE* fl){
+	//In case of error printing
+	char info[2000];
+
+	//Grab the next token
+	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
+	
+	//If we can't find it that's bad
+	if(lookahead.tok != IDENT){
+		sprintf(info, "String %s is not a valid type identifier", lookahead.lexeme);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		//Create and return an error node that will be sent up the chain
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Create the identifier node
+	generic_ast_node_t* type_ident_node = ast_node_alloc(AST_NODE_CLASS_TYPE_IDENTIFIER); //Add the identifier into the node itself
+	//Copy the string we got into it
+	strcpy(((type_identifier_ast_node_t*)(type_ident_node->node))->identifier, lookahead.lexeme);
+
+	//Now we can look this up in the symbol table. Although we cannot make any value judgements about this here, we
+	//can at least say if it's been defined or not
+	symtab_type_record_t* found = lookup_type(type_symtab, lookahead.lexeme);
+
+	//This will either be NULL or it will be the record. In either case, we'll simply populate the record in the 
+	//node and give it back
+	((type_identifier_ast_node_t*)(type_ident_node->node))->type_record = found;
+
+	//Return our reference to the node
+	return type_ident_node;
 }
 
 
 /**
  * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
- * is always the child of some parent node. As such, it will be added as a child to the parent node
- * passed in
+ * is always the child of some parent node. We will always return the reference to the node
+ * created here
  *
  * BNF Rule: <constant> ::= <integer-constant> 
  * 						  | <string-constant> 
  * 						  | <float-constant> 
  * 						  | <char-constant>
  */
-static u_int8_t constant(FILE* fl, generic_ast_node_t* parent_node){
+static generic_ast_node_t* constant(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -183,59 +282,61 @@ static u_int8_t constant(FILE* fl, generic_ast_node_t* parent_node){
 		default:
 			print_parse_message(PARSE_ERROR, "Invalid constant given", parser_line_num);
 			num_errors++;
-			return 0;
+			//Create and return an error node that will be propagated up
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//If we made it here, then we know that we have a valid constant
 	//We'll now copy the lexeme that we saw in here to the constant
 	strcpy(((constant_ast_node_t*)constant_node->node)->constant, lookahead.lexeme);
 
-	//Once the entire node has been made, we'll add it to the tree
-	add_child_node(parent_node, constant_node);
-
-	//All went well so
-	return 1;
+	//All went well so give the constant node back
+	return constant_node;
 }
 
 
 /**
  * An expression decays into an assignment expression. An expression
- * node is more of a "pass-through" rule, and itself does not make any children
+ * node is more of a "pass-through" rule, and itself does not make any children. It does
+ * however return the reference of whatever it created
  *
  * BNF Rule: <expression> ::= <assignment-expression>
  */
-static u_int8_t expression(FILE* fl, generic_ast_node_t* parent_node){
-	//Retvalue status
-	u_int8_t status = 0;
-
-
-	//We will start at the chain with an assignment expression
-	status = assignment_expression(fl, parent_node);
+static generic_ast_node_t* expression(FILE* fl){
+	u_int16_t current_line = parser_line_num;
+	//Call the appropriate rule
+	generic_ast_node_t* expression_node = assignment_expression(fl);
 	
-	//Not a leaf-level error so we'll bail out here
-	if(status == 0){
-		return 0;
+	//If it did fail, a message is appropriate here
+	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Top level expression invalid", current_line);
+		return expression_node;
 	}
 
-	//Otherwise it all worked so
-	return 1;
+	//Otherwise, we're all set so just give the node back
+	return expression_node;
+}
+
+static generic_ast_node_t* function_call(FILE* fl){
+
 }
 
 
 /**
  * A primary expression is, in a way, the termination of our expression chain. However, it can be used 
  * to chain back up to an expression in general using () as an enclosure. Just like all rules, a primary expression
- * itself has a parent and will produce children
+ * itself has a parent and will produce children. The reference to the primary expression itself is always returned
  *
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
  * 									| (<expression>)
+ * 									| <function-call>
  */
-static u_int8_t primary_expression(FILE* fl, generic_ast_node_t* parent_node){
+static generic_ast_node_t* primary_expression(FILE* fl){
+	//Freeze the current line number
+	u_int16_t current_line = parser_line_num;
 	//For error printing
 	char info[2000];
-	//Status var
-	u_int8_t status = 0;
 	//Lookahead token
 	Lexer_item lookahead;
 	
@@ -245,17 +346,25 @@ static u_int8_t primary_expression(FILE* fl, generic_ast_node_t* parent_node){
 	//We've seen an ident, so we'll put it back and let
 	//that rule handle it
 	if(lookahead.tok == IDENT){
+		//Put it back
 		push_back_token(fl, lookahead);
 
-		//The identifier will also take in the given parent_node as it's parent
-		status = identifier(fl, parent_node);
+		//We will let the identifier rule actually grab the ident. In this case
+		//the identifier will be a variable of some sort, that we'll need to check
+		//against the symbol table
+		generic_ast_node_t* ident_node = identifier(fl);
 
-		//####################################################################TODO SYMTAB CHECKING
-
-		//Not a "leaf error", just bail out
-		if(status == 0){
-			return 0;
+		//If there was a failure of some kind, we'll allow it to propogate up
+		if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return ident_node;
 		}
+
+		//Otherwise we now must check for symtab viability
+		char* ident_name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
+
+		//We'll see if we can find this in the symtab
+		symtab_variable_record_t* var_record = 
+
 
 		//Otherwise it all went well so
 		return 1;

@@ -31,8 +31,12 @@ typedef struct func_specifier_ast_node_t func_specifier_ast_node_t;
 typedef struct param_list_ast_node_t param_list_ast_node_t;
 //A parameter node
 typedef struct param_decl_ast_node_t param_decl_ast_node_t;
-//An identifier node
-typedef struct identifier_ast_node_t identifier_ast_node_t;
+//A function identifier node
+typedef struct function_identifier_ast_node_t function_identifier_ast_node_t;
+//A variable identifier node
+typedef struct variable_identifier_ast_node_t variable_identifier_ast_node_t;
+//A type identifier node
+typedef struct type_identifier_ast_node_t type_identifier_ast_node_t;
 //A label identifier node. Label identifiers always begin with dollar signs
 typedef struct label_identifier_ast_node_t label_identifier_ast_node_t;
 //A constant node. Can represent any of the four kinds of constant
@@ -61,8 +65,10 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PARAM_LIST,
 	AST_NODE_CLASS_CONSTANT,
 	AST_NODE_CLASS_PARAM_DECL,
-	AST_NODE_CLASS_IDENTIFER,
+	AST_NODE_CLASS_VARIABLE_IDENTIFIER,
 	AST_NODE_CLASS_LABEL_IDENTIFIER,
+	AST_NODE_CLASS_TYPE_IDENTIFIER,
+	AST_NODE_CLASS_FUNCTION_IDENTIFIER,
 	AST_NODE_CLASS_TYPE_SPECIFIER,
 	AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER,
 	AST_NODE_CLASS_TYPE_NAME,
@@ -119,16 +125,36 @@ struct param_list_ast_node_t{
 };
 
 
-//Holds information about an identifier that's been seen
-struct identifier_ast_node_t{
+//Holds information about a variable identifier that's been seen
+struct variable_identifier_ast_node_t{
 	//Holds the lexeme of the identifer: max size 1000 bytes(may change)
 	char identifier[1000];
+	//We'll also hold some reference to the record of this identifier
+	symtab_variable_record_t* variable_record;
+};
+
+//Holds information about an identifier that's been seen
+struct function_identifier_ast_node_t{
+	//Holds the lexeme of the identifer: max size 1000 bytes(may change)
+	char identifier[1000];
+	//We'll also hold some reference to the record of this identifier
+	symtab_function_record_t* func_record;
 };
 
 //Holds information about an identifier that's been seen
 struct label_identifier_ast_node_t{
 	//Holds the lexeme of the label identifier
-	char label_identifier[1000];
+	char identifier[1000];
+	//We'll also hold some reference to the record of this identifier
+	symtab_variable_record_t* label_record;
+};
+
+//Holds information about a type name that's been seen
+struct type_identifier_ast_node_t{
+	//Holds the lexeme of the label identifier
+	char identifier[1000];
+	//We'll also hold some reference to the record of this identifier
+	symtab_type_record_t* type_record;
 };
 
 //Holds information about a constant
