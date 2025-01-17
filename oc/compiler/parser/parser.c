@@ -13,7 +13,6 @@
 */
 
 #include "parser.h"
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1410,12 +1409,11 @@ u_int8_t logical_and_expression_prime(FILE* fl){
 
 
 /**
- * A logical and expression can also be chained together, and it descends into
- * an inclusive or expression
  *
- * BNF Rule: <logical-and-expression> ::= <logical-and-expression> ::= <inclusive-or-expression><logical-and-expression-prime>
+ *
+ * BNF Rule: <logical-and-expression> ::= <logical-and-expression> ::= <inclusive-or-expression>{&&<inclusive-or-expression>}
  */
-u_int8_t logical_and_expression(FILE* fl){
+generic_ast_node_t* logical_and_expression(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -1446,74 +1444,75 @@ u_int8_t logical_and_expression(FILE* fl){
 
 
 /**
- * A prime nonterminal that will allow us to avoid left recursion. 
- *
- * REMEMBER: By the time that we've gotten here, we've already seen the "||" terminal
- *
- * BNF Rule: <logical-or-expression-prime ::= ||<logical-and-expression><logical-or-expression-prime> 
- */
-u_int8_t logical_or_expression_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status;
-
-	//We now must see a valid logical and expression
-	status = logical_and_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see the double || here to chain
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Then we have a double or, so we'll make a recursive call
-	if(lookahead.tok == DOUBLE_OR){
-		return logical_or_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
  * A logical or expression can be chained together as many times as we want, and
  * descends into a logical and expression
- * BNF Rule: <logical-or-expression> ::= <logical-and-expression><logical-or-expression-prime>
+ *
+ * A logical or expression will be a parent and a child in the AST
+ *
+ * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
-u_int8_t logical_or_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
+u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node){
+	//Generic status var
 	u_int8_t status = 0;
+	//Lookahead token
+	Lexer_item lookahead;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We first must see a valid logical and expression
-	status = logical_and_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid logical and expression found in logical or expression", current_line);
-		num_errors++;
+	//No matter what, we do need to first see a logical and expression
+	generic_ast_node_t* sub_tree_root = logical_and_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
 		return 0;
 	}
-
-	//Otherwise, we may be able to see the double || here to chain
+	
+	//There are now two options. If we do not see any ||'s, we just add 
+	//this node in as the child and move along. But if we do see || symbols, 
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//As long as we have a double or
+	while(lookahead.tok == DOUBLE_OR){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
 
-	//Then we have a double or, so we'll make a recursive call
-	if(lookahead.tok == DOUBLE_OR){
-		return logical_or_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid logical and expression again
+		right_child = logical_and_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return 0;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		//"sub-tree root". We'll now refresh the token to keep looking
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//If we get here, it means that we did not see the "DOUBLE OR" token, so we are done. We'll put
+	//the token back and add this in as a subtree of the parent
+	push_back_token(fl, lookahead);
+
+	//Add it in as a child
+	add_child_node(parent_node, sub_tree_root);
+
+	return 1;
 }
 
 

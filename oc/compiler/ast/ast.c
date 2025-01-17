@@ -102,18 +102,24 @@ generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_CONSTANT;
 			break;
 
-		//Top level expression node case
-		case AST_NODE_CLASS_TOP_LEVEL_EXPR:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(top_level_expr_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_TOP_LEVEL_EXPR;
-			break;
-
 		//Assignment expression node
 		case AST_NODE_CLASS_ASNMNT_EXPR:
 			//Just allocate the proper size and set the class
 			node->node = calloc(1, sizeof(asnmnt_expr_ast_node_t));
 			node->CLASS = AST_NODE_CLASS_ASNMNT_EXPR;
+			break;
+
+		//Binary expression node
+		case AST_NODE_CLASS_BINARY_EXPR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(binary_expr_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_BINARY_EXPR;
+			break;
+
+		//Generic error node
+		case AST_NODE_CLASS_ERR_NODE:
+			//Just assign that it is an error and get out
+			node->CLASS = AST_NODE_CLASS_ERR_NODE;
 			break;
 
 		default:

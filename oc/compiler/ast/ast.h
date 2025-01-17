@@ -43,10 +43,10 @@ typedef struct type_spec_ast_node_t type_spec_ast_node_t;
 typedef struct type_name_ast_node_t type_name_ast_node_t;
 //Type address specifier node
 typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node_t;
-//The top level node for expressions
-typedef struct top_level_expr_ast_node_t top_level_expr_ast_node_t;
 //The top level node that holds together an assignment expression
 typedef struct asnmnt_expr_ast_node_t asnmnt_expr_ast_node_t;
+//The binary expression node
+typedef struct binary_expr_ast_node_t binary_expr_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -64,12 +64,9 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_TYPE_SPECIFIER,
 	AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER,
 	AST_NODE_CLASS_TYPE_NAME,
-	AST_NODE_CLASS_TOP_LEVEL_EXPR,
 	AST_NODE_CLASS_ASNMNT_EXPR,
-	AST_NODE_CLASS_LOGICAL_OR_EXPR,
-	AST_NODE_CLASS_LOGICAL_AND_EXPR,
-	AST_NODE_CLASS_INCLUSIVE_OR_EXPR,
-	AST_NODE_CLASS_EXCLUSIVE_OR_EXPR,
+	AST_NODE_CLASS_BINARY_EXPR,
+	AST_NODE_CLASS_ERR_NODE, /* specifically for expressions */
 } ast_note_class_t;
 
 
@@ -166,19 +163,19 @@ struct type_address_specifier_ast_node_t{
 	char address_specifer[10];
 };
 
-//Hold information about the top level expression.
-//This is where we will try to infer the type of the 
-//expression
-struct top_level_expr_ast_node_t{
-	generic_type_t* inferred_type;
-};
-
-
 //This node will hold data about an assignment expression
 struct asnmnt_expr_ast_node_t{
 	//Nothing here currently, except for
 	//maybe type matching
 	u_int8_t types_matched; //Will probably delete this or not use
+};
+
+//This node will hold data about any binary expression
+struct binary_expr_ast_node_t{
+	//What type does it produce?
+	generic_type_t* inferred_type;
+	//What operator is it
+	Token binary_operator;
 };
 
 /**
