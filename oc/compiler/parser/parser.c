@@ -1003,56 +1003,81 @@ static u_int8_t additive_expression(FILE* fl){
 
 
 /**
- * A shift expression cannot be chained, so no recursion is needed here. It decays into an additive expression
+ * A shift expression cannot be chained, so no recursion is needed here. It decays into an additive expression.
+ * Just like other expression rules, a shift expression will return a subtree root, whether that subtree is 
+ * rooted here or elsewhere
  *
  * BNF Rule: <shift-expression> ::= <additive-expression> 
  *								 |  <additive-expression> << <additive-expression> 
  *								 |  <additive-expression> >> <additive-expression>
  */
-static u_int8_t shift_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* shift_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We must first see a valid additive expression
-	status = additive_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression", current_line);
-		num_errors++;
-		return 0;
+	//No matter what, we do need to first see a valid additive expression
+	generic_ast_node_t* sub_tree_root = additive_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
 	}
-
-	//Let's see if we have any shift operators
+	
+	//There are now two options. If we do not see any shift operators, we just add 
+	//this node in as the child and move along. But if we do see shift operator symbols,
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//As long as we have a relational operators(== or !=) 
+	if(lookahead.tok == L_SHIFT || lookahead.tok == R_SHIFT){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
 
-	//Are there any shift operators?
-	if(lookahead.tok != L_SHIFT && lookahead.tok != R_SHIFT){
-		//If not, put it back and leave
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid additive expression again
+		right_child = additive_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+	} else {
+		//Otherwise just push the token back
 		push_back_token(fl, lookahead);
-		return 1;
 	}
-	
-	//If we get here, we now have to see a valid additive expression
-	status = additive_expression(fl);
 
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid additive expression found in shift expression", current_line);
-		num_errors++;
-		return 0;
-	}
-	
-	//If we get to here then we're all good
-	return 1;
+	//Once we make it here, the subtree root is either just the shift expression or it is the
+	//shift expression rooted at the relational operator
+
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 
 /**
  * A relational expression will descend into a shift expression. Ollie language does not allow for
- * chaining in relational expressions, no recursion will occur here.
+ * chaining in relational expressions, so there will be no while loop like other rules. Just like
+ * other expression rules, a relational expression will return a subtree, whether that subtree
+ * is made here or elsewhere
  *
  * <relational-expression> ::= <shift-expression> 
  * 						     | <shift-expression> > <shift-expression> 
@@ -1060,95 +1085,135 @@ static u_int8_t shift_expression(FILE* fl){
  * 						     | <shift-expression> >= <shift-expression> 
  * 						     | <shift-expression> <= <shift-expression>
  */
-static u_int8_t relational_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* relational_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We must first see a valid shift expression
-	status = shift_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression", current_line);
-		num_errors++;
-		return 0;
+	//No matter what, we do need to first see a valid shift expression
+	generic_ast_node_t* sub_tree_root = shift_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
 	}
-
-	//Otherwise, we may be able to see the double && here to chain
+	
+	//There are now two options. If we do not see any relational operators, we just add 
+	//this node in as the child and move along. But if we do see relational operator symbols,
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//As long as we have a relational operators(== or !=) 
+	if(lookahead.tok == G_THAN || lookahead.tok == G_THAN_OR_EQ
+	  || lookahead.tok == L_THAN || lookahead.tok == L_THAN_OR_EQ){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
 
-	//If we don't see one of our relational operators, then we can get out
-	if(lookahead.tok != G_THAN && lookahead.tok != L_THAN
-	  && lookahead.tok != G_THAN_OR_EQ && lookahead.tok != L_THAN_OR_EQ){
-		//Put it back and leave
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid shift again
+		right_child = shift_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+	} else {
+		//Otherwise just push the token back
 		push_back_token(fl, lookahead);
-		return 1;
 	}
-	
-	//Otherwise, we now must see another valid shift expression
-	//We must first see a valid shift expression
-	status = shift_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid shift expression found in relational expression", current_line);
-		num_errors++;
-		return 0;
-	}
-	
-	//If we get to here then we're all good
-	return 1;
+
+	//Once we make it here, the subtree root is either just the shift expression or it is the
+	//shift expression rooted at the relational operator
+
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 
 /**
- * An equality expression can be chained and descends into a relational expression 
+ * An equality expression can be chained and descends into a relational expression. It will
+ * always return a pointer to the subtree, whether that subtree is made here or elsewhere
  *
- * BNF Rule: <equality-expression> ::= <relational-expression> 
- * 									 | <relational-expression> == <relational-expression>
- * 									 | <relational-expression> != <relational-expression>
+ * BNF Rule: <equality-expression> ::= <relational-expression>{ (==|!=) <relational-expression> }*
  */
-static u_int8_t equality_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* equality_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We must first see a valid relational-expression
-	status = relational_expression(fl);
-	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid relational expression found in equality expression", current_line);
-		num_errors++;
-		return 0;
+	//No matter what, we do need to first see a valid relational expression
+	generic_ast_node_t* sub_tree_root = relational_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
 	}
-
-	//Otherwise, we may be able to see the double && here to chain
+	
+	//There are now two options. If we do not see any =='s or !='s, we just add 
+	//this node in as the child and move along. But if we do see == or != symbols,
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//As long as we have a relational operators(== or !=) 
+	while(lookahead.tok == NOT_EQUALS || lookahead.tok == D_EQUALS){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
 
-	//If we see a == or a != we can make a recursive call
-	if(lookahead.tok == D_EQUALS || lookahead.tok == NOT_EQUALS){
-		//We now need to see another relational expression
-		status = relational_expression(fl);
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
 
-		//Fail out
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid relational expression in equality expression", current_line);
-			num_errors++;
-			return 0;
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid relational expression again
+		right_child = relational_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
 		}
 
-		//Success otherwise
-		return 1;
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
 
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
+		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		//"sub-tree root". We'll now refresh the token to keep looking
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
+	//the token back and return our subtree
+	push_back_token(fl, lookahead);
+
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 

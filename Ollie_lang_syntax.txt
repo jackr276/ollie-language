@@ -132,14 +132,9 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <exclusive-or-expression> ::= <and-expression>{^ <and-expression>}*
 
-<and-expression> ::= <equality-expression> 
-				   | <equality-expression><and-expression-prime>
+<and-expression> ::= <equality-expression>{& <equality-expression>}*
 
-<and-expression-prime> ::= <equality-expression><and-expression-prime>
-
-<equality-expression> ::= <relational-expression> 
-						| <relational-expression> == <relational-expression>
-						| <relational-expression> != <relational-expression>
+<equality-expression> ::= <relational-expression>{ (==|!=) <relational-expression> }*
 
 <relational-expression> ::= <shift-expression>
 					 	  | <shift-expression> > <shift-expression>
@@ -151,11 +146,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 				   	|  <additive-expression> << <additive-expression> 
 					|  <additive-expression> >> <additive-expression>
 
-<additive-expression> ::= <multiplicative-expression> 
-					  	| <multiplicative-expression><additive-expression-prime>
-	
-<additive-expression-prime> ::= + <multiplicative-expression><additive-expression-prime>
-							  | - <multiplicative-expression><additive-expression-prime>
+<additive-expression> ::= <multiplicative-expression>{+ <multiplicative-expression>}*
 
 <multiplicative-expression> ::= <cast-expression>
 							  | <cast-expression><multiplicative-expression-prime>
