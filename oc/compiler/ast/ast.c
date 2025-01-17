@@ -15,7 +15,7 @@
  * that they want to use. It is assumed that the user already knows the proper type and takes appropriate action based
  * on that
 */
-generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
+generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
 
@@ -114,6 +114,13 @@ generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS){
 			//Just allocate the proper size and set the class
 			node->node = calloc(1, sizeof(binary_expr_ast_node_t));
 			node->CLASS = AST_NODE_CLASS_BINARY_EXPR;
+			break;
+
+		//Cast expression node
+		case AST_NODE_CLASS_CAST_EXPR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(cast_expr_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_CAST_EXPR;
 			break;
 
 		//Generic error node

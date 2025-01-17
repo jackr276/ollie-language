@@ -148,15 +148,10 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <additive-expression> ::= <multiplicative-expression>{ (+|-) <multiplicative-expression>}*
 
-<multiplicative-expression> ::= <cast-expression>
-							  | <cast-expression><multiplicative-expression-prime>
-
-<multiplicative-expression-prime> ::= *<cast-expression><multiplicative-expression-prime>
-									| /<cast-expression><multiplicative-expression-prime>
-									| %<cast-expression><multiplicative-expression-prime>
+<multiplicative-expression> ::= <cast-expression>{ (* | / | %) <cast-expression>}
 
 <cast-expression> ::= <unary-expression> 
-					| < <type-name> > <unary-expression>
+					| < <type-specifier> > <unary-expression>
 
 <unary-expression> ::= <postfix-expression>
 					 | ++<unary-expression> 

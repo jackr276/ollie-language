@@ -47,6 +47,8 @@ typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node
 typedef struct asnmnt_expr_ast_node_t asnmnt_expr_ast_node_t;
 //The binary expression node
 typedef struct binary_expr_ast_node_t binary_expr_ast_node_t;
+//The cast expression node
+typedef struct cast_expr_ast_node_t cast_expr_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -66,8 +68,9 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_TYPE_NAME,
 	AST_NODE_CLASS_ASNMNT_EXPR,
 	AST_NODE_CLASS_BINARY_EXPR,
-	AST_NODE_CLASS_ERR_NODE, /* specifically for expressions */
-} ast_note_class_t;
+	AST_NODE_CLASS_CAST_EXPR,
+	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
+} ast_node_class_t;
 
 
 /**
@@ -80,7 +83,7 @@ struct generic_ast_node_t{
 	generic_ast_node_t* first_child;
 	generic_ast_node_t* next_sibling;
 	//What kind of node is it?
-	ast_note_class_t CLASS;
+	ast_node_class_t CLASS;
 	//This is where we hold the actual node
 	void* node;
 };
@@ -178,10 +181,16 @@ struct binary_expr_ast_node_t{
 	Token binary_operator;
 };
 
+//The cast expression node is reached if we actually make a cast
+struct cast_expr_ast_node_t{
+	//What type does it have?
+	generic_type_t* casted_type;
+};
+
 /**
  * Global node allocation function
  */
-generic_ast_node_t* ast_node_alloc(ast_note_class_t CLASS);
+generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS);
 
 
 /**

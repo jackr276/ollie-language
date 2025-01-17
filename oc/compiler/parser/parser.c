@@ -39,11 +39,11 @@ generic_ast_node_t* ast_root = NULL;
 
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
-static u_int8_t cast_expression(FILE* fl, generic_ast_node_t* parent_node);
+static generic_ast_node_t* cast_expression(FILE* fl);
+static generic_ast_node_t* type_specifier(FILE* fl);
 static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node);
 static u_int8_t conditional_expression(FILE* fl, generic_ast_node_t* parent_node);
 static u_int8_t unary_expression(FILE* fl, generic_ast_node_t* parent_node);
-static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent_node);
 static u_int8_t declaration(FILE* fl, generic_ast_node_t* parent_node);
 static u_int8_t compound_statement(FILE* fl, generic_ast_node_t* parent_node);
 static u_int8_t statement(FILE* fl, generic_ast_node_t* parent_node);
@@ -790,101 +790,151 @@ static u_int8_t unary_expression(FILE* fl){
  * A cast expression decays into a unary expression
  *
  * BNF Rule: <cast-expression> ::= <unary-expression> 
- * 						    	| < <type-name> > <unary-expression>
+ * 						    	| < <type-specifier> > <unary-expression>
  */
-static u_int8_t cast_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* cast_expression(FILE* fl){
+	//The lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
-	//Let's see if we have a parenthesis
+	//If we first see an angle bracket, we know that we are truly doing
+	//a cast. If we do not, then this expression is just a pass through for
+	//a unary expression
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//If it's not the <, put the token back and just return the unary expression
+	if(lookahead.tok != L_THAN){
+		push_back_token(fl, lookahead);
+
+		//Let this handle it
+		return unary_expression(fl);
+	}
+	//Push onto the stack for matching
+	push(grouping_stack, lookahead);
+
+	//Grab the type specifier
+	generic_ast_node_t* type_spec = type_specifier(fl);
+
+	//If it's an error, we'll print and propagate it up
+	if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier given to cast expression", parser_line_num);
+		num_errors++;
+		//It is the error, so we can return it
+		return type_spec;
+	}
+
+	//We now have to see the closing braces that we need
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we have an L_PAREN, we'll push it to the stack
-	if(lookahead.tok == L_THAN){
-		//Push this on for later
-		push(grouping_stack, lookahead);
-		
-		//We now must see a valid type name
-		status = type_name(fl);
-		
-		//TODO symtab integration
-		
-		//If it was bad
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid type name found in cast expression", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise we're good to keep going
-		//We now must see a valid R_PAREN
-		lookahead = get_next_token(fl, &parser_line_num);
-		
-		//If this is an R_PAREN
-		if(lookahead.tok != G_THAN) {
-			print_parse_message(PARSE_ERROR, "Angle brackets expected after type name", current_line);
-			num_errors++;
-			return 0;
-		} else if(pop(grouping_stack).tok != L_THAN){
-			print_parse_message(PARSE_ERROR, "Unmatched angle brackets detected", current_line);
-			num_errors++;
-			return 0;
-		}
-		//Otherwise it all went well here
-	} else {
-		//If we didn't see an L_PAREN, put it back
-		push_back_token(fl, lookahead);
-	}
-
-	//Whether we saw the type-name or not, we now must see a valid unary expression
-	status = unary_expression(fl);
-	
-	//If it was bad
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid unary expression found in cast expression", current_line); 
+	//If we didn't see a match
+	if(lookahead.tok != G_THAN){
+		print_parse_message(PARSE_ERROR, "Expected closing > at end of cast", parser_line_num);
 		num_errors++;
-		return 0;
+		//Create and give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	return 1;
+	//Make sure we match
+	if(pop(grouping_stack).tok != L_THAN){
+		print_parse_message(PARSE_ERROR, "Unmatched angle brackets given to cast statement", parser_line_num);
+		num_errors++;
+		//Create and give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we have to see a valid unary expression. This is our last potential fail case in the chain
+	//The unary expression will handle this for us
+	generic_ast_node_t* right_hand_unary = unary_expression(fl);
+
+	//If it's an error we'll jump out
+	if(right_hand_unary->CLASS == AST_NODE_CLASS_ERR_NODE){
+		return right_hand_unary;
+	}
+
+	//Now if we make it here, we know that type_spec is actually valid
+	//We'll now allocate a cast expression node
+	generic_ast_node_t* cast_node = ast_node_alloc(AST_NODE_CLASS_CAST_EXPR);
+	
+	//This node will have a first child as the actual type node
+	add_child_node(cast_node, type_spec);
+
+	//Store the type information for faster retrieval later
+	((cast_expr_ast_node_t*)(cast_node->node))->casted_type = ((type_spec_ast_node_t*)(type_spec->node))->type_record->type;
+
+	//We'll now add the unary expression as the right node
+	add_child_node(cast_node, right_hand_unary);
+
+	//Finally, we're all set to go here, so we can return the root reference
+	return cast_node;
 }
 
 
 /**
- * A multiplicative expression can be chained and decays into a cast expression
+ * A multiplicative expression can be chained and decays into a cast expression. This method
+ * will return a pointer to the root of the subtree that is created by it, whether that subtree
+ * originated here or not
  *
- * BNF Rule: <multiplicative-expression> ::= <cast-expression> 
- * 										   | <cast-expression><multiplicative-expression-prime>
+ * BNF Rule: <multiplicative-expression> ::= <cast-expression>{ (* | / | %) <cast-expression>}*
  */
-static u_int8_t multiplicative_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* multiplicative_expression(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Temp holder for our use
+	generic_ast_node_t* temp_holder;
+	//For holding the right child
+	generic_ast_node_t* right_child;
 
-	//We must first see a valid cast expression
-	status = cast_expression(fl);
+	//No matter what, we do need to first see a valid cast expression expression
+	generic_ast_node_t* sub_tree_root = cast_expression(fl);
+
+	//Obvious fail case here
+	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//If this is an error, we can just propogate it up
+		return sub_tree_root;
+	}
 	
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid cast expression found in multiplicative expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we may be able to see *, /  or % here
+	//There are now two options. If we do not see any *'s or %'s or /, we just add 
+	//this node in as the child and move along. But if we do see * or % or / symbols,
+	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//As long as we have a relational operators(* or % or /) 
+	while(lookahead.tok == MOD || lookahead.tok == STAR || lookahead.tok == F_SLASH){
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
 
-	//If we see a + or a - we can make a recursive call
-	if(lookahead.tok == STAR || lookahead.tok == MOD || lookahead.tok == F_SLASH){
-		return multiplicative_expression_prime(fl);
-	} else {
-		//Otherwise we need to put it back and get out
-		push_back_token(fl, lookahead);
-		return 1;
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//We'll now assign the binary expression it's operator
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		//TODO handle type stuff later on
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
+
+		//Now we have no choice but to see a valid cast expression again
+		right_child = cast_expression(fl);
+
+		//If it's an error, just fail out
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+		//"sub-tree root". We'll now refresh the token to keep looking
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//If we get here, it means that we did not see the token we need, so we are done. We'll put
+	//the token back and return our subtree
+	push_back_token(fl, lookahead);
+
+	//We simply give back the sub tree root
+	return sub_tree_root;
 }
 
 
@@ -902,7 +952,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 	//For holding the right child
 	generic_ast_node_t* right_child;
 
-	//No matter what, we do need to first see a valid relational expression
+	//No matter what, we do need to first see a valid multiplicative expression
 	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl);
 
 	//Obvious fail case here
@@ -931,7 +981,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
 		add_child_node(sub_tree_root, temp_holder);
 
-		//Now we have no choice but to see a valid relational expression again
+		//Now we have no choice but to see a valid multiplicative expression again
 		right_child = multiplicative_expression(fl);
 
 		//If it's an error, just fail out
@@ -948,7 +998,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
-	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
+	//If we get here, it means that we did not see the token we need, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(fl, lookahead);
 
