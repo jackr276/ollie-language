@@ -195,16 +195,13 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 					   | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
 					   | <function-call>
 
-<function-call> ::= !<identifier>({conditional-expression}*)
+<function-call> ::= @<identifier>({conditional-expression}*)
 					   
 <primary-expression> ::= <identifier>
                        | <constant>
                        | ( <expression> )
 
-<expression> ::= <assignment-expression><expression_prime>
-
-<expression_prime> ::= , <assignment-expression><expression_prime>
-					 | epsilon
+<expression> ::= <assignment-expression>
 
 <assignment-expression> ::= <conditional-expression>
 						  | asn <unary-expression> := <conditional_expression>

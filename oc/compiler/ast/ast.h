@@ -45,6 +45,8 @@ typedef struct type_name_ast_node_t type_name_ast_node_t;
 typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node_t;
 //The top level node for expressions
 typedef struct top_level_expr_ast_node_t top_level_expr_ast_node_t;
+//The top level node that holds together an assignment expression
+typedef struct asnmnt_expr_ast_node_t asnmnt_expr_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -63,6 +65,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER,
 	AST_NODE_CLASS_TYPE_NAME,
 	AST_NODE_CLASS_TOP_LEVEL_EXPR,
+	AST_NODE_CLASS_ASNMNT_EXPR,
 } ast_note_class_t;
 
 
@@ -167,6 +170,13 @@ struct top_level_expr_ast_node_t{
 	generic_type_t* inferred_type;
 };
 
+
+//This node will hold data about an assignment expression
+struct asnmnt_expr_ast_node_t{
+	//Nothing here currently, except for
+	//maybe type matching
+	u_int8_t types_matched; //Will probably delete this or not use
+};
 
 /**
  * Global node allocation function

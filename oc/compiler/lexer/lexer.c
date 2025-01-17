@@ -427,6 +427,13 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
+					case '@':
+						lex_item.tok = AT;
+						strcpy(lex_item.lexeme, "@");
+						lex_item.line_num = line_num;
+						lex_item.char_count = token_char_count;
+						return lex_item;
+
 					case '.':
 						//Let's see what we have here
 						ch2 = get_next_char(fl);

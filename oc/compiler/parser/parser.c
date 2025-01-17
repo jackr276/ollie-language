@@ -34,31 +34,22 @@ u_int16_t num_errors = 0;
 //The current parser line number
 u_int16_t parser_line_num = 1;
 
-//Are we in a param_list?
-u_int8_t in_param_list = 0;
-
-//What's the function that we're in currently?
-symtab_function_record_t* current_function = NULL;
-
-//The current type. Used for global access
-generic_type_t* active_type = NULL;
-
 //The root of the entire tree
 generic_ast_node_t* ast_root = NULL;
 
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
-static u_int8_t cast_expression(FILE* fl);
-static u_int8_t assignment_expression(FILE* fl);
-static u_int8_t conditional_expression(FILE* fl);
-static u_int8_t unary_expression(FILE* fl);
-static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent);
-static u_int8_t declaration(FILE* fl);
-static u_int8_t compound_statement(FILE* fl, generic_ast_node_t* parent);
-static u_int8_t statement(FILE* fl);
-static u_int8_t expression(FILE* fl, generic_ast_node_t* parent);
-static u_int8_t initializer(FILE* fl);
-static u_int8_t declarator(FILE* fl);
+static u_int8_t cast_expression(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t conditional_expression(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t unary_expression(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t declaration(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t compound_statement(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t statement(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t expression(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t initializer(FILE* fl, generic_ast_node_t* parent_node);
+static u_int8_t declarator(FILE* fl, generic_ast_node_t* parent_node);
 
 
 /**
@@ -208,161 +199,122 @@ static u_int8_t constant(FILE* fl, generic_ast_node_t* parent_node){
 
 
 /**
- * A prime rule that allows for comma chaining and avoids right recursion. Just like a regular expression, this will always
- * be the child of some other node and will always produce children itself
+ * An expression decays into an assignment expression. An expression
+ * node is more of a "pass-through" rule, and itself does not make any children
  *
- * BNF Rule: <expression_prime> ::= , <assignment-expression><expression_prime>
- */
-static u_int8_t expression_prime(FILE* fl){
-	//The lookahead token
-	Lexer_item lookahead;
-	//Retvalue status
-	u_int8_t status = 0;
-
-	//We must first see a valid assignment-expression
-	status = assignment_expression(fl);
-	
-	//It failed
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid assignment expression found in expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//If we see a comma now, we know that we've triggered the prime rule
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Go on to the prime rule
-	if(lookahead.tok == COMMA){
-		return expression_prime(fl);
-	} else {
-		//Put it back and bail out
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
- * An expression decays into an assignment expression and can be chained using commas. An expression
- * itself will always be the child of some given parent node, and it will always have children itself
- * In fact, the top-level <expression> node will be used for all of our type inference
- *
- * BNF Rule: <expression> ::= <assignment-expression><expression_prime>
+ * BNF Rule: <expression> ::= <assignment-expression>
  */
 static u_int8_t expression(FILE* fl, generic_ast_node_t* parent_node){
-	//The lookahead token
-	Lexer_item lookahead;
 	//Retvalue status
 	u_int8_t status = 0;
 
-	//Create the top-level expression node
-	generic_ast_node_t* expr_node = ast_node_alloc(AST_NODE_CLASS_TOP_LEVEL_EXPR);
-	
-	//Add it into the tree as a child
-	add_child_node(parent_node, expr_node);
 
 	//We will start at the chain with an assignment expression
-	status = assignment_expression(fl, expr_node);
+	status = assignment_expression(fl, parent_node);
 	
 	//Not a leaf-level error so we'll bail out here
 	if(status == 0){
 		return 0;
 	}
 
-	//Otherwise we'll simply let the prime rule handle itself
-	return expression_prime(fl, parent_node);
-
+	//Otherwise it all worked so
+	return 1;
 }
 
 
 /**
  * A primary expression is, in a way, the termination of our expression chain. However, it can be used 
- * to chain back up to an expression in general using () as an enclosure
+ * to chain back up to an expression in general using () as an enclosure. Just like all rules, a primary expression
+ * itself has a parent and will produce children
  *
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
  * 									| (<expression>)
  */
-static u_int8_t primary_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
+static u_int8_t primary_expression(FILE* fl, generic_ast_node_t* parent_node){
+	//For error printing
+	char info[2000];
+	//Status var
 	u_int8_t status = 0;
-
-	//Let's grab the token that we next have
+	//Lookahead token
+	Lexer_item lookahead;
+	
+	//Grab the next token, we'll multiplex on this
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we have an ident, we'll call the appropriate function
+	//We've seen an ident, so we'll put it back and let
+	//that rule handle it
 	if(lookahead.tok == IDENT){
-		//Push it back and call ident
 		push_back_token(fl, lookahead);
 
-		status = identifier(fl);
+		//The identifier will also take in the given parent_node as it's parent
+		status = identifier(fl, parent_node);
 
-		//If it failed
+		//####################################################################TODO SYMTAB CHECKING
+
+		//Not a "leaf error", just bail out
 		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid identifier found in primary expression", current_line);
-			num_errors++;
 			return 0;
 		}
 
-		//Otherwise we're all set
+		//Otherwise it all went well so
 		return 1;
-	//If we see a constant, we'll call the appropriate function to handle it
-	} else if(lookahead.tok == CHAR_CONST || lookahead.tok == INT_CONST 
-		   || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST){
-		//Push it back and call constant
+
+	//If we see a constant
+	} else if (lookahead.tok == CONSTANT){
+		//Again put the token back
 		push_back_token(fl, lookahead);
+
+		//Call the constant rule
+		status = constant(fl, parent_node);
+
+		//Not a "leaf error", just bail out
+		if(status == 0){
+			return 0;
+		}
 		
-		status = constant(fl);
-
-		//If it failed
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid constant found in primary expression", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise we're all set
+		//Otherwise it all went well so
 		return 1;
-	//If we see an l_paren, we're gonna have another expression
-	} else if(lookahead.tok == L_PAREN){
-		//Push for later
+
+	//This is the case where we are putting the expression
+	//In parens
+	} else if (lookahead.tok == L_PAREN){
+		//We'll push it up to the stack for matching
 		push(grouping_stack, lookahead);
-		
-		//We now must see a valid expression
-		status = expression(fl);
 
-		//If it failed
+		//We are now required to see a valid expression
+		status = expression(fl, parent_node);
+
+		//Not a "leaf level" error so we'll leave it
 		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid expression found in primary expression", current_line);
-			num_errors++;
 			return 0;
 		}
 
-		//We must now also see an R_PAREN, and ensure that we have matching on the stack
+		//Otherwise it worked, but we're still not done. We now must see the R_PAREN and
+		//match it with the accompanying L_PAREN
 		lookahead = get_next_token(fl, &parser_line_num);
 
-		//If it isn't a right parenthesis
+		//Fail case here
 		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
-			num_errors++;
-			return 0;
-		//Make sure we match
-		} else if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", parser_line_num);
 			num_errors++;
 			return 0;
 		}
-		
-		//Otherwise we're all set
+
+		//Another fail case, if they're unmatched
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise if we make it here then
 		return 1;
+
+	//Generic fail case
 	} else {
-		char info[2000];
-		memset(info, 0, 2000 * sizeof(char));
-		sprintf(info, "Invalid token with lexeme %s found in primary expression", lookahead.lexeme); 
-		print_parse_message(PARSE_ERROR, info, current_line);
+		sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return 0;
 	}
@@ -371,73 +323,24 @@ static u_int8_t primary_expression(FILE* fl){
 
 /**
  * An assignment expression can decay into a conditional expression or it
- * can actually do assigning. There is no chaining in Ollie language of assignments
+ * can actually do assigning. There is no chaining in Ollie language of assignments. There are two
+ * options for treenodes here. If we see an actual assignment, there is a special assignment node
+ * that will be made. If not, we will simply pass the parent along
  *
  * BNF Rule: <assignment-expression> ::= <conditional-expression> 
  * 									   | asn <unary-expression> := <conditional-expression>
  */
-static u_int8_t assignment_expression(FILE* fl){
+static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//Lookahead token
 	Lexer_item lookahead;
+	//Status var
 	u_int8_t status = 0;
 
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//We've seen the ASN keyword
-	if(lookahead.tok == ASN){
-		//Since we've seen this, we now need to see a valid unary expression
-		status = unary_expression(fl);
-
-		//We have a bad one
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid unary expression found in assignment expression", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we must see the := assignment operator
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//We have a bad one
-		if(lookahead.tok != COLONEQ){
-			print_parse_message(PARSE_ERROR, "Assignment operator := expected after unary expression", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise it worked just fine
-		//Now we must see an conditional expression again
-		status = conditional_expression(fl);
-
-		//We have a bad one
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid conditional expression found in assingment expression", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//All went well if we get here
-		return 1;
-		
-	} else {
-		//Put it back if not
-		push_back_token(fl, lookahead);
-		//We have a conditional expression
-		status = conditional_expression(fl);
-
-		//We have a bad one
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid conditional expression found in postfix expression", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		
-		//Otherwise it worked
-		return 1;
-	}
 }
 
 
@@ -1553,6 +1456,8 @@ u_int8_t logical_or_expression(FILE* fl){
  * A conditional expression is simply used as a passthrough for a logical or expression,
  * but some important checks may be done here so we'll use it
  *
+ * A CONDITIONAL EXPRESSiON IS THE TOP LEVEL EXPRESSION
+ *
  * BNF Rule: <conditional-expression> ::= <logical-or-expression>
  */
 u_int8_t conditional_expression(FILE* fl){
@@ -1560,6 +1465,13 @@ u_int8_t conditional_expression(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Pass through to the logical or expression expression
 	u_int8_t status = logical_or_expression(fl);
+
+	//Create the top-level expression node
+	generic_ast_node_t* expr_node = ast_node_alloc(AST_NODE_CLASS_TOP_LEVEL_EXPR);
+	
+	//Add it into the tree as a child
+	add_child_node(parent_node, expr_node);
+
 
 	//Something failed
 	if(status == 0){

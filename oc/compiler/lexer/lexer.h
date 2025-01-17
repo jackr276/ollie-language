@@ -25,6 +25,7 @@ typedef enum {
 	DO,
 	WHILE,
 	FOR,
+	AT,
 	CASE,
 	BREAK,
 	CONTINUE,
