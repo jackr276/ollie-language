@@ -1901,11 +1901,13 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
  *
  * This rule also handles everything with identifiers to avoid excessive confusion
  *
- * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?
+ * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
 static generic_ast_node_t* construct_definer(FILE* fl){
 	//For error printing
 	char info[2000];
+	//Freeze the line num
+	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
 	Lexer_item lookahead;
 	//The actual type name that we have
@@ -1915,18 +1917,18 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	strcpy(type_name, "enumerated ");
 
 	//We are now required to see a valid identifier
-	lookahead = get_next_token(fl, &parser_line_num);
+	generic_ast_node_t* ident = identifier(fl);
 
 	//Fail case
-	if(lookahead.tok != IDENT){
+	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Valid identifier required after construct keyword", parser_line_num);
 		num_errors++;
-		//Create an error node and get out
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Ident is already an error, just give it back
+		return ident;
 	}
 
 	//Otherwise, we'll now add this identifier into the type name
-	strcat(type_name, lookahead.lexeme);	
+	strcat(type_name, ((identifier_ast_node_t*)(ident->node))->identifier);	
 
 	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
 	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
@@ -1959,6 +1961,64 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 
 	//We are now required to see a valid construct member list
 	generic_ast_node_t* mem_list = construct_member_list(fl);
+
+	//Automatic fail case here
+	if(mem_list->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid construct member list given in construct definition", parser_line_num);
+		//It's already an error, so we'll just allow it to propogate
+		return mem_list;
+	}
+
+	//Otherwise we got past the list, and now we need to see a closing curly
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Bail out if this happens
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Closing curly brace required after member list", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Check for unamtched curlies
+	if(pop(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//If we make it here, we've made it far enough to know what we need to build our type for this construct
+	generic_type_t* construct = create_constructed_type(type_name, current_line);
+
+	//Now we're going to have to walk the members of the member list, and add in their references to the type.
+	//Doing this work now saves us a lot of steps later on for not much duplicated space
+	//Start off with the first child
+	generic_ast_node_t* cursor = mem_list->first_child;
+
+	//As long as there are more children
+	while(cursor != NULL){
+		//Sanity check
+		if(cursor->CLASS != AST_NODE_CLASS_CONSTRUCT_MEMBER){
+			print_parse_message(PARSE_ERROR, "Fatal internal parse error. Found non-construct member in member list", parser_line_num);
+			//Return an error and fail out
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Pick out the variable record
+		symtab_variable_record_t* var = ((construct_member_ast_node_t*)(cursor->node))->member_var;
+
+		//We'll now add this into the parameter list
+		construct->construct_type->members[construct->construct_type->num_members] = var;
+		//Increment the number of members
+		(construct->construct_type->num_members)++;
+
+		//Now that we've added it in, advance the cursor
+		cursor = cursor->next_sibling;
+	}
+
+	//Now we'll actually create the node itself
+	generic_ast_node_t* construct_definer_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_DEFINER);
 
 
 }

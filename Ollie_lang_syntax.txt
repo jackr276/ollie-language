@@ -48,7 +48,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <enumerated-definer> ::= define enumerated <identifier> { <enumerator><enumerator-list-prime> } {as <identifier>}?;
 
-<construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?
+<construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
 
 <construct-member-list> ::= { <construct-member> ; }*
 
