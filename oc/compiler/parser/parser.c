@@ -795,7 +795,108 @@ static generic_ast_node_t* array_accessor(FILE* fl){
  *						  | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+	//Freeze the current line number
+	u_int16_t current_line = parser_line_num;
 
+	//No matter what, we have to first see a valid primary expression
+	generic_ast_node_t* primary_expr = primary_expression(fl);
+
+	//If we fail, then we're bailing out here
+	if(primary_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//Just return, no need for any errors here
+		return primary_expr;
+	}
+
+	//Peek at the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//Let's just check if we're able to get out immediately
+	if(lookahead.tok != L_BRACKET && lookahead.tok != COLON && lookahead.tok != ARROW_EQ
+	   && lookahead.tok != PLUSPLUS && lookahead.tok != MINUSMINUS){
+		//Put the token back
+		push_back_token(fl, lookahead);
+		//Just return what primary expr gave us
+		return primary_expr;
+	}
+
+	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
+	//post operation, so we can make the node for it
+	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_CLASS_POSTFIX_EXPR);
+	
+	//This node will always have the primary expression as its first child
+	add_child_node(postfix_expr_node, primary_expr);
+
+	//Now we can see as many construct accessor and array accessors as we can take
+	//TODO TYPE CHECKING NEEDED
+	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == ARROW_EQ){
+		//Let's see which rule it is
+		//We have an array accessor
+		if(lookahead.tok == L_BRACKET){
+			//Put the token back
+			push_back_token(fl, lookahead);
+			//Let the array accessor handle it
+			generic_ast_node_t* array_acc = array_accessor(fl);
+			
+			//Let's see if it actually worked
+			if(array_acc->CLASS == AST_NODE_CLASS_ERR_NODE){
+				print_parse_message(PARSE_ERROR, "Invalid array accessor found in postfix expression", current_line);
+				num_errors++;
+				//It's already an error, so we'll just give it back
+				return array_acc;
+			}
+			//TODO TYPE CHECKING
+
+			//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
+			//node
+			add_child_node(postfix_expr_node, array_acc);
+
+		//Otherwise we have a construct accessor
+		} else {
+			//Put it back for the rule to deal with
+			push_back_token(fl, lookahead);
+			//Let's have the rule do it
+			generic_ast_node_t* constr_acc = construct_accessor(fl);
+
+			//We have our fail case here
+			if(constr_acc->CLASS == AST_NODE_CLASS_ERR_NODE){
+				print_parse_message(PARSE_ERROR, "Invalid construct accessor found in postfix expression", current_line);
+				num_errors++;
+				//It's already an error so send it up
+				return constr_acc;
+			}
+
+			//TODO TYPE CHECKING
+			//Otherwise we know it's good, so we'll add it in as a child
+			add_child_node(postfix_expr_node, constr_acc);
+		}
+		
+		//refresh the lookahead for the next iteration
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//Now once we get here, we know that we have something that isn't one of accessor rules
+	//It could however be postinc/postdec. Let's first see if it isn't
+	if(lookahead.tok != PLUSPLUS && lookahead.tok != MINUSMINUS){
+		//Put the token back
+		push_back_token(fl, lookahead);
+		//And we'll give back what we had constructed so far
+		return postfix_expr_node;
+	}
+
+	//Otherwise if we get here we know that we either have post inc or dec
+	//Create the unary operator node
+	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
+
+	//Store the token
+	((unary_operator_ast_node_t*)(unary_post_op->node))->unary_operator = lookahead.tok;
+
+	//This will always be the last child of whatever we've built so far
+	add_child_node(postfix_expr_node, unary_post_op);
+
+	//Now that we're done, we can get out
+	return postfix_expr_node;
 }
 
 
