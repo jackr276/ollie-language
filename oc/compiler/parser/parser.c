@@ -1914,7 +1914,7 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	char type_name[MAX_TYPE_NAME_LENGTH];
 	
 	//We already know that the type name will have enumerated in it
-	strcpy(type_name, "enumerated ");
+	strcpy(type_name, "construct ");
 
 	//We are now required to see a valid identifier
 	generic_ast_node_t* ident = identifier(fl);
@@ -1989,7 +1989,7 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	}
 	
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
-	generic_type_t* construct = create_constructed_type(type_name, current_line);
+	generic_type_t* construct_type = create_constructed_type(type_name, current_line);
 
 	//Now we're going to have to walk the members of the member list, and add in their references to the type.
 	//Doing this work now saves us a lot of steps later on for not much duplicated space
@@ -2009,20 +2009,130 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 		symtab_variable_record_t* var = ((construct_member_ast_node_t*)(cursor->node))->member_var;
 
 		//We'll now add this into the parameter list
-		construct->construct_type->members[construct->construct_type->num_members] = var;
+		construct_type->construct_type->members[construct_type->construct_type->num_members] = var;
 		//Increment the number of members
-		(construct->construct_type->num_members)++;
+		(construct_type->construct_type->num_members)++;
 
 		//Now that we've added it in, advance the cursor
 		cursor = cursor->next_sibling;
 	}
 
+	//Once we're here, the construct type is fully defined. We can now add it into the symbol table
+	insert_type(type_symtab, create_type_record(construct_type));
+	
 	//Now we'll actually create the node itself
 	generic_ast_node_t* construct_definer_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_DEFINER);
+	//Save the construct type in here
+	((construct_definer_ast_node_t*)(construct_definer_node->node))->created_construct = construct_type;
 
+	//We'll now add a reference to the construct 
+	
+	//This node's first child will be the identifier
+	add_child_node(construct_definer_node, ident);
 
+	//The next node is the member list
+	add_child_node(construct_definer_node, mem_list);
+
+	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
+	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
+	//know that we're not aliasing however
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//We're out of here, just return the node that we made
+	if(lookahead.tok == SEMICOLON){
+		return construct_definer_node;
+	}
+	
+	//Otherwise, if this is correct, we should've seen the as keyword
+	if(lookahead.tok != AS){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition", parser_line_num);
+		num_errors++;
+		//Make an error and get out of here
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
+	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
+	generic_ast_node_t* alias_ident = identifier(fl);
+
+	//If it was invalid
+	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
+		num_errors++;
+		//It's already an error, so we'll just propogate it
+		return alias_ident;
+	}
+
+	//Real quick, let's check to see if we have the semicol that we need now
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Last chance for us to fail syntactically JK;w
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
+		num_errors++;
+		//Create and give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we have to check to make sure there are no name collisions
+	//Grab this for convenience
+	char* name = ((identifier_ast_node_t*)(alias_ident->node))->identifier;
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now if we make it all the way here, we know that we have a valid name that we can
+	//alias with, so we'll first add the ident in to the tree
+	add_child_node(construct_definer_node, alias_ident);
+
+	//Now we'll make the actual record for the aliased type
+	generic_type_t* aliased_type = create_aliased_type(name, construct_type, parser_line_num);
+
+	//Once we've made the aliased type, we can record it in the symbol table
+	insert_type(type_symtab, create_type_record(aliased_type));
+
+	//Give back the root level node
+	return construct_definer_node;
 }
-
 
 
 /**
