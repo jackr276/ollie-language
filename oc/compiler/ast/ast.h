@@ -53,6 +53,8 @@ typedef struct asnmnt_expr_ast_node_t asnmnt_expr_ast_node_t;
 typedef struct binary_expr_ast_node_t binary_expr_ast_node_t;
 //The cast expression node
 typedef struct cast_expr_ast_node_t cast_expr_ast_node_t;
+//The postfix expression node
+typedef struct postfix_expr_ast_node_t postfix_expr_ast_node_t;
 //The unary expression node
 typedef struct unary_expr_ast_node_t unary_expr_ast_node_t;
 //The unary operator node
@@ -61,6 +63,8 @@ typedef struct unary_operator_ast_node_t unary_operator_ast_node_t;
 typedef struct function_call_ast_node_t function_call_ast_node_t;
 //A struct accessor node
 typedef struct construct_accessor_ast_node_t construct_accessor_ast_node_t;
+//An array accessor node
+typedef struct array_accessor_ast_node_t array_accessor_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -83,9 +87,11 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ASNMNT_EXPR,
 	AST_NODE_CLASS_BINARY_EXPR,
 	AST_NODE_CLASS_CAST_EXPR,
+	AST_NODE_CLASS_POSTFIX_EXPR,
 	AST_NODE_CLASS_UNARY_EXPR,
 	AST_NODE_CLASS_UNARY_OPERATOR,
 	AST_NODE_CLASS_CONSTRUCT_ACCESSOR,
+	AST_NODE_CLASS_ARRAY_ACCESSOR,
 	AST_NODE_CLASS_FUNCTION_CALL,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
@@ -247,6 +253,19 @@ struct unary_operator_ast_node_t{
 struct construct_accessor_ast_node_t{
 	//The token that we saw(either : or =>)
 	Token tok;
+};
+
+//The array accessor AST Node. Doesn't really do much, just there
+//to represent what we're doing
+struct array_accessor_ast_node_t{
+	//What is the inferred type -- not yet implemented
+	generic_type_t* inferred_type;
+};
+
+//The postfix expression ast node. Does not do all that much currently
+struct postfix_expr_ast_node_t{
+	//What type do we think it is--not yet implemented
+	generic_type_t* inferred_type;
 };
 
 /**

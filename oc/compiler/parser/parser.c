@@ -715,9 +715,71 @@ static generic_ast_node_t* construct_accessor(FILE* fl){
 /**
  * An array accessor represents a request to get something from an array memory region. Like all
  * nodes, an array accessor will return a reference to the subtree that it creates
+ *
+ * We expect that the caller has given back the [ token for this rule
+ *
+ * BNF Rule: <array-accessor> ::= [ <conditional-expression> ]
+ *
  */
 static generic_ast_node_t* array_accessor(FILE* fl){
+	//The lookahead token
+	Lexer_item lookahead;
+	//Freeze the current line
+	u_int16_t current_line = parser_line_num;
 
+	//We expect to see the left bracket here
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//If we didn't see it, that's some weird internal error
+	if(lookahead.tok != L_BRACKET){
+		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Array accessor did not see [", current_line);
+		num_errors++;
+		//Fail out here
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise it all went well, so we'll push this onto the stack
+	push(grouping_stack, lookahead);
+
+	//Now we are required to see a valid constant expression representing what
+	//the actual index is. TODO TYPE CHECKING NEEDED
+	generic_ast_node_t* expr = conditional_expression(fl);
+
+	//If we fail, automatic exit here
+	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to array accessor", current_line);
+		num_errors++;
+		//It's already an error so we'll just return it
+		return expr;
+	}
+
+	//Otherwise, once we get here we need to check for matching brackets
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If wedon't see a right bracket, we'll fail out
+	if(lookahead.tok != R_BRACKET){
+		print_parse_message(PARSE_ERROR, "Right bracket expected at the end of array accessor", parser_line_num);
+		num_errors++;
+		//Give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We also must check for matching with the brackets
+	if(pop(grouping_stack).tok != L_BRACKET){
+		print_parse_message(PARSE_ERROR, "Unmatched brackets detected in array accessor", current_line);
+		num_errors++;
+		//Again give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now that we've done all of our checks have been done, we can create the actual node
+	generic_ast_node_t* array_acc_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_ACCESSOR);
+	//TODO encode type info later
+	//The conditional expression is a child of this node
+	add_child_node(array_acc_node, expr);
+
+	//And now we're done so give back the root reference
+	return array_acc_node;
 }
 
 
@@ -726,8 +788,11 @@ static generic_ast_node_t* array_accessor(FILE* fl){
  * operators that can be chained if context allows. Like all other rules, this rule
  * returns a reference to the root node that it creates
  *
+ * As an important note here: We can chain construct accessors and array accessors as much as we wish, 
+ * but seeing a plusplus or minusminus is the defintive end of this rule if we see it
+ *
  * <postfix-expression> ::= <primary-expression> 
- *						 | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
+ *						  | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl){
 

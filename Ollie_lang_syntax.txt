@@ -67,10 +67,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 				 <variable-identifer>{<array-accessor>}?
 				 <variable-identifier>{<construct-accessor}?
 
-<array-accessor> ::= [ {constant-expression}? ]<array-accessor-prime>
-
-<array-accessor-prime> ::= [ {constant-expression}? ]<array-accessor-prime>
-						 | epsilon
+<array-accessor> ::= [ <conditional-expression> ]
 
 <construct-accessor> ::= => <variable-identifier>
 					   | : <variable-identifier>

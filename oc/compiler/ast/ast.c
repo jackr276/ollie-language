@@ -165,6 +165,20 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_CONSTRUCT_ACCESSOR;
 			break;
 
+		//Array accessor AST node
+		case AST_NODE_CLASS_ARRAY_ACCESSOR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(array_accessor_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_ARRAY_ACCESSOR;
+			break;
+
+		//Postfix expression AST node
+		case AST_NODE_CLASS_POSTFIX_EXPR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(postfix_expr_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_POSTFIX_EXPR;
+			break;
+
 		//Generic error node
 		case AST_NODE_CLASS_ERR_NODE:
 			//Just assign that it is an error and get out
