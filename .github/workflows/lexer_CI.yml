@@ -15,7 +15,3 @@ jobs:
     - uses: actions/checkout@v4
     - name: Lexer test
       run: make ltest 
-    - name: Symtab test
-      run: make stest 
-    - name: Parser test
-      run: make ptest 
