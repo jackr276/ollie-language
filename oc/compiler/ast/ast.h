@@ -200,7 +200,8 @@ struct type_spec_ast_node_t{
 
 //Simply holds a name that we get for a type
 struct type_name_ast_node_t{
-	char type_name[MAX_TYPE_NAME_LENGTH];
+	//Hold the type record
+	symtab_type_record_t* type_record;
 };
 
 

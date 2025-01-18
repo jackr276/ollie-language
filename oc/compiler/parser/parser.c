@@ -13,6 +13,7 @@
 */
 
 #include "parser.h"
+#include <filesystem>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -907,7 +908,12 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
  *
  * BNF Rule: <unary-expression> ::= <postfix-expression> 
  * 								  | <unary-operator> <cast-expression> 
- * 								  | typesize(<type-name>)
+ * 								  | typesize(<type-specifier>)
+ *
+ * Important notes for typesize: It is assumed that the type-specifier node will handle
+ * any/all error checking that we need. It will not throw an error if the type is not defined, 
+ * but it will return null if it has not been previously defined. The typesize keyword is also considered
+ * to be a unary operator itself
  *
  * For convenience, we will also handle any/all unary operators here
  *
@@ -927,8 +933,15 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we see the typesize keyword 
+	//If we see the typesize keyword, we are locked in to the typesize rule
 	if(lookahead.tok == TYPESIZE){
+		//We've seen typesize, so that is our unary operator. To reflect this, we will create 
+		//a unary operator node for it
+		generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
+		//Assign the typesize operator to this
+		((unary_operator_ast_node_t*)(unary_op->node))->unary_operator = TYPESIZE;
+
+		//Now we have to look for the type
 		//We must then see left parenthesis
 		lookahead = get_next_token(fl, &parser_line_num);
 
@@ -943,17 +956,89 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Otherwise we'll push to the stack for checking
 		push(grouping_stack, lookahead);
 
-		//Now we need to see a valid type-specifier
+		//Now we need to see a valid type-specifier. It is important to note that the type
+		//specifier requires that a type has actually been defined. If it wasn't defined,
+		//then this will return an error node
 		generic_ast_node_t* type_spec = type_specifier(fl);
 
-		//Now if we don't see a valid type spec we need to bail out
-		//TODO FINISH ME
+		//If it's an error
+		if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Unable to perform cast on undefined type",  parser_line_num);
+			num_errors++;
+			//It's already an error, so give it back that way
+			return type_spec;
+		}
 
-	}
+		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out here if we don't see it
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type specifer", parser_line_num);
+			num_errors++;
+			//Create and return the error
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We can also fail if we somehow see unmatched parenthesis
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
+			num_errors++;
+			//Create and return the error
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise if we make it all the way down here, we are done and can perform final assemble on the node
+		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+
+		//The unary node always has the operator as it's left hand side
+		add_child_node(unary_node, unary_op);
+
+		//The next node will always be the type specifier
+		add_child_node(unary_node, type_spec);
+
+		//And we are done, so we'll send this out
+		return unary_node;
+
+	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
+	//the exact same way
+	} else if(lookahead.tok == PLUS || lookahead.tok == PLUSPLUS || lookahead.tok == MINUS || lookahead.tok == MINUSMINUS
+		     || lookahead.tok == STAR || lookahead.tok == AND || lookahead.tok == B_NOT || lookahead.tok == L_NOT){
+
+		//We'll first create the unary operateor node for ourselves here
+		generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
+		//Assign the typesize operator to this
+		((unary_operator_ast_node_t*)(unary_op->node))->unary_operator = lookahead.tok;
+
+		//Following this, we are required to see a valid cast expression
+		generic_ast_node_t* cast_expr = cast_expression(fl);
+
+		//Let's check for errors
+		if(cast_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If it is bad, we'll just propogate it up the chain
+			return cast_expr;
+		}
+
+		//Otherwise we know that it worked TODO TYPE CHECKING
+		//One we get here, we have both nodes that we need
+		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+
+		//The unary operator always comes first
+		add_child_node(unary_node, unary_op);
+
+		//The cast expression will be linked in last
+		add_child_node(unary_node, cast_expr);
+
+		//Finally we're all done, so we can just give this back
+		return unary_node;
 	
-
+	//If we get here we will just put the token back and pass the responsibility on to the
+	//postifix expression rule
+	} else {
+		push_back_token(fl, lookahead);
+		return postfix_expression(fl);
+	}
 }
-
 
 
 /**
@@ -1828,9 +1913,7 @@ u_int8_t construct_declaration(FILE* fl){
  *
  * REMEMBER: By the time we get here, we've already seen the construct keyword
  *
- * NOTE: The caller will do the final insertion into the symbol table
- *
- * BNF Rule: <construct-specifier> ::= construct <ident> { <construct-declaration> {, <construct-declaration>}* } 
+ * BNF Rule: <construct-specifier> ::= construct <variable-identifier> { <construct-declaration> {, <construct-declaration>}* } 
  */
 static u_int8_t construct_definer(FILE* fl){
 	//Freeze the line number
@@ -1939,6 +2022,7 @@ static u_int8_t construct_definer(FILE* fl){
 	return 1;
 
 }
+
 
 
 /**
@@ -2094,7 +2178,6 @@ u_int8_t enumerator(FILE* fl){
 
 	return 1;
 }
-
 
 /**
  * Helper to maintain RL(1) properties. Remember, by the time we've gotten here, we've already seen a COMMA
@@ -2347,7 +2430,7 @@ u_int8_t enumeration_specifier(FILE* fl){
  * 										| &{type-address-specifier}
  * 										| epsilon
  */
-static u_int8_t type_address_specifier(FILE* fl, generic_ast_node_t* type_specifier, generic_type_t** current_type){
+static generic_ast_node_t* type_address_specifier(FILE* fl){
 	//Status checker
 	u_int8_t status = 0;
 	//Lookahead token
@@ -2522,20 +2605,21 @@ static u_int8_t type_name(FILE* fl, generic_ast_node_t* type_specifier){
 
 /**
  * A type specifier is a type name that is then followed by an address specifier, this being  
- * the array brackets or address indicator. A type specifier is always the child of some
- * global parent
+ * the array brackets or address indicator. Like all rules, the type specifier rule will
+ * always return a reference to the root of the subtree it creates
  *
  * The type specifier itself is comprised of some type name and potential address specifiers
+ * 
+ * NOTE: This rule REQUIRES that the name actually be defined. This rule is not used for the 
+ * definition of names itself
  *
  * BNF Rule: <type-specifier> ::= <type-name>{<type-address-specifier>}*
  */
-static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
+static generic_ast_node_t* type_specifier(FILE* fl){
 	//For error printing
 	char info[2000];
 	//Freeze the current line
 	u_int8_t current_line = parser_line_num;
-	//Global status var
-	u_int8_t status = 0;
 	//Lookahead var
 	Lexer_item lookahead;
 
@@ -2543,13 +2627,9 @@ static u_int8_t type_specifier(FILE* fl, generic_ast_node_t* parent){
 	//At this point the node will be entirely blank
 	generic_ast_node_t* type_spec_node = ast_node_alloc(AST_NODE_CLASS_TYPE_SPECIFIER);
 
-	//We'll attach it as a child to the parent
-	add_child_node(parent, type_spec_node);
-
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
-	//add a new child node to the type_spec_node, which we will later use in the type
-	//record creation
-	status = type_name(fl, type_spec_node);
+	//return a record of the node that the type name has
+	status = type_name(fl);
 
 	//Throw and get out
 	if(status == 0){

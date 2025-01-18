@@ -476,6 +476,34 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
+					case '~':
+						lex_item.tok = B_NOT;
+						strcpy(lex_item.lexeme, "~");
+						lex_item.line_num = line_num;
+						lex_item.char_count = token_char_count;
+						return lex_item;
+
+					case '!':
+						ch2 = get_next_char(fl);
+						if(ch2 == '='){
+							current_state = IN_START;
+							//Prepare and return
+							lex_item.tok = NOT_EQUALS;
+							strcpy(lex_item.lexeme, "!=");
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
+						} else {
+							current_state = IN_START;
+							//Put it back
+							put_back_char(fl);
+							lex_item.tok = L_NOT;
+							strcpy(lex_item.lexeme, "!");
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
+						}
+
 					//Beginning of a string literal
 					case '"':
 						//Say that we're in a string
