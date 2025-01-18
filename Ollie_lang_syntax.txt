@@ -174,7 +174,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
                        | ( <expression> )
 					   | <function-call>
 
-<function-call> ::= @<function-identifier>({conditional-expression}*)
+<function-call> ::= @<function-identifier>({<conditional-expression>}?{, <conditional-expression>}*)
 
 <expression> ::= <assignment-expression>
 

@@ -53,6 +53,8 @@ typedef struct asnmnt_expr_ast_node_t asnmnt_expr_ast_node_t;
 typedef struct binary_expr_ast_node_t binary_expr_ast_node_t;
 //The cast expression node
 typedef struct cast_expr_ast_node_t cast_expr_ast_node_t;
+//The function call node
+typedef struct function_call_ast_node_t function_call_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -75,6 +77,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ASNMNT_EXPR,
 	AST_NODE_CLASS_BINARY_EXPR,
 	AST_NODE_CLASS_CAST_EXPR,
+	AST_NODE_CLASS_FUNCTION_CALL,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -211,6 +214,12 @@ struct binary_expr_ast_node_t{
 struct cast_expr_ast_node_t{
 	//What type does it have?
 	generic_type_t* casted_type;
+};
+
+//The function node call
+struct function_call_ast_node_t{
+	//What is the inferred type of the called function // may be removed
+	generic_type_t* inferred_type;
 };
 
 /**

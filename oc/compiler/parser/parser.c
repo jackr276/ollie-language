@@ -325,11 +325,139 @@ static generic_ast_node_t* expression(FILE* fl){
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<function-identifier>({conditional-expression}*)
- *
+ * BNF Rule: <function-call> ::= @<function-identifier>({<conditional-expression>}?{, <conditional_expression>}*)
  */
 static generic_ast_node_t* function_call(FILE* fl){
+	//For generic error printing
+	char info[2000];
+	//The current line num
+	u_int16_t current_line = parser_line_num;
+	//The lookahead token
+	Lexer_item lookahead;
+	//A nicer reference that we'll keep to the function record
+	symtab_function_record_t* function_record;
+	//We'll also keep a nicer reference to the function name
+	char* function_name;
+	//The number of parameters that we've seen
+	u_int8_t num_params = 0;
+	//The number of parameters that the function actually takes
+	u_int8_t function_num_params;
+	
+	//Let's first grab the function node
+	generic_ast_node_t* function_ident = function_identifier(fl);
 
+	//We have a general error-probably will be quite uncommon
+	if(function_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Non identifier provided as function call", parser_line_num);
+		num_errors++;
+		//We'll let the node propogate up
+		return function_ident;
+	}
+
+	//Otherwise we could still have trouble here
+	function_record = ((function_identifier_ast_node_t*)(function_ident->node))->func_record;
+	function_name = ((function_identifier_ast_node_t*)(function_ident->node))->identifier;
+	function_num_params = function_record->number_of_params;
+	//For convenience we can also keep a reference to the func params list
+	parameter_t* func_params = function_record->func_params;
+	
+	//It is also now safe enough for us to allocate the function node
+	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL);
+
+	//The function IDENT will be the first child of this node
+	add_child_node(function_call_node, function_ident);
+	//Add the inferred type in for convenience as well
+	((function_call_ast_node_t*)(function_call_node->node))->inferred_type = function_record->return_type;
+
+	//Important check here--if this function record does not exist, it means the user is trying to 
+	//call a nonexistent function
+	if(function_record == NULL){
+		sprintf(info, "Function \"%s\" is being called before definition", function_name);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		num_errors++;
+		//Return the error node and get out
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//However, if we make it here, we know that our function actually exists. We can now create
+	//the appropriate node that will hold all of our data about it
+	
+	//We now need to see a left parenthesis for our param list
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail out here
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected on function call", parser_line_num);
+		num_errors++;
+		//Send this error node up the chain
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//A node to hold our current parameter
+	generic_ast_node_t* current_param;
+
+	//Refresh the lookahead token
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//So long as we don't see the R_PAREN we aren't done
+	while(1){
+		//Parameters are in the form of a conditional expression
+		current_param = conditional_expression(fl);
+
+		//We now have an error of some kind
+		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Bad parameter passed to function call", current_line);
+			num_errors++;
+			//Return the error node -- it will propogate up the chain
+			return current_param;
+		}
+
+		//Otherwise it was fine. We'll first record that we saw one more parameter
+		num_params++;
+
+		//If we're exceeding the number of parameters, we'll fail out
+		if(num_params > function_num_params){
+			sprintf(info, "Function \"%s\" expects %d params, was given %d. First declared here:", function_name, function_num_params, num_params);
+			print_parse_message(PARSE_ERROR, info, current_line);
+			//Print out the actual function record as well
+			print_function_name(function_record);
+			num_errors++;
+			//Return the error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We can now safely add this into the function call node as a child. In the function call node, 
+		//the parameters will appear in order from left to right
+		add_child_node(function_call_node, current_param);
+		
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Two options here, we can either see a COMMA or an R_PAREN
+		//If it's an R_PAREN we're done
+		if(lookahead.tok == R_PAREN){
+			break;
+		}
+
+		//Otherwise it must be a comma. If it isn't we have a failure
+		if(lookahead.tok != COMMA){
+			print_parse_message(PARSE_ERROR, "Commas must be used to separate parameters in function call", parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+	}
+
+	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
+	if(pop(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in function call", parser_line_num);
+		num_errors++;
+		//Return the error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise, if we make it here, we're all good to return the function call node
+	return function_call_node;
 }
 
 
