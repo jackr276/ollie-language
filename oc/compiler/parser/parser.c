@@ -13,7 +13,6 @@
 */
 
 #include "parser.h"
-#include <filesystem>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,13 +75,12 @@ static void print_parse_message(parse_message_type_t message_type, char* info, u
 
 /**
  * We will always return a pointer to the node holding the identifier. Due to the times when
- * this will be called, we can not do any symbol table validation here. We will do a quick query and 
- * see if it is some defined variable
+ * this will be called, we can not do any symbol table validation here. 
  *
- * BNF "Rule": <variable-identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
+ * BNF "Rule": <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
  * Note all actual string parsing and validation is handled by the lexer
  */
-static generic_ast_node_t* variable_identifier(FILE* fl){
+static generic_ast_node_t* identifier(FILE* fl){
 	//In case of error printing
 	char info[2000];
 
@@ -99,146 +97,12 @@ static generic_ast_node_t* variable_identifier(FILE* fl){
 	}
 
 	//Create the identifier node
-	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_VARIABLE_IDENTIFIER); //Add the identifier into the node itself
+	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER); //Add the identifier into the node itself
 	//Copy the string we got into it
-	strcpy(((variable_identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
-
-	//Now we can look this up in the symbol table. Although we cannot make any value judgements about this here, we
-	//can at least say if it's been defined or not
-	symtab_variable_record_t* found = lookup_variable(variable_symtab, lookahead.lexeme);
-
-	//This will either be NULL or it will be the record. In either case, we'll simply populate the record in the 
-	//node and give it back
-	((variable_identifier_ast_node_t*)(ident_node->node))->variable_record = found;
+	strcpy(((identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
 
 	//Return our reference to the node
 	return ident_node;
-}
-
-
-/**
- * A label identifier will always be a child of some other node. As such, it will be
- * added on as a child of that node once created. We will return a reference to the 
- * node that was made here
- *
- * Although we cannot make any label judgments about whether or not it was defined in the 
- * symbol table, we can at least look to see if it was
- * BNF "Rule": <label_identifier> ::= ${(<letter>) | <digit> | _ | $}*
- */
-static generic_ast_node_t* label_identifier(FILE* fl){
-	//In case of error printing
-	char info[2000];
-
-	//Grab the next token
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
-	
-	//If we can't find it that's bad
-	if(lookahead.tok != LABEL_IDENT){
-		sprintf(info, "String %s is not a valid label-specific identifier", lookahead.lexeme);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Create and return an error node to be propagated up the chain
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Create the label identifier node
-	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_LABEL_IDENTIFIER);
-
-	//Add the identifier into the node itself
-	strcpy(((label_identifier_ast_node_t*)(label_ident_node->node))->identifier, lookahead.lexeme);
-
-	//Now we will hunt to see if we could actually find the label in the symbol table
-	symtab_variable_record_t* found = lookup_variable(variable_symtab, lookahead.lexeme); 
-
-	//If we didn't find anything, found will just be null, so either way we'll assign it here
-	((label_identifier_ast_node_t*)(label_ident_node->node))->label_record = found;
-
-	//Return the reference to the node that we made
-	return label_ident_node;
-}
-
-
-/**
- * We will always return a pointer to the node holding the identifier. Due to the times when
- * this will be called, we can not do any symbol table validation here. We will do a quick query and 
- * see if it is some defined variable
- *
- * BNF "Rule": <function-identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
- * Note all actual string parsing and validation is handled by the lexer
- */
-static generic_ast_node_t* function_identifier(FILE* fl){
-	//In case of error printing
-	char info[2000];
-
-	//Grab the next token
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
-	
-	//If we can't find it that's bad
-	if(lookahead.tok != IDENT){
-		sprintf(info, "String %s is not a valid function identifier", lookahead.lexeme);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Create and return an error node that will be sent up the chain
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Create the identifier node
-	generic_ast_node_t* function_ident_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_IDENTIFIER); //Add the identifier into the node itself
-	//Copy the string we got into it
-	strcpy(((function_identifier_ast_node_t*)(function_ident_node->node))->identifier, lookahead.lexeme);
-
-	//Now we can look this up in the symbol table. Although we cannot make any value judgements about this here, we
-	//can at least say if it's been defined or not
-	symtab_function_record_t* found = lookup_function(function_symtab, lookahead.lexeme);
-
-	//This will either be NULL or it will be the record. In either case, we'll simply populate the record in the 
-	//node and give it back
-	((function_identifier_ast_node_t*)(function_ident_node->node))->func_record = found;
-
-	//Return our reference to the node
-	return function_ident_node;
-}
-
-
-/**
- * We will always return a pointer to the node holding the identifier. Due to the times when
- * this will be called, we can not do any symbol table validation here. We will do a quick query and 
- * see if it is some defined variable
- *
- * BNF "Rule": <type-identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
- * Note all actual string parsing and validation is handled by the lexer
- */
-static generic_ast_node_t* type_identifier(FILE* fl){
-	//In case of error printing
-	char info[2000];
-
-	//Grab the next token
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
-	
-	//If we can't find it that's bad
-	if(lookahead.tok != IDENT){
-		sprintf(info, "String %s is not a valid type identifier", lookahead.lexeme);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Create and return an error node that will be sent up the chain
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Create the identifier node
-	generic_ast_node_t* type_ident_node = ast_node_alloc(AST_NODE_CLASS_TYPE_IDENTIFIER); //Add the identifier into the node itself
-	//Copy the string we got into it
-	strcpy(((type_identifier_ast_node_t*)(type_ident_node->node))->identifier, lookahead.lexeme);
-
-	//Now we can look this up in the symbol table. Although we cannot make any value judgements about this here, we
-	//can at least say if it's been defined or not
-	symtab_type_record_t* found = lookup_type(type_symtab, lookahead.lexeme);
-
-	//This will either be NULL or it will be the record. In either case, we'll simply populate the record in the 
-	//node and give it back
-	((type_identifier_ast_node_t*)(type_ident_node->node))->type_record = found;
-
-	//Return our reference to the node
-	return type_ident_node;
 }
 
 
@@ -323,7 +187,7 @@ static generic_ast_node_t* expression(FILE* fl){
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<function-identifier>({<conditional-expression>}?{, <conditional_expression>}*)
+ * BNF Rule: <function-call> ::= @<identifier>({<conditional-expression>}?{, <conditional_expression>}*)
  */
 static generic_ast_node_t* function_call(FILE* fl){
 	//For generic error printing
@@ -341,31 +205,22 @@ static generic_ast_node_t* function_call(FILE* fl){
 	//The number of parameters that the function actually takes
 	u_int8_t function_num_params;
 	
-	//Let's first grab the function node
-	generic_ast_node_t* function_ident = function_identifier(fl);
+	//First grab the ident node
+	generic_ast_node_t* ident = identifier(fl);
 
 	//We have a general error-probably will be quite uncommon
-	if(function_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Non identifier provided as function call", parser_line_num);
 		num_errors++;
 		//We'll let the node propogate up
-		return function_ident;
+		return ident;
 	}
 
-	//Otherwise we could still have trouble here
-	function_record = ((function_identifier_ast_node_t*)(function_ident->node))->func_record;
-	function_name = ((function_identifier_ast_node_t*)(function_ident->node))->identifier;
-	function_num_params = function_record->number_of_params;
-	//For convenience we can also keep a reference to the func params list
-	parameter_t* func_params = function_record->func_params;
-	
-	//It is also now safe enough for us to allocate the function node
-	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL);
+	//Grab the function name out for convenience
+	function_name = ((identifier_ast_node_t*)(ident->node))->identifier;
 
-	//The function IDENT will be the first child of this node
-	add_child_node(function_call_node, function_ident);
-	//Add the inferred type in for convenience as well
-	((function_call_ast_node_t*)(function_call_node->node))->inferred_type = function_record->return_type;
+	//Let's now look up the function name in the function symtab
+	function_record = lookup_function(function_symtab, function_name);
 
 	//Important check here--if this function record does not exist, it means the user is trying to 
 	//call a nonexistent function
@@ -377,8 +232,21 @@ static generic_ast_node_t* function_call(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//However, if we make it here, we know that our function actually exists. We can now create
+	//Now we can grab out some info for convenience
+	function_num_params = function_record->number_of_params;
+	//For convenience we can also keep a reference to the func params list
+	parameter_t* func_params = function_record->func_params;
+
+	//If we make it here, we know that our function actually exists. We can now create
 	//the appropriate node that will hold all of our data about it
+	//It is also now safe enough for us to allocate the function node
+	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL);
+
+	//The function IDENT will be the first child of this node
+	add_child_node(function_call_node, ident);
+
+	//Add the inferred type in for convenience as well
+	((function_call_ast_node_t*)(function_call_node->node))->inferred_type = function_record->return_type;
 	
 	//We now need to see a left parenthesis for our param list
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -491,24 +359,31 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//We will let the identifier rule actually grab the ident. In this case
 		//the identifier will be a variable of some sort, that we'll need to check
 		//against the symbol table
-		generic_ast_node_t* variable = variable_identifier(fl);
+		generic_ast_node_t* ident = identifier(fl);
 
 		//If there was a failure of some kind, we'll allow it to propogate up
-		if(variable->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return variable;
+		if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Send the error up the chain
+			return ident;
 		}
+
+		//Grab this out for convenience
+		char* var_name = ((identifier_ast_node_t*)(ident->node))->identifier;
+
+		//Now we will look this up in the variable symbol table
+		symtab_variable_record_t* found = lookup_variable(variable_symtab, var_name);
 
 		//We now must see a variable that was intialized. If it was not
 		//initialized, then we have an issue
-		if(((variable_identifier_ast_node_t*)(variable)->node)->variable_record == NULL){
-			sprintf(info, "Variable \"%s\" has not been declared", ((variable_identifier_ast_node_t*)(variable)->node)->identifier);
+		if(found == NULL){
+			sprintf(info, "Variable \"%s\" has not been declared", var_name);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
 		//Otherwise, we will just return the node that we got
-		return variable;
+		return ident;
 
 	//We can also see a constant
 	} else if (lookahead.tok == CONSTANT){
@@ -694,19 +569,19 @@ static generic_ast_node_t* construct_accessor(FILE* fl){
 	((construct_accessor_ast_node_t*)(const_access_node->node))->tok = lookahead.tok;
 
 	//Now we are required to see a valid variable identifier. TODO TYPE CHECKING
-	generic_ast_node_t* variable_ident = variable_identifier(fl); 
+	generic_ast_node_t* ident = identifier(fl); 
 
 	//For now we're just doing error checking TODO TYPE AND EXISTENCE CHECKING
-	if(variable_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Construct accessor could not find valid identifier", current_line);
 		num_errors++;
 		//It already is an error node so we'll return it
-		return variable_ident;
+		return ident;
 	}
 
 	//Otherwise we know that it worked, so we'll add this guy in as a child of the overall construct
 	//accessor
-	add_child_node(const_access_node, variable_ident);
+	add_child_node(const_access_node, ident);
 
 	//And now we're all done, so we'll just give back the root reference
 	return const_access_node;
@@ -911,9 +786,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
  * 								  | typesize(<type-specifier>)
  *
  * Important notes for typesize: It is assumed that the type-specifier node will handle
- * any/all error checking that we need. It will not throw an error if the type is not defined, 
- * but it will return null if it has not been previously defined. The typesize keyword is also considered
- * to be a unary operator itself
+ * any/all error checking that we need. Type specifier will throw an error if the type has 
+ * not been defined
  *
  * For convenience, we will also handle any/all unary operators here
  *
@@ -1842,240 +1716,135 @@ static generic_ast_node_t* conditional_expression(FILE* fl){
 
 
 /**
- * A structure declarator is grammatically identical to a regular declarator
+ * A construct member is something like a variable declaration. Like all rules in the parser,
+ * the construct member will return a reference to the root node of the subtree it creates
  *
- * BNF Rule: <construct-declarator> ::= <declarator> 
+ * As a reminder, type specifier will give us an error if the type is not defined
  *
+ * BNF Rule: <construct-member> ::= {constant}? <type-specifier> <identifier>
  */
-u_int8_t construct_declarator(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* construct_member(FILE* fl){
+	//The lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
+	//Is it a constant variable?
+	u_int8_t is_constant = 0;
 
-	//We can see a declarator
-	status = declarator(fl);
-
-	//TODO by no means done
-
-	//Otherwise we're all set so return 1
-	return 1;
-}
-
-/**
- * A construct declaration can optionally be chained into a large list
- *
- * BNF Rule: <construct-declaration> ::= {constant}? <type-specifier> <construct-declarator>
- */
-u_int8_t construct_declaration(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We can see the constant keyword here optionally
+	//Let's first see if it's a constant
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we see constant keyword
+	//If it is constant
 	if(lookahead.tok == CONSTANT){
-		//TODO handle
+		//Then it's constant
+		is_constant = 1;
 	} else {
-		//Put back
+		//Otherwise, we'll just put it back
 		push_back_token(fl, lookahead);
 	}
-	
-	//We must see a valid one
-	status = type_specifier(fl);
 
-	//Fail out if bad
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid type specifier in structure declaration", current_line);
+	//Now we are required to see a valid type specifier
+	generic_ast_node_t* type_spec = type_specifier(fl);
+
+	//If this is an error, the whole thing fails
+	if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in construct member", parser_line_num);
 		num_errors++;
-		return 0;
+		//It's already an error, so just send it up
+		return type_spec;
 	}
 
-	//Now we must see a valid structure declarator
-	status = construct_declarator(fl);
+	//Otherwise we know that it worked here
+	//Now we need to see a valid ident and check it for duplication
+	generic_ast_node_t* ident = identifier(fl);	
 
-	//Fail out if bad
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid structure declarator in structure declaration", current_line);
-		num_errors++;
-		return 0;
-	}
+	//TODO ALL CHECKS
+	//Check that it isn't some duplicated type name
 
-	//Otherwise it worked so
-	return 1;
+
 }
 
+
 /**
- * A construct definer is the definition of a construct 
+ * A construct member list holds all of the nodes that themselves represent construct members. Like all
+ * other rules, this function returns the root node of the subtree that it creates
  *
- * REMEMBER: By the time we get here, we've already seen the construct keyword
- *
- * BNF Rule: <construct-specifier> ::= construct <variable-identifier> { <construct-declaration> {, <construct-declaration>}* } 
+ * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
-static u_int8_t construct_definer(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
+static generic_ast_node_t* construct_member_list(FILE* fl){
+
+}
+
+
+/**
+ * A construct definer is the definition of a construct. We require all parts of the construct to be defined here.
+ * We also allow the potential for aliasing as a different type right off of the bat here. Like all other rules, 
+ * this function returns a pointer to the subtree that it creates
+ *
+ * REMEMBER: By the time we get here, we've already seen the define and construct keywords due to lookahead rules
+ *
+ * This rule also handles everything with identifiers to avoid excessive confusion
+ *
+ * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?
+ */
+static generic_ast_node_t* construct_definer(FILE* fl){
 	//For error printing
 	char info[2000];
-
-	//The name of the construct type
-	char construct_name[MAX_TYPE_NAME_LENGTH];
-
-	//Copy the name in here
-	strcpy(construct_name, "construct ");
-
-	//We now have to see a valid identifier, since we've already seen the construct keyword
-	//Stored here in current ident global variable
-	status = identifier(fl);
-
-	//If we don't see an ident
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid identifier found in construct specifier", parser_line_num);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we'll add this into our name
-	strcat(construct_name, current_ident->lexeme);
-
-	//Now in this case, it would be bad if it does exist
-	symtab_type_record_t* type = lookup_type(type_symtab, construct_name);
-
-	//If it does exist, we're done here 
-	if(type != NULL){
-		sprintf(info, "Constructed type with name \"%s\" already exists. First defined here:", construct_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_type_name(type);
-		num_errors++;
-		return 0;
-	}
-
-	//We now must see a left curly to officially start defining
-	lookahead = get_next_token(fl, &parser_line_num);
+	//Lookahead token for our uses
+	Lexer_item lookahead;
+	//The actual type name that we have
+	char type_name[MAX_TYPE_NAME_LENGTH];
 	
-	//Fail out here
-	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Raw definitions are not allowed, construct must be fully defined in definition statement", current_line);
+	//We already know that the type name will have enumerated in it
+	strcpy(type_name, "enumerated ");
+
+	//We are now required to see a valid identifier
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Valid identifier required after construct keyword", parser_line_num);
 		num_errors++;
-		return 0;
+		//Create an error node and get out
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Otherwise we saw a left curly, so push to stack 
+	//Otherwise, we'll now add this identifier into the type name
+	strcat(type_name, lookahead.lexeme);	
+
+	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
+	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
+	symtab_type_record_t* found = lookup_type(type_symtab, type_name);
+
+	//This means that we are attempting to redefine a type
+	if(found != NULL){
+		sprintf(info, "Type with name \"%s\" was already defined. First defined here:", type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the type
+		print_type_name(found);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we are required to see a curly brace
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case here
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
+		num_errors++;
+		//Create and return the error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we'll push onto the stack for later matching
 	push(grouping_stack, lookahead);
 
-	//Create the type
-	generic_type_t* constructed_type = create_constructed_type(construct_name, current_line);
+	//We are now required to see a valid construct member list
+	generic_ast_node_t* mem_list = construct_member_list(fl);
 
-	//Set the active type to be this type
-	active_type = constructed_type;
-
-	//Now we must see a valid structure declaration
-	status = construct_declaration(fl);
-
-	//If we failed
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid construct declaration inside of construct definition", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//We can optionally see a comma here
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//As long as we see commas
-	while(lookahead.tok == COMMA){
-		//We must now see a valid declaration
-		status = construct_declaration(fl);
-
-		//If we fail
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid construct declaration inside of construct definition", current_line);
-			num_errors++;
-			return 0;
-		}	
-
-		//Refresh lookahead
-		lookahead = get_next_token(fl, &parser_line_num);
-	}
-
-	//Once we get here it must be a closing curly
-	//If we don't see a curly
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Right curly brace expected after structure declaration", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//If it's unmatched
-	if(pop(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise it worked so
-	return 1;
 
 }
 
-
-
-/**
- * A construct specifier is the entry to a construct 
- *
- * REMEMBER: By the time we get here, we've already seen the construct keyword
- *
- * BNF Rule: <construct-specifier> ::= construct <ident>
- */
-static u_int8_t construct_specifier(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-	//For error printing
-	char info[2000];
-
-	//The name of the construct type
-	char construct_name[MAX_TYPE_NAME_LENGTH];
-
-	//Copy the name in here
-	strcpy(construct_name, "construct ");
-
-	//We now have to see a valid identifier, since we've already seen the construct keyword
-	//Stored here in current ident global variable
-	status = identifier(fl);
-
-	//If we don't see an ident
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid identifier found in construct specifier", parser_line_num);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we'll add this into our name
-	strcat(construct_name, current_ident->lexeme);
-
-	//Now once we get here, we need to check and see if this construct actually exists
-	symtab_type_record_t* type = lookup_type(type_symtab, construct_name);
-
-	//If it doesn't exist, we're done here 
-	if(type == NULL){
-		sprintf(info, "Constructed type with name \"%s\" does not exist", construct_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise we made it here and we're all clear
-	active_type = type->type;
-
-	return 1;
-}
 
 
 /**

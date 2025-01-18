@@ -81,32 +81,11 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER;
 			break;
 
-		//Function identifier
-		case AST_NODE_CLASS_FUNCTION_IDENTIFIER:
+		//An identifier of any kind
+		case AST_NODE_CLASS_IDENTIFIER:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(function_identifier_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_FUNCTION_IDENTIFIER;
-			break;
-
-		//Variable identifier
-		case AST_NODE_CLASS_VARIABLE_IDENTIFIER:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(variable_identifier_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_VARIABLE_IDENTIFIER;
-			break;
-
-		//Type identifier
-		case AST_NODE_CLASS_TYPE_IDENTIFIER:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(type_identifier_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_TYPE_IDENTIFIER;
-			break;
-
-		//Label identifier case
-		case AST_NODE_CLASS_LABEL_IDENTIFIER:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(label_identifier_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_LABEL_IDENTIFIER;
+			node->node = calloc(1, sizeof(identifier_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_IDENTIFIER;
 			break;
 
 		//Constant case
@@ -177,6 +156,27 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			//Just allocate the proper size and set the class
 			node->node = calloc(1, sizeof(postfix_expr_ast_node_t));
 			node->CLASS = AST_NODE_CLASS_POSTFIX_EXPR;
+			break;
+
+		//Construct definer ast node
+		case AST_NODE_CLASS_CONSTRUCT_DEFINER:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(construct_definer_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_CONSTRUCT_DEFINER;
+			break;
+
+		//Construct member list ast node
+		case AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(construct_member_list_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST;
+			break;
+
+		//Construct member ast node
+		case AST_NODE_CLASS_CONSTRUCT_MEMBER:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(construct_member_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_CONSTRUCT_MEMBER;
 			break;
 
 		//Generic error node

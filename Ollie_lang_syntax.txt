@@ -41,18 +41,16 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 							| external
 							| register
 
-<define-statement ::= define <complex-type-definer> {as <alias-identifer>}?;
+<define-statement> ::= <complex-type-definer>
 
 <complex-type-definer> ::= <enumerated-definer>
 						 | <construct-definer>
 
-<enumerated-definer> ::= define enumerated <identifier> { <enumerator><enumerator-list-prime> } as <identifier>;
+<enumerated-definer> ::= define enumerated <identifier> { <enumerator><enumerator-list-prime> } {as <identifier>}?;
 
-<construct-definer> ::= define construct <identifier> { <construct-member-list> }
+<construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?
 
-<construct-member-list> ::= <construct-member><construct-member-list-prime>
-
-<construct-member-list-prime> ::= , <construct-member><construct-member-list-prime>
+<construct-member-list> ::= { <construct-member> ; }*
 
 <construct-member> ::= {constant}? <type-specifier> <identifier>
 

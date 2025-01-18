@@ -31,14 +31,8 @@ typedef struct func_specifier_ast_node_t func_specifier_ast_node_t;
 typedef struct param_list_ast_node_t param_list_ast_node_t;
 //A parameter node
 typedef struct param_decl_ast_node_t param_decl_ast_node_t;
-//A function identifier node
-typedef struct function_identifier_ast_node_t function_identifier_ast_node_t;
-//A variable identifier node
-typedef struct variable_identifier_ast_node_t variable_identifier_ast_node_t;
-//A type identifier node
-typedef struct type_identifier_ast_node_t type_identifier_ast_node_t;
-//A label identifier node. Label identifiers always begin with dollar signs
-typedef struct label_identifier_ast_node_t label_identifier_ast_node_t;
+//An identifier node
+typedef struct identifier_ast_node_t identifier_ast_node_t;
 //A constant node. Can represent any of the four kinds of constant
 typedef struct constant_ast_node_t constant_ast_node_t;
 //A type specifier node
@@ -65,6 +59,12 @@ typedef struct function_call_ast_node_t function_call_ast_node_t;
 typedef struct construct_accessor_ast_node_t construct_accessor_ast_node_t;
 //An array accessor node
 typedef struct array_accessor_ast_node_t array_accessor_ast_node_t;
+//A construct definer node
+typedef struct construct_definer_ast_node_t construct_definer_ast_node_t;
+//A construct member list node
+typedef struct construct_member_list_ast_node_t construct_member_list_ast_node_t;
+//A construct member node
+typedef struct construct_member_ast_node_t construct_member_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -77,10 +77,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PARAM_LIST,
 	AST_NODE_CLASS_CONSTANT,
 	AST_NODE_CLASS_PARAM_DECL,
-	AST_NODE_CLASS_VARIABLE_IDENTIFIER,
-	AST_NODE_CLASS_LABEL_IDENTIFIER,
-	AST_NODE_CLASS_TYPE_IDENTIFIER,
-	AST_NODE_CLASS_FUNCTION_IDENTIFIER,
+	AST_NODE_CLASS_IDENTIFIER,
 	AST_NODE_CLASS_TYPE_SPECIFIER,
 	AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER,
 	AST_NODE_CLASS_TYPE_NAME,
@@ -93,6 +90,9 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CONSTRUCT_ACCESSOR,
 	AST_NODE_CLASS_ARRAY_ACCESSOR,
 	AST_NODE_CLASS_FUNCTION_CALL,
+	AST_NODE_CLASS_CONSTRUCT_DEFINER,
+	AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST,
+	AST_NODE_CLASS_CONSTRUCT_MEMBER,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -144,35 +144,9 @@ struct param_list_ast_node_t{
 
 
 //Holds information about a variable identifier that's been seen
-struct variable_identifier_ast_node_t{
+struct identifier_ast_node_t{
 	//Holds the lexeme of the identifer: max size 1000 bytes(may change)
 	char identifier[1000];
-	//We'll also hold some reference to the record of this identifier
-	symtab_variable_record_t* variable_record;
-};
-
-//Holds information about an identifier that's been seen
-struct function_identifier_ast_node_t{
-	//Holds the lexeme of the identifer: max size 1000 bytes(may change)
-	char identifier[1000];
-	//We'll also hold some reference to the record of this identifier
-	symtab_function_record_t* func_record;
-};
-
-//Holds information about an identifier that's been seen
-struct label_identifier_ast_node_t{
-	//Holds the lexeme of the label identifier
-	char identifier[1000];
-	//We'll also hold some reference to the record of this identifier
-	symtab_variable_record_t* label_record;
-};
-
-//Holds information about a type name that's been seen
-struct type_identifier_ast_node_t{
-	//Holds the lexeme of the label identifier
-	char identifier[1000];
-	//We'll also hold some reference to the record of this identifier
-	symtab_type_record_t* type_record;
 };
 
 //Holds information about a constant
@@ -267,6 +241,24 @@ struct array_accessor_ast_node_t{
 struct postfix_expr_ast_node_t{
 	//What type do we think it is--not yet implemented
 	generic_type_t* inferred_type;
+};
+
+//The construct definer node
+struct construct_definer_ast_node_t{
+	//Keep a reference to the type that was made for the construct
+	generic_type_t* created_construct;
+};
+
+//The construct member list node
+struct construct_member_list_ast_node_t{
+	//We'll just keep a count of how many members
+	u_int8_t num_members;
+};
+
+//The construct member node itself
+struct construct_member_ast_node_t{
+	//Keep a reference to the variable record
+	symtab_variable_record_t* member_var;
 };
 
 /**
