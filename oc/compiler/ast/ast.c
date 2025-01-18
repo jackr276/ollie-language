@@ -144,6 +144,20 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_FUNCTION_CALL;
 			break;
 
+		//Unary expression node
+		case AST_NODE_CLASS_UNARY_EXPR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(unary_expr_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_UNARY_EXPR;
+			break;
+
+		//Unary operator node
+		case AST_NODE_CLASS_UNARY_OPERATOR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(unary_operator_node_t));
+			node->CLASS = AST_NODE_CLASS_UNARY_OPERATOR;
+			break;
+
 		//Generic error node
 		case AST_NODE_CLASS_ERR_NODE:
 			//Just assign that it is an error and get out

@@ -34,9 +34,6 @@ u_int16_t num_errors = 0;
 //The current parser line number
 u_int16_t parser_line_num = 1;
 
-//The root of the entire tree
-generic_ast_node_t* ast_root = NULL;
-
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
@@ -663,19 +660,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 /**
  * A postfix expression decays into a primary expression, and there are certain
- * operators that can be chained if context allows
+ * operators that can be chained if context allows. Like all other rules, this rule
+ * returns a reference to the root node that it creates
  *
- * BNF Rule: <postfix-expression> ::= <primary-expression> 
- * 									| <primary-expression>:<postfix-expression> 
- * 									| <primary-expression>::<postfix-expression> 
- * 									| <primary-expression>{[ <expression> ]}*
- * 									| <primary-expression>{[ <expression> ]}*:<postifx-expression> 
- * 									| <primary-expression>{[ <expression> ]}*::<postfix-expression> 
- * 									| <primary-expression> ( {<conditional-expression>}* {, <conditional-expression>}*  ) 
- * 									| <primary-expression> ++ 
- * 									| <primary-expression> --
+ * <postfix-expression> ::= <primary-expression> 
+ *						 | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
  */ 
-static u_int8_t postfix_expression(FILE* fl){
+static generic_ast_node_t* postfix_expression(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -866,175 +857,57 @@ static u_int8_t postfix_expression(FILE* fl){
 
 
 /**
- * A unary expression decays into a postfix expression
+ * A unary expression decays into a postfix expression. With a unary expression, we are able to
+ * apply unary operators and take the size of given types. Like all rules, a unary expression
+ * will always return a pointer to the root node of the tree that it creates
  *
  * BNF Rule: <unary-expression> ::= <postfix-expression> 
- * 								  | ++<unary-expression> 
- * 								  | --<unary-expression> 
  * 								  | <unary-operator> <cast-expression> 
- * 								  | size (<unary-expression>)
- * 								  | typesize (<type-name>)
+ * 								  | typesize(<type-name>)
  *
- * Note that we will expand the Unary-operator rule here, as there is no point in having
- * a separate function for it
+ * For convenience, we will also handle any/all unary operators here
  *
- * <unary-operator> ::= & 
- * 					  | * 
- * 					  | ` 
- * 					  | + 
- * 					  | - 
- * 					  | ~ 
- * 					  | ! 
+ * BNF Rule: <unary-operator> ::= & 
+ * 								| * 
+ * 								| + 
+ * 								| - 
+ * 								| ~ 
+ * 								| ! 
+ * 								| ++ 
+ * 								| --
  */
-static u_int8_t unary_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* unary_expression(FILE* fl){
+	//The lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
-	//Let's first see what we have as the next token
+	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	switch (lookahead.tok) {
-		//If we see either of these, we must next see a valid unary expression
-		case MINUSMINUS:
-		case PLUSPLUS:
-			//Let's see if we have it
-			status = unary_expression(fl);
+	//If we see the typesize keyword 
+	if(lookahead.tok == TYPESIZE){
+		//We must then see left parenthesis
+		lookahead = get_next_token(fl, &parser_line_num);
 
-			//If it was bad
-			if(status == 0){
-				//print_parse_message(PARSE_ERROR, "Invalid unary expression following preincrement/predecrement", current_line);
-				num_errors++;
-				return 0;
-			}
-		
-			//If we make it here we know it went well
-			return 1;
+		//Fail case here
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize call", parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 
-		//If we see the size keyword
-		case SIZE:
-			//We must then see a left parenthesis
-			lookahead = get_next_token(fl, &parser_line_num);
+		//Otherwise we'll push to the stack for checking
+		push(grouping_stack, lookahead);
 
-			if(lookahead.tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Left parenthesis expected after size keyword", current_line);
-				num_errors++;
-				return 0;
-			}
-			
-			//Push it onto the stack
-			push(grouping_stack, lookahead);
-			
-			//Now we must see a valid unary expression
-			status = unary_expression(fl);
+		//Now we need to see a valid type-specifier
+		generic_ast_node_t* type_spec = type_specifier(fl);
 
-			//If it was bad
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid unary expression given to size operator", current_line);
-				num_errors++;
-				return 0;
-			}
-		
-			//If we get here though we know it worked
-			//Now we must see a valid closing parenthesis
-			lookahead = get_next_token(fl, &parser_line_num);
+		//Now if we don't see a valid type spec we need to bail out
+		//TODO FINISH ME
 
-			//If this is an R_PAREN
-			if(lookahead.tok != R_PAREN) {
-				print_parse_message(PARSE_ERROR, "Right parenthesis expected after unary expression", current_line);
-				num_errors++;
-				return 0;
-			//Otherwise if it wasn't matched right
-			} else if(pop(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-				num_errors++;
-				return 0;
-			}
-		
-			//Otherwise, we're all good here
-			return 1;
-
-		//If we see the typesize keyword
-		case TYPESIZE:
-			//We must then see a left parenthesis
-			lookahead = get_next_token(fl, &parser_line_num);
-
-			if(lookahead.tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize keyword", current_line);
-				num_errors++;
-				return 0;
-			}
-			
-			//Push it onto the stack
-			push(grouping_stack, lookahead);
-			
-			//Now we must see a valid type name 
-			status = type_name(fl);
-
-			//If it was bad
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid type name given to typesize operator", current_line);
-				num_errors++;
-				return 0;
-			}
-		
-			//If we get here though we know it worked
-			//Now we must see a valid closing parenthesis
-			lookahead = get_next_token(fl, &parser_line_num);
-
-			//If this is an R_PAREN
-			if(lookahead.tok != R_PAREN) {
-				print_parse_message(PARSE_ERROR, "Right parenthesis expected after type name", current_line);
-				num_errors++;
-				return 0;
-			//Otherwise if it wasn't matched right
-			} else if(pop(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-				num_errors++;
-				return 0;
-			}
-		
-			//Otherwise, we're all good here
-			return 1;
-
-		//We could also see one of our unary operators
-		case PLUS:
-		case MINUS:
-		case STAR:
-		case AND:
-		case B_NOT:
-		case L_NOT:
-			//No matter what we see here, we will have to see a valid cast expression after it
-			status = cast_expression(fl);
-
-			//If it was bad
-			if(status == 0){
-				//print_parse_message(PARSE_ERROR, "Invalid cast expression following unary operator", current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//If we get here then we know it worked
-			return 1;
-		
-		//If we make it all the way down here, we have to see a postfix expression
-		default:
-			//Whatever we saw, we didn't use, so push it back
-			push_back_token(fl, lookahead);
-			//No matter what we see here, we will have to see a valid cast expression after it
-			status = postfix_expression(fl);
-
-			//If it was bad
-			if(status == 0){
-				//print_parse_message(PARSE_ERROR, "Invalid postfix expression inside of unary expression", current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//If we get here then we know it worked
-			return 1;
 	}
+	
+
 }
 
 
@@ -2492,9 +2365,8 @@ static u_int8_t type_address_specifier(FILE* fl, generic_ast_node_t* type_specif
  * non-primitive type needs to have been previously defined for it to be
  * valid
  * 
- * Also note that no checking against the type symbol table will be done in
- * this function
- *
+ * If we are using this rule, we are assuming that this type exists in the 
+ * 
  * BNF Rule: <type-name> ::= void 
  * 						   | u_int8 
  * 						   | s_int8 
@@ -2507,9 +2379,9 @@ static u_int8_t type_address_specifier(FILE* fl, generic_ast_node_t* type_specif
  * 						   | float32 
  * 						   | float64 
  * 						   | char 
- * 						   | enumerated <identifer>
- * 						   | construct <identifier>
- * 						   | <identifier>
+ * 						   | enumerated <type-identifier>
+ * 						   | construct <type-identifier>
+ * 						   | <type-identifier>
  */
 static u_int8_t type_name(FILE* fl, generic_ast_node_t* type_specifier){
 	//Global status
@@ -5034,17 +4906,17 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 /**
  * Here we can either have a function definition or a declaration
  *
- * The AST will not be modified in this function, as these are pass through
- * rules that have no nonterminals
+ * Like all other functions, this function returns a pointer to the 
+ * root of the subtree it creates. Since there is no concrete node here,
+ * this function is really just a multiplexing rule
  *
  * <declaration-partition>::= <function-definition>
  *                        	| <declaration>
  */
-static u_int8_t declaration_partition(FILE* fl, generic_ast_node_t* parent_node){
+static generic_ast_node_t* declaration_partition(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
-	u_int8_t status;
 
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5052,68 +4924,60 @@ static u_int8_t declaration_partition(FILE* fl, generic_ast_node_t* parent_node)
 	//We know that we have a function here
 	//We consume the function token here, NOT in the function rule
 	if(lookahead.tok == FUNC){
-		//Otherwise our status is just whatever the function returns
-		status = function_definition(fl, parent_node);
-
-		//Something failed
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid function definition", current_line);
-			return 0;
-		}
+		//We'll just let the function definition rule handle this. If it fails, 
+		//that will be caught above
+		return function_definition(fl);
 
 	//Otherwise it must be a declaration
 	} else {
-		//Push it back
+		//Put the token back
 		push_back_token(fl, lookahead);
-		//Otherwise, the only other option is a declaration
-		status = declaration(fl);
 
-		//Something failed
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid top-level declaration", current_line);
-			return 0;
-		}
+		//We'll simply return whatever the product of the declaration function is
+		return declaration(fl);
 	}
-	
-	//If we get here it worked
-	return 1;
 }
 
 
 /**
- * Here is our entry point
+ * Here is our entry point. Like all functions, this returns
+ * a reference to the root of the subtree it creates
  *
  * BNF Rule: <program>::= {<declaration-partition>}*
  */
-static u_int8_t program(FILE* fl){
+static generic_ast_node_t* program(FILE* fl){
 	//Freeze the line number
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
 	//We first symbolically "see" the START token. The start token
 	//is the lexer symbol that the top level node holds
 	Lexer_item start;
-
 	//We really only care about the tok here
 	start.tok = START;
 	
 	//Create the ROOT of the tree
 	ast_root = ast_node_alloc(AST_NODE_CLASS_PROG);
+
 	//Assign the lexer item to it for completeness
 	((prog_ast_node_t*)(ast_root->node))->lex = start;
 
+	//We'll keep a temp reference to the pointer that we're working on
+	generic_ast_node_t* current;
+	
 	//As long as we aren't done
 	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
-		//Put the token back
-		push_back_token(fl, lookahead);
+		//Call declaration partition
+		current = declaration_partition(fl);
 
-		//Pass along and let the rest handle
-		status = declaration_partition(fl, ast_root);
-		
-		//No need for error printing here, should be handled by bottom level prog
-		if(status == 0){
-			return 0;
+		//It failed, we'll bail right out if this is the case
+		if(current->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Just return the erroneous node
+			return current;
 		}
+		
+		//Otherwise, we'll add this as a child of the root
+		add_child_node(ast_root, current);
+		//And then we'll keep right along
 	}
 
 	//All went well if we get here
@@ -5126,7 +4990,6 @@ static u_int8_t program(FILE* fl){
  * static methods
 */
 u_int8_t parse(FILE* fl){
-	u_int8_t status = 0;
 	num_errors = 0;
 	double time_spent;
 
@@ -5152,8 +5015,9 @@ u_int8_t parse(FILE* fl){
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_stack();
 
-	//Global entry/run point
-	status = program(fl);
+	//Global entry/run point, will give us a tree with
+	//the root being here
+	generic_ast_node_t* prog = program(fl);
 
 	//Timer end
 	clock_t end = clock();
@@ -5161,7 +5025,7 @@ u_int8_t parse(FILE* fl){
 	time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 
 	//If we failed
-	if(status == 0){
+	if(prog->CLASS == AST_NODE_CLASS_ERR_NODE){
 		char info[500];
 		sprintf(info, "Parsing failed with %d errors in %.8f seconds", num_errors, time_spent);
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
@@ -5183,7 +5047,7 @@ u_int8_t parse(FILE* fl){
 	destroy_type_symtab(type_symtab);
 	
 	//Deallocate the AST
-	deallocate_ast(ast_root);
+	deallocate_ast(prog);
 
 	return status;
 }

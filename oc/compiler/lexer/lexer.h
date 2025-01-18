@@ -55,7 +55,6 @@ typedef enum {
 	AS,
 	ENUMERATED,
 	CONSTRUCT,
-	SIZE,
 	MINUS,
 	MINUSMINUS,
 	STAR,

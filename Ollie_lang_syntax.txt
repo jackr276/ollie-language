@@ -61,7 +61,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <enumerator> ::= <identifier>
 
-<alias-statement> ::= alias <type-specifier> as <identifier>;
+<alias-statement> ::= alias <type-specifier> as <type-identifier>;
 
 <declarator> ::= <variable-identifer>
 				 <variable-identifer>{<array-accessor>}?
