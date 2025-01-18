@@ -1724,6 +1724,8 @@ static generic_ast_node_t* conditional_expression(FILE* fl){
  * BNF Rule: <construct-member> ::= {constant}? <type-specifier> <identifier>
  */
 static generic_ast_node_t* construct_member(FILE* fl){
+	//The error printing string
+	char info[2000];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Is it a constant variable?
@@ -1756,10 +1758,87 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	//Now we need to see a valid ident and check it for duplication
 	generic_ast_node_t* ident = identifier(fl);	
 
-	//TODO ALL CHECKS
-	//Check that it isn't some duplicated type name
+	//Let's make sure it actually worked
+	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as construct member name", parser_line_num);
+		num_errors++;
+		//It's an error, so we'll propogate it up
+		return ident;
+	}
 
+	//Grab this for convenience
+	char* name = ((identifier_ast_node_t*)(ident->node))->identifier;
 
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now if we finally make it all of the way down here, we are actually set. We'll construct the
+	//node that we have and also add it into our symbol table
+	
+	//We'll first create the symtab record
+	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	//It is a construct member
+	member_record->is_construct_member = 1;
+	member_record->line_number = parser_line_num;
+	//Store what the type is
+	member_record->type = ((type_spec_ast_node_t*)(type_spec)->node)->type_record->type;
+	//Store the constant status
+	member_record->is_constant = is_constant;
+	
+	//We can now add this into the symbol table
+	insert_variable(variable_symtab, member_record);
+
+	//We can now also construct the entire subtree
+	generic_ast_node_t* member_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_MEMBER);
+	//Store the variable record here
+	((construct_member_ast_node_t*)(member_node)->node)->member_var = member_record;
+
+	//The very first child will be the type specifier
+	add_child_node(member_node, type_spec);
+	//The second child will be the ident node
+	add_child_node(member_node, ident);
+
+	//All went well so we can send this up the chain
+	return member_node;
 }
 
 
@@ -1770,7 +1849,46 @@ static generic_ast_node_t* construct_member(FILE* fl){
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
 static generic_ast_node_t* construct_member_list(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
 
+	//Let's first declare the root node. This node will have children that are each construct members
+	generic_ast_node_t* member_list = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST);
+
+	//We can see as many construct members as we please here, all delimited by semicols
+	do{
+		//We must first see a valid construct member
+		generic_ast_node_t* member_node = construct_member(fl);
+
+		//If it's an error, we'll fail right out
+		if(member_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid construct member declaration", parser_line_num);
+			//It's already an error node so just let it propogate
+			return member_node;
+		}
+		
+		//Otherwise, we'll add it in as one of the children
+		add_child_node(member_list, member_node);
+
+		//Now we will refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num);
+
+	//So long as we keep seeing semicolons
+	} while (lookahead.tok == SEMICOLON);
+
+	//Once we get here, what we know is that lookahead was not a semicolon. We know that it should
+	//be a closing curly brace, so in the interest of better error messages, we'll do a little pre-check
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Construct members must be delimited by ;", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//If we get here we know that it's right, but we'll still allow the other rule to handle it
+	push_back_token(fl, lookahead);
+
+	//Give the member list back
+	return member_list;
 }
 
 
