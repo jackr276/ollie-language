@@ -659,6 +659,69 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 
 /**
+ * A construct accessor is used to access a construct either on the heap of or on the stack.
+ * Like all rules, it will return a reference to the root node of the tree that it created
+ *
+ * A constructor accessor node will be a subtree with the parent holding the actual operator
+ * and its child holding the variable identifier
+ *
+ * We will expect to see the => or : here
+ *
+ * BNF Rule: <construct-accessor> ::= => <variable-identifier> 
+ * 								    | : <variable-identifier>
+ */
+static generic_ast_node_t* construct_accessor(FILE* fl){
+	//Freeze the current line
+	u_int16_t current_line = parser_line_num;
+	//The lookahead token
+	Lexer_item lookahead;
+
+	//We'll first grab whatever token that we have here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//This would be incredibly bizarre, as we know that they are already here
+	if(lookahead.tok != ARROW_EQ && lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Fatal internal parser error at construct accessor", parser_line_num);
+		num_errors++;
+		//Error out
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Otherwise we'll now make the node here
+	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR);
+	//Put the token in to show what we have
+	((construct_accessor_ast_node_t*)(const_access_node->node))->tok = lookahead.tok;
+
+	//Now we are required to see a valid variable identifier. TODO TYPE CHECKING
+	generic_ast_node_t* variable_ident = variable_identifier(fl); 
+
+	//For now we're just doing error checking TODO TYPE AND EXISTENCE CHECKING
+	if(variable_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Construct accessor could not find valid identifier", current_line);
+		num_errors++;
+		//It already is an error node so we'll return it
+		return variable_ident;
+	}
+
+	//Otherwise we know that it worked, so we'll add this guy in as a child of the overall construct
+	//accessor
+	add_child_node(const_access_node, variable_ident);
+
+	//And now we're all done, so we'll just give back the root reference
+	return const_access_node;
+}
+
+
+/**
+ * An array accessor represents a request to get something from an array memory region. Like all
+ * nodes, an array accessor will return a reference to the subtree that it creates
+ */
+static generic_ast_node_t* array_accessor(FILE* fl){
+
+}
+
+
+/**
  * A postfix expression decays into a primary expression, and there are certain
  * operators that can be chained if context allows. Like all other rules, this rule
  * returns a reference to the root node that it creates
@@ -667,192 +730,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  *						 | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	char info[2000];
-	char function_name[100];
-	//0 this out
-	memset(function_name, 0, 100*sizeof(char));
-	u_int8_t status = 0;
 
-	//We must first see a valid primary expression no matter what
-	status = primary_expression(fl);
-
-	//We have a bad one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid primary expression found in postifx expression", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Othwerise we're good to move on, so we'll need to lookahead here
-	lookahead = get_next_token(fl, &parser_line_num);
-	
-	//There are a multitude of different things that we could see here
-	switch (lookahead.tok) {
-		//If we see these then we're done
-		case MINUSMINUS:
-		case PLUSPLUS:
-			//TODO handle this later
-			//All set here
-			return 1;
-	
-		//These are our memory addressing schemes
-		case COLON:
-		case DOUBLE_COLON:
-			//If we see these, we know that we'll need to make a recursive call
-			//TODO handle the actual memory addressing later on
-			return postfix_expression(fl);
-
-		//If we see a left paren, we are looking at a function call
-		case L_PAREN:
-			//Push to the stack for later
-			push(grouping_stack, lookahead);
-
-			//How many inputs have we seen?
-			u_int8_t params_seen = 0;
-
-			//Copy it in for safety
-			strcpy(function_name, current_ident->lexeme);
-			//This is for sure a function call, so we need to be able to recognize the function
-			symtab_function_record_t* func = lookup_function(function_symtab, function_name);
-
-			//Let's see if we found it
-			if(func == NULL){
-				//Wipe it
-				memset(info, 0, 2000*sizeof(char));
-				//Format nice
-				sprintf(info, "Function \"%s\" was not defined", current_ident->lexeme);
-				//Relese the memory
-				free(current_ident);
-				print_parse_message(PARSE_ERROR, info, current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//Release these here
-			free(current_ident);
-			//Let's check to see if we have an immediate end
-			lookahead = get_next_token(fl, &parser_line_num);
-
-			//If it is an R_PAREN
-			if(lookahead.tok == R_PAREN){
-				goto end_params;
-			} else {
-				//Otherwise put it back
-				push_back_token(fl, lookahead);
-			} 
-
-			//Loop until we see the end
-			//As long as we don't see a right paren
-			while(1){
-				//Now we need to see a valid conditional-expression
-				status = conditional_expression(fl);
-
-				//Bail out if bad
-				if(status == 0){
-					print_parse_message(PARSE_ERROR,  "Invalid conditional expression given to function call", current_line);
-					num_errors++;
-					return 0;
-				}
-				
-				//One more param seen
-				params_seen++;
-
-				//Grab the next token here
-				lookahead = get_next_token(fl, &parser_line_num);
-				
-				//If it's not a comma get out
-				if(lookahead.tok != COMMA){
-					break;
-				}
-			}
-			
-			//Once we break out here, in theory our token will be a right paren
-			//Just to double check
-			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Right parenthesis at the end of function call", current_line);
-				num_errors++;
-				return 0;
-			}
-			
-		end_params:
-			//Check for matching
-			if(pop(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//Now check for parameter correctness TODO NOT DONE
-			if(params_seen != func->number_of_params){
-				//Special printing details here
-				memset(info, 0, 2000*sizeof(char));
-				sprintf(info, "Function \"%s\" requires %d parameters, was given %d. Function first defined here:", func->func_name, func->number_of_params, params_seen);
-				print_parse_message(PARSE_ERROR, info, current_line);
-				print_function_name(func);
-
-				num_errors++;
-				return 0;
-			}
-
-			//If we make it here, then we should be all in the clear
-			return 1;
-
-		//If we see a left bracket, we then need to see an expression
-		case L_BRACKET:
-			//As long as we see left brackets
-			while(lookahead.tok == L_BRACKET){
-				//Push it onto the stack
-				push(grouping_stack, lookahead);
-
-				//We must see a valid expression
-				status = expression(fl);
-				
-				//We have a bad one
-				if(status == 0){
-					print_parse_message(PARSE_ERROR, "Invalid expression in primary expression index", current_line);
-					num_errors++;
-					return 0;
-				}
-
-				//Now we have to see a valid right bracket
-				lookahead = get_next_token(fl, &parser_line_num);
-
-				//Just to double check
-				if(lookahead.tok != R_BRACKET){
-					print_parse_message(PARSE_ERROR, "Right bracket expected after primary expression index", current_line);
-					num_errors++;
-					return 0;
-				//Or we have some unmatched grouping operator
-				} else if(pop(grouping_stack).tok != L_BRACKET){
-					print_parse_message(PARSE_ERROR, "Unmatched bracket detected", current_line);
-					num_errors++;
-					return 0;
-				}
-				
-				//Now we must refresh the lookahead
-				lookahead = get_next_token(fl, &parser_line_num);
-			}
-
-			//Once we break out here, we no longer have any left brackets	
-			//We could however see the colon or double_colon operators, in which case we'd make a recursive call
-			if(lookahead.tok == COLON || lookahead.tok == DOUBLE_COLON){
-				//Return the postfix expression here
-				return postfix_expression(fl);
-			}
-		
-			//Otherwise we don't know what it is, so we'll get out
-			push_back_token(fl, lookahead);
-			return 1;
-
-		//It is possible to see nothing afterwards, so we'll just get out if this is the case
-		default:
-			//Whatever we saw we didn't use, so put it back
-			push_back_token(fl, lookahead);
-			return 1;
-	}
 }
 
 

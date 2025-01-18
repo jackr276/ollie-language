@@ -268,6 +268,14 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
+						} else if(ch2 == '>'){
+							current_state = IN_START;
+							//Prepare and return
+							lex_item.tok = ARROW_EQ;
+							strcpy(lex_item.lexeme, "=>");
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
 						} else {
 							current_state = IN_START;
 							//"Put back" the char

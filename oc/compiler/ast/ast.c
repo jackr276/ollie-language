@@ -154,8 +154,15 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		//Unary operator node
 		case AST_NODE_CLASS_UNARY_OPERATOR:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(unary_operator_node_t));
+			node->node = calloc(1, sizeof(unary_operator_ast_node_t));
 			node->CLASS = AST_NODE_CLASS_UNARY_OPERATOR;
+			break;
+
+		//Construct accessor node
+		case AST_NODE_CLASS_CONSTRUCT_ACCESSOR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(construct_accessor_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_CONSTRUCT_ACCESSOR;
 			break;
 
 		//Generic error node

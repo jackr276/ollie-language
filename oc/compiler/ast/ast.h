@@ -56,9 +56,11 @@ typedef struct cast_expr_ast_node_t cast_expr_ast_node_t;
 //The unary expression node
 typedef struct unary_expr_ast_node_t unary_expr_ast_node_t;
 //The unary operator node
-typedef struct unary_operator_node_t unary_operator_node_t;
+typedef struct unary_operator_ast_node_t unary_operator_ast_node_t;
 //The function call node
 typedef struct function_call_ast_node_t function_call_ast_node_t;
+//A struct accessor node
+typedef struct construct_accessor_ast_node_t construct_accessor_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -83,6 +85,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CAST_EXPR,
 	AST_NODE_CLASS_UNARY_EXPR,
 	AST_NODE_CLASS_UNARY_OPERATOR,
+	AST_NODE_CLASS_CONSTRUCT_ACCESSOR,
 	AST_NODE_CLASS_FUNCTION_CALL,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
@@ -235,9 +238,15 @@ struct unary_expr_ast_node_t{
 };
 
 //The unary operator node
-struct unary_operator_node_t{
+struct unary_operator_ast_node_t{
 	//We will keep the token of the unary operator
 	Token unary_operator;
+};
+
+//The construct accessor node
+struct construct_accessor_ast_node_t{
+	//The token that we saw(either : or =>)
+	Token tok;
 };
 
 /**
