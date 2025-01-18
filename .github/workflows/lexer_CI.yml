@@ -13,8 +13,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: make
-      run: make
     - name: Lexer test
       run: make ltest 
     - name: Symtab test
