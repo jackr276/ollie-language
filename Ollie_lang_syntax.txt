@@ -63,9 +63,9 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <alias-statement> ::= alias <type-specifier> as <identifier>;
 
-<declarator> ::= <identifer>
-				 <identifer>{<array-accessor>}?
-				 <identifier>{<construct-accessor}?
+<declarator> ::= <variable-identifer>
+				 <variable-identifer>{<array-accessor>}?
+				 <variable-identifier>{<construct-accessor}?
 
 <array-accessor> ::= [ {constant-expression}? ]<array-accessor-prime>
 

@@ -580,22 +580,21 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  * An assignment expression can decay into a conditional expression or it
  * can actually do assigning. There is no chaining in Ollie language of assignments. There are two
  * options for treenodes here. If we see an actual assignment, there is a special assignment node
- * that will be made. If not, we will simply pass the parent along
+ * that will be made. If not, we will simply pass the parent along. An assignment expression will return
+ * a reference to the subtree created by it
  *
  * BNF Rule: <assignment-expression> ::= <conditional-expression> 
  * 									   | asn <unary-expression> := <conditional-expression>
  *
  * TODO TYPE CHECKING REQUIRED
  */
-static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node){
+static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Info array for error printing
 	char info[2000];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
-	//Status var
-	u_int8_t status = 0;
 
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -606,36 +605,30 @@ static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node)
 		//Put the token back
 		push_back_token(fl, lookahead);
 
-		//Pass through with the exact same parent node
-		status = conditional_expression(fl, parent_node);
-
-		//Not a "leaf error", just bail out
-		if(status == 0){
-			return 0;
-		}
-
-		//Otherwise it all worked here so
-		return 1;
+		//Simply let the conditional expression rule handle it
+		return conditional_expression(fl);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
 	//this is the case, we'll make a new assignment node and take the appropriate actions here 
 	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_CLASS_ASNMNT_EXPR);	
 
-	//This will be a child of whomever the parent is
-	add_child_node(parent_node, asn_expr_node);
-
 	//Now we must see a valid unary expression. The unary expression's parent
 	//will itself be the assignment expression node
 	
 	//We'll let this rule handle it
-	status = unary_expression(fl, asn_expr_node);
+	generic_ast_node_t* left_hand_unary = unary_expression(fl);
 
 	//Fail out here
-	if(status == 0){
+	if(left_hand_unary->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid left hand side given to assignment expression", current_line);
-		return 0;
+		//Return the erroneous node as we fail up the tree
+		return left_hand_unary;
 	}
+
+	//Otherwise it worked, so we'll add it in as the left child
+	add_child_node(asn_expr_node, left_hand_unary);
+	//TODO add more with types
 
 	//Now we are required to see the := terminal
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -645,21 +638,26 @@ static u_int8_t assignment_expression(FILE* fl, generic_ast_node_t* parent_node)
 		sprintf(info, "Expected := symbol in assignment expression, instead got %s", lookahead.lexeme);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		//Return a special kind of error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Now that we're here we must see a valid conditional expression
-	status = conditional_expression(fl, asn_expr_node);
+	generic_ast_node_t* conditional = conditional_expression(fl);
 
 	//Fail case here
-	if(status == 0){
+	if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid right hand side given to assignment expression", current_line);
 		num_errors++;
-		return 0;
+		//The conditional is already an error, so we'll just return it
+		return conditional;
 	}
 
-	//Otherwise it all worked so
-	return 0;
+	//Otherwise we know it worked, so we'll add the conditional in as the right child
+	add_child_node(asn_expr_node, conditional);
+
+	//Return the reference to the overall node
+	return asn_expr_node;
 }
 
 
@@ -1759,11 +1757,11 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
  * A logical or expression can be chained together as many times as we want, and
  * descends into a logical and expression
  *
- * A logical or expression will be a parent and a child in the AST
+ * This will always return a reference to the root node of the tree
  *
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
-static u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node){
+static generic_ast_node_t* logical_or_expression(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -1776,7 +1774,8 @@ static u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node)
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
-		return 0;
+		//It's already an error node, so allow it to propogate
+		return sub_tree_root;
 	}
 	
 	//There are now two options. If we do not see any ||'s, we just add 
@@ -1804,7 +1803,8 @@ static u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node)
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return 0;
+			//It's already an error node, so allow it to propogate
+			return right_child;
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
@@ -1819,10 +1819,8 @@ static u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node)
 	//the token back and add this in as a subtree of the parent
 	push_back_token(fl, lookahead);
 
-	//Add it in as a child
-	add_child_node(parent_node, sub_tree_root);
-
-	return 1;
+	//Return the reference to the root node
+	return sub_tree_root;
 }
 
 
@@ -1830,23 +1828,14 @@ static u_int8_t logical_or_expression(FILE* fl, generic_ast_node_t* parent_node)
  * A conditional expression is simply used as a passthrough for a logical or expression,
  * but some important checks may be done here so we'll use it
  *
+ * This rule will always return a reference to the root of the subtree it makes
+ *
  * BNF Rule: <conditional-expression> ::= <logical-or-expression>
  */
-static u_int8_t conditional_expression(FILE* fl, generic_ast_node_t* parent_node){
-	//Status var
-	u_int8_t status = 0;
-
+static generic_ast_node_t* conditional_expression(FILE* fl){
 	//We'll now hand the entire thing off to the logical-or-expression node
-	//The expression node that we made here is the parent
-	status = logical_or_expression(fl, parent_node);
-
-	//Something failed, but we don't have a leaf error so just leave
-	if(status == 0){
-		return 0;
-	}
-
-	//Otherwise we're all set
-	return 1;
+	//and return the reference that it gives us
+	return logical_or_expression(fl);
 }
 
 
