@@ -3891,33 +3891,33 @@ static generic_ast_node_t* branch_statement(FILE* fl){
 
 
 /**
- * BNF Rule: <switch-statement> ::= switch on( <expression> ) {<labeled-statement>*}
+ * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
+ * for the use of labeled statements followed by statements in general. We will do more static analysis
+ * on this later. Like all rules in the system, this function returns the root node that it creates
+ *
+ * NOTE: The caller has already consumed the switch keyword by the time we get here
+ *
+ * BNF Rule: <switch-statement> ::= switch on( <conditional-expression> ) { {<statement>}+ }
  */
-static u_int8_t switch_statement(FILE* fl){
+static generic_ast_node_t* switch_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
-	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Fail case
-	if(lookahead.tok != SWITCH){
-		print_parse_message(PARSE_ERROR, "switch keyword expected in switch statement", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Now we have to see the on keyword
+	//We've already seen the switch keyword, so now we have to see the on keyword
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail case
 	if(lookahead.tok != ON){
 		print_parse_message(PARSE_ERROR, "on keyword expected after switch in switch statement", current_line);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
+
+	//Once we get here, we can allocate the root level node
+	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_CLASS_SWITCH_STMT);
 
 	//Now we must see an lparen
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -3926,97 +3926,110 @@ static u_int8_t switch_statement(FILE* fl){
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Push to stack for later
+	//Push to stack for later matching
 	push(grouping_stack, lookahead);
 
-	//Now we must see a valid expression
-	status = expression(fl);
+	//Now we must see a valid conditional expression
+	generic_ast_node_t* conditional_expr = conditional_expression(fl);
 
-	//Invalid one
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid expression in switch statement", current_line);
+	//If we see an invalid one we fail right out
+	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid conditional expression provided to switch on", current_line);
 		num_errors++;
-		return 0;
+		//It's already an error, so just send this up
+		return conditional_expr;
 	}
+	
+	//Since we know it's valid, we can add this in as a child
+	add_child_node(switch_stmt_node, conditional_expr);
 
 	//Now we must see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail case
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in switch statement", current_line);
 		num_errors++;
-		return 0;
+		//Create and return an error
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Check to make sure that the parenthesis match up
 	if(pop(grouping_stack).tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Now we must see an lcurly
+	//Now we must see an lcurly to begin the actual block
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail case
 	if(lookahead.tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Left curly brace expected after expression", current_line);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Push to stack for later
+	//Push to stack for later matching
 	push(grouping_stack, lookahead);
 
-	//Seed the search here
-	lookahead = get_next_token(fl, &parser_line_num);
+	/**
+	 * IMPORTANT NOTE: Once we get here, we have officially reached a new lexical scope. To officiate this, 
+	 * we will initialize a new scope for both the variable and type symtabs. This scope will be finalized once
+	 * we leave the switch statement
+	 */
+	initialize_type_scope(type_symtab);
+	initialize_variable_scope(variable_symtab);
 
-	//So long as there is no closing curly
-	while(lookahead.tok != R_CURLY){
-		//Fail cases here
-		if(lookahead.tok != CASE && lookahead.tok != DEFAULT){
-			//print_parse_message(PARSE_ERROR, "Invalid label statement found in switch statement", current_line);
+	//Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
+	//our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
+	//that switch statements have at least one thing in them
+
+	do{
+		//We need to see a valid statement 
+		generic_ast_node_t* stmt_node = statement(fl);
+
+		//If we fail, we get out
+		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid statement inside of switch statement", current_line);
 			num_errors++;
-			return 0;
+			//It's already an error, so just send it back
+			return stmt_node;
 		}
 
-		//Otherwise, we must see a labeled statement
-		push_back_token(fl, lookahead);
+		//If we get here we know it worked, so we can add it in as a child
+		add_child_node(switch_stmt_node, stmt_node);
 
-		//Let's see if we have a valid one
-		status = labeled_statement(fl);
-
-		//Invalid here
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid label statement found in switch statement", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Reseed the search
+		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num);
-	}
 
-	//By the time we get here, we should've seen an R_paren
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Closing curly brace expected", current_line);
-		num_errors++;
-		return 0;
-	}
+	//Keep going so long as we don't see an end
+	} while(lookahead.tok != R_CURLY);
 
-	//We could also have unmatched curlies
+	//By the time we reach this, we should have seen a right curly
+	//However, we could still have matching issues, so we'll check for that here
 	if(pop(grouping_stack).tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", current_line);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Otherwise if we get here, all went well
-	return 1;
+	//Now once we get here, we will finalize the variable and type scopes that we had initialized beforehand
+	finalize_type_scope(type_symtab);
+	finalize_variable_scope(variable_symtab);
+
+	//If we make it here, all went well
+	return switch_stmt_node;
 }
+
 
 
 /**

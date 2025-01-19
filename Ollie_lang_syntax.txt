@@ -84,7 +84,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <for-statement> ::= for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
  
-<switch-statement> ::= switch on( <expression> ) {<labeled-statement> <statement>*}*
+<switch-statement> ::= switch on( <expression> ) {<labeled-statement> <statement>}+
 
 <branch-statement> ::= <jump-statement>
 					 | <continue-statement>

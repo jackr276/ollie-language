@@ -91,6 +91,8 @@ typedef struct break_stmt_ast_node_t break_stmt_ast_node_t;
 typedef struct continue_stmt_ast_node_t continue_stmt_ast_node_t;
 //An AST node for ret statements
 typedef struct ret_stmt_ast_node_t ret_stmt_ast_node_t;
+//An AST node for switch statements
+typedef struct switch_stmt_ast_node_t switch_stmt_ast_node_t;
 
 
 //What type is in the AST node?
@@ -129,6 +131,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_BREAK_STMT,
 	AST_NODE_CLASS_CONTINUE_STMT,
 	AST_NODE_CLASS_RET_STMT,
+	AST_NODE_CLASS_SWITCH_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -379,6 +382,12 @@ struct continue_stmt_ast_node_t{
 struct ret_stmt_ast_node_t{
 	//Just hold status for now
 	u_int8_t status; //todo may get rid of
+};
+
+//A switch statement
+struct switch_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status;
 };
 
 /**
