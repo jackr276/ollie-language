@@ -13,6 +13,8 @@
 */
 
 #include "parser.h"
+#include <cmath>
+#include <locale>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2978,7 +2980,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
  *
  * BNF Rule: <parameter-declaration> ::= {constant}? <type-specifier> <identifier>
  */
-static u_int8_t parameter_declaration(FILE* fl){
+static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//For any needed error printing
 	char info[2000];
 	//Freeze the line number
@@ -2988,16 +2990,10 @@ static u_int8_t parameter_declaration(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
 
-	//We'll first create and attach the actual parameter declaration node
+	//Let's first create the top level node here
 	generic_ast_node_t* parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_PARAM_DECL);
 
-	//This node will always be a child of the parent level parameter list
-	add_child_node(parameter_list_node, parameter_decl_node);
-
-	//Increment the parameter list node count
-	((param_list_ast_node_t*)(parameter_list_node->node))->num_params++;
-
-	//Now we can optionally see constant here
+	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//Is this parameter constant? If so we'll just set a flag for later
@@ -3009,151 +3005,100 @@ static u_int8_t parameter_declaration(FILE* fl){
 		is_constant = 0;
 	}
 
-	//Now we must see a valid type specifier
-	status = type_specifier(fl, parameter_decl_node);
+	//We are now required to see a valid type specifier node
+	generic_ast_node_t* type_spec_node = type_specifier(fl);
 	
-	//If it's bad then we're done here
-	if(status == 0){
-		num_errors++;
-		return 0;
+	//If the node fails, we'll just send the error up the chain
+	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//It's already an error, just propogate it up
+		return type_spec_node;
 	}
 
-	//We are now required to see a valid identifier for the function
-	status = identifier(fl, parameter_decl_node);
+	//Now that we know that it worked, we can add it in as a child
+	add_child_node(parameter_decl_node, type_spec_node);
 
-	//Again if it's bad bail
-	if(status == 0){
+	//Following the valid type specifier declaration, we are required to to see a valid variable. This
+	//takes the form of an ident
+	generic_ast_node_t* ident = identifier(fl);
+
+	//If it didn't work we fail immediately
+	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid name given to parameter in function definition", parser_line_num);
 		num_errors++;
-		return 0;
+		//It's already an error, so just return it
+		return ident;
 	}
+
+	//Now we must perform all needed duplication checks for the name
+	//Grab this for convenience
+	char* name = ((identifier_ast_node_t*)(ident->node))->identifier;
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Once we get here we know that the ident is valid, so we can add it in as a child
+	add_child_node(parameter_decl_node, ident); 
 
 	//Once we get here, we have actually seen an entire valid parameter 
 	//declaration. It is now incumbent on us to store it in the variable 
 	//symbol table
-
-	//Define a cursor for tree walking
-	generic_ast_node_t* cursor = parameter_decl_node;
-
-	//We'll now walk the subtree that parameter-decl has in order. We expect
-	//to first see the type specifier
-	cursor = cursor->first_child;
 	
-	//Fatal error, debug message for dev only
-	if(cursor->CLASS != AST_NODE_CLASS_TYPE_SPECIFIER){
-		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected type specifier in parameter declaration", parser_line_num);
-		return 0;
-	}
-
-	//Grab the type record reference
-	symtab_type_record_t* parameter_type = ((type_spec_ast_node_t*)(cursor->node))->type_record;
-
-	//Now walk to the next child. If all is correct, this should be an identifier
-	cursor = cursor->next_sibling;
-
-	//Again this needs to be an identifier
-	if(cursor->CLASS != AST_NODE_CLASS_IDENTIFER){
-		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected identifier in parameter declaration", parser_line_num);
-		return 0;
-	}
-
-	//Grab the ident record
-	identifier_ast_node_t* ident = cursor->node;
-
-	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
-	symtab_function_record_t* found_function = lookup_function(function_symtab, ident->identifier); 
-
-	if(found_function != NULL){
-		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_function_name(found_function);
-		num_errors++;
-		return 0;
-	}
-
-	//Check for duplicated variables
-	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, ident->identifier); 
-
-	if(found_variable != NULL){
-		sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_variable_name(found_variable);
-		num_errors++;
-		return 0;
-	}
-
-	//Check for duplicated type names
-	symtab_type_record_t* found_type = lookup_type(type_symtab, ident->identifier); 
-
-	if(found_type != NULL){
-		sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_type_name(found_type);
-		num_errors++;
-		return 0;
-	}
-
-	//If we make it here we've passed all of the checks
-
-	//Now we have the identifier and the type, we can build our record
-	symtab_variable_record_t* param = create_variable_record(ident->identifier, STORAGE_CLASS_NORMAL);
-	//Assign the parameter type
-	param->type = parameter_type->type;
-	//Constant status
-	param->is_constant = is_constant;
+	//Let's first construct the variable record
+	symtab_variable_record_t* param_record = create_variable_record(((identifier_ast_node_t*)(ident->node))->identifier, STORAGE_CLASS_NORMAL);
 	//It is a function parameter
-	param->is_function_paramater = 1;
+	param_record->is_function_paramater = 1;
+	//We assume that it was initialized
+	param_record->initialized = 1;
+	//Store the type as well, very important
+	param_record->type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
 
-	//Insert into the symbol table
-	insert_variable(variable_symtab, param);
+	//We've now built up our param record, so we'll give add it to the symtab
+	insert_variable(variable_symtab, param_record);
 
-	//And, we'll hold a reference to it inside of the node as well
-	((param_decl_ast_node_t*)(parameter_decl_node->node))->param_record = param;
+	//We'll also save the associated record in the node
+	((param_decl_ast_node_t*)(parameter_decl_node->node))->param_record = param_record;
 
-	//All went well
-	return 1;
-}
-
-
-/**
- * Optional repetition allowed with our parameter list. Merely a passthrough function,
- * no nodes created directly
- *
- * REMEMBER: By the time that we get here, we've already seen a comma
- *
- * BNF Rule: <parameter-list-prime> ::= , <parameter-declaration><parameter-list-prime>
- * 									  | epsilon
- */
-u_int8_t parameter_list_prime(FILE* fl, generic_ast_node_t* param_list_node){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//If we see a comma, we will proceed
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If there's no comma, we'll just bail out
-	if(lookahead.tok != COMMA){
-		//Whatever it was, we don't want it so put it back
-		push_back_token(fl, lookahead);
-		//This is our "epsilon" case
-		return 1;
-	}
-
-	//Otherwise, we can now see a valid declaration
-	//This declarations parent will be the parameter list that 
-	//was carried through here
-	status = parameter_declaration(fl, param_list_node);
-
-	//If we didn't see a valid one
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//We can keep going as long as there are parameters
-	return parameter_list_prime(fl, param_list_node);
+	//Finally, we'll send this node back
+	return parameter_decl_node;
 }
 
 
