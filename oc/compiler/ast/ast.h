@@ -106,6 +106,12 @@ typedef enum ast_node_class_t{
 } ast_node_class_t;
 
 
+//What kind of address type specifier is it
+typedef enum address_specifier_type_t{
+	ADDRESS_SPECIFIER_ARRAY,
+	ADDRESS_SPECIFIER_ADDRESS,
+} address_specifier_type_t;
+
 /**
  * Current implementation is an N-ary tree. Each node holds pointers to its
  * first child and next sibling. The generic node also holds a pointer 
@@ -192,8 +198,8 @@ struct type_name_ast_node_t{
 
 //Hold the address specifier
 struct type_address_specifier_ast_node_t{
-	//Either see an & or array brackets
-	char address_specifer[10];
+	//Is it an address or array?
+	address_specifier_type_t address_type;
 };
 
 //This node will hold data about an assignment expression

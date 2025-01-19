@@ -13,6 +13,7 @@
 */
 
 #include "parser.h"
+#include <execution>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2518,65 +2519,89 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 
 
 /**
- * A type address specifier allows us to specify that a type is actually an address(&) or some kind of array of these types
- * There is no limit to how deep the array or address manipulation can go, so this rule is recursive.
- * In the interest of memory safety, ollie language requires array bounds for static arrays to be known at compile time
+ * A type address specifier allows us to specify that a type is actually an address(&) or some kind of array of these types.
+ * For type safety, ollie lang requires array bounds to be known at comptime. Like all other rules in the language, this 
+ * function returns a reference to the root node that it created
  *
- * BNF Rule: {type-address-specifier} ::= [<constant>]{type-address-specifier}
- * 										| &{type-address-specifier}
- * 										| epsilon
+ * As a reminder, we will assume that the caller has put back everything for us(the tokens and such) before they call
+ *
+ * BNF Rule: {type-address-specifier} ::= [<constant>]
+ * 										| &
  */
 static generic_ast_node_t* type_address_specifier(FILE* fl){
-	//Status checker
-	u_int8_t status = 0;
-	//Lookahead token
+	//The lookahead token
 	Lexer_item lookahead;
-	//A node that we'll be adding to the parent if we see something
-	generic_ast_node_t* node;
+	//The node that we'll be giving back
+	generic_ast_node_t* type_addr_node = ast_node_alloc(AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER);
 
-	//Let's see what we have here
+	//Let's see what we have as the address specifier
 	lookahead = get_next_token(fl, &parser_line_num);
 	
-	//What type do we have
-	//Single and sign(&) means pointer
+	//Very easy to handle this, we'll just construct the node and give it back
 	if(lookahead.tok == AND){
-		//Allocate it
-		node = ast_node_alloc(AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER);
-
-		//Copy this in for storage
-		strcpy(((type_address_specifier_ast_node_t*)(node->node))->address_specifer, "&");
-
-		//This node will always be the child of a type specifier node
-		add_child_node(type_specifier, node);
-
-		//We'll make a new pointer type that points back to the original type
-		*current_type = create_pointer_type(*current_type, parser_line_num);
-
-		//We'll see if we need to keep going
-		return type_address_specifier(fl, type_specifier, current_type);
-
-	} else if(lookahead.tok == L_BRACKET){
-		//Push the L_Bracket onto the stack for matching
-		push(grouping_stack, lookahead);
-
-		//Allocate it
-		node = ast_node_alloc(AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER);
-
-		//Copy this in for storage
-		strcpy(((type_address_specifier_ast_node_t*)(node->node))->address_specifer, "[]");
-
-		//This node will always be the child of a type specifier node
-		add_child_node(type_specifier, node);
-
-		status = constant(fl, type_specifier);
-
-		//TODO FINISH
-
-	//This is our epsilon area, we'll just put it back and leave
-	} else {
-		push_back_token(fl, lookahead);
-		return 1;
+		//This is an address specifier
+		((type_address_specifier_ast_node_t*)(type_addr_node->node))->address_type = ADDRESS_SPECIFIER_ADDRESS;
+		//And we're done, just give it back
+		return type_addr_node;
 	}
+
+	//If we get here, we know that this has to be the case, so if it's not we're out
+	if(lookahead.tok != L_BRACKET){
+		print_parse_message(PARSE_ERROR, "Array [] or address & required in type address specifier", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise if we get here we know that it was an L_BRACKET, so we'll push to the stack for matching
+	push(grouping_stack, lookahead);
+
+	//Now once we end up here, we need to see a valid constant that is an integer
+	generic_ast_node_t* constant_node = constant(fl);
+
+	//If we fail here it's an automatic out
+	if(constant_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid constant given to array specifier", parser_line_num);
+		num_errors++;
+		//It's already an error so we'll just give it back
+		return constant_node;
+	}
+
+	//Now if we make it here, we must also check that it's an integer
+	if(((constant_ast_node_t*)(constant_node))->constant_type != INT_CONST){
+		print_parse_message(PARSE_ERROR, "Array bounds must be an integer constant", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we've seen a valid integer, so the only other thing that we need syntactically is the closing brace
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see an R_BRACKET
+	if(lookahead.tok != R_BRACKET){
+		print_parse_message(PARSE_ERROR, "Array specifier must have enclosed square brackets", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we must also check for matching
+	if(pop(grouping_stack).tok != L_BRACKET){
+		print_parse_message(PARSE_ERROR, "Unmatched square brackets detected in array specifier", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Once we get here, we know that everything is syntactically valid. We'll now build and return our node
+	//Declare what kind of node this is
+	((type_address_specifier_ast_node_t*)(type_addr_node)->node)->address_type = ADDRESS_SPECIFIER_ARRAY;
+	//Since it's an array, it will have a child that is the constant node
+	add_child_node(type_addr_node, constant_node);
+	
+	//Finally we'll give the node back
+	return type_addr_node;
 }
 
 
@@ -2667,52 +2692,104 @@ static generic_ast_node_t* type_name(FILE* fl){
 
 		//If we didn't find it it's an instant fail
 		if(record == NULL){
-			//TODO FINISH THIS RULE
+			sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
+		//Otherwise we were able to find the record, so we'll add in to the node
+		((type_name_ast_node_t*)(type_name_node->node))->type_record = record;
+		//Copy the name over here for convenience later
+		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, type_name);
 
+		//We can also add in the type ident as a child node of the type name node
+		add_child_node(type_name_node, type_ident);
+
+		//Once we make it here, we should be all set to get out
+		return type_name_node;
 
 	//Construct names are pretty much the same as enumerated names
 	} else if(lookahead.tok == CONSTRUCT){
-		//Add in the enumerated keyword
-		strcpy(((type_name_ast_node_t*)type_name->node)->type_name, "construct ");
+		//We know that this keyword is in the name, so we'll add it in
+		strcpy(type_name, "construct ");
 
-		//Now we have to see a valid identifier. The parent of this identifer
-		//Will itself be the type_name node
-		status = identifier(fl, type_name);
+		//It is required that we now see a valid identifier
+		generic_ast_node_t* type_ident = identifier(fl);
 
-		//If this is the case we'll fail out, no need for a message
-		if(status == 0){
-			return 0;
+		//If we fail, we'll bail out
+		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid identifier given as construct type name", parser_line_num);
+			//It's already an error so just give it back
+			return type_ident;
 		}
 
-		//If we make it here we know that it's valid, so we'll grab the identifier name
-		//and add it to our name
-		strcat(((type_name_ast_node_t*)type_name->node)->type_name, ((identifier_ast_node_t*)type_name->first_child->node)->identifier);
+		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
+		strcat(type_name, ((identifier_ast_node_t*)(type_ident->node))->identifier);
 
-		//Once we have this, we're out of here
-		return 1;
-	
+		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+		symtab_type_record_t* record = lookup_type(type_symtab, type_name);
+
+		//If we didn't find it it's an instant fail
+		if(record == NULL){
+			sprintf(info, "Construct %s was never defined. Types must be defined before use", type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise we were able to find the record, so we'll add in to the node
+		((type_name_ast_node_t*)(type_name_node->node))->type_record = record;
+		//Copy the name over here for convenience later
+		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, type_name);
+
+		//We can also add in the type ident as a child node of the type name node
+		add_child_node(type_name_node, type_ident);
+
+		//Once we make it here, we should be all set to get out
+		return type_name_node;
+
 	//If this is the case then we have to see some user defined name, which is an ident
 	} else {
-		//We'll put this token back into the stream
+		//Put the token back for the ident rule
 		push_back_token(fl, lookahead);
 
-		//Now we have to see a valid identifier. The parent of this identifer
-		//Will itself be the type_name node
-		status = identifier(fl, type_name);
+		//We will let the identifier rule handle it
+		generic_ast_node_t* type_ident = identifier(fl);
 
-		//If this is the case we'll fail out, no need for a message
-		if(status == 0){
-			return 0;
+		//If we fail, we'll bail out
+		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
+			//It's already an error so just give it back
+			return type_ident;
 		}
 
-		//If we make it here we know that it's valid, so we'll grab the identifier name
-		//and add it to our name
-		strcat(((type_name_ast_node_t*)type_name->node)->type_name, ((identifier_ast_node_t*)type_name->first_child->node)->identifier);
+		//Grab a pointer for it for convenience
+		char* temp_name = ((identifier_ast_node_t*)(type_ident->node))->identifier;
 
-		//Once we have this, we're out of here
-		return 1;
+		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+		symtab_type_record_t* record = lookup_type(type_symtab, temp_name);
+
+		//If we didn't find it it's an instant fail
+		if(record == NULL){
+			sprintf(info, "Type %s was never defined. Types must be defined before use", temp_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise if we get here we were able to find it, so we're good to move on
+		((type_name_ast_node_t*)(type_name_node->node))->type_record = record;
+		//Copy the name over here for convenience later
+		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, temp_name);
+		//We can also add in the type ident as a child node of the type name node
+		add_child_node(type_name_node, type_ident);
+
+		//Once we make it here, we should be all set to get out
+		return type_name_node;
 	}
 }
 
