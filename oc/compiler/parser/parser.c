@@ -2066,7 +2066,7 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Last chance for us to fail syntactically JK;w
+	//Last chance for us to fail syntactically 
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
 		num_errors++;
@@ -2340,16 +2340,186 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 
 	//Push onto the stack for grouping
 	push(grouping_stack, lookahead);
+	
+	//Now we must see a valid enum member list
+	generic_ast_node_t* member_list = enum_member_list(fl);
 
+	//If it failed, we bail out
+	if(member_list->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid enumeration member list given in enum definition", current_line);
+		//It's already an error so just send it back up
+		return member_list;
+	}
 
+	//Now that we get down here the only thing left syntatically is to check for the closing curly
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//First chance to fail
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enum member list", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We must also see matching ones here
+	if(pop(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected in enum defintion", parser_line_num);
+		num_errors++;
+		//Create and return the error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now that we know everything here has worked, we can finally create the enum type
+	generic_type_t* enum_type = create_enumerated_type(name, current_line);
+
+	//Now we will crawl through all of the types that we had and add their references into this enum type's list
+	//This should in theory be an enum member node
+	generic_ast_node_t* cursor = member_list->first_child;	
+
+	//Go through while the cursor isn't null
+	while(cursor != NULL){
+		//Sanity check here, this should be of type enum member
+		if(cursor->CLASS != AST_NODE_CLASS_ENUM_MEMBER){
+			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Found non-member node in member list for enum", parser_line_num);
+			//Bail right out if this happens
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+		//Otherwise we're fine
+		//We'll now extract the symtab record that this node holds onto
+		symtab_variable_record_t* variable_rec = ((enum_member_ast_node_t*)(cursor->node))->member_var;
+
+		//Associate the type here as well
+		variable_rec->type = enum_type;
+
+		//We will store this in the enum types records
+		enum_type->enumerated_type->tokens[enum_type->enumerated_type->token_num] = variable_rec;
+		//Increment the number of tokens by one
+		(enum_type->enumerated_type->token_num)++;
+
+		//Move the cursor up by one
+		cursor = cursor->next_sibling;
+	}
+
+	//Now that this is all filled out, we can add this to the type symtab
+	insert_type(type_symtab, create_type_record(enum_type));
+
+	//Now once we get here, we will have added all of the sibling references in
+	//We can now also create the overall definer node
+	generic_ast_node_t* enum_def_node = ast_node_alloc(AST_NODE_CLASS_ENUM_DEFINER);
+	//We will also now link this type to it
+	((enum_definer_ast_node_t*)(enum_def_node->node))->created_enum = enum_type;
+
+	//The enum def node first has the name ident as its child
+	add_child_node(enum_def_node, ident);
+	//The next child will be the enum definer list
+	add_child_node(enum_def_node, member_list);
+
+	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
+	//for redefining variables immediately upon declaration. They are prefaced by the "As" keyword
+	//However, before we do that, we can first see if we have a semicol
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//This means that we're out, so just give back the root node
+	if(lookahead.tok == SEMICOLON){
+		return enum_def_node;
+	}
+
+	//Otherwise, it is a requirement that we see the as keyword, so if we don't we're in trouble
+	if(lookahead.tok != AS){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after enum definition", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
+	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
+	generic_ast_node_t* alias_ident = identifier(fl);
+
+	//If it was invalid
+	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
+		num_errors++;
+		//It's already an error, so we'll just propogate it
+		return alias_ident;
+	}
+
+	//Real quick, let's check to see if we have the semicol that we need now
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Last chance for us to fail syntactically 
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after enum definition",  parser_line_num);
+		num_errors++;
+		//Create and give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we have to check to make sure there are no name collisions
+	//Grab this for convenience
+	char* alias_name = ((identifier_ast_node_t*)(alias_ident->node))->identifier;
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally check that it isn't a duplicated type name
+	found_type = lookup_type(type_symtab, name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now if we make it all the way here, we know that we have a valid name that we can
+	//alias with, so we'll first add the ident in to the tree
+	add_child_node(enum_def_node, alias_ident);
+
+	//Now we'll make the actual record for the aliased type
+	generic_type_t* aliased_type = create_aliased_type(name, enum_type, parser_line_num);
+
+	//Once we've made the aliased type, we can record it in the symbol table
+	insert_type(type_symtab, create_type_record(aliased_type));
+
+	//Give back the root level node
+	return enum_def_node;
 }
 
 
 /**
  * A type address specifier allows us to specify that a type is actually an address(&) or some kind of array of these types
- * There is no limit to how deep the array or address manipulation can go, so this rule is recursive. This rule actively
- * modifies the current_record type record that it has, updating it to support whatever type we have
- *
+ * There is no limit to how deep the array or address manipulation can go, so this rule is recursive.
  * In the interest of memory safety, ollie language requires array bounds for static arrays to be known at compile time
  *
  * BNF Rule: {type-address-specifier} ::= [<constant>]{type-address-specifier}
