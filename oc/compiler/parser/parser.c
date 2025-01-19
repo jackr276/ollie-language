@@ -2137,7 +2137,8 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 
 /**
  * An enum member is simply an identifier. This rule performs all the needed checks to ensure
- * that it's not a duplicate of anything else that we've currently seen
+ * that it's not a duplicate of anything else that we've currently seen. Like all rules, this function
+ * returns a reference to the root of the tree it created
  *
  * BNF Rule: <enum-member> ::= <identifier>
  */
@@ -2214,6 +2215,8 @@ static generic_ast_node_t* enum_member(FILE* fl){
 	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER);
 	//Store the record in this for ease of access/modification
 	((enum_member_ast_node_t*)(enum_member->node))->member_var = enum_record;
+	//Add the identifier as the child of this node
+	add_child_node(enum_member, ident);
 
 	//Finally we'll give the reference back
 	return enum_member;
@@ -2221,12 +2224,56 @@ static generic_ast_node_t* enum_member(FILE* fl){
 
 
 /**
- * An enumeration list guarantees that we have at least one enumerator
+ * An enumeration list guarantees that we have at least one enumerator. It also allows us to
+ * chain enumerators using commas. Like all rules, this rule returns a reference to the root of 
+ * the subtree that it creates
  *
- * BNF Rule: <enumerator-list> ::= <enumerator><enumerator-list-prime>
+ * BNF Rule: <enum-member-list> ::= <enum-member>{, <enum-member>}*
  */
 static generic_ast_node_t* enum_member_list(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
 
+	//We will first create the list node
+	generic_ast_node_t* enum_list_node = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER_LIST);
+
+	//Now, we can see as many enumerators as we'd like here, each separated by a comma
+	do{
+		//First we need to see a valid enum member
+		generic_ast_node_t* member = enum_member(fl);
+
+		//If the member is bad, we bail right out
+		if(member->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid member given in enum definition", parser_line_num);
+			num_errors++;
+			//It's already an error so we'll just send it up the chain
+			return member;
+		}
+
+		//We can now add this in as a child of the enum list
+		add_child_node(enum_list_node, member);
+
+		//Finally once we make it here we'll refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num);
+
+	//Keep going as long as we see commas
+	} while(lookahead.tok == COMMA);
+
+	//Once we make it out here, we know that we didn't see a comma. We know that we really need to see an
+	//R_CURLY when we get here, so if we didn't we can give a more helpful error message here
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Enum members must be separated by commas in defintion", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Otherwise if we end up here all went well. We'll let the caller do the final checking with the R_CURLY so 
+	//we'll give it back
+	push_back_token(fl, lookahead);
+
+	//We'll now give back the list node itself
+	return enum_list_node;
 }
 
 
@@ -2234,9 +2281,66 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
  * An enumeration definition is where we see the actual definition of an enum. Like all other root nodes
  * in the language, it returns the root of the subtree that it created
  *
- * BNF Rule: <enum-definer> ::= define enumerated <identifier> { <enumerator-member-list> } {as <identifier>}?;
+ * Important note: By the time we get here, we will have already consume the "define" and "enum" tokens
+ *
+ * BNF Rule: <enum-definer> ::= define enum <identifier> { <enum-member-list> } {as <identifier>}?;
  */
 static generic_ast_node_t* enum_definer(FILE* fl){
+	//For error printing
+	char info[2000];
+	//Freeze the current line number
+	u_int16_t current_line = parser_line_num;
+	//Lookahead token
+	Lexer_item lookahead;
+	//The actual name of the enum
+	char name[MAX_TYPE_NAME_LENGTH];
+
+	//We already know that it will have this in the name
+	strcpy(name, "enum ");
+
+	//We now need to see a valid identifier to round out the name
+	generic_ast_node_t* ident = identifier(fl);
+
+	//Fail case here
+	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid name given to enum definition", parser_line_num);
+		num_errors++;
+		//It's already an error so just return it
+		return ident;
+	}
+
+	//Now if we get here we know that we found a valid ident, so we'll add it to the name
+	strcat(name, ((identifier_ast_node_t*)(ident->node))->identifier);
+
+	//Now we need to check that this name isn't already currently in use. We only need to check against the
+	//type symtable, because nothing else could have enum in the name
+	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+
+	//If we found something, that's an illegal redefintion
+	if(found_type != NULL){
+		sprintf(info, "Type \"%s\" has already been defined. First defined here:", name); 
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Print out the actual type too
+		print_type_name(found_type);
+		num_errors++;
+		return 0;
+	}
+
+	//Now that we know we don't have a duplicate, we can now start looking for the enum list
+	//We must first see an L_CURLY
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case here
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Left curly expected before enumerator list", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Push onto the stack for grouping
+	push(grouping_stack, lookahead);
+
 
 }
 
