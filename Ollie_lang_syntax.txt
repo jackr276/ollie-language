@@ -93,7 +93,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <jump-statement> ::= jump <label-identifier>;
 
-<continue-statement> ::=  continue when({<conditional-expression>}?); 
+<continue-statement> ::=  continue {when(<conditional-expression>)}?; 
 
 <break-statement> ::= break {when(<conditional-expression>)}?; 
 

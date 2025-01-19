@@ -3608,9 +3608,256 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 
 
 /**
+ * A continue statement is also related to a jump statement. Ollie language gives support for
+ * conditional continues, and that is reflected in the BNF for this rule. Like all rules, this
+ * function returns a reference to the root node that it created
+ *
+ * NOTE: By the time we get here, we will have already seen and consumed the continue keyword 
+ *
+ * BNF Rule: <continue-statement> ::=  continue {when(<conditional-expression>)}?; 
+ */
+static generic_ast_node_t* continue_statement(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//Once we get here, we've already seen the continue keyword, so we can make the node
+	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_CLASS_CONTINUE_STMT);
+
+	//Let's see what comes after this. If it's a semicol, we get right out
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If it's a semicolon we're done
+	if(lookahead.tok == SEMICOLON){
+		return continue_stmt;
+	}
+
+	//Otherwise, it has to have been a when keyword, so if it's not we have an error
+	if(lookahead.tok != WHEN){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after continue statement", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//If we get down here, we know that we are seeing a continue when statement
+	//We now need to see an lparen
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't have one, it's an instant fail
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Parenthesis expected after continue when keywords", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Push to the stack for grouping
+	push(grouping_stack, lookahead);
+
+	//Now we need to see a valid conditional expression
+	generic_ast_node_t* conditional_expr_node = conditional_expression(fl);
+
+	//If it failed, we also fail
+	if(conditional_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to continue when statement", parser_line_num);
+		num_errors++;
+		//It's already an error so we'll just give it back
+		return conditional_expr_node;
+	}
+
+	//If we get here we know that it worked, so we can add it as a child
+	add_child_node(continue_stmt, conditional_expr_node);
+
+	//We need to now see a closing paren
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see it fail out
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Closing paren expected after when clause",  parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Check for matching next
+	if(pop(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally if we make it all the way down here, we need to see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after statement", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//If we make it all the way down here, it worked so we can return the root node
+	return continue_stmt;
+}
+
+
+/**
+ * A break statement is also related to a jump statement. Ollie language gives support for
+ * conditional breaks, and that is reflected in the BNF for this rule. Like all rules, this
+ * function returns a reference to the root node that it created
+ *
+ * NOTE: By the time we get here, we will have already seen and consumed the break keyword 
+ *
+ * BNF Rule: <break-statement> ::=  break {when(<conditional-expression>)}?; 
+ */
+static generic_ast_node_t* break_statement(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//Once we get here, we've already seen the break keyword, so we can make the node
+	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_CLASS_BREAK_STMT);
+
+	//Let's see what comes after this. If it's a semicol, we get right out
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If it's a semicolon we're done
+	if(lookahead.tok == SEMICOLON){
+		return break_stmt;
+	}
+
+	//Otherwise, it has to have been a when keyword, so if it's not we have an error
+	if(lookahead.tok != WHEN){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after break statement", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//If we get down here, we know that we are seeing a break when statement
+	//We now need to see an lparen
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't have one, it's an instant fail
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Parenthesis expected after break when keywords", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Push to the stack for grouping
+	push(grouping_stack, lookahead);
+
+	//Now we need to see a valid conditional expression
+	generic_ast_node_t* conditional_expr_node = conditional_expression(fl);
+
+	//If it failed, we also fail
+	if(conditional_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to break when statement", parser_line_num);
+		num_errors++;
+		//It's already an error so we'll just give it back
+		return conditional_expr_node;
+	}
+
+	//If we get here we know that it worked, so we can add it as a child
+	add_child_node(break_stmt, conditional_expr_node);
+
+	//We need to now see a closing paren
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see it fail out
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Closing paren expected after when clause",  parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Check for matching next
+	if(pop(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally if we make it all the way down here, we need to see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after statement", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//If we make it all the way down here, it worked so we can return the root node
+	return break_stmt;
+}
+
+
+/**
+ * A return statement removes us from whatever function we are currently in. It can optionally
+ * have an expression after it. Like all rules, a return statement returns a reference to the root
+ * node that it created
+ *
+ * NOTE: By the time we get here, we will have already consumed the ret keyword
+ *
+ * BNF Rule: <return-statement> ::= ret {<conditional-expression>}?;
+ */
+static generic_ast_node_t* return_statement(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//We can create the node now
+	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_CLASS_RET_STMT);
+
+	//Now we can optionally see the semicolon immediately. Let's check if we have that
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a semicolon, we can just leave
+	if(lookahead.tok == SEMICOLON){
+		return return_stmt;
+	}
+
+	//Otherwise if we get here, we need to see a valid conditional expression
+	generic_ast_node_t* conditional_expr = conditional_expression(fl);
+
+	//If this is bad, we fail out
+	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to return statement", parser_line_num);
+		num_errors++;
+		//It's already an error, so we'll just return it
+		return conditional_expr;
+	}
+
+	//Otherwise it worked, so we'll add it as a child of the other node
+	add_child_node(return_stmt, conditional_expr);
+
+	//After the conditional, we just need to see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected after return statement", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//If we get here we're all good, just return the parent
+	return return_stmt;
+}
+
+
+/**
  * A branch statement is an entirely abstract rule that multiplexes for us based on what it sees.
  * Like all rules, it returns a reference to the root node that it creates, but that root node will
  * not be created here
+ *
+ * If we get here, it will have been because the caller has seen a jump, continue, break or return statement.
+ * They will have pushed that token back for us to multiplex on here
  *
  * BNF Rule: <branch-statement> ::= <jump-statement> 
  * 								  | <continue-statement> 
@@ -3618,7 +3865,28 @@ static generic_ast_node_t* jump_statement(FILE* fl){
  * 								  | <return-statement>
  */
 static generic_ast_node_t* branch_statement(FILE* fl){
+	//The lookahead token
+	Lexer_item lookahead;
 
+	//Let's see what we have
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//We'll now switch based on which token we have
+	switch (lookahead.tok) {
+		case JUMP:
+			return jump_statement(fl);
+		case RET:
+			return return_statement(fl);
+		case BREAK:
+			return break_statement(fl);
+		case CONTINUE:
+			return continue_statement(fl);
+		//This should never occur
+		default:
+			//For developer, something very wrong if this occurs
+			print_parse_message(PARSE_ERROR, "Fatal internal compiler error in branch statement",  parser_line_num);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 }
 
 
