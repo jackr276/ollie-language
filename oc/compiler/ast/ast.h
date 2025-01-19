@@ -81,6 +81,8 @@ typedef struct case_stmt_ast_node_t case_stmt_ast_node_t;
 typedef struct default_stmt_ast_node_t default_stmt_ast_node_t;
 //An AST node for label statements
 typedef struct label_stmt_ast_node_t label_stmt_ast_node_t;
+//An AST node for if statements
+typedef struct if_stmt_ast_node_t if_stmt_ast_node_t;
 
 
 //What type is in the AST node?
@@ -114,6 +116,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CASE_STMT,
 	AST_NODE_CLASS_DEFAULT_STMT,
 	AST_NODE_CLASS_LABEL_STMT,
+	AST_NODE_CLASS_IF_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -332,6 +335,12 @@ struct label_stmt_ast_node_t{
 	u_int64_t mem_location;
 	//The variable that is associated with it
 	symtab_variable_record_t* associate_var;
+};
+
+//An if statement node
+struct if_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status; //todo may get rid of
 };
 
 /**

@@ -84,7 +84,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <for-statement> ::= for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
  
-<switch-statement> ::= switch on( <expression> ) {<labeled-statement>*}
+<switch-statement> ::= switch on( <expression> ) {<labeled-statement> <statement>*}*
 
 <branch-statement> ::= <jump-statement>
 					 | <continue-statement>
@@ -99,7 +99,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <return-statement> ::= ret {<conditional-expression>}?;
 
-<if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement | compound-statement>}*
+<if-statement> ::= if( <conditional_expression> ) then <compound-statement> {else <if-statement | compound-statement>}*
 
 <labeled-statement> ::= <label-identifier> :
 					  | case <constant> :

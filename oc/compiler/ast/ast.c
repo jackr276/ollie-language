@@ -227,7 +227,13 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->node = calloc(1, sizeof(label_stmt_ast_node_t));
 			node->CLASS = AST_NODE_CLASS_LABEL_STMT;
 			break;
-			
+
+		//If statement node
+		case AST_NODE_CLASS_IF_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(if_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_IF_STMT;
+			break;
 
 		//Generic error node
 		case AST_NODE_CLASS_ERR_NODE:

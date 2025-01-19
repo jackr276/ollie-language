@@ -3400,49 +3400,50 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 
 /**
- * The callee will have left the if token for us once we get here
+ * The if statement has a variety of different nodes that it holds as children. Like all rules, this function
+ * returns a reference to the root node that it creates
  *
- * BNF Rule: <if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement> | <compound-statement>}*
+ * NOTE: We assume that the caller has already seen and consumed the if token if they make it here
+ *
+ * BNF Rule: <if-statement> ::= if( <conditional_expression> ) then <compound-statement> {else <if-statement> | <compound-statement>}*
  */
-static u_int8_t if_statement(FILE* fl){
+static generic_ast_node_t* if_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//Lookahead token
 	Lexer_item lookahead;
-	Lexer_item lookahead2;
-	u_int8_t status = 0;
 
-	//First we must see the if token
+	//Let's first create our if statement
+	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_CLASS_IF_STMT);
+
+	//Remember, we've already seen the if token, so now we just need to see an L_PAREN
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we didn't see it fail out
-	if(lookahead.tok != IF){
-		print_parse_message(PARSE_ERROR, "if keyword expected in if statement", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise, we now must see parenthesis
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Fail out
+	//Fail out if we don't have it
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Left parenthesis expected after if statement", current_line);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Push onto the stack
+	//Push onto the stack for matching later
 	push(grouping_stack, lookahead);
 	
-	//We now need to see a valid expression
-	status = expression(fl);
+	//We now need to see a valid conditional expression
+	generic_ast_node_t* expression_node = conditional_expression(fl);
 
-	//If we fail
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid expression found in if statement", current_line); 
+	//If we see an invalid one
+	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid conditional expression given as if statement condition", current_line);
 		num_errors++;
-		return 0;
+		//It's already an error so just return it
+		return expression_node;
 	}
+
+	//TODO TYPE CHECKING
+	//If we make it here, we can add this in as the first child to the root node
+	add_child_node(if_stmt, expression_node);
 
 	//Following the expression we need to see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -3451,14 +3452,16 @@ static u_int8_t if_statement(FILE* fl){
 	if(lookahead.tok != R_PAREN){
 		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in if statement", current_line);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Now let's check the stack
+	//Now let's check the stack, we need to have matching ones here
 	if(pop(grouping_stack).tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//If we make it to this point, we need to see the THEN keyword
@@ -3468,66 +3471,100 @@ static u_int8_t if_statement(FILE* fl){
 	if(lookahead.tok != THEN){
 		print_parse_message(PARSE_ERROR, "then keyword expected following expression in if statement", current_line);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Now we must see a valid compound statement
-	status = compound_statement(fl);
+	//Now following this, we need to see a valid compound statement
+	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
-	//If we fail
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid compound statement in if block", current_line);
+	//If this node fails, whole thing is bad
+	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid compound statement given to if statement", current_line);
 		num_errors++;
-		return 0;
+		//It's already an error, so just send it back up
+		return compound_stmt_node;
 	}
 
-	//Once we're here, we can optionally see the else keyword repeatedly
-	//Seed the search
+	//If we make it down here, we know that it's valid. As such, we can now add it as a child node
+	add_child_node(if_stmt, compound_stmt_node);
+
+	//Now we're at the point where we can optionally see an else statement. An else statement could
+	//be followed by another if statement optionally. We will handle both cases
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//As long as we keep seeing else
-	while(lookahead.tok == ELSE){
-		//Grab the next guy
-		lookahead = get_next_token(fl, &parser_line_num);
+	//No else statement, so we'll just put it back and get out
+	if(lookahead.tok != ELSE){
+		//Push this back
+		push_back_token(fl, lookahead);
+		//Return the root node
+		return if_stmt;
+	}
 
-		//We can either see an if statement or a compound statement
-		if(lookahead.tok == IF){
-			//Put it back
-			push_back_token(fl, lookahead);
+	//Otherwise if we get here we did see an else statement. Let's also check
+	//to see if it's an if statement or just a compound statement
+	lookahead = get_next_token(fl, &parser_line_num);
 
-			//Call if statement if we see this
-			status = if_statement(fl);
-
-			//If we fail
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid else-if block", current_line);
-				num_errors++;
-				return 0;
-			}
-
-		} else {
-			//We have to see a compound statement here
-			//Push the token back
-			push_back_token(fl, lookahead);
-
-			//Let's see if we have one
-			status = compound_statement(fl);
-
-			//If we fail
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid compound statement in else block", current_line);
-				num_errors++;
-				return 0;
-			}
+	//If we see an if statement here
+	if(lookahead.tok == IF){
+		//Now we need to see another if statement
+		generic_ast_node_t* if_stmt_child = if_statement(fl);
+		
+		//If it fails we'll just allow it to propogate
+		if(if_stmt_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//It's already an error, just send it up
+			return if_stmt_child;
 		}
 
-		//Once we make it down here, we'll refresh the search to see what we have next
-		lookahead = get_next_token(fl, &parser_line_num);
+		//Otherwise, we'll add it in as a child
+		add_child_node(if_stmt, if_stmt_child);
+
+	//Otherwise, we have a compound statement here
+	} else {
+		//Now we need to see a valid compound statement
+		generic_ast_node_t* else_compound_stmt = compound_statement(fl);
+
+		//We have an error here, we'll propogate it through
+		if(else_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid compound statement given in else block", current_line);
+			num_errors++;
+			//It's already an error, just send it up
+			return else_compound_stmt;
+		}
+		//Otherwise it all worked so we'll add it in as a child
+		add_child_node(if_stmt, else_compound_stmt);
 	}
 	
-	//We escaped so push it back and leave
-	push_back_token(fl, lookahead);
-	return 1;
+	//Once we reach the end, return the root level node
+	return if_stmt;
+}
+
+
+/**
+ * A jump statement allows us to instantly relocate in the memory map of the program. Like all rules, 
+ * a jump statement returns a reference to the root node that it created
+ *
+ * NOTE: By the time we get here, we will have already consumed the jump token
+ *
+ * BNF Rule: <jump-statement> ::= jump <label-identifier>;
+ */
+static generic_ast_node_t* jump_statement(FILE* fl){
+
+}
+
+
+/**
+ * A branch statement is an entirely abstract rule that multiplexes for us based on what it sees.
+ * Like all rules, it returns a reference to the root node that it creates, but that root node will
+ * not be created here
+ *
+ * BNF Rule: <branch-statement> ::= <jump-statement> 
+ * 								  | <continue-statement> 
+ * 								  | <break-statement> 
+ * 								  | <return-statement>
+ */
+static generic_ast_node_t* branch_statement(FILE* fl){
+
 }
 
 
