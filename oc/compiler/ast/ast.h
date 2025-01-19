@@ -65,6 +65,12 @@ typedef struct construct_definer_ast_node_t construct_definer_ast_node_t;
 typedef struct construct_member_list_ast_node_t construct_member_list_ast_node_t;
 //A construct member node
 typedef struct construct_member_ast_node_t construct_member_ast_node_t;
+//An enumerated definer node
+typedef struct enum_definer_ast_node_t enum_definer_ast_node_t;
+//An enumarated list node
+typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
+//An enumerated member node
+typedef struct enum_member_ast_node_t enum_member_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
 
@@ -93,6 +99,9 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CONSTRUCT_DEFINER,
 	AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST,
 	AST_NODE_CLASS_CONSTRUCT_MEMBER,
+	AST_NODE_CLASS_ENUM_DEFINER,
+	AST_NODE_CLASS_ENUM_MEMBER_LIST,
+	AST_NODE_CLASS_ENUM_MEMBER,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -258,6 +267,24 @@ struct construct_member_list_ast_node_t{
 //The construct member node itself
 struct construct_member_ast_node_t{
 	//Keep a reference to the variable record
+	symtab_variable_record_t* member_var;
+};
+
+//The enum definer node
+struct enum_definer_ast_node_t{
+	//Holds a reference to the type
+	generic_type_t* created_enum;
+};
+
+//The enum list node for the definition
+struct enum_member_list_ast_node_t{
+	//Holds the number of members
+	u_int8_t num_members;
+};
+
+//The enum member node
+struct enum_member_ast_node_t{
+	//Hold the associate symtable record
 	symtab_variable_record_t* member_var;
 };
 

@@ -2136,138 +2136,87 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 
 
 /**
- * An enumerator here is simply an identifier. Ollie language does not support custom
- * indexing for enumerated types
+ * An enum member is simply an identifier. This rule performs all the needed checks to ensure
+ * that it's not a duplicate of anything else that we've currently seen
  *
- * BNF Rule: <enumerator> ::= <identifier> 
+ * BNF Rule: <enum-member> ::= <identifier>
  */
-u_int8_t enumerator(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
+static generic_ast_node_t* enum_member(FILE* fl){
 	//For error printing
 	char info[2000];
 
-	//We will use these for checking duplicate names 
-	symtab_function_record_t* function_record;
-	symtab_type_record_t* type_record;
-	symtab_variable_record_t* variable_record;
+	//We really just need to see a valid identifier here
+	generic_ast_node_t* ident = identifier(fl);
 
-	u_int8_t status = 0;
-
-	//We must see a valid identifier here
-	status = identifier(fl);
-
-	//Get out if bad
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid identifier in enumerator", current_line);
+	//If it fails, we'll blow the whole thing up
+	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as enum member", parser_line_num);
 		num_errors++;
-		return 0;
+		//It's already an error, so we'll just send it back
+		return ident;
 	}
 
-	//Something very strange if this happens
-	if(active_type->type_class != TYPE_CLASS_ENUMERATED){
-		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Enumerated type not active in enumerator", current_line);
+	//Now if we make it here, we'll need to check and make sure that it isn't a duplicate of anything else
+	//Grab this for convenience
+	char* name = ((identifier_ast_node_t*)(ident->node))->identifier;
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
 		num_errors++;
-		return 0;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Otherwise it worked, so we now have a current IDENT that is valid
-	//However we aren't done, because we now must check for duplicates everywhere
-	function_record = lookup_function(function_symtab,  current_ident->lexeme);
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
 
-	//Name collision here
-	if(function_record != NULL){
-		sprintf(info, "A function with the name \"%s\" was already defined. Enumeration members and functions may not share names. First declared here:", current_ident->lexeme);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_function_name(function_record);
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
 		num_errors++;
-		return 0;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Let's check for variable collisions
-	variable_record = lookup_variable(variable_symtab, current_ident->lexeme);
-		
-	//Name collision here
-	if(variable_record != NULL){
-		sprintf(info, "A variable with the name \"%s\" was already defined. Enumeration members and variables may not share names. First declared here:", current_ident->lexeme);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_variable_name(variable_record);
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
 		num_errors++;
-		return 0;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Let's check for type collisions finally
-	type_record = lookup_type(type_symtab, current_ident->lexeme); 
+	//Once we make it all the way down here, we know that we don't have any duplication
+	//We can now make the record of the enum
+	symtab_variable_record_t* enum_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	//Later down the line, we'll assign the type that this thing is
+	
+	//We can now add it into the symtab
+	insert_variable(variable_symtab,  enum_record);
 
-	//Name collision here
-	if(type_record != NULL){
-		sprintf(info, "A type with the name \"%s\" was already defined. Enumeration members and types may not share names. First declared here:", current_ident->lexeme);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_type_name(type_record);
-		num_errors++;
-		return 0;
-	}
+	//Finally, we'll construct the node that holds this item and send it out
+	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER);
+	//Store the record in this for ease of access/modification
+	((enum_member_ast_node_t*)(enum_member->node))->member_var = enum_record;
 
-	/**
-	 * Now if we make it here we'll have to construct a variable and place it in. For the needs of ollie lang, enumeration members are considered
-	 * a special kind of variable. These variables contain references to the fact that they are declared in enumerations
-	 */
-	variable_record = create_variable_record(current_ident->lexeme, STORAGE_CLASS_NORMAL);
-
-	//This flag tells us where we are
-	variable_record->is_enumeration_member = 1;
-
-	//Assign the type to be the enumerated type
-	variable_record->type = active_type;
-	//It was initialized
-	variable_record->initialized = 1;
-	//Store the line num
-	variable_record->line_number = parser_line_num;
-
-	//Insert this into the symtab
-	insert_variable(variable_symtab, variable_record);
-
-	//We now link this in here
-	active_type->enumerated_type->tokens[active_type->enumerated_type->size] = variable_record;
-	//One more token
-	active_type->enumerated_type->size++;
-
-	return 1;
-}
-
-/**
- * Helper to maintain RL(1) properties. Remember, by the time we've gotten here, we've already seen a COMMA
- *
- * BNF Rule: <enumerator-list-prime> ::= ,<enumerator><enumerator-list-prime>
- */
-u_int8_t enumeration_list_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We now need to see a valid enumerator
-	status = enumerator(fl);
-
-	//Get out if bad
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Now if we see a comma, we know that we have an enumerator-list-prime
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a comma, we'll use the helper
-	if(lookahead.tok == COMMA){
-		return enumeration_list_prime(fl);
-	} else {
-		//Put it back and get out if no
-		push_back_token(fl, lookahead);
-		return 1;
-	}
+	//Finally we'll give the reference back
+	return enum_member;
 }
 
 
@@ -2276,203 +2225,19 @@ u_int8_t enumeration_list_prime(FILE* fl){
  *
  * BNF Rule: <enumerator-list> ::= <enumerator><enumerator-list-prime>
  */
-u_int8_t enumeration_list(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
+static generic_ast_node_t* enum_member_list(FILE* fl){
 
-	//We need to see a valid enumerator
-	status = enumerator(fl);
-
-	//Get out if bad
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid enumerator in enumeration list", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Now if we see a comma, we know that we have an enumerator-list-prime
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a comma, we'll use the helper
-	if(lookahead.tok == COMMA){
-		return enumeration_list_prime(fl);
-	} else {
-		//Put it back and get out if no
-		push_back_token(fl, lookahead);
-		return 1;
-	}
 }
 
 
 /**
- * An enumeration definition is where we see the actual definition of an enum
+ * An enumeration definition is where we see the actual definition of an enum. Like all other root nodes
+ * in the language, it returns the root of the subtree that it created
  *
- * NOTE: The actual addition into the symtable is handled by the caller
- *
- * BNF Rule: enumerated <identifier> { <enumerator-list> } 
+ * BNF Rule: <enum-definer> ::= define enumerated <identifier> { <enumerator-member-list> } {as <identifier>}?;
  */
-static u_int8_t enumeration_definer(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	//Info array for error printing
-	char info[2000];
+static generic_ast_node_t* enum_definer(FILE* fl){
 
-	//Used for finding duplicates
-	symtab_type_record_t* type_record;
-
-	//The name of the enumerated type
-	char enumerated_name[MAX_TYPE_NAME_LENGTH];
-
-	//For grabbing tokens
-	Lexer_item lookahead;
-
-	//Copy the name in here
-	strcpy(enumerated_name, "enumerated ");
-
-	//We now have to see a valid identifier, since we've already seen the ENUMERATED keyword
-	//Stored here in current ident global variable
-	u_int8_t status = identifier(fl);
-
-	//If it's bad then we're done here
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid enumeration name given in definition", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//If we found a valid ident, we'll add it into the name
-	//Following this, we'll have the whole name of the enumerated type written out
-	strcat(enumerated_name, current_ident->lexeme);
-
-	//This means that the type must have been defined, so we'll check
-	type_record = lookup_type(type_symtab, enumerated_name);
-
-	//If we couldn't find it
-	if(type_record != NULL){
-		sprintf(info, "Enumerated type \"%s\" has already been defined, redefinition is illegal", enumerated_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_type_name(type_record);
-		num_errors++;
-		return 0;
-	}
-
-	//Following this, if we see a right curly brace, we know that we have a list
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Enumeration defintion expected after the name is defined", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Push onto the grouping stack for matching
-	push(grouping_stack, lookahead);
-
-	//Before we even go on, if this was already defined, we can't have it
-	type_record = lookup_type(type_symtab, enumerated_name);
-
-	//If it is already defined, we'll bail out
-	if(type_record != NULL){
-		//Automatic fail case
-		sprintf(info, "Illegal type redefinition. Enumerated type %s was already defined here:", enumerated_name);
-		print_parse_message(PARSE_ERROR, info, current_line); 
-		print_type_name(type_record);
-		return 0;
-	}
-
-	//Once we get here we know that we're declaring so we can create
-	generic_type_t* type = create_enumerated_type(enumerated_name, current_line);
-
-	//This now is the active type
-	active_type = type;
-
-	//We now must see a valid enumeration list
-	status = enumeration_list(fl);
-
-	//If it's bad then we're done here
-	if(status == 0){
-		num_errors++;
-		return 0;
-	}
-
-	//Must see a right curly
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//All of our fail cases here
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Right curly brace expected at end of enumeration list", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Unmatched left curly
-	if(pop(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched right parenthesis", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise we should be fine when we get here, so we can return
-	return 1;
-}
-
-
-/**
- * An enumeration specifier will always start with enumerated
- * REMEMBER: Due to RL(1), by the time we get here ENUMERATED has already been seen
- *
- * BNF Rule: <enumeration-specifier> ::= enumerated <identifier>
- */
-u_int8_t enumeration_specifier(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	//Info array for error printing
-	char info[2000];
-
-	//Used for finding duplicates
-	symtab_type_record_t* type_record;
-
-	//The name of the enumerated type
-	char enumerated_name[MAX_TYPE_NAME_LENGTH];
-
-	//For grabbing tokens
-	Lexer_item lookahead;
-
-	//Copy the name in here
-	strcpy(enumerated_name, "enumerated ");
-
-	//We now have to see a valid identifier, since we've already seen the ENUMERATED keyword
-	//Stored here in current ident global variable
-	u_int8_t status = identifier(fl);
-
-	//If it's bad then we're done here
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid enumeration name given in declaration", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//If we found a valid ident, we'll add it into the name
-	//Following this, we'll have the whole name of the enumerated type written out
-	strcat(enumerated_name, current_ident->lexeme);
-
-	//This means that the type must have been defined, so we'll check
-	type_record = lookup_type(type_symtab, enumerated_name);
-
-	//If we couldn't find it
-	if(type_record == NULL){
-		sprintf(info, "Enumerated type \"%s\" is either not defined or being used before declaration", enumerated_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Assign the active type
-	active_type = type_record->type;
-	
-	return 1;
 }
 
 

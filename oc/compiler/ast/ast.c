@@ -179,6 +179,27 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_CONSTRUCT_MEMBER;
 			break;
 
+		//Enum definer ast node
+		case AST_NODE_CLASS_ENUM_DEFINER:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(enum_definer_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_ENUM_DEFINER;
+			break;
+
+		//Enum list ast node
+		case AST_NODE_CLASS_ENUM_MEMBER_LIST:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(enum_member_list_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_ENUM_MEMBER_LIST;
+			break;
+
+		//Enum list member node
+		case AST_NODE_CLASS_ENUM_MEMBER:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(enum_member_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_ENUM_MEMBER;
+			break;
+
 		//Generic error node
 		case AST_NODE_CLASS_ERR_NODE:
 			//Just assign that it is an error and get out

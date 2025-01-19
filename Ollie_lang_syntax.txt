@@ -46,7 +46,11 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 <complex-type-definer> ::= <enumerated-definer>
 						 | <construct-definer>
 
-<enumerated-definer> ::= define enumerated <identifier> { <enumerator><enumerator-list-prime> } {as <identifier>}?;
+<enum-definer> ::= define enum <identifier> { <enum-member-list> } {as <identifier>}?;
+
+<enum-member-list> ::= <enum-member>{, <enum-member>}*
+
+<enum-member> ::= <identifier>
 
 <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
 
@@ -54,21 +58,16 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <construct-member> ::= {constant}? <type-specifier> <identifier>
 
-<enumerator-list-prime> ::= , <enumerator><enumerator-list-prime>
-						  | epsilon
-
-<enumerator> ::= <identifier>
-
 <alias-statement> ::= alias <type-specifier> as <type-identifier>;
 
-<declarator> ::= <variable-identifer>
-				 <variable-identifer>{<array-accessor>}?
-				 <variable-identifier>{<construct-accessor}?
+<declarator> ::= <identifer>
+				 <identifer>{<array-accessor>}?
+				 <identifier>{<construct-accessor}?
 
 <array-accessor> ::= [ <conditional-expression> ]
 
-<construct-accessor> ::= => <variable-identifier>
-					   | : <variable-identifier>
+<construct-accessor> ::= => <identifier>
+					   | : <identifier>
 
 <statement> ::= <labeled-statement>
 			  | <expression-statement>
@@ -196,7 +195,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 			  | <construct-type>
 			  | <aliased-type>
 
-<enumerated-type> ::= enumerated <type-identifier>
+<enumerated-type> ::= enum <type-identifier>
 
 <construct-type> ::= construct <type-identifier>
 
