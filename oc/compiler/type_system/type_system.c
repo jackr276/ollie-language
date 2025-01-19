@@ -3,6 +3,7 @@
 */
 
 #include "type_system.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -116,8 +117,10 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  */
 generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members){
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
+	//The array bounds string
+	char array_bound_str[50];
 
-	//Pointer type class
+	//Array type class
 	type->type_class = TYPE_CLASS_ARRAY;
 
 	//Where was it declared
@@ -126,18 +129,20 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Let's first copy the type name in
 	strcpy(type->type_name, points_to->type_name);
 
-	//And then we add a pointer onto the end of it
-	strcat(type->type_name, "[]");
+	//Let's construct the array bounds string
+	sprintf(array_bound_str, "[%d]", num_members);
 
+	//Concatenate it to the name of it
+	strcat(type->type_name, array_bound_str);
+	
 	//Now we'll make the actual pointer type
 	type->pointer_type = calloc(1, sizeof(array_type_t));
 
 	//Store what it points to
-	type->pointer_type->points_to = points_to;
-
-	//A pointer is always 8 bytes(Ollie lang is for x86-64 only)
-	//TODO FIXME
-	type->pointer_type->size = 100;
+	type->array_type->member_type = points_to;
+	
+	//Store the number of members
+	type->array_type->num_members = num_members;
 
 	return type;
 }

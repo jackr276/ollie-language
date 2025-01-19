@@ -180,6 +180,11 @@ generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number);
 generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
 
 /**
+ * Dynamically allocate and create an array type
+ */
+generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members);
+
+/**
  * Dynamically allocate and create an aliased type
  */
 generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_type, u_int32_t line_number);

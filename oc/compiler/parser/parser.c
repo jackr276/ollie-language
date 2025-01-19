@@ -2851,126 +2851,142 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 	generic_ast_node_t* type_spec_node = ast_node_alloc(AST_NODE_CLASS_TYPE_SPECIFIER);
 
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
-	//return a record of the node that the type name has
+	//return a record of the node that the type name has. If the type name function could not
+	//find the name, then it will send back an error that we can handle here
 	generic_ast_node_t* name_node = type_name(fl);
 
-	//Throw and get out
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid type name given to type specifier", current_line);
-		return 0;
+	//We'll just fail here, no need for any error printing
+	if(name_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//It's already and error so just give it back
+		return name_node;
 	}
 
-	//Just for convenience, we'll store this locally
-	char type_name[MAX_TYPE_NAME_LENGTH];
-	//The name will be in the type_spec_nodes first child
-	strcpy(type_name, ((type_name_ast_node_t*)((type_spec_node->first_child)->node))->type_name);
+	//The name node will always be a child of the specifier node, so we'll add it now
+	add_child_node(type_spec_node, name_node);
 
-	//We'll now lookup the type that we have and keep it as a temporary reference
-	//We're also checking for existence. If this type does not exist, then that's bad
-	symtab_type_record_t* current_type_record = lookup_type(type_symtab, type_name);
-
-	//This is a "leaf-level" error
-	if(current_type_record == NULL){
-		sprintf(info, "Type with name: \"%s\" does not exist in the current scope.", type_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		num_errors++;
-		return 0;
-	}
-
+	//Now once we make it here, we know that we have a name that actually exists in the symtab
+	//Let's grab out some info to make things easier
+	char* type_name = ((type_name_ast_node_t*)(name_node->node))->type_name;
+	//The current type record is what we will eventually point our node to
+	symtab_type_record_t* current_type_record = ((type_name_ast_node_t*)(name_node->node))->type_record;
+	
 	//Let's see where we go from here
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	if(lookahead.tok == AND || lookahead.tok == L_BRACKET){
-		//Now if we make it here, we know that the type exists in the system, and we have a record of it
-		//in our hands. We can now optionally see some type-address-specifiers. These take the form of
-		//array brackets or address operators(&)
-		//
-		//The type-address-specifier function works uniquely compared to other functions. It will actively
-		//modify the type that we have currently active. When it's done, our "current_type" reference should
-		//in theory be fully done with arrays
-		//
-		//Just like before, this node is the child of the type-spec-node
-
-		//We'll first push the token back
+	//As long as we are seeing address specifiers
+	while(lookahead.tok == AND || lookahead.tok == L_BRACKET){
+		//Put the token back
 		push_back_token(fl, lookahead);
+		//We'll now let the other rule handle it
+		generic_ast_node_t* address_specifier = type_address_specifier(fl);
 
-		//Now we expect to have some new types made
-		generic_type_t* current_type = current_type_record->type;
-
-		//We'll now let this do it's thing. By the time we come back, current_type
-		//will automagically be the complete type
-		status = type_address_specifier(fl, type_spec_node, &current_type);
-
-		//Non-leaf error here, no need to print anything
-		if(status == 0){
-			return 0;
+		//If it's invalid for some reason, we'll fail out here
+		if(address_specifier->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid address specifier given in type specifier", parser_line_num);
+			num_errors++;
+			//It's already an error so just send it up
+			return address_specifier;
 		}
+
+		//Now we know that we have a valid address specifier. We'll first add it as a child to the
+		//parent node
+		add_child_node(type_spec_node, address_specifier);
+
+		//We'll now create a type that represents either a pointer or an array. This type may or may not
+		//currently be in the symbol table, but that doesn't matter. These are not truly new types, as they
+		//are only aggregate types
 		
-		//Let's now search to see if this type name has ever appeared before. If it has, there
-		//is no issue with that. Duplicated pointer and array types are of no concern, as they are
-		//universal
-		current_type_record = lookup_type(type_symtab, current_type->type_name);
+		//If it's a pointer type
+		if(((type_address_specifier_ast_node_t*)(address_specifier->node))->address_type == ADDRESS_SPECIFIER_ADDRESS){
+			//Let's create the pointer type. This pointer type will point to the current type
+			generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num);
 
-		//If we actually found it, we'll just reuse that same record
-		if(current_type_record != NULL){
-			//We no longer need this type
-			destroy_type(current_type);
-			//Assign this and get out
-			((type_spec_ast_node_t*)(type_spec_node->node))->type_record = current_type_record;
-			return 1;
-		//Otherwise we'll make a totally new type record
+			//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
+			//also not an issue
+			symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer->type_name);
+
+			//If we did not find it, we will add it into the symbol table
+			if(found_pointer == NULL){
+				//Create the type record
+				symtab_type_record_t* created_pointer = create_type_record(pointer);
+				//Insert it into the symbol table
+				insert_type(type_symtab, created_pointer);
+				//We'll also set the current type record to be this
+				current_type_record = created_pointer;
+			} else {
+				//Otherwise, just set the current type record to be what we found
+				current_type_record = found_pointer;
+			}
+
+		//Otherwise we know that we found an array pointer
 		} else {
-			current_type_record = create_type_record(current_type);
-			//Put into symtab
-			insert_type(type_symtab, current_type_record);
+			//Let's grab the constant node out
+			generic_ast_node_t* constant_node = address_specifier->first_child;
 
-			//Assign this and get out
-			((type_spec_ast_node_t*)(type_spec_node->node))->type_record = current_type_record;
+			//Sanity check here
+			if(constant_node == NULL || constant_node->CLASS != AST_NODE_CLASS_CONSTANT){
+				print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Could not find constant node in array specifier", parser_line_num);
+				//Get out if this happens
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
 
-			return 1;
+			//Let's now grab the number of members
+			u_int32_t num_members = atoi(((constant_ast_node_t*)(constant_node->node))->constant);
+
+			//Lets create the array type
+			generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_members);
+
+			//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
+			//also not an issue
+			symtab_type_record_t* found_array = lookup_type(type_symtab, array_type->type_name);
+
+			//If we did not find it, we will add it into the symbol table
+			if(found_array == NULL){
+				//Create the type record
+				symtab_type_record_t* created_array = create_type_record(array_type);
+				//Insert it into the symbol table
+				insert_type(type_symtab, created_array);
+				//We'll also set the current type record to be this
+				current_type_record = created_array;
+			} else {
+				//Otherwise, just set the current type record to be what we found
+				current_type_record = found_array;
+			}
 		}
 
-	} else {
-		//If we make it here, there will be no type modifications or potential new types made. The pointer
-		//to the type record that we already have is actually completely valid, and as such we'll just
-		//stash it and get out
-
-		//Put whatever we saw back
-		push_back_token(fl, lookahead);
-
-		//Store the reference to the type that we have here
-		((type_spec_ast_node_t*)(type_spec_node->node))->type_record = current_type_record;
-
-		return 1;
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//Once we get here we stopped seeing the type specifiers, so we'll give the token back
+	push_back_token(fl, lookahead);
+
+	//The type specifier node has already been fully created, so we just need to add the type reference
+	//and return it
+	//This will store a reference to whatever the type record is
+	((type_spec_ast_node_t*)(type_spec_node->node))->type_record = current_type_record;
+
+	//Finally we can give back the node
+	return type_spec_node;
 }
 
 
-
 /**
- * A parameter declaration is always a child of a parameter list node. It can optionally
- * be made constant. The register keyword is not needed here. Ollie lang restricts the 
- * number of parameters to 6 so that they all may be kept in registers ideally(minus large structs)
- *
- * A parameter declaration is always a parent to other nodes
+ * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
+ * top lexical scope for the function itself. Like all rules, it returns a reference to the
+ * root of the subtree that it creates
  *
  * BNF Rule: <parameter-declaration> ::= {constant}? <type-specifier> <identifier>
  */
-static u_int8_t parameter_declaration(FILE* fl, generic_ast_node_t* parameter_list_node){
+static u_int8_t parameter_declaration(FILE* fl){
 	//For any needed error printing
 	char info[2000];
-
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-
 	//Is it constant? No by default
 	u_int8_t is_constant = 0;
-
-	//Lookahead for peeking
+	//Lookahead token
 	Lexer_item lookahead;
-
-	//General status var
-	u_int8_t status = 0;
 
 	//We'll first create and attach the actual parameter declaration node
 	generic_ast_node_t* parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_PARAM_DECL);
