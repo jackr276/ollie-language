@@ -2580,15 +2580,15 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
 }
 
 
-
 /**
  * A type name node is always a child of a type specifier. It consists
  * of all of our primitive types and any defined construct or
  * aliased types that we may have. It is important to note that any
  * non-primitive type needs to have been previously defined for it to be
- * valid
+ * valid. Like all rules in the language, this rule returns a root reference 
+ * of the subtree that it creates
  * 
- * If we are using this rule, we are assuming that this type exists in the 
+ * If we are using this rule, we are assuming that this type exists in the system
  * 
  * BNF Rule: <type-name> ::= void 
  * 						   | u_int8 
@@ -2602,21 +2602,20 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
  * 						   | float32 
  * 						   | float64 
  * 						   | char 
- * 						   | enumerated <type-identifier>
- * 						   | construct <type-identifier>
- * 						   | <type-identifier>
+ * 						   | enum <identifier>
+ * 						   | construct <identifier>
+ * 						   | <identifier>
  */
-static u_int8_t type_name(FILE* fl, generic_ast_node_t* type_specifier){
-	//Global status
-	u_int8_t status = 0;
+static generic_ast_node_t* type_name(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
+	//A temporary holder for the type name
+	char type_name[MAX_TYPE_NAME_LENGTH];
 
 	//Let's create the type name node
-	generic_ast_node_t* type_name = ast_node_alloc(AST_NODE_CLASS_TYPE_NAME);
-
-	//It will always be a child of the type specifier node
-	add_child_node(type_specifier,  type_name);
+	generic_ast_node_t* type_name_node = ast_node_alloc(AST_NODE_CLASS_TYPE_NAME);
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -2626,32 +2625,52 @@ static u_int8_t type_name(FILE* fl, generic_ast_node_t* type_specifier){
 	   || lookahead.tok == S_INT16 || lookahead.tok == U_INT32 || lookahead.tok == S_INT32 || lookahead.tok == U_INT64
 	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == CHAR){
 
-		//Copy the lexeme into the node
-		strcpy(((type_name_ast_node_t*)type_name->node)->type_name, lookahead.lexeme);
+		//Copy the lexeme into the node, no need for intermediaries here
+		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, lookahead.lexeme);
 
-		//This one is all set now
-		return 1;
+		//We will now grab this record from the symtable to make our life easier
+		symtab_type_record_t* record = lookup_type(type_symtab, lookahead.lexeme);
 
-	//Otherwise we may have an enumerated type
-	} else if(lookahead.tok == ENUMERATED){
-		//Add in the enumerated keyword
-		strcpy(((type_name_ast_node_t*)type_name->node)->type_name, "enumerated ");
-
-		//Now we have to see a valid identifier. The parent of this identifer
-		//Will itself be the type_name node
-		status = identifier(fl, type_name);
-
-		//If this is the case we'll fail out, no need for a message
-		if(status == 0){
-			return 0;
+		//Sanity check, if this is null something is very wrong
+		if(record == NULL){
+			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
+			//Create and give back an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//If we make it here we know that it's valid, so we'll grab the identifier name
-		//and add it to our name
-		strcat(((type_name_ast_node_t*)type_name->node)->type_name, ((identifier_ast_node_t*)type_name->first_child->node)->identifier);
+		//Link this record in with the actual node
+		((type_name_ast_node_t*)(type_name_node->node))->type_record = record;
 
-		//Once we have this, we're out of here
-		return 1;
+		//This one is now all set to send up. We will not store any children if this is the case
+		return type_name_node;
+
+	//There's also a chance that we see an enum type
+	} else if(lookahead.tok == ENUM){
+		//We know that this keyword is in the name, so we'll add it in
+		strcpy(type_name, "enum ");
+
+		//It is required that we now see a valid identifier
+		generic_ast_node_t* type_ident = identifier(fl);
+
+		//If we fail, we'll bail out
+		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
+			//It's already an error so just give it back
+			return type_ident;
+		}
+
+		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
+		strcat(type_name, ((identifier_ast_node_t*)(type_ident->node))->identifier);
+
+		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+		symtab_type_record_t* record = lookup_type(type_symtab, type_name);
+
+		//If we didn't find it it's an instant fail
+		if(record == NULL){
+			//TODO FINISH THIS RULE
+		}
+
+
 
 	//Construct names are pretty much the same as enumerated names
 	} else if(lookahead.tok == CONSTRUCT){
@@ -2725,7 +2744,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has
-	status = type_name(fl);
+	generic_ast_node_t* name_node = type_name(fl);
 
 	//Throw and get out
 	if(status == 0){
