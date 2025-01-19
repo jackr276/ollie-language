@@ -13,7 +13,6 @@
 */
 
 #include "parser.h"
-#include <cmath>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,6 +103,38 @@ static generic_ast_node_t* identifier(FILE* fl){
 
 	//Return our reference to the node
 	return ident_node;
+}
+
+/**
+ * We will always return a pointer to the node holding the label identifier. Due to the times when
+ * this will be called, we can not do any symbol table validation here. 
+ *
+ * BNF "Rule": <label-identifier> ::= ${(<letter>) | <digit> | _ | $}*
+ * Note all actual string parsing and validation is handled by the lexer
+ */
+static generic_ast_node_t* label_identifier(FILE* fl){
+	//In case of error printing
+	char info[2000];
+
+	//Grab the next token
+	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
+	
+	//If we can't find it that's bad
+	if(lookahead.tok != LABEL_IDENT){
+		sprintf(info, "String %s is not a valid label identifier", lookahead.lexeme);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		//Create and return an error node that will be sent up the chain
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Create the identifier node
+	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER); //Add the identifier into the node itself
+	//Copy the string we got into it
+	strcpy(((identifier_ast_node_t*)(label_ident_node->node))->identifier, lookahead.lexeme);
+
+	//Return our reference to the node
+	return label_ident_node;
 }
 
 
@@ -3221,81 +3252,149 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 
 
 /**
- * <labeled-statement> ::= <label-identifier> <compound-statement>
- * 						 | case <constant-expression> <compound-statement>
- * 						 | default <compound-statement>
+ * A labeled statement could come as part of a switch statement or could
+ * simply be a label that can be used for jumping. Whatever it is, it is
+ * always followed by a colon. Like all rules, this rule returns a reference to
+ * it's root node
+ *
+ * <labeled-statement> ::= <label-identifier> : 
+ * 						 | case <constant>: 
+ * 						 | default :
  */
-static u_int8_t labeled_statement(FILE* fl){
+static generic_ast_node_t* labeled_statement(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//The lookahead token
 	Lexer_item lookahead;
-	u_int8_t status;
 
-	//Let's grab the next item here
+	//Let's see what kind of statement that we have here
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we see a label identifier
-	if(lookahead.tok == LABEL_IDENT){
-		//Push it back and process it
-		push_back_token(fl, lookahead);
-		//Process it
-		label_identifier(fl);
+	//We have some kind of case statement
+	if(lookahead.tok == CASE){
+		//Create the node
+		generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT);
+		//We are now required to see a valid constant
+		generic_ast_node_t* const_node = constant(fl);
 
-		//Now we can see a compound statement
-		status = compound_statement(fl);
-
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid compound statement in labeled statement", current_line);
+		//If this fails, the whole thing is over
+		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Constant required in case statement", current_line);
 			num_errors++;
-			return 0;
+			//It's already an error, so we'll just give it back
+			return const_node;
 		}
 
-		//Otherwise it worked so
-		return 1;
+		//Now once we get down here, we know that the constant node worked, so we'll add it as the child
+		add_child_node(case_stmt, const_node);
 
-	//If we see the CASE keyword
-	} else if (lookahead.tok == CASE){
-		//Now we need to see a constant expression
-		status = constant_expression(fl);
+		//One last thing to check -- we need a colon
+		lookahead = get_next_token(fl, &parser_line_num);
 
-		//If it failed
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid constant expression in case statement", current_line);
+		//If we don't see one, we need to scrap it
+		if(lookahead.tok != COLON){
+			print_parse_message(PARSE_ERROR, "Colon required after case statement", current_line);
 			num_errors++;
-			return 0;
-		}
-		//Now we can see a compound statement
-		status = compound_statement(fl);
-
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid compound statement in case statement", current_line);
-			num_errors++;
-			return 0;
+			//Error node return
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//Otherwise it worked so
-		return 1;
+		//Otherwise, we made it just fine. We'll now return the node that we made
+		return case_stmt;
 
-
-	//If we see the DEFAULT keyword
+	//We have a default statement
 	} else if(lookahead.tok == DEFAULT){
-		//Now we can see a compound statement
-		status = compound_statement(fl);
+		//If we see default, we can just make the default node
+		generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT);
 
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid compound statement in case statement", current_line);
+		//All that we need to see now is a colon
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we don't see one, we need to scrap it
+		if(lookahead.tok != COLON){
+			print_parse_message(PARSE_ERROR, "Colon required after default statement", current_line);
 			num_errors++;
-			return 0;
+			//Error node return
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+		
+		//Otherwise it all worked, so we'll just return
+		return default_stmt;
+
+	//Otherwise, we need to see a valid label identifier
+	} else {
+		//Let's create the label ident node
+		generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT);
+
+		//Put it back for label ident
+		push_back_token(fl, lookahead);
+
+		//Let's see if we can find one
+		generic_ast_node_t* label_ident = label_identifier(fl);
+
+		//If it's bad we'll fail out here
+		if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid label identifier given as label ident statement", current_line);
+			num_errors++;
+			//Return the label ident, it's already an error
+			return label_ident;
+		}
+		
+		//Let's also verify that we have the colon right now
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we don't see one, we need to scrap it
+		if(lookahead.tok != COLON){
+			print_parse_message(PARSE_ERROR, "Colon required after label statement", current_line);
+			num_errors++;
+			//Error node return
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+		//Otherwise we are all good syntactically here
+
+		//Grab the name out for convenience
+		char* label_name = ((identifier_ast_node_t*)(label_ident->node))->identifier;
+
+		//We now need to make sure that it isn't a duplicate
+		symtab_variable_record_t* found = lookup_variable(variable_symtab, label_name);
+
+		//If we did find it, that's bad
+		if(found != NULL){
+			sprintf(info, "Label identifier %s has already been declared. First declared here", label_name); 
+			print_parse_message(PARSE_ERROR, label_name, parser_line_num);
+			//Also print out the original declaration
+			print_variable_name(found);
+			num_errors++;
+			//give back an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//Otherwise it worked so
-		return 1;
+		//Grab the label type
+		//The label type is one of our core types
+		symtab_type_record_t* label_type = lookup_type(type_symtab, "label");
 
-	//Fail case here
-	} else {
-		//print_parse_message(PARSE_ERROR, "Invalid keyword for labeled statement", current_line);
-		num_errors++;
-		return 0;
+		//Sanity check here
+		if(label_type == NULL){
+			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Basic type label was not found", parser_line_num);
+			//Get out if this happens
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Now that we know we didn't find it, we'll create it
+		found = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
+		//Store the type
+		found->type = label_type->type;
+
+		//Put into the symtab
+		insert_variable(variable_symtab, found);
+
+		//We'll also associate this variable with the node
+		((label_stmt_ast_node_t*)(label_stmt->node))->associate_var = found;
+
+		//Now we can get out
+		return label_stmt;
 	}
 }
 
@@ -3303,7 +3402,7 @@ static u_int8_t labeled_statement(FILE* fl){
 /**
  * The callee will have left the if token for us once we get here
  *
- * BNF Rule: <if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement | compound-statement>}*
+ * BNF Rule: <if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement> | <compound-statement>}*
  */
 static u_int8_t if_statement(FILE* fl){
 	//Freeze the line number

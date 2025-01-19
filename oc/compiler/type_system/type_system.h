@@ -84,6 +84,8 @@ struct basic_type_t{
 	Token basic_type;
 	//What is the size of this type?
 	u_int32_t size;
+	//Is it a label?
+	u_int8_t is_label;
 };
 
 

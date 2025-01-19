@@ -362,6 +362,11 @@ void add_all_basic_types(type_symtab_t* symtab){
 	//float64 type
 	type = create_basic_type("float32", FLOAT64);
 	insert_type(symtab,  create_type_record(type));
+
+	//label type
+	type = create_basic_type("label", LABEL_IDENT);
+	insert_type(symtab,  create_type_record(type));
+
 }
 
 

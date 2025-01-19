@@ -101,9 +101,9 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <if-statement> ::= if( <expression> ) then <compound-statement> {else <if-statement | compound-statement>}*
 
-<labeled-statement> ::= <label-identifier> <compound-statement>
-					  | case <constant-expression> <compound-statement>
- 					  | default <compound-statement>
+<labeled-statement> ::= <label-identifier> :
+					  | case <constant> :
+ 					  | default :
 
 <expression-statement> ::= {<expression>}?;
 

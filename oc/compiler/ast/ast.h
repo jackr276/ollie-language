@@ -75,6 +75,12 @@ typedef struct enum_member_ast_node_t enum_member_ast_node_t;
 typedef struct decl_ast_node_t decl_ast_node_t;
 //An AST node for expression statements
 typedef struct expression_stmt_ast_node_t expression_stmt_ast_node_t;
+//An AST node for the case blocks in switches
+typedef struct case_stmt_ast_node_t case_stmt_ast_node_t;
+//An AST node for the default blocks in switches
+typedef struct default_stmt_ast_node_t default_stmt_ast_node_t;
+//An AST node for label statements
+typedef struct label_stmt_ast_node_t label_stmt_ast_node_t;
 
 
 //What type is in the AST node?
@@ -105,6 +111,9 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ENUM_MEMBER_LIST,
 	AST_NODE_CLASS_ENUM_MEMBER,
 	AST_NODE_CLASS_EXPR_STMT,
+	AST_NODE_CLASS_CASE_STMT,
+	AST_NODE_CLASS_DEFAULT_STMT,
+	AST_NODE_CLASS_LABEL_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -303,6 +312,26 @@ struct enum_member_ast_node_t{
 struct expression_stmt_ast_node_t{
 	//The inferred type
 	generic_type_t* inferred_type;
+};
+
+//A case statement node
+struct case_stmt_ast_node_t{
+	//Just hold the memory offset for now
+	u_int64_t mem_location;
+};
+
+//A default statement node
+struct default_stmt_ast_node_t{
+	//Just hold the memory location for now
+	u_int64_t mem_location;
+};
+
+//A label statement node
+struct label_stmt_ast_node_t{
+	//Just hold the memory location for now
+	u_int64_t mem_location;
+	//The variable that is associated with it
+	symtab_variable_record_t* associate_var;
 };
 
 /**
