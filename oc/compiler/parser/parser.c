@@ -13,7 +13,6 @@
 */
 
 #include "parser.h"
-#include <execution>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2515,6 +2514,38 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 
 	//Give back the root level node
 	return enum_def_node;
+}
+
+
+/**
+ * A complex type definer is simply a pass-through rule that multiplexes based on whether it 
+ * sees enum or construct. When we reach this rule, we will have already seen the define keyword.
+ * Like all rules, this function returns a reference to the root node of the tree that it creates
+ *
+ *
+ * BNF Rule: <complex-type-definer> ::= <enumerated-definer> 
+ * 									  | <construct-definer>
+ */
+static generic_ast_node_t* complex_type_definer(FILE* fl){
+	//The lookahead token
+	Lexer_item lookahead;
+
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//We will just multiplex based on what we see here
+	if(lookahead.tok == ENUM){
+		return enum_definer(fl);
+	} else if(lookahead.tok == CONSTRUCT){
+		return construct_definer(fl);
+	
+	//Handle the case where there's some bad keyword here
+	} else {
+		print_parse_message(PARSE_ERROR, "enum or construct keywords required after define keyword", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 }
 
 
