@@ -83,6 +83,14 @@ typedef struct default_stmt_ast_node_t default_stmt_ast_node_t;
 typedef struct label_stmt_ast_node_t label_stmt_ast_node_t;
 //An AST node for if statements
 typedef struct if_stmt_ast_node_t if_stmt_ast_node_t;
+//An AST node for jump statements
+typedef struct jump_stmt_ast_node_t jump_stmt_ast_node_t;
+//An AST node for break statements
+typedef struct break_stmt_ast_node_t break_stmt_ast_node_t;
+//An AST node for continue statements
+typedef struct continue_stmt_ast_node_t continue_stmt_ast_node_t;
+//An AST node for ret statements
+typedef struct ret_stmt_ast_node_t ret_stmt_ast_node_t;
 
 
 //What type is in the AST node?
@@ -117,6 +125,10 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_DEFAULT_STMT,
 	AST_NODE_CLASS_LABEL_STMT,
 	AST_NODE_CLASS_IF_STMT,
+	AST_NODE_CLASS_JUMP_STMT,
+	AST_NODE_CLASS_BREAK_STMT,
+	AST_NODE_CLASS_CONTINUE_STMT,
+	AST_NODE_CLASS_RET_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -339,6 +351,32 @@ struct label_stmt_ast_node_t{
 
 //An if statement node
 struct if_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status; //todo may get rid of
+};
+
+//A jump statement node
+struct jump_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status; //todo may get rid of
+	//Contain where we are jumping to
+	symtab_variable_record_t* label_record;
+};
+
+//A break statement node
+struct break_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status; //todo may get rid of
+};
+
+//A continue statement node
+struct continue_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status; //todo may get rid of
+};
+
+//A ret statement node
+struct ret_stmt_ast_node_t{
 	//Just hold status for now
 	u_int8_t status; //todo may get rid of
 };

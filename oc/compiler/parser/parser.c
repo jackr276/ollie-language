@@ -3549,7 +3549,61 @@ static generic_ast_node_t* if_statement(FILE* fl){
  * BNF Rule: <jump-statement> ::= jump <label-identifier>;
  */
 static generic_ast_node_t* jump_statement(FILE* fl){
+	//Error message holding
+	char info[2000];
+	//Lookahead token
+	Lexer_item lookahead;
 
+	//We can off the bat create the jump statement node here
+	generic_ast_node_t* jump_stmt = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT); 
+
+	//Once we've made it, we need to see a valid label identifier
+	generic_ast_node_t* label_ident = label_identifier(fl);
+
+	//If this failed, we're done
+	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid label given to jump statement", parser_line_num);
+		num_errors++;
+		//It's already an error, just give it back
+		return label_ident;
+	}
+
+	//Grab the name out for convenience
+	char* name = ((identifier_ast_node_t*)(label_ident->node))->identifier;
+
+	//We now need to ensure that this actually exists in the symbol table as an identifier
+	symtab_variable_record_t* label_record = lookup_variable(variable_symtab, name);
+
+	//If it's not there, whole thing fails
+	if(label_record == NULL){
+		sprintf(info, "%s is not a defined label", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//One last tripping point befor we create the node, we do need to see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see a semicolon we bail
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after jump statement", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Otherwise if we get here we know that it is a valid label and valid syntax
+	//We'll now do the final assembly
+	//First we'll add the label ident as a child of the jump
+	add_child_node(jump_stmt, label_ident);
+
+	//Then we'll sotre the label record in the jump statement for ease of use later
+	((jump_stmt_ast_node_t*)(jump_stmt->node))->label_record = label_record;
+
+	//Finally we'll give back the root reference
+	return jump_stmt;
 }
 
 
@@ -3565,184 +3619,6 @@ static generic_ast_node_t* jump_statement(FILE* fl){
  */
 static generic_ast_node_t* branch_statement(FILE* fl){
 
-}
-
-
-/**
- * BNF Rule: <jump-statement> ::= jump <label-identifier>;
- * 								| continue when(<conditional-expression>); 
- * 								| continue; 
- * 								| break when(<conditional-expression>); 
- * 								| break; 
- * 								| ret {<conditional-expression>}?;
- */
-static u_int8_t jump_statement(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a jump statement
-	if(lookahead.tok == JUMP){
-		//We now must see a valid label-ident
-		status = label_identifier(fl);
-
-		//Fail out
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid label identifier found after jump statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		//semicolon handled at end
-		
-	} else if(lookahead.tok == CONTINUE){
-		//Grab the next toekn because we could have "continue when"
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//If we have continue when
-		if(lookahead.tok != WHEN){
-			//Regular continue here, go to semicolon
-			push_back_token(fl, lookahead);
-			//TODO handle accordingly
-			goto semicol;
-		}
-
-		//Otherwise, we must see parenthesis here
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail out
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after when keyword", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Push to stack for later
-		push(grouping_stack, lookahead);
-
-		//Now we must see a valid conditional expression
-		status = conditional_expression(fl);
-
-		//fail out
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Finally we must see a closing paren
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//If we don't see it
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after conditional expression", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Double check that we matched
-		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise we're good to go
-	
-	} else if(lookahead.tok == BREAK){
-		//Grab the next toekn because we could have "break when"
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//If we have continue when
-		if(lookahead.tok != WHEN){
-			//Regular continue here, go to semicolon
-			push_back_token(fl, lookahead);
-			//TODO handle accordingly
-			goto semicol;
-		}
-
-		//Otherwise, we must see parenthesis here
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail out
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after when keyword", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Push to stack for later
-		push(grouping_stack, lookahead);
-
-		//Now we must see a valid conditional expression
-		status = conditional_expression(fl);
-
-		//fail out
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid conditional expression in continue when statement", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Finally we must see a closing paren
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//If we don't see it
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after conditional expression", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Double check that we matched
-		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise we're good to go
-
-	} else if(lookahead.tok == RET){
-		//A return statement can have an expression at the end
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//We may just have a semicolon here
-		if(lookahead.tok == SEMICOLON){
-			//TODO handle
-			return 1;
-		}
-
-		//Otherwise we must see a valid expression
-		push_back_token(fl, lookahead);
-
-		//Now we must see a valid conditional-expression
-		status = conditional_expression(fl);
-
-		//If we fail
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid conditional expression in ret statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		//otherwise we're all set
-	}
-
-semicol:
-	//We now must see a semicolon
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of statement", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise all went well
-	return 1;
 }
 
 

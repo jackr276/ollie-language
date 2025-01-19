@@ -235,6 +235,34 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_IF_STMT;
 			break;
 
+		//Jump statement node
+		case AST_NODE_CLASS_JUMP_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(jump_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_JUMP_STMT;
+			break;
+
+		//Break statement node
+		case AST_NODE_CLASS_BREAK_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(break_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_BREAK_STMT;
+			break;
+
+		//Continue statement node
+		case AST_NODE_CLASS_CONTINUE_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(continue_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_CONTINUE_STMT;
+			break;
+
+		//Ret statement node
+		case AST_NODE_CLASS_RET_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(ret_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_RET_STMT;
+			break;
+
 		//Generic error node
 		case AST_NODE_CLASS_ERR_NODE:
 			//Just assign that it is an error and get out
