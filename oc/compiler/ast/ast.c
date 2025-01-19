@@ -200,6 +200,14 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_ENUM_MEMBER;
 			break;
 
+		//Expression statement AST node
+		case AST_NODE_CLASS_EXPR_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(expression_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_EXPR_STMT;
+			break;
+
+
 		//Generic error node
 		case AST_NODE_CLASS_ERR_NODE:
 			//Just assign that it is an error and get out

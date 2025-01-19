@@ -73,6 +73,8 @@ typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
 typedef struct enum_member_ast_node_t enum_member_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
+//An AST node for expression statements
+typedef struct expression_stmt_ast_node_t expression_stmt_ast_node_t;
 
 
 //What type is in the AST node?
@@ -102,6 +104,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ENUM_DEFINER,
 	AST_NODE_CLASS_ENUM_MEMBER_LIST,
 	AST_NODE_CLASS_ENUM_MEMBER,
+	AST_NODE_CLASS_EXPR_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -294,6 +297,12 @@ struct enum_member_list_ast_node_t{
 struct enum_member_ast_node_t{
 	//Hold the associate symtable record
 	symtab_variable_record_t* member_var;
+};
+
+//An expression statement node
+struct expression_stmt_ast_node_t{
+	//The inferred type
+	generic_type_t* inferred_type;
 };
 
 /**

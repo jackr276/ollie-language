@@ -14,7 +14,6 @@
 
 #include "parser.h"
 #include <cmath>
-#include <locale>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -3103,86 +3102,106 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 
 
 /**
- * A parameter list will always be the child of a function node. It is important to note
- * that the <parameter-declaration> function is responsible for verifying and storing
- * each individual parameter in the parameter list, this function does not perform
- * that duty
+ * A paramater list will handle all of the parameters in a function definition. It is important
+ * to note that a parameter list may very well be empty, and that this rule will handle that case.
+ * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
  *
- * <parameter-list> ::= <parameter-declaration><parameter-list-prime>
- * 					  | epsilon
+ * <parameter-list> ::= <parameter-declaration> { ,<parameter-declaration>}*
  */
-u_int8_t parameter_list(FILE* fl, generic_ast_node_t* parent){
+static generic_ast_node_t* parameter_list(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
-	//Let's now create the parameter list node and add it into the tree
+	//Let's now create the parameter list node
 	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST);
+	//Initially no params
+	((param_list_ast_node_t*)(param_list_node->node))->num_params = 0;
 
-	//This will be the child of the function node
-	add_child_node(parent, param_list_node);
-
-	//There are two options that we have here. We can have an entirely blank
-	//parameter list. 
+	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
+	//done here and we'll just return an empty list
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we see an R_PAREN, it's blank so we'll just leave
+	//If it's an R_PAREN, we'll just leave
 	if(lookahead.tok == R_PAREN){
-		//Put it back for checking by the caller
+		//Return the list node
 		push_back_token(fl, lookahead);
-		return 1;
-	} else {
-		//Otherwise we'll put the token back and keep going
-		push_back_token(fl, lookahead);
+		return param_list_node;
 	}
 
-	//First, we must see a valid parameter declaration. Here, the parent will be the
-	//parameter list
-	status = parameter_declaration(fl, param_list_node);
-	
-	//If we didn't see a valid one
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "Invalid parameter declaration in parameter list", current_line);
-		num_errors++;
-		return 0;
-	}
+	//We'll keep going as long as we see more commas
+	do{
+		//We must first see a valid parameter declaration
+		generic_ast_node_t* param_decl = parameter_declaration(fl);
 
-	//Again here the parent is the parameter list node
-	return parameter_list_prime(fl, param_list_node);
+		//It's invalid, we'll just send it up the chain
+		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//It's already an error so send it on up
+			return param_decl;
+		}
+
+		//Add this in as a child node
+		add_child_node(param_list_node, param_decl);
+
+		//Otherwise it was valid, so we've seen one more parameter
+		(((param_list_ast_node_t*)(param_list_node->node))->num_params)++;
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num);
+
+	//We keep going as long as we see commas
+	} while(lookahead.tok == COMMA);
+
+	//Once we make it here, we know that we don't have another comma. We'll put it back
+	//for the caller to handle
+	push_back_token(fl, lookahead);
+
+	//Now we're done here, so we'll just give the root node back
+	return param_list_node;
 }
 
 
 /**
+ * An expression statement can optionally have an expression in it. Like all rules, it returns 
+ * a reference to the root of the subtree it creates
+ *
  * BNF Rule: <expression-statement> ::= {<expression>}?;
  */
-static u_int8_t expression_statement(FILE* fl){
+static generic_ast_node_t* expression_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//The lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
-	//Let's see if we have a semicolon
+	//No matter what, we will always have an expression statement node here 
+	generic_ast_node_t* expr_stmt_node = ast_node_alloc(AST_NODE_CLASS_EXPR_STMT);
+
+	//Let's see if we have a semicolon. If we do, we'll just jump right out
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Empty expression, we're done here
 	if(lookahead.tok == SEMICOLON){
-		return 1;
+		//Blank statement, simply leave
+		return expr_stmt_node;
 	}
 
 	//Otherwise, put it back and call expression
 	push_back_token(fl, lookahead);
 	
-	//We now must see a valid expression
-	status = expression(fl);
+	//Now we know that it's not empty, so we have to see a valid expression
+	generic_ast_node_t* expr_node = expression(fl);
 
-	//Fail case
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid expression discovered", current_line);
-		num_errors++;
-		return 0;
+	//If this fails, the whole thing is over
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//It's already an error, so just send it back up
+		return expr_node;
 	}
+
+	//Otherwise this actually did work, so we'll add it to the parent
+	add_child_node(expr_stmt_node, expr_node);
+
+	//TODO ADD TYPE INFERENCE
 
 	//Now to close out we must see a semicolon
 	//Let's see if we have a semicolon
@@ -3192,11 +3211,12 @@ static u_int8_t expression_statement(FILE* fl){
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after statement", current_line);
 		num_errors++;
-		return 0;
+		//Create and send back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Otherwise we're all set
-	return 1;
+	return expr_stmt_node;
 }
 
 
@@ -4024,7 +4044,7 @@ static u_int8_t iterative_statement(FILE* fl){
  * 						   | <if-statement> 
  * 						   | <switch-statement> 
  * 						   | <iterative-statement> 
- * 						   | <jump-statement>
+ * 						   | <branch-statement>
  */
 static u_int8_t statement(FILE* fl){
 	//Freeze the line number
