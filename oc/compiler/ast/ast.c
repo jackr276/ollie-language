@@ -298,6 +298,33 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_COMPOUND_STMT;
 			break;
 
+		//A declare statement node
+		case AST_NODE_CLASS_DECL_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(decl_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_DECL_STMT;
+			break;
+
+		//A let statement node
+		case AST_NODE_CLASS_LET_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(let_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_LET_STMT;
+			break;
+
+		//A define statement node
+		case AST_NODE_CLASS_DEF_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(def_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_DEF_STMT;
+			break;
+
+		//An alias statement node
+		case AST_NODE_CLASS_ALIAS_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(alias_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_ALIAS_STMT;
+			break;
 
 		//Generic error node
 		case AST_NODE_CLASS_ERR_NODE:

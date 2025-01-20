@@ -4661,424 +4661,44 @@ static generic_ast_node_t* alias_statement(FILE* fl){
 
 /**
  * A declaration is a pass through rule that does not itself initialize a node. Instead, it will pass down to
- * the appropriate rule here and let them initialize the rule. The declaration itself does have a parent node,
- * so it will need to pass that parent node down through to these rules here
+ * the appropriate rule here and let them initialize the rule. Like all rules in a system, the declaration returns
+ * a reference to the root node that it created
  *
  * <declaration> ::= <declare-statement> 
  * 				   | <let-statement> 
  * 				   | <define-statement> 
  * 				   | <alias-statement>
  */
-static u_int8_t declaration(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static generic_ast_node_t* declaration(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
-	//Generic status currently
-	u_int8_t status = 0;
-	//What is the storage class of our variable?
-	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
-	//Keep track if it's a const or not
-	u_int8_t is_constant = 0;
-	//The type that we have
-	basic_type_t type;
-	//The var name
-	char var_name[100];
-	//Wipe it
-	memset(var_name, 0, 100*sizeof(char));
 
-	//Grab the token
+	//We will multiplex based on what we see with the lookahead
+	//This rule also consumes the first token that it sees, so all downstream
+	//rules must account for that
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Handle declaration
+	//We have a declare statement
 	if(lookahead.tok == DECLARE){
-		//We can optionally see the constant keyword here
-		lookahead = get_next_token(fl, &parser_line_num);
-		
-		//If it's constant we'll simply set the flag
-		if(lookahead.tok == CONSTANT){
-			is_constant = 1;
-			//Refresh lookahead
-			lookahead = get_next_token(fl, &parser_line_num);
-		}
-		//Otherwise we'll keep the same token for our uses
-
-		//Now we can optionally see storage class specifiers here
-		//If we see one here
-		if(lookahead.tok == STATIC){
-			storage_class = STORAGE_CLASS_STATIC;
-		//Would make no sense so fail out
-		} else if(lookahead.tok == EXTERNAL){
-			//TODO
-			print_parse_message(PARSE_ERROR, "External variables are not yet supported", current_line);
-			num_errors++;
-			return 0;
-		} else if(lookahead.tok == REGISTER){
-			storage_class = STORAGE_CLASS_REGISTER;
-		} else {
-			//Otherwise, put the token back and get out
-			push_back_token(fl, lookahead);
-			storage_class = STORAGE_CLASS_NORMAL;
-		}
-	
-		//Now we must see a valid type specifier
-		status = type_specifier(fl);
-
-		//fail case
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid type given to declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we can optionally see several pointers
-		//Just let this do its thing
-		pointer(fl);
-
-		//Then we must see a direct declarator
-		status = direct_declarator(fl);
-
-		//fail case
-		if(status == 0){
-			num_errors++;
-			return 0;
-		}
-
-		//Let's check if we can actually find it
-		symtab_variable_record_t* found_var = lookup_variable(variable_symtab, current_ident->lexeme);
-
-		//Can we grab it
-		if(found_var != NULL){
-			print_parse_message(PARSE_ERROR, "Illegal variable redefinition. First defined here:", current_line);
-			print_variable_name(found_var);
-			num_errors++;
-			return 0;
-		}
-
-		//Ollie language also does not allow duplicate function names
-		symtab_function_record_t* found_func = lookup_function(function_symtab, current_ident->lexeme);
-
-		//Can we grab it
-		if(found_func != NULL){
-			print_parse_message(PARSE_ERROR, "Variables may not share the same names as functions. First defined here:", current_line);
-			print_function_name(found_func);
-			num_errors++;
-			return 0;
-		}
-
-		//Ollie language also does not allow duplicated type names
-		symtab_type_record_t* found_type = lookup_type(type_symtab, current_ident->lexeme);
-
-		//Can we grab it
-		if(found_type != NULL){
-			print_parse_message(PARSE_ERROR, "Variables may not share the same names as types. First defined here:", current_line);
-			print_type_name(found_type);
-			num_errors++;
-			return 0;
-		}
-		//Otherwise we're in the clear here
-
-		//Otherwise all should have gone well here, so we can construct our declaration
-		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
-		//It was not initialized
-		var->initialized = 0;
-		//What's the type
-		var->type = active_type;
-		//The current line
-		var->line_number = current_line;
-		//Not a function param
-		var->is_function_paramater = 0;
-		//Was made using DECLARE(0)
-		var->declare_or_let = 0;
-		
-		//Store for our uses
-		insert_variable(variable_symtab, var);
-
-		//Now once we make it here, we need to see a SEMICOL
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail out
-		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
-			//Free the active type condition
-			num_errors++;
-			return 0;
-		}
-
-		//Once we make it here, we know it worked
-		active_type = NULL;
-		free(current_ident);
-		current_ident = NULL;
-
-		return 1;
-
-	//Handle declaration + assignment
+		return declare_statement(fl);
+	//We have a let statement
 	} else if(lookahead.tok == LET){
-		//We can optionally see the constant keyword here
-		lookahead = get_next_token(fl, &parser_line_num);
-		
-		//If it's constant we'll simply set the flag
-		if(lookahead.tok == CONSTANT){
-			is_constant = 1;
-			//Refresh lookahead
-			lookahead = get_next_token(fl, &parser_line_num);
-		}
-		//Otherwise we'll keep the same token for our uses
-
-		//Now we can optionally see storage class specifiers here
-		//If we see one here
-		if(lookahead.tok == STATIC){
-			storage_class = STORAGE_CLASS_STATIC;
-		//Would make no sense so fail out
-		} else if(lookahead.tok == EXTERNAL){
-			//TODO
-			print_parse_message(PARSE_ERROR, "External variables are not yet supported", current_line);
-			num_errors++;
-			return 0;
-		} else if(lookahead.tok == REGISTER){
-			storage_class = STORAGE_CLASS_REGISTER;
-		} else {
-			//Otherwise, put the token back and get out
-			push_back_token(fl, lookahead);
-			storage_class = STORAGE_CLASS_NORMAL;
-		}
-
-		//Now we must see a valid type specifier
-		status = type_specifier(fl);
-
-		//fail case
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid type given to declaration", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we can optionally see several pointers
-		//Just let this do its thing
-		pointer(fl);
-
-		//Then we must see a direct declarator
-		status = direct_declarator(fl);
-
-		//fail case
-		if(status == 0){
-			num_errors++;
-			return 0;
-		}
-
-		//Let's check if we can actually find it
-		symtab_variable_record_t* found = lookup_variable(variable_symtab, current_ident->lexeme);
-
-		if(found != NULL){
-			print_parse_message(PARSE_ERROR, "Illegal variable redefinition. First defined here:", current_line);
-			print_variable_name(found);
-			num_errors++;
-			return 0;
-		}
-
-		//Ollie language also does not allow duplicate function names
-		symtab_function_record_t* found_func = lookup_function(function_symtab, current_ident->lexeme);
-
-		//Can we grab it
-		if(found_func != NULL){
-			print_parse_message(PARSE_ERROR, "Variables may not share the same names as functions. First defined here:", current_line);
-			print_function_name(found_func);
-			num_errors++;
-			return 0;
-		}
-
-		//Ollie language also does not allow duplicated type names
-		symtab_type_record_t* found_type = lookup_type(type_symtab, current_ident->lexeme);
-
-		//Can we grab it
-		if(found_type != NULL){
-			print_parse_message(PARSE_ERROR, "Variables may not share the same names as types. First defined here:", current_line);
-			print_type_name(found_type);
-			num_errors++;
-			return 0;
-		}
-		//Otherwise we're in the clear here
-
-		//Otherwise all should have gone well here, so we can construct our declaration
-		symtab_variable_record_t* var = create_variable_record(current_ident->lexeme, storage_class);
-		//It should be initialized in this case
-		var->initialized = 1;
-		//What's the type
-		var->type = active_type;
-		//The current line
-		var->line_number = current_line;
-		//Not a function param
-		var->is_function_paramater = 0;
-		//Was made using LET(1) 
-		var->declare_or_let = 1;
-		
-		//Store for our uses
-		insert_variable(variable_symtab, var);
-
-		//Now we need to see a valid := initializer;
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail out
-		if(lookahead.tok != COLONEQ){
-			print_parse_message(PARSE_ERROR, "Assignment operator(:=) expected in let statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Now we have to see a valid initializer
-		status = initializer(fl);
-
-		//Fail out
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid initialization in let statement", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//TODO NEED MANY MORE TYPE CHECKS HERE
-
-		//Now once we make it here, we need to see a SEMICOL
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail out
-		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of declaration", current_line);
-			//Free the active type condition
-			num_errors++;
-			return 0;
-		}
-
-		//Once we make it here, we know it worked
-		free(current_ident);
-		active_type = NULL;
-		current_ident = NULL;
-
-		return 1;
-
-	//Handle type definition. This works for enum types and structure types 
+		return let_statement(fl);
+	//We have a define statement
 	} else if(lookahead.tok == DEFINE){
-		//Now let's see what kind of definition that we have
-		lookahead = get_next_token(fl, &parser_line_num);
-		
-		//Enumerated type
-		if(lookahead.tok == ENUMERATED){
-			//Go through an do an enumeration defintion
-			status = enumeration_definer(fl);
-			
-			//Fail case
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid enumeration defintion given",  current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//Otherwise we'll add into the symtable
-			insert_type(type_symtab, create_type_record(active_type));
-
-		//Constructed type
-		} else if(lookahead.tok == CONSTRUCT){
-			//Go through and do a construct definition
-			status = construct_definer(fl);
-			
-			//Fail case
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid construct definition given",  current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//Otherwise we'll add into the symtable
-			insert_type(type_symtab, create_type_record(active_type));
-		}
-
-		//We must see a semicol to round things out
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//If we see the as keyword, we are doing a type alias
-		//Ollie language supports type aliases immediately upon definition
-		if(lookahead.tok == AS){
-			//We now must see a valid IDENT
-			status = identifier(fl);
-
-			//If we don't see that, we're out of here
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
-				num_errors++;
-				return 0;
-			}
-			//Otherwise it worked, our ident is now stored in current_ident
-
-			//Let's do some checks to ensure that we don't have duplicate names
-			//Let's check if we can actually find it
-			symtab_variable_record_t* found = lookup_variable(variable_symtab, current_ident->lexeme);
-
-			if(found != NULL){
-				print_parse_message(PARSE_ERROR, "Aliases and variables may not share names. First defined here:", current_line);
-				print_variable_name(found);
-				num_errors++;
-				return 0;
-			}
-
-			//Ollie language also does not allow duplicate function names
-			symtab_function_record_t* found_func = lookup_function(function_symtab, current_ident->lexeme);
-
-			//Can we grab it
-			if(found_func != NULL){
-				print_parse_message(PARSE_ERROR, "Aliases may not share the same names as functions. First defined here:", current_line);
-				print_function_name(found_func);
-				num_errors++;
-				return 0;
-			}
-
-			//Ollie language also does not allow duplicated type names
-			symtab_type_record_t* found_type = lookup_type(type_symtab, current_ident->lexeme);
-
-			//Can we grab it
-			if(found_type != NULL){
-				print_parse_message(PARSE_ERROR, "Aliases may not share the same names as previously defined types/aliases. First defined here:", current_line);
-				print_type_name(found_type);
-				num_errors++;
-				return 0;
-			}
-			//Otherwise we're in the clear here
-			
-			//Store this for now
-			generic_type_t* temp = active_type;
-
-			//Create the aliased type
-			active_type = create_aliased_type(current_ident->lexeme, temp, parser_line_num);
-
-			//Put into the symtab now
-			insert_type(type_symtab, create_type_record(active_type));
-
-		} else {
-			//Put it back, no alias
-			push_back_token(fl, lookahead);
-		}
-	
-		//Finally we need to see a semicol here
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Automatic fail case
-		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of definition statement", parser_line_num);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise it worked so we can leave
-		return 1;
-
-	//Alias statement
+		return define_statement(fl);
+	//We have an alias statement
 	} else if(lookahead.tok == ALIAS){
-
-		return 0;
-
-	//We had some failure here
+		return alias_statement(fl);
+	//Otherwise we have some weird error here
 	} else {
-		print_parse_message(PARSE_ERROR, "Declare, let, define or alias keyword expected in declaration block", current_line);
+		sprintf(info, "Saw \"%s\" when let, define, declare or alias was expected", lookahead.lexeme);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 }
 
