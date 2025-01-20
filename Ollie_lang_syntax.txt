@@ -30,7 +30,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <parameter-declaration> ::= {constant}? <type-specifier> <identifier>
 
-<declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <declarator>;
+<declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <identifier>;
 
 <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <declarator> := <conditional-expression>;
 
@@ -76,9 +76,9 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 			  | <while-statement>
 			  | <branch-statement>
 
-<while-statement> ::= while( <expression> ) do <compound-statement>
+<while-statement> ::= while( <conditional-expression> ) do <compound-statement>
 
-<do-while-statement> ::= do <compound-statement> while( <expression> );
+<do-while-statement> ::= do <compound-statement> while( <conditional-expression> );
 
 <for-statement> ::= for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
  

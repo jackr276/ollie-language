@@ -4040,8 +4040,88 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  * BNF Rule: <while-statement> ::= while( <conditional-expression> ) do <compound-statement> 
  */
 static generic_ast_node_t* while_statement(FILE* fl){
+	//Freeze the current line number
+	u_int16_t current_line = parser_line_num;
 	//The lookahead token
 	Lexer_item lookahead;
+
+	//First create the actual node
+	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_CLASS_WHILE_STMT);
+
+	//We already have seen the while keyword, so now we need to see parenthesis surrounding a conditional expression
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//Fail out if we don't see
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected after while keyword", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Push it to the stack for later matching
+	push(grouping_stack, lookahead);
+
+	//Now we need to see a valid conditional block in here
+	generic_ast_node_t* conditional_expr = conditional_expression(fl);
+
+	//Fail out if this happens
+	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid expression in while statement",  parser_line_num);
+		num_errors++;
+		//It's already an error so just give this back
+		return conditional_expr;
+	}
+
+	//Otherwise we know it's good so we can add it in as a child
+	add_child_node(while_stmt_node, conditional_expr);
+
+	//After this point we need to see a right paren
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail if we don't see it
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Expected right parenthesis after conditional expression",  parser_line_num);
+		num_errors++;
+		//Create and give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We also need to check for matching
+	if(pop(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now that we've made it all the way here, we need to see the do keyword
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Instant fail if not
+	if(lookahead.tok != DO){
+		print_parse_message(PARSE_ERROR, "Do keyword expected before compound expression in while statement", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Following this, we need to see a valid compound statement, and then we're done
+	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+
+	//If this is invalid we fail
+	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid compound statement in while expression", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we'll add it in as a child
+	add_child_node(while_stmt_node, compound_stmt_node);
+
+	//And we'll return the root reference
+	return while_stmt_node;
 }
 
 
@@ -4163,6 +4243,91 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 }
 
+
+/**
+ * A compound statement is denoted by the {} braces, and can decay in to 
+ * statements and declarations
+ *
+ * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
+ */
+static u_int8_t compound_statement(FILE* fl){
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
+	Lexer_item lookahead;
+	u_int8_t status = 0;
+
+	//When we get here, we absolutely must see a cury brace
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail case
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Opening curly brace expected to begin compound statement", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//We'll push this guy onto the stack for later
+	push(grouping_stack, lookahead);
+	//TODO change the lexical scope here
+	
+	//Grab the next token to search
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Now we keep going until we see the closing curly brace
+	while(lookahead.tok != R_CURLY && lookahead.tok != DONE){
+		//If we see this we know that we have a declaration
+		if(lookahead.tok == LET || lookahead.tok == DECLARE || lookahead.tok == DEFINE){
+			//Push it back
+			push_back_token(fl, lookahead);
+
+			//Hand it off to the declaration function
+			status = declaration(fl);
+			
+			//If we fail here just leave
+			if(status == 0){
+				//print_parse_message(PARSE_ERROR, "Invalid declaration found in compound statement", current_line);
+				num_errors++;
+				return 0;
+			}
+			//Otherwise we're all good
+		} else {
+			//Put the token back
+			push_back_token(fl, lookahead);
+
+			//In the other case, we must see a statement here
+			status = statement(fl);
+
+			//If we failed
+			if(status == 0){
+				//print_parse_message(PARSE_ERROR, "Invalid statement found in compound statement", current_line);
+				num_errors++;
+				return 0;
+			}
+			//Otherwise we're all good
+		}
+
+		//Grab the next token to refresh the search
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//We ran off the end, common fail case
+	if(lookahead.tok == DONE){
+		print_parse_message(PARSE_ERROR, "No closing curly brace given to compound statement", current_line);
+		num_errors++;
+		return 0;
+	}
+	
+	//When we make it here, we know that we have an R_CURLY in the lookahead
+	//Let's check to see if the grouping went properly
+	if(pop(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected inside of compound statement", current_line);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise everything worked here
+	return 1;
+}
 
 
 /**
@@ -4316,116 +4481,12 @@ static generic_ast_node_t* statement(FILE* fl){
 
 
 /**
- * A compound statement is denoted by the {} braces, and can decay in to 
- * statements and declarations
- *
- * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
- */
-static u_int8_t compound_statement(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//When we get here, we absolutely must see a cury brace
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Fail case
-	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Opening curly brace expected to begin compound statement", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//We'll push this guy onto the stack for later
-	push(grouping_stack, lookahead);
-	//TODO change the lexical scope here
-	
-	//Grab the next token to search
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Now we keep going until we see the closing curly brace
-	while(lookahead.tok != R_CURLY && lookahead.tok != DONE){
-		//If we see this we know that we have a declaration
-		if(lookahead.tok == LET || lookahead.tok == DECLARE || lookahead.tok == DEFINE){
-			//Push it back
-			push_back_token(fl, lookahead);
-
-			//Hand it off to the declaration function
-			status = declaration(fl);
-			
-			//If we fail here just leave
-			if(status == 0){
-				//print_parse_message(PARSE_ERROR, "Invalid declaration found in compound statement", current_line);
-				num_errors++;
-				return 0;
-			}
-			//Otherwise we're all good
-		} else {
-			//Put the token back
-			push_back_token(fl, lookahead);
-
-			//In the other case, we must see a statement here
-			status = statement(fl);
-
-			//If we failed
-			if(status == 0){
-				//print_parse_message(PARSE_ERROR, "Invalid statement found in compound statement", current_line);
-				num_errors++;
-				return 0;
-			}
-			//Otherwise we're all good
-		}
-
-		//Grab the next token to refresh the search
-		lookahead = get_next_token(fl, &parser_line_num);
-	}
-
-	//We ran off the end, common fail case
-	if(lookahead.tok == DONE){
-		print_parse_message(PARSE_ERROR, "No closing curly brace given to compound statement", current_line);
-		num_errors++;
-		return 0;
-	}
-	
-	//When we make it here, we know that we have an R_CURLY in the lookahead
-	//Let's check to see if the grouping went properly
-	if(pop(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected inside of compound statement", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise everything worked here
-	return 1;
-}
-
-/**
  * A declarator has an optional pointer type and is followed by a direct declarator
  *
  * BNF Rule: <declarator> ::= {<pointer>}? <direct-declarator>
+ * TODO NO LONGER REFLECTED
  */
-static u_int8_t declarator(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	u_int8_t status = 0;
-
-	//We can see pointers here
-	status = pointer(fl);
-
-	//If we see any pointers, handle them accordingly TODO
-	
-	//Now we must see a valid direct declarator
-	status = direct_declarator(fl);
-	
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid direct declarator found in declarator", current_line);
-		num_errors++;
-		return 0;
-	}
-
-	//Otherwise we're all set so return 1
-	return 1;
+static generic_ast_node_t* declarator(FILE* fl){
 }
 
 
@@ -4434,7 +4495,7 @@ static u_int8_t declarator(FILE* fl){
  * be added as the child of the given parent node. A declare statement also performs all
  * needed type/repetition checks 
  *
- * BNF Rule: <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <declarator>;
+ * BNF Rule: <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <identifier>;
  */
 static u_int8_t declare_statement(FILE* fl, generic_ast_node_t* parent_node){
 
