@@ -109,6 +109,8 @@ typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 typedef struct def_stmt_ast_node_t def_stmt_ast_node_t;
 //An AST node for let statements
 typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
+//An AST node for storage class specifiers
+typedef struct storage_class_spec_ast_node_t storage_class_spec_ast_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
@@ -119,6 +121,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_DEF_STMT,
 	AST_NODE_CLASS_FUNC_DEF,
 	AST_NODE_CLASS_FUNC_SPECIFIER,
+	AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER,
 	AST_NODE_CLASS_PARAM_LIST,
 	AST_NODE_CLASS_CONSTANT,
 	AST_NODE_CLASS_PARAM_DECL,
@@ -459,6 +462,12 @@ struct let_stmt_ast_node_t{
 struct def_stmt_ast_node_t{
 	//Hold the record of the type that we defined
 	symtab_type_record_t* defined_type;
+};
+
+//Storage class specifier for variables
+struct storage_class_spec_ast_node_t{
+	//Hold the associated token
+	Token specifier;
 };
 
 /**

@@ -4613,13 +4613,73 @@ static generic_ast_node_t* statement(FILE* fl){
 
 
 /**
+ * A storage class specifier stores compiler directive about how a variable is to be stored.
+ * Like all nodes, this node returns a reference to the root node that it creates
+ *
+ * IMPORTANT NOTE: This rule is unique in that it is NULLABLE. It will return NULL if it cannot
+ * find anything. This is the caller's responsibility to handle
+ *
+ * BNF Rule: <storage-class-specifier> ::= static 
+ * 										 | external 
+ * 										 | register
+ */
+static generic_ast_node_t* storage_class_specifier(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//Let's see what we have
+	lookahead = get_next_token(fl,  &parser_line_num);
+
+	//If we have a valid lookahead
+	if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL || lookahead.tok == REGISTER){
+		//Construct and return our node
+		generic_ast_node_t* storage_class_spec = ast_node_alloc(AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER);
+
+		//Add the token that we have into here
+		((storage_class_spec_ast_node_t*)(storage_class_spec->node))->specifier = lookahead.tok;
+
+		//We're all set, just return this node
+		return storage_class_spec;
+	//Otherwise, we'll put the token back and return NULL
+	} else{
+		//Return to the stream
+		push_back_token(fl, lookahead);
+		//Return NULL - CALLER'S RESPONSIBILITY TO HANDLE
+		return NULL;
+	}
+}
+
+
+/**
  * A declare statement is always the child of an overall declaration statement, so it will
  * be added as the child of the given parent node. A declare statement also performs all
- * needed type/repetition checks 
+ * needed type/repetition checks. Like all rules, this function returns a reference to the root
+ * node that it's created.
+ * 
+ * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
  * BNF Rule: <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <identifier>;
  */
 static generic_ast_node_t* declare_statement(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+	//Is it constant or not?
+	u_int8_t is_constant = 0;
+
+	//We can first optionally see the constant node
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see it, we'll just set the flag
+	if(lookahead.tok == CONSTANT){
+		is_constant = 1;
+	} else {
+		//Otherwise just put it back
+		push_back_token(fl, lookahead);
+	}
+
+	//Now we can optionally see a storage class specifier here
+
+
 	//placeholder
 	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
@@ -4632,7 +4692,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <identifier> := <initializer>;
+ * BNF Rule: <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <declarator> := <initializer>;
  */
 static generic_ast_node_t* let_statement(FILE* fl){
 	//placeholder
