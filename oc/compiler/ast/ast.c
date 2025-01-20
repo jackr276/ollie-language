@@ -270,6 +270,27 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_SWITCH_STMT;
 			break;
 
+		//While statement node
+		case AST_NODE_CLASS_WHILE_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(while_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_WHILE_STMT;
+			break;
+
+		//Do-while statement node
+		case AST_NODE_CLASS_DO_WHILE_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(do_while_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_DO_WHILE_STMT;
+			break;
+
+		//For statement node
+		case AST_NODE_CLASS_FOR_STMT:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(for_stmt_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_FOR_STMT;
+			break;
+
 		//Generic error node
 		case AST_NODE_CLASS_ERR_NODE:
 			//Just assign that it is an error and get out

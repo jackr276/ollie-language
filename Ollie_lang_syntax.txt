@@ -32,7 +32,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <declarator>;
 
-<let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <declarator> := <initializer>;
+<let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <declarator> := <conditional-expression>;
 
 <storage-class-specifier> ::= static
 							| external
@@ -71,20 +71,18 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 			  | <compound-statement>
 			  | <if-statement>
 			  | <switch-statement>
-			  | <iterative-statement>
+			  | <for-statement>
+			  | <do-while-statement>
+			  | <while-statement>
 			  | <branch-statement>
 
-<iterative-statement> ::= <while-statement>
-						| <do-while-statement>
-						| <for-statement>
-
-<while-statement> ::= while( <expression> ) do <compound-statement> 
+<while-statement> ::= while( <expression> ) do <compound-statement>
 
 <do-while-statement> ::= do <compound-statement> while( <expression> );
 
 <for-statement> ::= for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
  
-<switch-statement> ::= switch on( <expression> ) {<labeled-statement> <statement>}+
+<switch-statement> ::= switch on( <conditional-expression> ) {<labeled-statement> <statement>}+
 
 <branch-statement> ::= <jump-statement>
 					 | <continue-statement>

@@ -4031,301 +4031,45 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 }
 
 
+/**
+ * A while statement simply ensures that the check is executed before the body. Like all other rules, this
+ * function returns a reference to the root node of the subtree that it creates
+ *
+ * NOTE: By the time that we make it here, we assume that we have already seen the while keyword
+ *
+ * BNF Rule: <while-statement> ::= while( <expression> ) do <compound-statement> 
+ */
+static generic_ast_node_t* while_statement(FILE* fl){
+	//The lookahead token
+	Lexer_item lookahead;
+}
+
 
 /**
- * Iterative statements encompass while, for and do while loops
+ * A do-while statement ensures that the body is executes once before the condition is checked. Like all other
+ * rules, this function returns a reference to the root node of the subtree that it creates
  *
- * BNF Rule: <iterative-statement> ::= while( <expression> ) do <compound-statement> 
- * 									 | do <compound-statement> while( <expression> );
- * 									 | for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
+ * NOTE: By the time we get here, we assume that we've already seen the "do" keyword
+ *
+ * BNF Rule: <do-while-statement> ::= do <compound-statement> while( <expression> );
  */
-static u_int8_t iterative_statement(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
+static generic_ast_node_t* do_while_statement(FILE* fl){
 
-	//Let's see what kind we have here
-	lookahead = get_next_token(fl, &parser_line_num);
-	
-	//If we have a while loop
-	if(lookahead.tok == WHILE){
-		//We must then see parenthesis
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail case
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Push to stack for later
-		push(grouping_stack, lookahead);
-
-		//Now we must see a valid expression
-		status = expression(fl);
-
-		//Invalid one
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid expression in switch statement", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we must see a closing paren
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail case
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Unmatched parenthesis
-		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we must see a do keyword
-		lookahead = get_next_token(fl, &parser_line_num);
-		
-		//If we don't see it
-		if(lookahead.tok != DO){
-			print_parse_message(PARSE_ERROR, "Do keyword expected after expression in while loop", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Following that, we must see a valid compound statement
-		status = compound_statement(fl);
-
-		//Last fail case
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement in while loop", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise it worked so
-		return 1;
-
-	//Do while loop
-	} else if(lookahead.tok == DO){
-		//We must immediately see a valid compound statement
-		status = compound_statement(fl);
-
-		//Fail out
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement in do while loop", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we have to see the while keyword
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail out
-		if(lookahead.tok != WHILE){
-			print_parse_message(PARSE_ERROR, "While keyword expected in do while loop", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//We must then see parenthesis
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail case
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Push to stack for later
-		push(grouping_stack, lookahead);
-
-		//Now we must see a valid expression
-		status = expression(fl);
-
-		//Invalid one
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid expression in switch statement", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we must see a closing paren
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail case
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Unmatched parenthesis
-		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Finally we need to see a semicolon
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Final fail case
-		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected at the end of statement", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise it all worked here
-		return 1;
-
-	//For loop case
-	} else if(lookahead.tok == FOR){
-		//We must then see parenthesis
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail case
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Push to stack for later
-		push(grouping_stack, lookahead);
-
-		//Now we can either see an expression or a SEMICOL
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//We must then see an expression
-		if(lookahead.tok != SEMICOLON){
-			//Put it back and find the expression
-			push_back_token(fl, lookahead);
-
-			status = expression(fl);
-
-			//Fail case
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid expression found in for loop", current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//Now we do have to see a semicolon
-			lookahead = get_next_token(fl, &parser_line_num);
-
-			if(lookahead.tok != SEMICOLON){
-				print_parse_message(PARSE_ERROR, "Semicolon expected after expression in for loop", current_line);
-				num_errors++;
-				return 0;
-			}
-		}
-
-		//Otherwise it was a semicolon and we have no expression
-		//We'll now repeat the exact process for the second one
-		//Now we can either see an expression or a SEMICOL
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//We must then see an expression
-		if(lookahead.tok != SEMICOLON){
-			//Put it back and find the expression
-			push_back_token(fl, lookahead);
-
-			status = expression(fl);
-
-			//Fail case
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid expression found in for loop", current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//Now we do have to see a semicolon
-			lookahead = get_next_token(fl, &parser_line_num);
-
-			if(lookahead.tok != SEMICOLON){
-				print_parse_message(PARSE_ERROR, "Semicolon expected after expression in for loop", current_line);
-				num_errors++;
-				return 0;
-			}
-		}
-
-		//Otherwise it was a semicolon and we have no expression
-		
-		//Finally we can see a third expression or a closing paren
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Let's see if there's a final expression
-		if(lookahead.tok != R_PAREN){
-			//Put it back for the search
-			push_back_token(fl, lookahead);
-
-			status = expression(fl);
-
-			//Fail case
-			if(status == 0){
-				print_parse_message(PARSE_ERROR, "Invalid expression found in for loop", current_line);
-				num_errors++;
-				return 0;
-			}
-
-			//Now we need to see an R_PAREN
-			lookahead = get_next_token(fl, &parser_line_num);
-
-			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Closing parenthesis expected", current_line);
-				num_errors++;
-				return 0;
-			}
-		}
-
-		//Once we get here, we know that we had an R_PAREN
-		//Let's now check for matching
-		if(pop(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Now we need to see the do keyword
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//Fail out here
-		if(lookahead.tok != DO){
-			print_parse_message(PARSE_ERROR, "Do keyword expected in for loop", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise if we get here, the last thing that we need to see is a valid compound statement
-		status = compound_statement(fl);
-		
-		//Fail case
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement found in iterative statement", current_line);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise we're all set
-		return 1;
-
-	//Some weird error
-	} else {
-		print_parse_message(PARSE_ERROR, "Invalid keyword used for iterative statement", current_line); 
-		num_errors++;
-		return 0;
-	}
 }
+
+
+/**
+ * A for statement is the classic for loop that you'd expect. Like all other rules, this rule returns
+ * a reference to the root of the subtree that it creates
+ * 
+ * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
+ *
+ * BNF Rule: <for-statement> ::= for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
+ */
+static generic_ast_node_t* for_statement(FILE* fl){
+
+}
+
 
 
 /**
@@ -4339,7 +4083,7 @@ static u_int8_t iterative_statement(FILE* fl){
  * 						   | <iterative-statement> 
  * 						   | <branch-statement>
  */
-static u_int8_t statement(FILE* fl){
+static generic_ast_node_t* statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	Lexer_item lookahead;
@@ -4562,150 +4306,6 @@ static u_int8_t compound_statement(FILE* fl){
 	//Otherwise everything worked here
 	return 1;
 }
-
-
-/**
- * A prime rule that allows us to avoid left recursion
- * 
- * REMEMBER: By the time we arrive here, we've already seen the comma
- *
- * BNF Rule: <initializer-list-prime> ::= , <initializer><initializer-list-prime>
- */
-static u_int8_t initializer_list_prime(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We must first see a valid initializer
-	status = initializer(fl);
-
-	//Invalid here
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list", current_line);
-		num_errors++;
-		return 0;
-	}
-	
-	//Otherwise we may be able to see a comma and chain the initializer lists
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a comma we know to chain with intializer list prime
-	if(lookahead.tok == COMMA){
-		return initializer_list_prime(fl);
-	} else {
-		//Put it back and leave
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
- * An initializer list is a series of initializers chained together
- *
- * BNF Rule: <initializer-list> ::= <initializer><initializer-list-prime>
- */
-static u_int8_t initializer_list(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//We must first see a valid initializer
-	status = initializer(fl);
-
-	//Invalid here
-	if(status == 0){
-		//print_parse_message(PARSE_ERROR, "Invalid initializer in initializer list", current_line);
-		num_errors++;
-		return 0;
-	}
-	
-	//Otherwise we may be able to see a comma and chain the initializer lists
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a comma we know to chain with intializer list prime
-	if(lookahead.tok == COMMA){
-		return initializer_list_prime(fl);
-	} else {
-		//Put it back and leave
-		push_back_token(fl, lookahead);
-		return 1;
-	}
-}
-
-
-/**
- * An initializer can descend into a conditional expression or an initializer list
- *
- * BNF Rule: <initializer> ::= <conditional-expression> 
- * 							| { <intializer-list> }
- */
-static u_int8_t initializer(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
-	Lexer_item lookahead;
-	u_int8_t status = 0;
-
-	//Let's see what we have in front
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a left curly, we know that we have an intializer list
-	if(lookahead.tok == L_CURLY){
-		//Push to stack for checking
-		push(grouping_stack, lookahead);
-
-		//Now we just see a valid initializer list
-		u_int8_t status = initializer_list(fl);
-
-		//Fail out here
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid initializer list in initializer", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Now we have to see a closing curly
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//If we don't see it
-		if(lookahead.tok != R_CURLY){
-			print_parse_message(PARSE_ERROR, "Closing curly brace expected after initializer list", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Unmatched curlies here
-		if(pop(grouping_stack).tok != L_CURLY){
-			print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked so we can get out
-		return 1;
-
-	//If we didn't see the curly, we must see a conditional expression
-	} else {
-		//Put the token back
-		push_back_token(fl, lookahead);
-
-		//Must work here
-		status = conditional_expression(fl);
-
-		//Fail out if we get here
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid conditional expression found in initializer", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked, so return 1
-		return 1;
-	}
-}
-
 
 /**
  * A declarator has an optional pointer type and is followed by a direct declarator

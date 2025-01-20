@@ -93,7 +93,12 @@ typedef struct continue_stmt_ast_node_t continue_stmt_ast_node_t;
 typedef struct ret_stmt_ast_node_t ret_stmt_ast_node_t;
 //An AST node for switch statements
 typedef struct switch_stmt_ast_node_t switch_stmt_ast_node_t;
-
+//An AST node for while statements
+typedef struct while_stmt_ast_node_t while_stmt_ast_node_t;
+//An AST node for do-while statements
+typedef struct do_while_stmt_ast_node_t do_while_stmt_ast_node_t;
+//An AST node for for statements
+typedef struct for_stmt_ast_node_t for_stmt_ast_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
@@ -132,6 +137,9 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CONTINUE_STMT,
 	AST_NODE_CLASS_RET_STMT,
 	AST_NODE_CLASS_SWITCH_STMT,
+	AST_NODE_CLASS_WHILE_STMT,
+	AST_NODE_CLASS_DO_WHILE_STMT,
+	AST_NODE_CLASS_FOR_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -389,6 +397,25 @@ struct switch_stmt_ast_node_t{
 	//Just hold status for now
 	u_int8_t status;
 };
+
+//A while statement
+struct while_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status;
+};
+
+//A do-while statement
+struct do_while_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status;
+};
+
+//A for statement
+struct for_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status;
+};
+
 
 /**
  * Global node allocation function
