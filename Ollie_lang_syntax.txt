@@ -80,7 +80,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <do-while-statement> ::= do <compound-statement> while( <conditional-expression> );
 
-<for-statement> ::= for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
+<for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<conditional-expression>}? ; {<conditional-expression>}? ) do <compound-statement>
  
 <switch-statement> ::= switch on( <conditional-expression> ) {<labeled-statement> <statement>}+
 

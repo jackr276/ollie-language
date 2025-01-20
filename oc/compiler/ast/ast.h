@@ -97,6 +97,8 @@ typedef struct switch_stmt_ast_node_t switch_stmt_ast_node_t;
 typedef struct while_stmt_ast_node_t while_stmt_ast_node_t;
 //An AST node for do-while statements
 typedef struct do_while_stmt_ast_node_t do_while_stmt_ast_node_t;
+//An AST node for compound statements
+typedef struct compound_stmt_ast_node_t compound_stmt_ast_node_t;
 //An AST node for for statements
 typedef struct for_stmt_ast_node_t for_stmt_ast_node_t;
 
@@ -140,6 +142,7 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_WHILE_STMT,
 	AST_NODE_CLASS_DO_WHILE_STMT,
 	AST_NODE_CLASS_FOR_STMT,
+	AST_NODE_CLASS_COMPOUND_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -412,6 +415,12 @@ struct do_while_stmt_ast_node_t{
 
 //A for statement
 struct for_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status;
+};
+
+//A compound statement
+struct compound_stmt_ast_node_t{
 	//Just hold status for now
 	u_int8_t status;
 };

@@ -4237,7 +4237,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for( {<expression>}? ; {<expression>}? ; {<expression>}? ) do <compound-statement>
+ * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<conditional-expression>}? ; {<conditional-expression>}? ) do <compound-statement>
  */
 static generic_ast_node_t* for_statement(FILE* fl){
 
@@ -4246,92 +4246,112 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 /**
  * A compound statement is denoted by the {} braces, and can decay in to 
- * statements and declarations
+ * statements and declarations. It also represents the start of a brand new
+ * lexical scope for types and variables. Like all rules, this rule returns
+ * a reference to the root node that it creates
+ *
+ * NOTE: We assume that we have NOT consumed the { token by the time we make
+ * it here
  *
  * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
  */
-static u_int8_t compound_statement(FILE* fl){
-	//Freeze the line number
+static generic_ast_node_t* compound_statement(FILE* fl){
+	//Let's also freeze the current line number
 	u_int16_t current_line = parser_line_num;
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
-	//When we get here, we absolutely must see a cury brace
+	//We must first see a left curly
 	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Fail case
+	
+	//If we don't see one, we fail out
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Opening curly brace expected to begin compound statement", current_line);
+		print_parse_message(PARSE_ERROR, "Left curly brace required at beginning of compound statement", parser_line_num);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//We'll push this guy onto the stack for later
+	//Push onto the grouping stack so we can check matching
 	push(grouping_stack, lookahead);
-	//TODO change the lexical scope here
-	
-	//Grab the next token to search
+
+	//Now if we make it here, we're safe to create the actual node
+	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
+	//Begin a new lexical scope for types and variables
+	initialize_type_scope(type_symtab);
+	initialize_variable_scope(variable_symtab);
+
+	//Now we can keep going until we see a closing curly
+	//We'll seed the search
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Now we keep going until we see the closing curly brace
-	while(lookahead.tok != R_CURLY && lookahead.tok != DONE){
-		//If we see this we know that we have a declaration
-		if(lookahead.tok == LET || lookahead.tok == DECLARE || lookahead.tok == DEFINE){
-			//Push it back
+	//So long as we don't reach the end
+	while(lookahead.tok != R_CURLY){
+		//We can choose between a declaration or a statement
+		//All these keywords indicate a declaraion
+		if(lookahead.tok == DECLARE || lookahead.tok == LET || lookahead.tok == ALIAS
+		  || lookahead.tok == DEFINE){
+			//We'll let the actual rule handle it, so push the token back
 			push_back_token(fl, lookahead);
 
-			//Hand it off to the declaration function
-			status = declaration(fl);
-			
-			//If we fail here just leave
-			if(status == 0){
-				//print_parse_message(PARSE_ERROR, "Invalid declaration found in compound statement", current_line);
-				num_errors++;
-				return 0;
+			//We now need to see a valid version
+			generic_ast_node_t* declaration_node = declaration(fl);
+
+			//If it's invalid, we pass right through, no error printing
+			if(declaration_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+				//It's already an error, so just send it back up
+				return declaration_node;
 			}
-			//Otherwise we're all good
+
+			//Otherwise it's worked just fine, so we'll add it in as a child
+			add_child_node(compound_stmt_node, declaration_node);
+
+		//Otherwise, we need to see a statement of some kind
 		} else {
-			//Put the token back
+			//Put whatever we saw back
 			push_back_token(fl, lookahead);
+			
+			//We now need to see a valid statement
+			generic_ast_node_t* stmt_node = statement(fl);
 
-			//In the other case, we must see a statement here
-			status = statement(fl);
-
-			//If we failed
-			if(status == 0){
-				//print_parse_message(PARSE_ERROR, "Invalid statement found in compound statement", current_line);
-				num_errors++;
-				return 0;
+			//If it's invalid we'll pass right through, no error printing
+			if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+				//Send it right back
+				return stmt_node;
 			}
-			//Otherwise we're all good
-		}
 
-		//Grab the next token to refresh the search
+			//Otherwise, we'll add it as a child node
+			add_child_node(compound_stmt_node, stmt_node);
+		}
+		
+		//Whatever happened, once we get here we need to refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
-	//We ran off the end, common fail case
-	if(lookahead.tok == DONE){
-		print_parse_message(PARSE_ERROR, "No closing curly brace given to compound statement", current_line);
-		num_errors++;
-		return 0;
-	}
-	
-	//When we make it here, we know that we have an R_CURLY in the lookahead
-	//Let's check to see if the grouping went properly
+	//Once we've escaped out of the while loop, we know that the token we currently have
+	//is an R_CURLY
+	//We still must check for matching
 	if(pop(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected inside of compound statement", current_line);
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Otherwise everything worked here
-	return 1;
+	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
+	//"finalize" both of these scopes
+	finalize_type_scope(type_symtab);
+	finalize_variable_scope(variable_symtab);
+
+	//And we're all done, so we'll return the reference to the root node
+	return compound_stmt_node;
 }
 
 
 /**
- * A statement is a kind of multiplexing rule that just determines where we need to go to
+ * A statement is a kind of multiplexing rule that just determines where we need to go to. Like all rules in the parser,
+ * this function returns a reference to the the root node that it creates, even though that actual root node is created 
+ * further down the chain
  *
  * BNF Rule: <statement> ::= <labeled-statement> 
  * 						   | <expression-statement> 
@@ -4481,16 +4501,6 @@ static generic_ast_node_t* statement(FILE* fl){
 
 
 /**
- * A declarator has an optional pointer type and is followed by a direct declarator
- *
- * BNF Rule: <declarator> ::= {<pointer>}? <direct-declarator>
- * TODO NO LONGER REFLECTED
- */
-static generic_ast_node_t* declarator(FILE* fl){
-}
-
-
-/**
  * A declare statement is always the child of an overall declaration statement, so it will
  * be added as the child of the given parent node. A declare statement also performs all
  * needed type/repetition checks 
@@ -4506,7 +4516,7 @@ static u_int8_t declare_statement(FILE* fl, generic_ast_node_t* parent_node){
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
  * performs type checking and inference and all needed symbol table manipulation
  *
- * BNF Rule: <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <declarator> := <initializer>;
+ * BNF Rule: <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <identifier> := <initializer>;
  */
 static u_int8_t let_statement(FILE* fl, generic_ast_node_t* parent_node){
 
