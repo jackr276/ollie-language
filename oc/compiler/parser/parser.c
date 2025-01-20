@@ -4553,144 +4553,73 @@ static generic_ast_node_t* compound_statement(FILE* fl){
  * 						   | <compound-statement> 
  * 						   | <if-statement> 
  * 						   | <switch-statement> 
- * 						   | <iterative-statement> 
+ * 						   | <for-statement> 
+ * 						   | <do-while-statement> 
+ * 						   | <while-statement> 
  * 						   | <branch-statement>
  */
 static generic_ast_node_t* statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+	//Lookahead token
 	Lexer_item lookahead;
-	u_int8_t status = 0;
 
 	//Let's grab the next item and see what we have here
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we have a compound statement
-	if(lookahead.tok == L_CURLY){
-		//We'll put the curly back and let compound statement handle it
+	//If we see a label ident, we know we're seeing a labeled statement
+	if(lookahead.tok == LABEL_IDENT || lookahead.tok == CASE || lookahead.tok == DEFAULT){
+		//This rule relies on these tokens, so we'll push them back
 		push_back_token(fl, lookahead);
-		
-		//Let compound statement handle it
-		status = compound_statement(fl);
-
-		//If it fails
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid compound statement found in statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked so get out
-		return 1;
-
-	//If we see a labeled statement
-	} else if(lookahead.tok == LABEL_IDENT || lookahead.tok == CASE || lookahead.tok == DEFAULT){
-		//Put it back for the actual rule to handle
+	
+		//Just return whatever the rule gives us
+		return labeled_statement(fl);
+	
+	//If we see an L_CURLY, we are seeing a compound statement
+	} else if(lookahead.tok == L_CURLY){
+		//The rule relies on it, so put it back
 		push_back_token(fl, lookahead);
-		
-		//Let this handle it
-		status = labeled_statement(fl);
 
-		//If it fails
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid labeled statement found in statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked so get out
-		return 1;
+		//Return whatever the rule gives us
+		return compound_statement(fl);
+	
+	//If we see for, we are seeing a for statement
+	} else if(lookahead.tok == FOR){
+		//This rule relies on for already being consumed, so we won't put it back
+		return for_statement(fl);
 
-	//If statement
-	} else if(lookahead.tok == IF){
-		//Put it back for the actual rule to handle
-		push_back_token(fl, lookahead);
-		
-		//Let this handle it
-		status = if_statement(fl);
+	//While statement
+	} else if(lookahead.tok == WHILE){
+		//This rule relies on while already being consumed, so we won't put it back
+		return while_statement(fl);
 
-		//If it fails
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid if statement found in statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked so get out
-		return 1;
+	//Do while statement
+	} else if(lookahead.tok == DO){
+		//This rule relies on do already being consumed, so we won't put it back
+		return do_while_statement(fl);
 
 	//Switch statement
 	} else if(lookahead.tok == SWITCH){
-		//Put it back for the actual rule to handle
-		push_back_token(fl, lookahead);
-		
-		//Let this handle it
-		status = switch_statement(fl);
+		//This rule relies on switch already being consumed, so we won't put it back
+		return switch_statement(fl);
 
-		//If it fails
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid switch statement found in statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked so get out
-		return 1;
+	//If statement
+	} else if(lookahead.tok == IF){
+		//This rule relies on if already being consumed, so we won't put it back
+		return switch_statement(fl);
 
-	//Jump statement
+	//Some kind of branch statement
 	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
-			 || lookahead.tok == RET){
-		//Put it back for the actual rule to handle
+			|| lookahead.tok == RET){
+		//The branch rule needs these, so we'll put them back
 		push_back_token(fl, lookahead);
-		
-		//Let this handle it
-		status = jump_statement(fl);
-
-		//If it fails
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid jump statement found in statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked so get out
-		return 1;
-
-	//Iterative statement
-	} else if(lookahead.tok == DO || lookahead.tok == WHILE || lookahead.tok == FOR){
-		//Put it back for the actual rule to handle
-		push_back_token(fl, lookahead);
-		
-		//Let this handle it
-		status = iterative_statement(fl);
-
-		//If it fails
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid iterative statement found in statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked so get out
-		return 1;
-
-	//Otherwise we just have the generic expression rule here
+		//return whatever this gives us
+		return branch_statement(fl);
 	} else {
-		//Put it back for the actual rule to handle
+		//Otherwise, this is some kind of expression statement. We'll put the token back and
+		//return that
 		push_back_token(fl, lookahead);
-		
-		//Let this handle it
-		status = expression_statement(fl);
-
-		//If it fails
-		if(status == 0){
-			//print_parse_message(PARSE_ERROR, "Invalid expression statement found in statement", current_line);
-			num_errors++;
-			return 0;
-		}
-		
-		//Otherwise it worked so get out
-		return 1;
+		return expression_statement(fl);
 	}
 }
 
