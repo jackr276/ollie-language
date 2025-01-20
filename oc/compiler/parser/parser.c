@@ -4037,7 +4037,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  *
  * NOTE: By the time that we make it here, we assume that we have already seen the while keyword
  *
- * BNF Rule: <while-statement> ::= while( <expression> ) do <compound-statement> 
+ * BNF Rule: <while-statement> ::= while( <conditional-expression> ) do <compound-statement> 
  */
 static generic_ast_node_t* while_statement(FILE* fl){
 	//The lookahead token
@@ -4051,10 +4051,103 @@ static generic_ast_node_t* while_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we assume that we've already seen the "do" keyword
  *
- * BNF Rule: <do-while-statement> ::= do <compound-statement> while( <expression> );
+ * BNF Rule: <do-while-statement> ::= do <compound-statement> while( <conditional-expression> );
  */
 static generic_ast_node_t* do_while_statement(FILE* fl){
+	//Freeze the current line number
+	u_int16_t current_line = parser_line_num;
+	//Lookahead token
+	Lexer_item lookahead;
 
+	//Let's first create the overall global root node
+	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT);
+
+	//Remember by the time that we've gotten here, we have already seen the do keyword
+	//Let's first find a valid compound statement
+	generic_ast_node_t* compound_stmt = compound_statement(fl);
+
+	//If we fail, then we are done here
+	if(compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid compound statement given to do-while statement", current_line);
+		num_errors++;
+		//It's already an error, so just give it back
+		return compound_stmt;
+	}
+
+	//Otherwise we know that it was valid, so we can add it in as a child of the root
+	add_child_node(do_while_stmt_node, compound_stmt);
+
+	//Once we get past the compound statement, we need to now see the while keyword
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see it, instant failure
+	if(lookahead.tok != WHILE){
+		print_parse_message(PARSE_ERROR, "Expected while keyword after block in do-while statement", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Once we've made it here, we now need to see a left paren
+	lookahead = get_next_token(fl, &parser_line_num);
+	
+	//Fail out if we don't see
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected after while keyword", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Push it to the stack for later matching
+	push(grouping_stack, lookahead);
+
+	//Now we need to see a valid conditional block in here
+	generic_ast_node_t* conditional_expr = conditional_expression(fl);
+
+	//Fail out if this happens
+	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid expression in while part of do-while statement",  parser_line_num);
+		num_errors++;
+		//It's already an error so just give this back
+		return conditional_expr;
+	}
+
+	//Otherwise we know it's good so we can add it in as a child
+	add_child_node(do_while_stmt_node, conditional_expr);
+
+	//After this point we need to see a right paren
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail if we don't see it
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Expected right parenthesis after conditional expression",  parser_line_num);
+		num_errors++;
+		//Create and give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We also need to check for matching
+	if(pop(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally we need to see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see one, final chance to fail
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of do while statement", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Otherwise if we made it here, everything went well
+	return do_while_stmt_node;
 }
 
 
