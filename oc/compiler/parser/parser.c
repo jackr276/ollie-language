@@ -150,8 +150,7 @@ static generic_ast_node_t* label_identifier(FILE* fl){
  * 						  | <char-constant>
  */
 static generic_ast_node_t* constant(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	//Lookahead token
 	Lexer_item lookahead;
 	
 	//We should see one of the 4 constants here
@@ -2494,11 +2493,11 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	char* alias_name = ((identifier_ast_node_t*)(alias_ident->node))->identifier;
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -2508,11 +2507,11 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -2522,11 +2521,11 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	found_type = lookup_type(type_symtab, name);
+	found_type = lookup_type(type_symtab, alias_name);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -2540,7 +2539,7 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	add_child_node(enum_def_node, alias_ident);
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(name, enum_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -2872,10 +2871,6 @@ static generic_ast_node_t* type_name(FILE* fl){
  * BNF Rule: <type-specifier> ::= <type-name>{<type-address-specifier>}*
  */
 static generic_ast_node_t* type_specifier(FILE* fl){
-	//For error printing
-	char info[2000];
-	//Freeze the current line
-	u_int8_t current_line = parser_line_num;
 	//Lookahead var
 	Lexer_item lookahead;
 
@@ -2898,8 +2893,6 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 	add_child_node(type_spec_node, name_node);
 
 	//Now once we make it here, we know that we have a name that actually exists in the symtab
-	//Let's grab out some info to make things easier
-	char* type_name = ((type_name_ast_node_t*)(name_node->node))->type_name;
 	//The current type record is what we will eventually point our node to
 	symtab_type_record_t* current_type_record = ((type_name_ast_node_t*)(name_node->node))->type_record;
 	
@@ -3014,8 +3007,6 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//For any needed error printing
 	char info[2000];
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
 	//Is it constant? No by default
 	u_int8_t is_constant = 0;
 	//Lookahead token
@@ -3119,6 +3110,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	param_record->is_function_paramater = 1;
 	//We assume that it was initialized
 	param_record->initialized = 1;
+	//Record if it's constant
+	param_record->is_constant = is_constant;
 	//Store the type as well, very important
 	param_record->type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
 
@@ -3141,8 +3134,6 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
  * <parameter-list> ::= <parameter-declaration> { ,<parameter-declaration>}*
  */
 static generic_ast_node_t* parameter_list(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -4041,8 +4032,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  * BNF Rule: <while-statement> ::= while( <conditional-expression> ) do <compound-statement> 
  */
 static generic_ast_node_t* while_statement(FILE* fl){
-	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
 	//The lookahead token
 	Lexer_item lookahead;
 
@@ -4451,8 +4440,6 @@ static generic_ast_node_t* for_statement(FILE* fl){
  * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
  */
 static generic_ast_node_t* compound_statement(FILE* fl){
-	//Let's also freeze the current line number
-	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -4559,8 +4546,6 @@ static generic_ast_node_t* compound_statement(FILE* fl){
  * 						   | <branch-statement>
  */
 static generic_ast_node_t* statement(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
 
