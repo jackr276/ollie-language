@@ -4617,6 +4617,8 @@ static generic_ast_node_t* statement(FILE* fl){
  * BNF Rule: <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <identifier>;
  */
 static generic_ast_node_t* declare_statement(FILE* fl){
+	//placeholder
+	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
 }
 
@@ -4630,7 +4632,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
  * BNF Rule: <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <identifier> := <initializer>;
  */
 static generic_ast_node_t* let_statement(FILE* fl){
-
+	//placeholder
+	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 }
 
 
@@ -4643,7 +4646,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
  * BNF Rule: <define-statement> ::= define <complex-type-definer> {as <alias-identifer>}?;
  */
 static generic_ast_node_t* define_statement(FILE* fl){
-
+	//placeholder
+	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 }
 
 
@@ -4655,7 +4659,8 @@ static generic_ast_node_t* define_statement(FILE* fl){
  * BNF Rule: *<alias-statement> ::= alias <type-specifier> as <identifier>;
  */
 static generic_ast_node_t* alias_statement(FILE* fl){
-
+	//placeholder
+	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 }
 
 
@@ -4704,12 +4709,13 @@ static generic_ast_node_t* declaration(FILE* fl){
 
 
 /**
- * A function specifier has two options, the rule merely exists for AST integration
+ * A function specifier has two options, external or static. These will not be directly handled
+ * by this rule, but we do return a node that holds what it is. This rule is entered
+ * after we have seen the ":" keyword. Like all rules, this one returns a reference to the root
+ * node of the function that it creates
  *
- * ALWAYS A CHILD
  */
-static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
-
+static generic_ast_node_t* function_specifier(FILE* fl){
 	//We need to see static or external keywords here
 	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
 	
@@ -4728,18 +4734,15 @@ static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
 			((func_specifier_ast_node_t*)(node->node))->function_storage_class = STORAGE_CLASS_EXTERNAL;
 		}
 
-		//This node is always a child of a parent node. Accordingly so, we'll use the
-		//helper function to attach it
-		add_child_node(parent_node, node);
-
-		//Succeeded
-		return 1;
+		//We succeeded, so just return the node that we have
+		return node;
 
 	//Fail case here
 	} else {
 		print_parse_message(PARSE_ERROR, "STATIC or EXTERNAL keywords expected after colon in function declaration", parser_line_num);
 		num_errors++;
-		return 0;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 }
 
@@ -4754,30 +4757,21 @@ static u_int8_t function_specifier(FILE* fl, generic_ast_node_t* parent_node){
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
-static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
+static generic_ast_node_t* function_definition(FILE* fl){
 	//This will be used for error printing
 	char info[2000];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	//The status tracker
-	u_int8_t status = 0;
 	//Lookahead token
 	Lexer_item lookahead;
-	//We will define a cursor that we will use to walk the children of the function node
-	//as the function's subtree is built. This will allow us to incrementally move up
-	//as opposed to doing it all at once
-	generic_ast_node_t* cursor = NULL;
 
 	//What is the function's storage class? Normal by default
-	STORAGE_CLASS_T storage_class;
+	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
 
 	//We also have the AST function node, this will be intialized immediately
 	//It also requires a symtab record of the function, but this will be assigned
 	//later once we have it
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF);
-
-	//The function node will be a child of the parent, so we'll add it in as such
-	add_child_node(parent_node, function_node);
 
 	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4785,28 +4779,20 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 	//We've seen the option function specifier
 	if(lookahead.tok == COLON){
 		//If we see this, we must then see a valid function specifier
-		status = function_specifier(fl, function_node);
+		generic_ast_node_t* func_spec_node = function_specifier(fl);
 
 		//Invalid function specifier -- error out
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Invalid function specifier seen after \":\"",  current_line);
-			return 0;
+		if(func_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Error will already be printed, simply fail out
+			//It's already an error, so just give it back
+			return func_spec_node;
 		}
 
-		//Refresh current line
-		current_line = parser_line_num;
-		
-		//At this point we can initialize the cursor
-		cursor = function_node->first_child;
-
-		//Largely for dev usage
-		if(cursor == NULL || cursor->CLASS != AST_NODE_CLASS_FUNC_SPECIFIER){
-			print_parse_message(PARSE_ERROR, "Fatal internal parse error. Expected function specifier node as child", current_line);
-			return 0;
-		}
+		//Otherwise if we get here, this will be the first child of the function node
+		add_child_node(function_node, func_spec_node);
 
 		//Also stash this for later use
-		storage_class = ((func_specifier_ast_node_t*)(cursor->node))->function_storage_class;
+		storage_class = ((func_specifier_ast_node_t*)(func_spec_node->node))->function_storage_class;
 
 	//Otherwise it's a plain function so put the token back
 	} else {
@@ -4816,67 +4802,68 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 		storage_class = STORAGE_CLASS_NORMAL;
 	}
 
-	//Now we must see an identifer
-	status = identifier(fl, function_node);
+	//Now we must see a valid identifier as the name
+	generic_ast_node_t* ident_node = identifier(fl);
 
-	//We have no identifier, so we must quit
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "No valid identifier found for function", current_line);
+	//If we have a failure here, we're done for
+	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid name given as function name", current_line);
 		num_errors++;
-		return 0;
+		//It's already an error, so just give it back
+		return ident_node;
 	}
 
-	//Now we can actually grab the identifier out. This next sibling should be an ident
-	cursor = cursor->next_sibling;
-	
-	//For dev use
-	if(cursor == NULL || cursor->CLASS != AST_NODE_CLASS_IDENTIFER){
-		print_parse_message(PARSE_ERROR, "Fatal internal parse error. Expected identifier node as next sibling", current_line);
-		return 0;
-	}
-
-	//This in theory should be an ident node
-	identifier_ast_node_t* ident = cursor->node;
+	//Otherwise, we could still have a failure here if this is any kind of duplicate
+	//Grab a reference for convenience
+	char* function_name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
 
 	//Let's now do all of our checks for duplication before we go any further. This can
 	//save us time if it ends up being bad
 	
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
-	symtab_function_record_t* found_function = lookup_function(function_symtab, ident->identifier); 
+	symtab_function_record_t* found_function = lookup_function(function_symtab, function_name); 
 
+	//Fail out if found
 	if(found_function != NULL){
 		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name);
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_function_name(found_function);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Check for duplicated variables
-	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, ident->identifier); 
+	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name); 
 
+	//Fail out if duplicate is found
 	if(found_variable != NULL){
 		sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name);
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_variable_name(found_variable);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Check for duplicated type names
-	symtab_type_record_t* found_type = lookup_type(type_symtab, ident->identifier); 
+	symtab_type_record_t* found_type = lookup_type(type_symtab, function_name); 
 
+	//Fail out if duplicate has been found
 	if(found_type != NULL){
 		sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name);
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_type_name(found_type);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start
-	//it
-	symtab_function_record_t* function_record = create_function_record(ident->identifier, storage_class);
+	//Once we make it here we know that the ident was good, so we can add it in as a child
+	add_child_node(function_node, ident_node);
+
+	//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
+	symtab_function_record_t* function_record = create_function_record(function_name, storage_class);
 	//Associate this with the function node
 	((func_def_ast_node_t*)function_node->node)->func_record = function_record;
 
@@ -4885,9 +4872,10 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 
 	//If we didn't find it, no point in going further
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected", current_line);
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", current_line);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Otherwise, we'll push this onto the list to check for later
@@ -4900,68 +4888,62 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	status = parameter_list(fl, function_node);
+	generic_ast_node_t* param_list_node = parameter_list(fl);
 
 	//We have a bad parameter list
-	if(status == 0){
-		print_parse_message(PARSE_ERROR, "No valid parameter list found for function", current_line);
+	if(param_list_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid parameter list given in function declaration", current_line);
 		num_errors++;
-		return 0;
+		//It's already an error, so just send it back up
+		return param_list_node;
 	}
+
+	//We'll hold off on addind it as a child until we see valid closing parenthesis
 	
 	//Now we need to see a valid closing parenthesis
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we don't have an R_Paren that's an issue
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected", current_line);
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected after parameter list", current_line);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 	
 	//If this happens, then we have some unmatched parenthesis
 	if(pop(grouping_stack).tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Unmatched parenthesis found", current_line);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
 	//now parse the param_list and store records to it	
-	//Advance the cursor to its next sibling
+	//Let's first add the param list in as a child
+	add_child_node(function_node, param_list_node);
 	
-	//If it's not null, there is a parameter list
-	if(cursor->next_sibling != NULL){
-		//Advance the cursor
-		cursor = cursor->next_sibling;
+	//Let's now iterate over the parameter list and add the parameter records into the function 
+	//record for ease of access later
+	generic_ast_node_t* param_list_cursor = param_list_node->first_child;
 
-		//Some very weird error here
-		if(cursor->CLASS != AST_NODE_CLASS_PARAM_LIST){
-			print_parse_message(PARSE_ERROR, "Fatal internal parse error. Expected parameter list node as next sibling", current_line);
-			return 0;
-		}
+	//So long as this is not null
+	while(param_list_cursor != NULL){
+		//The variable record for this param node
+		symtab_variable_record_t* param_rec = ((param_decl_ast_node_t*)(param_list_node->node))->param_record;
 
-		//The actual parameters are children of the param list cursor
-		generic_ast_node_t* param_cursor = cursor->first_child;
+		//We'll add it in as a reference to the function
+		function_record->func_params[function_record->number_of_params].associate_var = param_rec;
+		//Increment the parameter count
+		(function_record->number_of_params)++;
 
-		//Now we'll walk the param list
-		while(param_cursor != NULL){
-			function_record->func_params[function_record->number_of_params] = ((param_decl_ast_node_t*)(param_cursor->node))->param_record;
-			function_record->number_of_params++;
-			
-			//If this happens get out
-			if(function_record->number_of_params > 6){
-				print_parse_message(PARSE_ERROR, "Ollie language restricts parameter numbers to 6 due to register constraints", current_line);
-				num_errors++;
-				return 0;
-			}
-			//Move it up
-			param_cursor = param_cursor->next_sibling;
-		}
+		//Push the cursor up by 1
+		param_list_cursor = param_list_cursor->next_sibling;
 	}
-	
-	//Once we get down here, the cursor should be precisely poised
-	
+
+	//Once we get down here, the entire parameter list has been stored properly
+
 	//Semantics here, we now must see a valid arrow symbol
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -4969,43 +4951,41 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 	if(lookahead.tok != ARROW){
 		print_parse_message(PARSE_ERROR, "Arrow(->) required after parameter-list in function", parser_line_num);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Now if we get here, we must see a valid type specifier
-	//The parent of this will be the function node
-	status = type_specifier(fl, function_node);
+	//The type specifier rule already does existence checking for us
+	generic_ast_node_t* return_type_node = type_specifier(fl);
 
 	//If we failed, bail out
-	if(status == 0){
+	if(return_type_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
 		num_errors++;
-		return 0;
-	}
-
-	//Next sibling must be a type_specifier node
-	cursor = cursor->next_sibling;
-
-	//Dev uses only
-	if(cursor == NULL || cursor->CLASS != AST_NODE_CLASS_TYPE_SPECIFIER){
-		print_parse_message(PARSE_ERROR, "Fatal internal parse error. Expected type specifier node as next sibling", parser_line_num);
-		return 0;
+		//It's already an error, just send it back
+		return return_type_node;
 	}
 
 	//Grab the type record. A reference to this will be stored in the function symbol table
-	symtab_type_record_t* type = ((type_spec_ast_node_t*)(cursor->node))->type_record;
+	symtab_type_record_t* type = ((type_spec_ast_node_t*)(return_type_node->node))->type_record;
 
 	//Store the return type
-	function_record->return_type = type;
+	function_record->return_type = type->type;
 
-	//Once we get here, we must see a valid compound statement. The function node
-	//will be considered the parent of the compound statement
-	status = compound_statement(fl, function_node);
+	//We can also add the return type node in as a child
+	add_child_node(function_node, return_type_node);
 
-	//Not a leaf error, we can just leave
-	if(status == 0){
-		return 0;
+	//We are finally required to see a valid compound statement
+	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+
+	//If this fails we'll just pass it through
+	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		return compound_stmt_node;
 	}
+
+	//If we get here we know that it worked, so we'll add it in as a child
+	add_child_node(function_node, compound_stmt_node);
 
 	//Finally, we'll put the function into the symbol table
 	//since we now know that everything worked
@@ -5015,7 +4995,7 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
 	finalize_variable_scope(variable_symtab);
 
 	//All good so we can get out
-	return 1;
+	return function_node;
 }
 
 
@@ -5030,8 +5010,7 @@ static u_int8_t function_definition(FILE* fl, generic_ast_node_t* parent_node){
  *                        	| <declaration>
  */
 static generic_ast_node_t* declaration_partition(FILE* fl){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	//Lookahead tokn
 	Lexer_item lookahead;
 
 	//Grab the next token
@@ -5072,18 +5051,18 @@ static generic_ast_node_t* program(FILE* fl){
 	start.tok = START;
 	
 	//Create the ROOT of the tree
-	ast_root = ast_node_alloc(AST_NODE_CLASS_PROG);
+	generic_ast_node_t* ast_root = ast_node_alloc(AST_NODE_CLASS_PROG);
 
 	//Assign the lexer item to it for completeness
 	((prog_ast_node_t*)(ast_root->node))->lex = start;
-
-	//We'll keep a temp reference to the pointer that we're working on
-	generic_ast_node_t* current;
 	
 	//As long as we aren't done
 	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
+		//Put the token back
+		push_back_token(fl, lookahead);
+
 		//Call declaration partition
-		current = declaration_partition(fl);
+		generic_ast_node_t* current = declaration_partition(fl);
 
 		//It failed, we'll bail right out if this is the case
 		if(current->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5096,8 +5075,8 @@ static generic_ast_node_t* program(FILE* fl){
 		//And then we'll keep right along
 	}
 
-	//All went well if we get here
-	return 1;
+	//Return the root of the tree
+	return ast_root;
 }
 
 
@@ -5108,6 +5087,7 @@ static generic_ast_node_t* program(FILE* fl){
 u_int8_t parse(FILE* fl){
 	num_errors = 0;
 	double time_spent;
+	u_int16_t status = 0;
 
 	//Start the timer
 	clock_t begin = clock();
@@ -5124,6 +5104,7 @@ u_int8_t parse(FILE* fl){
 	initialize_variable_scope(variable_symtab);
 	//Global variable scope here
 	initialize_type_scope(type_symtab);
+	//Functions only have one scope, need no initialization
 
 	//Add all basic types into the type symtab
 	add_all_basic_types(type_symtab);
@@ -5142,6 +5123,7 @@ u_int8_t parse(FILE* fl){
 
 	//If we failed
 	if(prog->CLASS == AST_NODE_CLASS_ERR_NODE){
+		status = 1;
 		char info[500];
 		sprintf(info, "Parsing failed with %d errors in %.8f seconds", num_errors, time_spent);
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
@@ -5149,6 +5131,7 @@ u_int8_t parse(FILE* fl){
 		printf("%s\n", info);
 		printf("=======================================================================\n\n");
 	} else {
+		status = 0;
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", parser_line_num);
 		printf("Parsing succeeded in %.8f seconds\n", time_spent);
