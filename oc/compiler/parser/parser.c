@@ -3151,6 +3151,9 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 		//Return the list node
 		push_back_token(fl, lookahead);
 		return param_list_node;
+	} else {
+		//Put it back for the search
+		push_back_token(fl, lookahead);
 	}
 
 	//We'll keep going as long as we see more commas
