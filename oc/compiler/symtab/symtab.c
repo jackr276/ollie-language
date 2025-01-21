@@ -434,6 +434,36 @@ symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name)
 	return NULL;
 }
 
+
+/**
+ * Lookup the record in the symtab that corresponds to the following name. This function
+ * will specifically ONLY check the local scope
+ */
+symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab, char* name){
+	//Grab the hash
+	u_int16_t h = hash(name);
+
+	//A cursor for records iterating
+	symtab_variable_record_t* records_cursor;
+
+	//We only deal with the current level
+	records_cursor = symtab->current->records[h];
+	
+	//We could have had collisions so we'll have to hunt here
+	while(records_cursor != NULL){
+		//If we find the right one, then we can get out
+		if(strcmp(records_cursor->var_name, name) == 0){
+			return records_cursor;
+		}
+		//Advance it
+		records_cursor = records_cursor->next;
+	}
+
+	//Otherwise if we get here there's no match, so
+	return NULL;
+}
+
+
 /**
  * Lookup the record in the symtab that corresponds to the following name.
  * 

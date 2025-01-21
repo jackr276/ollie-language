@@ -321,6 +321,12 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
 
 /**
+ * Lookup a variable name in the symtab, only one scope
+ */
+symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab, char* name);
+
+
+/**
  * Lookup a type name in the symtab
  */
 symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name);

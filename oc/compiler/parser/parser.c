@@ -4649,8 +4649,14 @@ static generic_ast_node_t* storage_class_specifier(FILE* fl){
 		//Construct and return our node
 		generic_ast_node_t* storage_class_spec = ast_node_alloc(AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER);
 
-		//Add the token that we have into here
-		((storage_class_spec_ast_node_t*)(storage_class_spec->node))->specifier = lookahead.tok;
+		//Assign this based on what we found
+		if(lookahead.tok == STATIC){
+			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_STATIC;
+		} else if(lookahead.tok == EXTERNAL){
+			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_EXTERNAL;
+		} else {
+			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_REGISTER;
+		}
 
 		//We're all set, just return this node
 		return storage_class_spec;
@@ -4675,10 +4681,17 @@ static generic_ast_node_t* storage_class_specifier(FILE* fl){
  * BNF Rule: <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <identifier>;
  */
 static generic_ast_node_t* declare_statement(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Is it constant or not?
 	u_int8_t is_constant = 0;
+	//The storage class, normal by default
+	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
+
+	//Let's first declare the root node
+	generic_ast_node_t* decl_node = ast_node_alloc(AST_NODE_CLASS_DECL_STMT);
 
 	//We can first optionally see the constant node
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4692,11 +4705,123 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	}
 
 	//Now we can optionally see a storage class specifier here
+	generic_ast_node_t* storage_class_spec_node = storage_class_specifier(fl);
 
+	//Now this node may be null, and if it is we don't have a storage specifier
+	if(storage_class_spec_node != NULL){
+		//There actually was a storage class, so we'll grab it
+		storage_class = ((storage_class_spec_ast_node_t*)(storage_class_spec_node->node))->storage_class;
+		
+		//We'll also add this node in as a child of the root node
+		add_child_node(decl_node, storage_class_spec_node);
+	} 
+	//If it was null, it just won't be the child, which is no big deal
+	
+	//Now we are required to see a valid type specifier
+	generic_ast_node_t* type_spec_node = type_specifier(fl);
 
-	//placeholder
-	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	//If this fails, the whole thing is bunk
+	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier given in declaration", parser_line_num);
+		//It's already an error, so we'll just send it back up
+		return type_spec_node;
+	}
 
+	//We'll now add it in as a child node
+	add_child_node(decl_node, type_spec_node);
+
+	//The last thing before we perform checks is for us to see a valid identifier
+	generic_ast_node_t* ident_node = identifier(fl);
+
+	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given in declaration", parser_line_num);
+		num_errors++;
+		//It's already an error, just give it back
+		return ident_node;
+	}
+
+	//Now we'll add it as a child
+	add_child_node(decl_node, ident_node);
+
+	//The last thing that we are required to see before final assembly is a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required at the end of declaration statement", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Let's get a pointer to the name for convenience
+	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
+
+	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
+	//the same scope may not share names. This is also true regarding functions and types globally
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Check that it isn't some duplicated variable name. We will only check in the
+	//local scope for this one
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
+	//now create the variable record for this function
+	//Initialize the record
+	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
+	//Store its constant status
+	declared_var->is_constant = is_constant;
+	//Store the type
+	declared_var->type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
+	//It was not initialized
+	declared_var->initialized = 0;
+	//It was declared
+	declared_var->declare_or_let = 0;
+
+	//Now that we're all good, we can add it into the symbol table
+	insert_variable(variable_symtab, declared_var);
+
+	//Also store this record with the root node
+	((decl_stmt_ast_node_t*)(decl_node->node))->declared_var = declared_var;
+
+	//All went well so we can return this
+	return decl_node;
 }
 
 

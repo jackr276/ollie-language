@@ -466,8 +466,8 @@ struct def_stmt_ast_node_t{
 
 //Storage class specifier for variables
 struct storage_class_spec_ast_node_t{
-	//Hold the associated token
-	Token specifier;
+	//What storage class is it?
+	STORAGE_CLASS_T storage_class;
 };
 
 /**
