@@ -186,7 +186,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 							//Prepare the token and return it
 							lex_item.tok = F_SLASH;
-							strcpy(lex_item.lexeme, "/");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -200,7 +199,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = PLUSPLUS;
-							strcpy(lex_item.lexeme, "++");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -210,7 +208,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							put_back_char(fl);	
 
 							lex_item.tok = PLUS;
-							strcpy(lex_item.lexeme, "+");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -223,7 +220,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = MINUSMINUS;
-							strcpy(lex_item.lexeme, "--");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -232,7 +228,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = ARROW;
-							strcpy(lex_item.lexeme, "->");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -242,7 +237,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							put_back_char(fl);
 
 							lex_item.tok = MINUS;
-							strcpy(lex_item.lexeme, "-");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -251,7 +245,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					case '*':
 						current_state = IN_START;
 						lex_item.tok = STAR;
-						strcpy(lex_item.lexeme, "*");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
@@ -264,7 +257,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = D_EQUALS;
-							strcpy(lex_item.lexeme, "==");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -272,7 +264,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = ARROW_EQ;
-							strcpy(lex_item.lexeme, "=>");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -282,35 +273,17 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							put_back_char(fl);
 
 							lex_item.tok = EQUALS;
-							strcpy(lex_item.lexeme, "=");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						}
 
 					case '&':
-						ch2 = get_next_char(fl);					
-
-						//If we get this then it's +=
-						if(ch2 == '&'){
-							current_state = IN_START;
-							//Prepare and return
-							lex_item.tok = DOUBLE_AND;
-							strcpy(lex_item.lexeme, "&&");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						} else {
-							current_state = IN_START;
-							//"Put back" the char
-							put_back_char(fl);
-
-							lex_item.tok = AND;
-							strcpy(lex_item.lexeme, "&");
-							lex_item.line_num = line_num;
-							lex_item.char_count = token_char_count;
-							return lex_item;
-						}
+						current_state = IN_START;
+						lex_item.tok = AND;
+						lex_item.line_num = line_num;
+						lex_item.char_count = token_char_count;
+						return lex_item;
 
 					case '|':
 						ch2 = get_next_char(fl);
@@ -319,7 +292,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = DOUBLE_OR;
-							strcpy(lex_item.lexeme, "||");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -328,7 +300,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							//"Put back" the char
 							put_back_char(fl);
 							lex_item.tok = OR;
-							strcpy(lex_item.lexeme, "|");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -336,7 +307,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 					case ';':
 						lex_item.tok = SEMICOLON;
-						strcpy(lex_item.lexeme, ";");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
@@ -344,7 +314,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					case '%':
 						current_state = IN_START;
 						lex_item.tok = MOD;
-						strcpy(lex_item.lexeme, "%");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
@@ -355,7 +324,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = DOUBLE_COLON;
-							strcpy(lex_item.lexeme, "::");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -373,7 +341,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							//Put it back
 							put_back_char(fl);
 							lex_item.tok = COLON;
-							strcpy(lex_item.lexeme, ":");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -381,21 +348,18 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 					case '(':
 						lex_item.tok = L_PAREN;
-						strcpy(lex_item.lexeme, "(");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
 					case ')':
 						lex_item.tok = R_PAREN;
-						strcpy(lex_item.lexeme, ")");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
 					case '^':
 						lex_item.tok = CARROT;
-						strcpy(lex_item.lexeme, "^");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
@@ -409,35 +373,30 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 					case '}':
 						lex_item.tok = R_CURLY;
-						strcpy(lex_item.lexeme, "}");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
 					case '[':
 						lex_item.tok = L_BRACKET;
-						strcpy(lex_item.lexeme, "[");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
 					case ']':
 						lex_item.tok = R_BRACKET;
-						strcpy(lex_item.lexeme, "]");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
 					case '#':
 						lex_item.tok = POUND;
-						strcpy(lex_item.lexeme, "#");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
 					case '@':
 						lex_item.tok = AT;
-						strcpy(lex_item.lexeme, "@");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
@@ -461,7 +420,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							//Put back ch2
 							put_back_char(fl);
 							lex_item.tok = DOT;
-							strcpy(lex_item.lexeme, ".");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -478,7 +436,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 					case '~':
 						lex_item.tok = B_NOT;
-						strcpy(lex_item.lexeme, "~");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
@@ -489,7 +446,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							current_state = IN_START;
 							//Prepare and return
 							lex_item.tok = NOT_EQUALS;
-							strcpy(lex_item.lexeme, "!=");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -498,7 +454,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							//Put it back
 							put_back_char(fl);
 							lex_item.tok = L_NOT;
-							strcpy(lex_item.lexeme, "!");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -558,20 +513,17 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						ch2 = get_next_char(fl);
 						if(ch2 == '<'){
 							lex_item.tok = L_SHIFT;
-							strcpy(lex_item.lexeme, "<<");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else if(ch2 == '=') {
 							lex_item.tok = L_THAN_OR_EQ;
-							strcpy(lex_item.lexeme, "<=");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else {
 							put_back_char(fl);
 							lex_item.tok = L_THAN;
-							strcpy(lex_item.lexeme, "<");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -583,20 +535,17 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						ch2 = get_next_char(fl);
 						if(ch2 == '>'){
 							lex_item.tok = R_SHIFT;
-							strcpy(lex_item.lexeme, ">>");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else if(ch2 == '=') {
 							lex_item.tok = G_THAN_OR_EQ;
-							strcpy(lex_item.lexeme, ">=");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						} else {
 							put_back_char(fl);
 							lex_item.tok = G_THAN;
-							strcpy(lex_item.lexeme, ">");
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -765,8 +714,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 	//Return this token
 	if(ch == EOF){
 		lex_item.tok = DONE;
-		strcpy(lex_item.lexeme, "DONE");
-		lex_item.char_count = 1;
 	}
 
 	return lex_item;

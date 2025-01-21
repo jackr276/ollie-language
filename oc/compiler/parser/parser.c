@@ -418,7 +418,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		return ident;
 
 	//We can also see a constant
-	} else if (lookahead.tok == CONSTANT){
+	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
+			  || lookahead.tok == CHAR_CONST){
 		//Again put the token back
 		push_back_token(fl, lookahead);
 
@@ -450,14 +451,16 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		if(lookahead.tok != R_PAREN){
 			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", parser_line_num);
 			num_errors++;
-			return 0;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
 		//Another fail case, if they're unmatched
 		if(pop(grouping_stack).tok != L_PAREN){
 			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 			num_errors++;
-			return 0;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
 		//If we make it here, return the expression node
@@ -476,7 +479,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 }
 
@@ -921,6 +925,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//Let's check for errors
 		if(cast_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid cast expression given after unary operator", parser_line_num);
 			//If it is bad, we'll just propogate it up the chain
 			return cast_expr;
 		}
@@ -1601,6 +1606,8 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
+	//We'll need two due to our scenario with double and
+ 	Lexer_item lookahead2;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -1618,10 +1625,12 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//There are now two options. If we do not see any &&'s, we just add 
 	//this node in as the child and move along. But if we do see && symbols, 
 	//we will on the fly construct a subtree here
+	//TODO FIXME
 	lookahead = get_next_token(fl, &parser_line_num);
-	
+	lookahead2 = get_next_token(fl, &parser_line_num);
+
 	//As long as we have a double and 
-	while(lookahead.tok == DOUBLE_AND){
+	while(lookahead.tok == AND && lookahead2.tok == AND){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
@@ -1650,10 +1659,15 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
 		lookahead = get_next_token(fl, &parser_line_num);
+		lookahead2 = get_next_token(fl, &parser_line_num);
 	}
+	
+	print_token(&lookahead2);
+	print_token(&lookahead);
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
+	push_back_token(fl, lookahead2);
 	push_back_token(fl, lookahead);
 
 	//We simply give back the sub tree root

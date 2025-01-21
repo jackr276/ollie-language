@@ -44,7 +44,6 @@ typedef enum {
 	JUMP,
 	STATIC,
 	EXTERNAL,
-	DOUBLE_AND, /* && */
 	DOUBLE_OR,
 	AND, /* & */
 	OR,

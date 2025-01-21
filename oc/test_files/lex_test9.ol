@@ -1,8 +1,11 @@
-func main(u_int32 argc, char* argv) -> u_int32{
+func main(u_int32 argc, char&& argv) -> u_int32{
 	while(argc < 5) do {
 		declare u_int32 i;
 		asn i := 3;
 	}
+
+	//Array of addresses
+	declare u_int32&[32] address_array;
 
 	declare u_int32 j;
 
