@@ -2,7 +2,7 @@
 * Sample program
 */
 
-//declare u_int8 j;
+declare u_int8 j;
 
 func:static main() -> u_int32* {
 	//Single line comment

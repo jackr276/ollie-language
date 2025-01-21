@@ -3487,6 +3487,9 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//Otherwise, we have a compound statement here
 	} else {
+		//Put the token back
+		push_back_token(fl, lookahead);
+
 		//Now we need to see a valid compound statement
 		generic_ast_node_t* else_compound_stmt = compound_statement(fl);
 
@@ -4643,6 +4646,8 @@ static generic_ast_node_t* storage_class_specifier(FILE* fl){
 static generic_ast_node_t* declare_statement(FILE* fl){
 	//For error printing
 	char info[2000];
+	//Freeze the current line number
+	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
 	//Is it constant or not?
@@ -4773,6 +4778,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	declared_var->initialized = 0;
 	//It was declared
 	declared_var->declare_or_let = 0;
+	//The line_number
+	declared_var->line_number = current_line;
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
@@ -4796,6 +4803,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 static generic_ast_node_t* let_statement(FILE* fl){
 	//For error printing
 	char info[2000];
+	//The line number
+	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
 	//Is it constant or not?
@@ -4949,8 +4958,10 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	declared_var->type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
 	//It was initialized
 	declared_var->initialized = 1;
-	//It was declared
-	declared_var->declare_or_let = 0;
+	//It was "letted" 
+	declared_var->declare_or_let = 1;
+	//Save the line num
+	declared_var->line_number = current_line;
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
@@ -5334,6 +5345,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	((func_def_ast_node_t*)(function_node->node))->func_record = function_record;
 	//Set first thing
 	function_record->number_of_params = 0;
+	function_record->line_number = current_line;
+
+	//We'll put the function into the symbol table
+	//since we now know that everything worked
+	insert_function(function_symtab, function_record);
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5465,10 +5481,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//If we get here we know that it worked, so we'll add it in as a child
 	add_child_node(function_node, compound_stmt_node);
-
-	//Finally, we'll put the function into the symbol table
-	//since we now know that everything worked
-	insert_function(function_symtab, function_record);
 
 	//Finalize the variable scope for the parameter list
 	finalize_variable_scope(variable_symtab);
