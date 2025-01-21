@@ -13,7 +13,7 @@ define enumerated type_enum{
 	TYPE_CHAR
 } as enum;
 
-func:static main(char&& argv, s_int8 argc) -> void{
+func:static main(char** argv, s_int8 argc) -> void{
 	let enum my_enum := 1;
 	//Should fail
 	let u_int32 TYPE_NORMAL := 1;

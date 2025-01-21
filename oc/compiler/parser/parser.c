@@ -1627,10 +1627,9 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//we will on the fly construct a subtree here
 	//TODO FIXME
 	lookahead = get_next_token(fl, &parser_line_num);
-	lookahead2 = get_next_token(fl, &parser_line_num);
 
 	//As long as we have a double and 
-	while(lookahead.tok == AND && lookahead2.tok == AND){
+	while(lookahead.tok == DOUBLE_AND){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
@@ -1659,15 +1658,10 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
 		lookahead = get_next_token(fl, &parser_line_num);
-		lookahead2 = get_next_token(fl, &parser_line_num);
 	}
 	
-	print_token(&lookahead2);
-	print_token(&lookahead);
-
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(fl, lookahead2);
 	push_back_token(fl, lookahead);
 
 	//We simply give back the sub tree root
@@ -2603,7 +2597,7 @@ static generic_ast_node_t* complex_type_definer(FILE* fl){
  * As a reminder, we will assume that the caller has put back everything for us(the tokens and such) before they call
  *
  * BNF Rule: {type-address-specifier} ::= [<constant>]
- * 										| &
+ * 										| * 
  */
 static generic_ast_node_t* type_address_specifier(FILE* fl){
 	//The lookahead token
@@ -2615,7 +2609,7 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//Very easy to handle this, we'll just construct the node and give it back
-	if(lookahead.tok == AND){
+	if(lookahead.tok == STAR){
 		//This is an address specifier
 		((type_address_specifier_ast_node_t*)(type_addr_node->node))->address_type = ADDRESS_SPECIFIER_ADDRESS;
 		//And we're done, just give it back
@@ -2645,7 +2639,7 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
 	}
 
 	//Now if we make it here, we must also check that it's an integer
-	if(((constant_ast_node_t*)(constant_node))->constant_type != INT_CONST){
+	if(((constant_ast_node_t*)(constant_node->node))->constant_type != INT_CONST){
 		print_parse_message(PARSE_ERROR, "Array bounds must be an integer constant", parser_line_num);
 		num_errors++;
 		//Create and return an error node
@@ -2914,7 +2908,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//As long as we are seeing address specifiers
-	while(lookahead.tok == AND || lookahead.tok == L_BRACKET){
+	while(lookahead.tok == STAR || lookahead.tok == L_BRACKET){
 		//Put the token back
 		push_back_token(fl, lookahead);
 		//We'll now let the other rule handle it
@@ -3046,6 +3040,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	
 	//If the node fails, we'll just send the error up the chain
 	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier gien to function parameter", parser_line_num);
 		//It's already an error, just propogate it up
 		return type_spec_node;
 	}
@@ -3101,7 +3096,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
 
 	//Fail out here
-	if(found_type!= NULL){
+	if(found_type != NULL){
 		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
@@ -3119,7 +3114,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//symbol table
 	
 	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(((identifier_ast_node_t*)(ident->node))->identifier, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
 	//It is a function parameter
 	param_record->is_function_paramater = 1;
 	//We assume that it was initialized
@@ -3828,6 +3823,9 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//If we see a semicolon, we can just leave
 	if(lookahead.tok == SEMICOLON){
 		return return_stmt;
+	} else {
+		//Put it back if no
+		push_back_token(fl, lookahead);
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
@@ -5231,7 +5229,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
 	symtab_function_record_t* function_record = create_function_record(function_name, storage_class);
 	//Associate this with the function node
-	((func_def_ast_node_t*)function_node->node)->func_record = function_record;
+	((func_def_ast_node_t*)(function_node->node))->func_record = function_record;
+	//Set first thing
+	function_record->number_of_params = 0;
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5296,13 +5296,24 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//So long as this is not null
 	while(param_list_cursor != NULL){
+		//For dev use--sanity check
+		if(param_list_cursor->CLASS != AST_NODE_CLASS_PARAM_DECL){
+			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected declaration node in parameter list", parser_line_num);
+			num_errors++;
+			//Return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//The variable record for this param node
-		symtab_variable_record_t* param_rec = ((param_decl_ast_node_t*)(param_list_node->node))->param_record;
+		symtab_variable_record_t* param_rec = ((param_decl_ast_node_t*)(param_list_cursor->node))->param_record;
 
 		//We'll add it in as a reference to the function
 		function_record->func_params[function_record->number_of_params].associate_var = param_rec;
 		//Increment the parameter count
 		(function_record->number_of_params)++;
+
+		//Set the associated function record
+		param_rec->parent_function = function_record;
 
 		//Push the cursor up by 1
 		param_list_cursor = param_list_cursor->next_sibling;

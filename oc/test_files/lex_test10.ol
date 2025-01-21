@@ -5,7 +5,7 @@ define construct my_struct{
 };
 
 alias construct my_struct as custom;
-alias u_int8& as int_ptr;
+alias u_int8* as int_ptr;
 
 
 func my_func(u_int32 error_code) -> u_int32{

@@ -94,7 +94,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	strcpy(type->type_name, points_to->type_name);
 
 	//And then we add a pointer onto the end of it
-	strcat(type->type_name, "&");
+	strcat(type->type_name, "*");
 
 	//Now we'll make the actual pointer type
 	type->pointer_type = calloc(1, sizeof(pointer_type_t));
@@ -136,7 +136,7 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	strcat(type->type_name, array_bound_str);
 	
 	//Now we'll make the actual pointer type
-	type->pointer_type = calloc(1, sizeof(array_type_t));
+	type->array_type = calloc(1, sizeof(array_type_t));
 
 	//Store what it points to
 	type->array_type->member_type = points_to;

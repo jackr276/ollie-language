@@ -8,3 +8,4 @@ func main() -> u_int32 {
 	let u_int16 j := 0;
 	
 	ret i * j;
+}

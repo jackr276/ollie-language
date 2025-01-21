@@ -2,7 +2,7 @@
 * Another sample program here
 * This program is total nonsense, it just tests the lexing
 */
-alias char&& as str_arr;
+alias char** as str_arr;
 
 func:static main(u_int32 arg_count, str_arr arg_vector) -> u_int32{
 	declare str my_str;

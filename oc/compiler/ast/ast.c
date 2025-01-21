@@ -364,7 +364,7 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child){
 	 * But if we make it here, we now know that there are other children. As such,
 	 * we need to move to the end of the child linked list and append it there
 	 */
-	generic_ast_node_t* cursor = child;
+	generic_ast_node_t* cursor = parent->first_child;
 
 	//As long as there are more siblings
 	while(cursor->next_sibling != NULL){

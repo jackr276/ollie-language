@@ -1,14 +1,14 @@
 /**
-* This one should work
+* This one should not work
 */
 
-func:static example(s_int32& my_arr, u_int8 max) -> void{
+func:static example(s_int32* my_arr, u_int8 max) -> void{
 	asn *(my_arr) := 2*3 + 6-1;
 	ret;
 }
 
-func main(s_int32 argc, char&& argv) -> s_int32 {
-	declare s_int32 my_arr[500];
+func main(s_int32 argc, char** argv) -> s_int32 {
+	declare s_int32[500] my_arr;
 	asn my_arr[0] := 3;
 
 	let u_int32 argc := 14;

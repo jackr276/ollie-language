@@ -279,11 +279,23 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						}
 
 					case '&':
-						current_state = IN_START;
-						lex_item.tok = AND;
-						lex_item.line_num = line_num;
-						lex_item.char_count = token_char_count;
-						return lex_item;
+						ch2 = get_next_char(fl);
+
+						if(ch2 == '&'){
+							current_state = IN_START;
+							//Prepare and return
+							lex_item.tok = DOUBLE_AND;
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
+						} else {
+							put_back_char(fl);
+							current_state = IN_START;
+							lex_item.tok = AND;
+							lex_item.line_num = line_num;
+							lex_item.char_count = token_char_count;
+							return lex_item;
+						}
 
 					case '|':
 						ch2 = get_next_char(fl);
@@ -307,6 +319,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 					case ';':
 						lex_item.tok = SEMICOLON;
+						strcpy(lex_item.lexeme, ";");
 						lex_item.line_num = line_num;
 						lex_item.char_count = token_char_count;
 						return lex_item;
