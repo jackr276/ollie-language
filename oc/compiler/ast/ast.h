@@ -105,8 +105,6 @@ typedef struct for_stmt_ast_node_t for_stmt_ast_node_t;
 typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 //An AST node for declaration statements
 typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
-//An AST node for define statements
-typedef struct def_stmt_ast_node_t def_stmt_ast_node_t;
 //An AST node for let statements
 typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
 //An AST node for storage class specifiers
@@ -118,7 +116,6 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ALIAS_STMT,
 	AST_NODE_CLASS_DECL_STMT,
 	AST_NODE_CLASS_LET_STMT,
-	AST_NODE_CLASS_DEF_STMT,
 	AST_NODE_CLASS_FUNC_DEF,
 	AST_NODE_CLASS_FUNC_SPECIFIER,
 	AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER,
@@ -456,12 +453,6 @@ struct decl_stmt_ast_node_t{
 struct let_stmt_ast_node_t{
 	//Hold the variable that we declared
 	symtab_variable_record_t* declared_var;
-};
-
-//A define statement
-struct def_stmt_ast_node_t{
-	//Hold the record of the type that we defined
-	symtab_type_record_t* defined_type;
 };
 
 //Storage class specifier for variables

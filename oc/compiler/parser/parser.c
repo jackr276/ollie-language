@@ -45,8 +45,6 @@ static generic_ast_node_t* declaration(FILE* fl);
 static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* expression(FILE* fl);
-static generic_ast_node_t* initializer(FILE* fl);
-static generic_ast_node_t* declarator(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl);
 
 
@@ -266,8 +264,6 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 	//Now we can grab out some info for convenience
 	function_num_params = function_record->number_of_params;
-	//For convenience we can also keep a reference to the func params list
-	parameter_t* func_params = function_record->func_params;
 
 	//If we make it here, we know that our function actually exists. We can now create
 	//the appropriate node that will hold all of our data about it
@@ -1606,8 +1602,6 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
-	//We'll need two due to our scenario with double and
- 	Lexer_item lookahead2;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -2554,38 +2548,6 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 
 	//Give back the root level node
 	return enum_def_node;
-}
-
-
-/**
- * A complex type definer is simply a pass-through rule that multiplexes based on whether it 
- * sees enum or construct. When we reach this rule, we will have already seen the define keyword.
- * Like all rules, this function returns a reference to the root node of the tree that it creates
- *
- *
- * BNF Rule: <complex-type-definer> ::= <enumerated-definer> 
- * 									  | <construct-definer>
- */
-static generic_ast_node_t* complex_type_definer(FILE* fl){
-	//The lookahead token
-	Lexer_item lookahead;
-
-	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//We will just multiplex based on what we see here
-	if(lookahead.tok == ENUM){
-		return enum_definer(fl);
-	} else if(lookahead.tok == CONSTRUCT){
-		return construct_definer(fl);
-	
-	//Handle the case where there's some bad keyword here
-	} else {
-		print_parse_message(PARSE_ERROR, "enum or construct keywords required after define keyword", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
 }
 
 
@@ -4606,7 +4568,7 @@ static generic_ast_node_t* statement(FILE* fl){
 	//If statement
 	} else if(lookahead.tok == IF){
 		//This rule relies on if already being consumed, so we won't put it back
-		return switch_statement(fl);
+		return if_statement(fl);
 
 	//Some kind of branch statement
 	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
@@ -5002,16 +4964,33 @@ static generic_ast_node_t* let_statement(FILE* fl){
 
 
 /**
- * A define statement allows users to define complex types like enumerateds and constructs and give them aliases
- * inline(there is also a separate aliasing feature). Just like any other declaration, this function performs 
- * all type checking and name checking and symbol table manipulation. It is also always the child of some given
- * node
+ * A define statement allows users to define complex types like enumerateds and constructs and give them aliases. This rule is
+ * already largely handled by the construct-definer and enum-definer rules that we've seen previously. Like all rules, this function
+ * returns a root node to the tree it creates
  *
- * BNF Rule: <define-statement> ::= define <complex-type-definer> {as <alias-identifer>}?;
+ * Remember: we've already seen and consumed the defined keyword by the time we get here
+ *
+ * BNF Rule: <define-statement> ::= define {<construct-definer> | <enum-definer>}
  */
 static generic_ast_node_t* define_statement(FILE* fl){
-	//placeholder
-	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//We need to see ENUM or CONSTRUCT
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Construct definer
+	if(lookahead.tok == CONSTRUCT){
+		return construct_definer(fl);
+	//Enum definer
+	} else if(lookahead.tok == ENUM){
+		return enum_definer(fl);
+	//Otherwise it's wrong
+	} else {
+		print_parse_message(PARSE_ERROR, "Enum or construct keywords required after define keyword", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 }
 
 
@@ -5020,11 +4999,134 @@ static generic_ast_node_t* define_statement(FILE* fl){
  * simplest of any of these rules, but it still performs all type checking and symbol table manipulation. It is
  * always the child of a parent node
  *
- * BNF Rule: *<alias-statement> ::= alias <type-specifier> as <identifier>;
+ * NOTE: By the time we make it here, we have already seeen the alias keyword
+ *
+ * BNF Rule: <alias-statement> ::= alias <type-specifier> as <identifier>;
  */
 static generic_ast_node_t* alias_statement(FILE* fl){
-	//placeholder
-	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	//For error printing
+	char info[2000];
+	//Our lookahead token
+	Lexer_item lookahead;
+
+	//Let's create the overall parent node
+	generic_ast_node_t* alias_stmt_node = ast_node_alloc(AST_NODE_CLASS_ALIAS_STMT);
+
+	//We need to first see a valid type specifier
+	generic_ast_node_t* type_spec_node = type_specifier(fl);
+
+	//If it is bad, we'll bail out
+	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier given to alias statement", parser_line_num);
+		num_errors++;
+		//It's already an error, so just give it back
+		return type_spec_node;
+	}
+
+	//We know it worked, so add it in as a child
+	add_child_node(alias_stmt_node, type_spec_node);
+
+	//We now need to see the as keyword
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see it we're out
+	if(lookahead.tok != AS){
+		print_parse_message(PARSE_ERROR, "As keyword expected in alias statement", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we've made it, so now we need to see a valid identifier
+	generic_ast_node_t* ident_node = identifier(fl);
+
+	//If it's bad, we're also done here
+	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
+		num_errors++;
+		//It's already an error so just give it back
+		return ident_node;
+	}
+
+	//We know it worked, so add it in as a child
+	add_child_node(alias_stmt_node, ident_node);
+
+	//Let's do our last syntax check--the semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see a semicolon we're out
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of alias statement",  parser_line_num);
+		num_errors++;
+		//Create and reutnr and error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we know that the entire statement is syntactically valid and that the type
+	//we wish to alias exists. We now need to check for name duplication across all of our 
+	//symbol tables
+	//Let's grab the name for convenience
+	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Grab this out too for neatness
+	generic_type_t* type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
+
+	//If we get here, we know that it actually worked, so we can create the alias
+	generic_type_t* aliased_type = create_aliased_type(name, type, parser_line_num);
+
+	//Let's now create the aliased record
+	symtab_type_record_t* aliased_record = create_type_record(aliased_type);
+
+	//We'll store it in the symbol table
+	insert_type(type_symtab, aliased_record);
+
+	//Store a reference to it in the node
+	((alias_stmt_ast_node_t*)(alias_stmt_node->node))->alias = aliased_record;
+	
+	//Finally we're all set, so we'll give the node back
+	return alias_stmt_node;
 }
 
 
