@@ -32,7 +32,7 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <identifier>;
 
-<let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <declarator> := <conditional-expression>;
+<let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <identifier> := <conditional-expression>;
 
 <storage-class-specifier> ::= static
 							| external
@@ -56,10 +56,6 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 <construct-member> ::= {constant}? <type-specifier> <identifier>
 
 <alias-statement> ::= alias <type-specifier> as <type-identifier>;
-
-<declarator> ::= <identifer>
-				 <identifer>{<array-accessor>}?
-				 <identifier>{<construct-accessor}?
 
 <array-accessor> ::= [ <conditional-expression> ]
 
