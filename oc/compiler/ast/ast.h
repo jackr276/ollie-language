@@ -99,8 +99,6 @@ typedef struct do_while_stmt_ast_node_t do_while_stmt_ast_node_t;
 typedef struct compound_stmt_ast_node_t compound_stmt_ast_node_t;
 //An AST node for for statements
 typedef struct for_stmt_ast_node_t for_stmt_ast_node_t;
-//An AST node for alias statements
-typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 //An AST node for declaration statements
 typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 //An AST node for let statements
@@ -113,7 +111,6 @@ typedef struct top_level_statment_node_t top_level_statment_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
-	AST_NODE_CLASS_ALIAS_STMT,
 	AST_NODE_CLASS_DECL_STMT,
 	AST_NODE_CLASS_LET_STMT,
 	AST_NODE_CLASS_FUNC_DEF,
@@ -437,12 +434,6 @@ struct for_stmt_ast_node_t{
 struct compound_stmt_ast_node_t{
 	//Just hold status for now
 	u_int8_t status;
-};
-
-//An alias stmt
-struct alias_stmt_ast_node_t{
-	//Hold the alias that we made
-	symtab_type_record_t* alias;
 };
 
 //A declaration stmt

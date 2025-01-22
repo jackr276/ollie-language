@@ -297,13 +297,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_LET_STMT;
 			break;
 
-		//An alias statement node
-		case AST_NODE_CLASS_ALIAS_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(alias_stmt_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_ALIAS_STMT;
-			break;
-
 		//An storage class specifier node
 		case AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER:
 			//Just allocate the proper size and set the class
