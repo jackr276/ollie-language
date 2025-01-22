@@ -1864,7 +1864,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	//We can now also construct the entire subtree
 	generic_ast_node_t* member_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_MEMBER);
 	//Store the variable record here
-	((construct_member_ast_node_t*)(member_node)->node)->member_var = member_record;
+	((construct_member_ast_node_t*)(member_node->node))->member_var = member_record;
 
 	//The very first child will be the type specifier
 	add_child_node(member_node, type_spec);
@@ -1889,8 +1889,14 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 	//Let's first declare the root node. This node will have children that are each construct members
 	generic_ast_node_t* member_list = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST);
 
+	//This is just to seed our search
+	lookahead = get_next_token(fl, &parser_line_num);
+
 	//We can see as many construct members as we please here, all delimited by semicols
 	do{
+		//Put what we saw back
+		push_back_token(fl, lookahead);
+
 		//We must first see a valid construct member
 		generic_ast_node_t* member_node = construct_member(fl);
 
@@ -1907,8 +1913,18 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 		//Now we will refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num);
 
-	//So long as we keep seeing semicolons
-	} while (lookahead.tok == SEMICOLON);
+		//We must now see a valid semicolon
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Construct members must be delimited by ;", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Refresh it once more
+		lookahead = get_next_token(fl, &parser_line_num);
+
+	//So long as we don't see the end
+	} while (lookahead.tok != R_CURLY);
 
 	//Once we get here, what we know is that lookahead was not a semicolon. We know that it should
 	//be a closing curly brace, so in the interest of better error messages, we'll do a little pre-check
