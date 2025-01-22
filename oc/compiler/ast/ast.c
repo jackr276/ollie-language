@@ -21,13 +21,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 	switch (CLASS) {
 		//The function specifier AST node
-		case AST_NODE_CLASS_FUNC_SPECIFIER:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(func_specifier_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_FUNC_SPECIFIER;
-			break;
-				
-		//The function specifier AST node
 		case AST_NODE_CLASS_FUNC_DEF:
 			//Just allocate the proper size and set the class
 			node->node = calloc(1, sizeof(func_def_ast_node_t));
@@ -333,6 +326,12 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	return node;
 }
 
+/**
+ * Allocate a top level statement node
+ */
+top_level_statment_node_t* top_lvl_stmt_alloc(){
+	return calloc(1, sizeof(top_level_statment_node_t));
+}
 
 /**
  * A helper function that will appropriately add a child node into the parent

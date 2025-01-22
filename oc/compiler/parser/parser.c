@@ -41,7 +41,7 @@ u_int8_t need_leader = 1;
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
 static generic_ast_node_t* type_specifier(FILE* fl);
-static generic_ast_node_t* assignment_expression(FILE* fl);
+static generic_ast_node_t* assignment_statement(FILE* fl);
 static generic_ast_node_t* conditional_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl);
 static generic_ast_node_t* declaration(FILE* fl);
@@ -191,16 +191,16 @@ static generic_ast_node_t* constant(FILE* fl){
 
 
 /**
- * An expression decays into an assignment expression. An expression
+ * An expression decays into a conditional expression. An expression
  * node is more of a "pass-through" rule, and itself does not make any children. It does
  * however return the reference of whatever it created
  *
- * BNF Rule: <expression> ::= <assignment-expression>
+ * BNF Rule: <expression> ::= <conditional-expression>
  */
 static generic_ast_node_t* expression(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Call the appropriate rule
-	generic_ast_node_t* expression_node = assignment_expression(fl);
+	generic_ast_node_t* expression_node = conditional_expression(fl);
 	
 	//If it did fail, a message is appropriate here
 	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -485,18 +485,17 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 
 /**
- * An assignment expression can decay into a conditional expression or it
- * can actually do assigning. There is no chaining in Ollie language of assignments. There are two
- * options for treenodes here. If we see an actual assignment, there is a special assignment node
- * that will be made. If not, we will simply pass the parent along. An assignment expression will return
- * a reference to the subtree created by it
+ * An assignment is one of our core building blocks. It itself produces a statement node that
+ * is to be added into the control flow graph. It will create its own expression level
+ * AST that accomodates our hybrid-IR approach
  *
- * BNF Rule: <assignment-expression> ::= <conditional-expression> 
- * 									   | asn <unary-expression> := <conditional-expression>
+ * REMEMBER: By the time we get here, we've already seen and consumed the asn keyword
+ *
+ * BNF Rule: <assignment-statement> ::= asn <unary-expression> := <conditional-expression>
  *
  * TODO TYPE CHECKING REQUIRED
  */
-static generic_ast_node_t* assignment_expression(FILE* fl){
+static top_level_statment_node_t* assignment_statement(FILE* fl){
 	//Info array for error printing
 	char info[2000];
 	//Freeze the line number
@@ -504,20 +503,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
 
-	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we don't see an assign keyword, we know that 
-	//we're just passing through to a conditional expression
-	if(lookahead.tok != ASN){
-		//Put the token back
-		push_back_token(fl, lookahead);
-
-		//Simply let the conditional expression rule handle it
-		return conditional_expression(fl);
-	}
-
-	//If we make it here however, that means that we did see the assign keyword. Since
+	//If we make it here, that means that we did see the assign keyword. Since
 	//this is the case, we'll make a new assignment node and take the appropriate actions here 
 	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_CLASS_ASNMNT_EXPR);	
 
@@ -530,8 +516,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Fail out here
 	if(left_hand_unary->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid left hand side given to assignment expression", current_line);
-		//Return the erroneous node as we fail up the tree
-		return left_hand_unary;
+		//Fail out
+		return NULL;
 	}
 
 	//Otherwise it worked, so we'll add it in as the left child
@@ -546,8 +532,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		sprintf(info, "Expected := symbol in assignment expression, instead got %s", lookahead.lexeme);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		//Return a special kind of error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return NULL;
 	}
 
 	//Now that we're here we must see a valid conditional expression
@@ -557,15 +543,21 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid right hand side given to assignment expression", current_line);
 		num_errors++;
-		//The conditional is already an error, so we'll just return it
-		return conditional;
+		//Fail out
+		return NULL;
 	}
 
 	//Otherwise we know it worked, so we'll add the conditional in as the right child
 	add_child_node(asn_expr_node, conditional);
 
-	//Return the reference to the overall node
-	return asn_expr_node;
+	//If we made it this far, we can create the overall node
+	top_level_statment_node_t* expression_node = top_lvl_stmt_alloc();
+
+	//This node holds the reference to the entire expression node here
+	expression_node->root = asn_expr_node;
+
+	//Return a reference to the expression node itself
+	return expression_node;
 }
 
 
@@ -5243,51 +5235,12 @@ static generic_ast_node_t* declaration(FILE* fl){
 
 
 /**
- * A function specifier has two options, external or static. These will not be directly handled
- * by this rule, but we do return a node that holds what it is. This rule is entered
- * after we have seen the ":" keyword. Like all rules, this one returns a reference to the root
- * node of the function that it creates
- *
- */
-static generic_ast_node_t* function_specifier(FILE* fl){
-	//We need to see static or external keywords here
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
-	
-	//IF we got here, we need to see static or external
-	if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL){
-		//Create a new node
-		generic_ast_node_t* node = ast_node_alloc(AST_NODE_CLASS_FUNC_SPECIFIER);
-	
-		//Assign the token here and attach it to the tree
-		((func_specifier_ast_node_t*)(node->node))->funcion_storage_class_tok = lookahead.tok;
-
-		//Assign these for ease of use later in the parse tree
-		if(lookahead.tok == STATIC){
-			((func_specifier_ast_node_t*)(node->node))->function_storage_class = STORAGE_CLASS_STATIC;
-		} else {
-			((func_specifier_ast_node_t*)(node->node))->function_storage_class = STORAGE_CLASS_EXTERNAL;
-		}
-
-		//We succeeded, so just return the node that we have
-		return node;
-
-	//Fail case here
-	} else {
-		print_parse_message(PARSE_ERROR, "STATIC or EXTERNAL keywords expected after colon in function declaration", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-}
-
-
-/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= func {:<function-specifier>}? <identifer> ({<parameter-list>}?) -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= func {:static}? <identifer> ({<parameter-list>}?) -> <type-specifier> <compound-statement>
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
@@ -5300,33 +5253,39 @@ static u_int8_t function_definition(FILE* fl){
 	Lexer_item lookahead;
 
 	//What is the function's storage class? Normal by default
-	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
+	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
-	//We also have the AST function node, this will be intialized immediately
-	//It also requires a symtab record of the function, but this will be assigned
-	//later once we have it
-	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF);
+	//We will use the AST node as a holding structure for the duration of this rule. However,
+	//this node will not survive the function and will be deallocated before we leave
+	generic_ast_node_t* function_def_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF);
+
+	/**
+	 * ******************** CFG STRUCTURE ***********************
+	 * There is no explicit funcition node in the CFG. A function is a set
+	 * of blocks, just like anything else. Since a function is entered after some
+	 * kind of call statement, the first block in it needs to be a "leader". As such,
+	 * we will set the "need_leader" flag once we hop in here
+	 */
+	need_leader = 1;
 
 	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
 	lookahead = get_next_token(fl, &parser_line_num);
 	
-	//We've seen the option function specifier
+	//We've seen the option for a function specifier
 	if(lookahead.tok == COLON){
-		//If we see this, we must then see a valid function specifier
-		generic_ast_node_t* func_spec_node = function_specifier(fl);
-
-		//Invalid function specifier -- error out
-		if(func_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			//Error will already be printed, simply fail out
-			//It's already an error, so just give it back
-			return func_spec_node;
+		//We'll now grab the next token an process it
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		//We have a static storage class
+		if(lookahead.tok == STATIC){
+			storage_class = STORAGE_CLASS_STATIC;
+		//Otherwise we've been given an incorrect lexeme here
+		} else {
+			print_parse_message(PARSE_ERROR, "Static keyword required after colon in function definition", parser_line_num);
+			num_errors++;
+			//Fail out here
+			return 0;
 		}
-
-		//Otherwise if we get here, this will be the first child of the function node
-		add_child_node(function_node, func_spec_node);
-
-		//Also stash this for later use
-		storage_class = ((func_specifier_ast_node_t*)(func_spec_node->node))->function_storage_class;
 
 	//Otherwise it's a plain function so put the token back
 	} else {
@@ -5343,8 +5302,8 @@ static u_int8_t function_definition(FILE* fl){
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid name given as function name", current_line);
 		num_errors++;
-		//It's already an error, so just give it back
-		return ident_node;
+		//Fail out here
+		return 0;
 	}
 
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
@@ -5363,8 +5322,8 @@ static u_int8_t function_definition(FILE* fl){
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_function_name(found_function);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 
 	//Check for duplicated variables
@@ -5376,8 +5335,8 @@ static u_int8_t function_definition(FILE* fl){
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_variable_name(found_variable);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 
 	//Check for duplicated type names
@@ -5389,20 +5348,23 @@ static u_int8_t function_definition(FILE* fl){
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_type_name(found_type);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 
 	//Once we make it here we know that the ident was good, so we can add it in as a child
-	add_child_node(function_node, ident_node);
+	add_child_node(function_def_node, ident_node);
 
 	//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
+	//This is the most important part of this whole rule
 	symtab_function_record_t* function_record = create_function_record(function_name, storage_class);
-	//Associate this with the function node
-	((func_def_ast_node_t*)(function_node->node))->func_record = function_record;
-	//Set first thing
+
 	function_record->number_of_params = 0;
 	function_record->line_number = current_line;
+	//Save the storage class too
+	function_record->storage_class = storage_class;
+	//Was it ever defined?
+	function_record->defined = 0;
 
 	//We'll put the function into the symbol table
 	//since we now know that everything worked
@@ -5415,12 +5377,19 @@ static u_int8_t function_definition(FILE* fl){
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", current_line);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 
 	//Otherwise, we'll push this onto the list to check for later
 	push(grouping_stack, lookahead);
+
+	/**
+	 * ************* CFG Structure for variables ******************
+	 * Parameter lists have nothing to do with control. As such, when we see
+	 * parameter declarations, there will be no CFG structures created for them.
+	 * We'll just store them in the symtab and move along
+	 */
 
 	//We initialize this scope automatically, even if there is no param list.
 	//It will just be empty if this is the case, no big issue
@@ -5435,8 +5404,8 @@ static u_int8_t function_definition(FILE* fl){
 	if(param_list_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid parameter list given in function declaration", current_line);
 		num_errors++;
-		//It's already an error, so just send it back up
-		return param_list_node;
+		//Fail out here
+		return 0;
 	}
 
 	//We'll hold off on addind it as a child until we see valid closing parenthesis
@@ -5448,22 +5417,22 @@ static u_int8_t function_definition(FILE* fl){
 	if(lookahead.tok != R_PAREN){
 		print_parse_message(PARSE_ERROR, "Right parenthesis expected after parameter list", current_line);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 	
 	//If this happens, then we have some unmatched parenthesis
 	if(pop(grouping_stack).tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Unmatched parenthesis found", current_line);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 
 	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
 	//now parse the param_list and store records to it	
 	//Let's first add the param list in as a child
-	add_child_node(function_node, param_list_node);
+	add_child_node(function_def_node, param_list_node);
 	
 	//Let's now iterate over the parameter list and add the parameter records into the function 
 	//record for ease of access later
@@ -5475,8 +5444,8 @@ static u_int8_t function_definition(FILE* fl){
 		if(param_list_cursor->CLASS != AST_NODE_CLASS_PARAM_DECL){
 			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected declaration node in parameter list", parser_line_num);
 			num_errors++;
-			//Return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//Fail out here
+			return 1;
 		}
 
 		//The variable record for this param node
@@ -5557,6 +5526,7 @@ static u_int8_t function_definition(FILE* fl){
  * <declaration-partition> ::= <function-definition>
  * 							 | <let-statement>
  * 							 | <declare-statement>
+ * 							 | <assignment-stmt>
  * 							 | <alias-statment> (COMPILER ONLY)
  * 							 | <define-statement> (COMPILER ONLY)
  */
@@ -5632,8 +5602,8 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 				return NULL;
 			}
 
-			//Is the declare node a leader?
-			if(declare_node->is_leader == 1){
+			//Do we need a leader node?
+			if(need_leader == 1){
 				//We'll create a whole new node for it and add it as a successor
 				basic_block_t* new_block = basic_block_alloc(cfg);
 
@@ -5661,8 +5631,8 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 				return NULL;
 			}
 
-			//Is the declare node a leader?
-			if(let_node->is_leader == 1){
+			//Are we looking for a leader node?
+			if(need_leader == 1){
 				//We'll create a whole new node for it and add it as a successor
 				basic_block_t* new_block = basic_block_alloc(cfg);
 
@@ -5675,6 +5645,34 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 			//Otherwise if it isn't a leader, it just gets added into our current block
 			} else {
 				add_statement(current_block, let_node);
+			}
+
+		//Assignment statements are a control flow construct. They are statements. Each assignment node will either
+		//be a leader node or be in a chain of expression nodes in the basic block
+		} else if(lookahead.tok == ASN){
+			//We'll first define it
+			top_level_statment_node_t* asn_node = assignment_statement(fl);
+
+			//If it's null, we had a bad declaration block
+			if(asn_node == NULL){
+				print_parse_message(PARSE_ERROR, "Bad top level let statement given", parser_line_num);
+				return NULL;
+			}
+
+			//Are we looking for a leader node?
+			if(need_leader == 1){
+				//We'll create a whole new node for it and add it as a successor
+				basic_block_t* new_block = basic_block_alloc(cfg);
+
+				//Add the declare node as the very first statement
+				add_statement(new_block, asn_node);
+
+				//We've already seen a leader, so we don't need to see another one immediately
+				need_leader = 0;
+
+			//Otherwise if it isn't a leader, it just gets added into our current block
+			} else {
+				add_statement(current_block, asn_node);
 			}
 
 		//If we make it here then there is some kind of failure

@@ -25,8 +25,6 @@ typedef struct generic_ast_node_t generic_ast_node_t;
 typedef struct prog_ast_node_t prog_ast_node_t;
 //A function definition AST node
 typedef struct func_def_ast_node_t func_def_ast_node_t;
-//A function specifier node
-typedef struct func_specifier_ast_node_t func_specifier_ast_node_t;
 //A parameter list node
 typedef struct param_list_ast_node_t param_list_ast_node_t;
 //A parameter node
@@ -115,12 +113,10 @@ typedef struct top_level_statment_node_t top_level_statment_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
-	AST_NODE_CLASS_PROG,
 	AST_NODE_CLASS_ALIAS_STMT,
 	AST_NODE_CLASS_DECL_STMT,
 	AST_NODE_CLASS_LET_STMT,
 	AST_NODE_CLASS_FUNC_DEF,
-	AST_NODE_CLASS_FUNC_SPECIFIER,
 	AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER,
 	AST_NODE_CLASS_PARAM_LIST,
 	AST_NODE_CLASS_CONSTANT,
@@ -198,7 +194,6 @@ struct top_level_statment_node_t{
 	// 1.) The first statement seen
 	// 2.) The first statement that is the target of a branch
 	// 3.) The first statement that immediately follows a branch
-	u_int8_t is_leader;
 	//Acts as a singly linked list of nodes
 	top_level_statment_node_t* next;
 	//Hold the reference to the root node for the expression-level AST
@@ -206,27 +201,11 @@ struct top_level_statment_node_t{
 };
 
 
-//The starting AST node really only exists to hold the tree root
-struct prog_ast_node_t{
-	//The lexer item, really a formality
-	Lexer_item lex;
-};
-
-
 //Represents a top level function definition
 struct func_def_ast_node_t{
-	//The symtable function record that is created in parallel
-	symtab_function_record_t* func_record;
+	//Placeholder only
+	u_int8_t status;
 };
-
-
-//Holds the static or external keywords for a function
-struct func_specifier_ast_node_t{
-	//Just holds a token for us
-	Token funcion_storage_class_tok;
-	STORAGE_CLASS_T function_storage_class;
-};
-
 
 //Holds references to our parameter list
 struct param_list_ast_node_t{
@@ -489,6 +468,11 @@ struct storage_class_spec_ast_node_t{
  */
 generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS);
 
+
+/**
+ * Allocate a top level statement
+ */
+top_level_statment_node_t* top_lvl_stmt_alloc();
 
 /**
  * A helper function that will appropriately add a child node into the parent

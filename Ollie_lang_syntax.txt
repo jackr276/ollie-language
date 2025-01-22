@@ -157,10 +157,9 @@ Epsilon means that no production is required for the rule. Essentially, it is a 
 
 <function-call> ::= @<function-identifier>({<conditional-expression>}?{, <conditional-expression>}*)
 
-<expression> ::= <assignment-expression>
+<expression> ::= <conditional-expression>
 
-<assignment-expression> ::= <conditional-expression>
-						  | asn <unary-expression> := <conditional_expression>
+<assignment-statement> ::= asn <unary-expression> := <conditional_expression>
 
 
 ########################## Ollie language type system #######################################
