@@ -57,14 +57,10 @@ typedef struct function_call_ast_node_t function_call_ast_node_t;
 typedef struct construct_accessor_ast_node_t construct_accessor_ast_node_t;
 //An array accessor node
 typedef struct array_accessor_ast_node_t array_accessor_ast_node_t;
-//A construct definer node
-typedef struct construct_definer_ast_node_t construct_definer_ast_node_t;
 //A construct member list node
 typedef struct construct_member_list_ast_node_t construct_member_list_ast_node_t;
 //A construct member node
 typedef struct construct_member_ast_node_t construct_member_ast_node_t;
-//An enumerated definer node
-typedef struct enum_definer_ast_node_t enum_definer_ast_node_t;
 //An enumarated list node
 typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
 //An enumerated member node
@@ -131,10 +127,8 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CONSTRUCT_ACCESSOR,
 	AST_NODE_CLASS_ARRAY_ACCESSOR,
 	AST_NODE_CLASS_FUNCTION_CALL,
-	AST_NODE_CLASS_CONSTRUCT_DEFINER,
 	AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST,
 	AST_NODE_CLASS_CONSTRUCT_MEMBER,
-	AST_NODE_CLASS_ENUM_DEFINER,
 	AST_NODE_CLASS_ENUM_MEMBER_LIST,
 	AST_NODE_CLASS_ENUM_MEMBER,
 	AST_NODE_CLASS_EXPR_STMT,
@@ -314,10 +308,6 @@ struct postfix_expr_ast_node_t{
 	generic_type_t* inferred_type;
 };
 
-//The construct definer node
-struct construct_definer_ast_node_t{
-	u_int8_t status;
-};
 
 //The construct member list node
 struct construct_member_list_ast_node_t{
@@ -329,11 +319,6 @@ struct construct_member_list_ast_node_t{
 struct construct_member_ast_node_t{
 	//Keep a reference to the variable record
 	symtab_variable_record_t* member_var;
-};
-
-//The enum definer node
-struct enum_definer_ast_node_t{
-	u_int8_t status;
 };
 
 //The enum list node for the definition
