@@ -110,6 +110,9 @@ typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
 //An AST node for storage class specifiers
 typedef struct storage_class_spec_ast_node_t storage_class_spec_ast_node_t;
 
+//FOR CFG-A top level "statement" node
+typedef struct top_level_statment_node_t top_level_statment_node_t;
+
 //What type is in the AST node?
 typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PROG,
@@ -165,13 +168,16 @@ typedef enum address_specifier_type_t{
 	ADDRESS_SPECIFIER_ADDRESS,
 } address_specifier_type_t;
 
+
+
 /**
  * Current implementation is an N-ary tree. Each node holds pointers to its
  * first child and next sibling. The generic node also holds a pointer 
  * to what the actual node is
 */
 struct generic_ast_node_t{
-	//The linked list structure for our CFG of statments
+	//The linked list structure for our CFG of statments. THIS IS SPECIFICALLY
+	//RESERVED FOR CFG USE
 	generic_ast_node_t* next_statement;
 	//These are the two pointers that make up the whole of the tree
 	generic_ast_node_t* first_child;
@@ -180,6 +186,18 @@ struct generic_ast_node_t{
 	ast_node_class_t CLASS;
 	//This is where we hold the actual node
 	void* node;
+};
+
+
+/**
+ * This top level node holds the reference to an expression subtree. These references will be held
+ * by the basic blocks of our CFG
+ */
+struct top_level_statment_node_t{
+	//Acts as a singly linked list of nodes
+	top_level_statment_node_t* next;
+	//Hold the reference to the root node
+	generic_ast_node_t* root;
 };
 
 

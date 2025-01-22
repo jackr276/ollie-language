@@ -5623,9 +5623,9 @@ u_int8_t parse(FILE* fl){
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_stack();
 
-	//Global entry/run point, will give us a tree with
-	//the root being here
-	generic_ast_node_t* prog = program(fl);
+	//Create our global entry point to the CFG. We'll hold the root referece to all
+	//of our nodes
+	basic_block_t* control_flow_graph = program(fl);
 
 	//Timer end
 	clock_t end = clock();

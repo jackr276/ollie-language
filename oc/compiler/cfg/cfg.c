@@ -10,6 +10,14 @@
 static u_int16_t current_block_id = 0;
 
 /**
+ * Dynamically create the overarching CFG structure
+ */
+cfg_t* create_cfg(){
+	return calloc(1, sizeof(cfg_t));
+}
+
+
+/**
  * A helper function that makes a new block id. This ensures we have an atomically
  * increasing block ID
  */
@@ -23,11 +31,17 @@ static u_int16_t increment_and_get(){
  * Allocate a basic block using calloc. NO data assignment
  * happens in this function
 */
-basic_block_t* basic_block_alloc(){
+basic_block_t* basic_block_alloc(cfg_t* cfg){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 	//Grab the unique ID for this block
 	created->block_id = increment_and_get();
+
+	//Add this into the CFG storage
+	cfg->blocks[cfg->num_blocks] = created;
+	//Increment the number of blocks
+	(cfg->num_blocks)++;
+
 	return created;
 }
 
@@ -100,6 +114,25 @@ void add_successor(basic_block_t* target, basic_block_t* successor){
 
 
 /**
+ * Add a statement to the target block, following all standard linked-list protocol
+ */
+void add_statement(basic_block_t* target, top_level_statment_node_t* statement_node){
+	//Special case--we're adding the head
+	if(target->leader_statement == NULL){
+		//Assign this to be the head and the tail
+		target->leader_statement = statement_node;
+		target->exit_statement = statement_node;
+		return;
+	}
+
+	//Otherwise, we are not dealing with the head. We'll simply tack this on to the tail
+	target->exit_statement->next = statement_node;
+	//Update the tail reference
+	target->exit_statement = statement_node;
+}
+
+
+/**
  * Deallocate a basic block
 */
 void basic_block_dealloc(basic_block_t* block){
@@ -111,4 +144,18 @@ void basic_block_dealloc(basic_block_t* block){
 
 	//Otherwise its fine so
 	free(block);
+}
+
+
+/**
+ * CFG destructor function
+*/
+void dealloc_cfg(cfg_t* cfg){
+	//We'll loop over all of the blocks and free them one by one
+	for(u_int32_t i = 0; i < cfg->num_blocks; i++){
+		basic_block_dealloc(cfg->blocks[i]);
+	}
+
+	//Finally free the cfg itself
+	free(cfg);
 }
