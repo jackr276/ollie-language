@@ -218,24 +218,24 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 
 
 /**
- * Destroy a type that is no longer in use
- * TODO NOT DONE
+ * Provide a way of destroying a type variable easily
 */
 void destroy_type(generic_type_t* type){
-	//We will take action based on what kind of type that we have
-	//Just free type and leave
+	//We'll take action based on what kind of type it is
 	if(type->type_class == TYPE_CLASS_BASIC){
 		free(type->basic_type);
-		free(type);
-	} else if(type->type_class == TYPE_CLASS_ARRAY){
+	} else if (type->type_class == TYPE_CLASS_ALIAS){
+		free(type->aliased_type);
+	} else if (type->type_class == TYPE_CLASS_ARRAY){
 		free(type->array_type);
-		free(type);
 	} else if(type->type_class == TYPE_CLASS_POINTER){
 		free(type->pointer_type);
-		free(type);
+	} else if(type->type_class == TYPE_CLASS_CONSTRUCT){
+		free(type->construct_type);
 	} else if(type->type_class == TYPE_CLASS_ENUMERATED){
-
-	} else {
-
+		free(type->enumerated_type);
 	}
+
+	//Finally just free the overall pointer
+	free(type);
 }

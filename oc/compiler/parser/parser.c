@@ -287,11 +287,11 @@ static generic_ast_node_t* function_call(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Push onto the grouping stack once we see this
+	push(grouping_stack, lookahead);
+
 	//A node to hold our current parameter
 	generic_ast_node_t* current_param;
-
-	//Refresh the lookahead token
-	lookahead = get_next_token(fl, &parser_line_num);
 
 	//So long as we don't see the R_PAREN we aren't done
 	while(1){
@@ -2697,7 +2697,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 	//These are all of our basic types
 	if(lookahead.tok == VOID || lookahead.tok == U_INT8 || lookahead.tok == S_INT8 || lookahead.tok == U_INT16
 	   || lookahead.tok == S_INT16 || lookahead.tok == U_INT32 || lookahead.tok == S_INT32 || lookahead.tok == U_INT64
-	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == CHAR){
+	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == FLOAT64 || lookahead.tok == CHAR){
 
 		//Copy the lexeme into the node, no need for intermediaries here
 		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, lookahead.lexeme);
@@ -2928,6 +2928,8 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 			} else {
 				//Otherwise, just set the current type record to be what we found
 				current_type_record = found_pointer;
+				//We don't need the other ponter if this is the case
+				destroy_type(pointer);
 			}
 
 		//Otherwise we know that we found an array pointer
@@ -2963,6 +2965,8 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 			} else {
 				//Otherwise, just set the current type record to be what we found
 				current_type_record = found_array;
+				//We don't need the other one if this is the case
+				destroy_type(array_type);
 			}
 		}
 

@@ -189,12 +189,6 @@ symtab_type_record_t* create_type_record(generic_type_t* type){
 	//Allocate it
 	symtab_type_record_t* record = (symtab_type_record_t*)calloc(1, sizeof(symtab_type_record_t));
 
-	//Hard fail and exit if this happens
-	if(type == NULL){
-		printf("TYPE WAS NULL\n");
-		exit(1);
-	}
-
 	//Hash the type name and store it
 	record->hash = hash(type->type_name);
 	//Assign the type
@@ -360,7 +354,7 @@ void add_all_basic_types(type_symtab_t* symtab){
 	insert_type(symtab,  create_type_record(type));
 	
 	//float64 type
-	type = create_basic_type("float32", FLOAT64);
+	type = create_basic_type("float64", FLOAT64);
 	insert_type(symtab,  create_type_record(type));
 
 	//label type
@@ -718,6 +712,8 @@ void destroy_type_symtab(type_symtab_t* symtab){
 
 		//Now we'll free all non-null records
 		for(u_int16_t j = 0; j < KEYSPACE; j++){
+			record = cursor->records[j];
+
 			//We could have chaining here, so run through just in case
 			while(record != NULL){
 				temp = record;
