@@ -5254,7 +5254,7 @@ static generic_ast_node_t* function_specifier(FILE* fl){
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
-static generic_ast_node_t* function_definition(FILE* fl){
+static u_int8_t function_definition(FILE* fl){
 	//This will be used for error printing
 	char info[2000];
 	//Freeze the line number
@@ -5513,16 +5513,19 @@ static generic_ast_node_t* function_definition(FILE* fl){
 /**
  * Here we can either have a function definition or a declaration
  *
- * Like all other functions, this function returns a pointer to the 
- * root of the subtree it creates. Since there is no concrete node here,
- * this function is really just a multiplexing rule
+ * While this function really is just a multiplexing rule, it does have the important
+ * job of finding the reference to the very first basic block and storing it
  *
  * <declaration-partition>::= <function-definition>
  *                        	| <declaration>
+ *                        	| <define-statement>
+ *                        	| <alias-statement>
  */
-static generic_ast_node_t* declaration_partition(FILE* fl){
-	//Lookahead tokn
+static u_int8_t declaration_partition(FILE* fl, basic_block_t** block){
+	//Lookahead token
 	Lexer_item lookahead;
+	//Status variable
+	u_int8_t status = 0;
 
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5530,64 +5533,96 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 	//We know that we have a function here
 	//We consume the function token here, NOT in the function rule
 	if(lookahead.tok == FUNC){
-		//We'll just let the function definition rule handle this. If it fails, 
-		//that will be caught above
-		return function_definition(fl);
+		/**
+		 * A function, before it is called, is completely disconnected from any kind of
+		 * control flow. As such, the function rule creates an entirely segregated control flow 
+		 * graph that is only entered/exited from when some other declaration makes an explicit call to it
+		 */
+		status = function_definition(fl);
 
-	//Otherwise it must be a declaration
-	} else {
-		//Put the token back
-		push_back_token(fl, lookahead);
+		//If the function defintion failed...
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Function definition failed", parser_line_num);
+			num_errors++;
+			return 0;
+		}
 
-		//We'll simply return whatever the product of the declaration function is
-		return declaration(fl);
+		//Otherwise it worked so
+		return 1;
+
+	//Otherwise, it could be a declaration statement
+	} else if(lookahead.tok == DEFINE){
+		//A define statement is 100% a compiler-only statement. It only defines a type. As such,
+		//there is no interest in us storing this in any control-flow graph
+		status = define_statement(fl);
+
+		//If we have a bad definition statement
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Type definition failed", parser_line_num);
+			num_errors++;
+			return 0;
+		}
+		//Otherwise it worked so
+		return 1;
+
+	//We could also have an alias statement
+	} else if(lookahead.tok == ALIAS){
+		//Again, an alaias statement is a 100% compiler only statement. It only defines a type. As such,
+		//there is no interest in us storing this in any control flow graph
+		status = alias_statement(fl);
+
+		//If we have a bad alias statement
+		if(status == 0){
+			print_parse_message(PARSE_ERROR, "Aliasing failed", parser_line_num);
+			num_errors++;
+			return 0;
+		}
+
+		//Otherwise it worked so
+		return 1;
+		
+	//Otherwise we could be seeing a let statement
+	} else if(lookahead.tok == LET){
+		basic_block_t* let_entry_block = let_statement(fl);
+
+		//If this is bad, we'll fail out
+
 	}
 }
 
 
 /**
- * Here is our entry point. Like all functions, this returns
- * a reference to the root of the subtree it creates
+ * Here is our entry point. The program rule is the entry point of our control-flow graph. This returns
+ * a reference to the "start" basic block of the control flow graph in the program. We also pass down 
+ * this reference as the current node we're operating on
  *
  * BNF Rule: <program>::= {<declaration-partition>}*
  */
-static generic_ast_node_t* program(FILE* fl){
-	//Freeze the line number
+static basic_block_t* program(FILE* fl){
+	//Lookahead token
 	Lexer_item lookahead;
+	//Status var
+	u_int8_t status = 0;
+	//The first basic block
+	basic_block_t* first_block = NULL;
 
-	//We first symbolically "see" the START token. The start token
-	//is the lexer symbol that the top level node holds
-	Lexer_item start;
-	//We really only care about the tok here
-	start.tok = START;
-	
-	//Create the ROOT of the tree
-	generic_ast_node_t* ast_root = ast_node_alloc(AST_NODE_CLASS_PROG);
-
-	//Assign the lexer item to it for completeness
-	((prog_ast_node_t*)(ast_root->node))->lex = start;
-	
 	//As long as we aren't done
 	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
 		//Put the token back
 		push_back_token(fl, lookahead);
 
 		//Call declaration partition
-		generic_ast_node_t* current = declaration_partition(fl);
+		status = declaration_partition(fl, &first_block);
 
 		//It failed, we'll bail right out if this is the case
-		if(current->CLASS == AST_NODE_CLASS_ERR_NODE){
-			//Just return the erroneous node
-			return current;
+		if(status == 0){
+			//We failed here, we'll just return NULL
+			return NULL;
 		}
-		
-		//Otherwise, we'll add this as a child of the root
-		add_child_node(ast_root, current);
-		//And then we'll keep right along
 	}
 
 	//Return the root of the tree
-	return ast_root;
+	return first_block;
 }
 
 
@@ -5623,9 +5658,16 @@ u_int8_t parse(FILE* fl){
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_stack();
 
+	//Let's allocate the CFG
+	cfg_t* cfg = create_cfg();
+
 	//Create our global entry point to the CFG. We'll hold the root referece to all
 	//of our nodes
 	basic_block_t* control_flow_graph = program(fl);
+	
+	//We know that the very first block in the CFG will be the basic block that comes
+	//out of the program rule
+	cfg->root = control_flow_graph;
 
 	//Timer end
 	clock_t end = clock();
@@ -5633,7 +5675,7 @@ u_int8_t parse(FILE* fl){
 	time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 
 	//If we failed
-	if(prog->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(control_flow_graph == NULL){
 		status = 1;
 		char info[500];
 		sprintf(info, "Parsing failed with %d errors in %.8f seconds", num_errors, time_spent);
@@ -5656,8 +5698,8 @@ u_int8_t parse(FILE* fl){
 	destroy_variable_symtab(variable_symtab);
 	destroy_type_symtab(type_symtab);
 	
-	//Deallocate the AST
-	deallocate_ast(prog);
+	//Destroy the CFG
+	dealloc_cfg(cfg);
 
 	return status;
 }
