@@ -1954,6 +1954,9 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
  *
  * This rule also handles everything with identifiers to avoid excessive confusion
  *
+ * This rule has NO CFG INTEGRATION. The job of the AST that we build here is simply for parsing, and it will be destroyed
+ * shortly after it is used. The main purpose here is to get that defined construct into the symbol table
+ *
  * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
 static generic_ast_node_t* construct_definer(FILE* fl){
@@ -2075,10 +2078,6 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	
 	//Now we'll actually create the node itself
 	generic_ast_node_t* construct_definer_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_DEFINER);
-	//Save the construct type in here
-	((construct_definer_ast_node_t*)(construct_definer_node->node))->created_construct = construct_type;
-
-	//We'll now add a reference to the construct 
 	
 	//This node's first child will be the identifier
 	add_child_node(construct_definer_node, ident);
@@ -2336,6 +2335,9 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
  *
  * Important note: By the time we get here, we will have already consume the "define" and "enum" tokens
  *
+ * The main purpose of this rule is to get the enum type into the symbol table. There is NO CFG INTEGRATION
+ * with this rule. The AST that it creates will be destroyed shortly after creation
+ *
  * BNF Rule: <enum-definer> ::= define enum <identifier> { <enum-member-list> } {as <identifier>}?;
  */
 static generic_ast_node_t* enum_definer(FILE* fl){
@@ -2460,8 +2462,6 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	//Now once we get here, we will have added all of the sibling references in
 	//We can now also create the overall definer node
 	generic_ast_node_t* enum_def_node = ast_node_alloc(AST_NODE_CLASS_ENUM_DEFINER);
-	//We will also now link this type to it
-	((enum_definer_ast_node_t*)(enum_def_node->node))->created_enum = enum_type;
 
 	//The enum def node first has the name ident as its child
 	add_child_node(enum_def_node, ident);
@@ -4999,31 +4999,65 @@ static generic_ast_node_t* let_statement(FILE* fl){
 
 /**
  * A define statement allows users to define complex types like enumerateds and constructs and give them aliases. This rule is
- * already largely handled by the construct-definer and enum-definer rules that we've seen previously. Like all rules, this function
- * returns a root node to the tree it creates
+ * already largely handled by the construct-definer and enum-definer rules that we've seen previously. Since this is a COMPILER
+ * ONLY rule, we will actually destroy the AST node once we're done with this. This rule has absolute NO CFG INTEGRATION.
  *
  * Remember: we've already seen and consumed the defined keyword by the time we get here
  *
  * BNF Rule: <define-statement> ::= define {<construct-definer> | <enum-definer>}
  */
-static generic_ast_node_t* define_statement(FILE* fl){
+static u_int8_t define_statement(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
 
 	//We need to see ENUM or CONSTRUCT
 	lookahead = get_next_token(fl, &parser_line_num);
 
+	//The root node of the AST that we make. This will actually be destroyed when we're done with it
+	generic_ast_node_t* ast_root_node;
+
 	//Construct definer
 	if(lookahead.tok == CONSTRUCT){
-		return construct_definer(fl);
+		//Let this rule handle it
+		ast_root_node = construct_definer(fl);
+
+		//If we have an error we'll fail out
+		if(ast_root_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//This is invalid, so we'll just return 0
+			return 0;
+		}
+
+		//Otherwise it actually did work, and the symbol table integration already happened, so we'll 
+		//just destroy the AST node and return success
+		deallocate_ast(ast_root_node);
+
+		//Success here
+		return 1;
+
 	//Enum definer
 	} else if(lookahead.tok == ENUM){
-		return enum_definer(fl);
+		//Let this rule handle it
+		ast_root_node = enum_definer(fl);
+
+		//If we have an error we'll fail out
+		if(ast_root_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//This is invalid, so we'll just return 0
+			return 0;
+		}
+
+		//Otherwise it actually did work, and the symbol table integration already happened, so we'll 
+		//just destroy the AST node and return success
+		deallocate_ast(ast_root_node);
+
+		//Success here
+		return 1;
+
 	//Otherwise it's wrong
 	} else {
 		print_parse_message(PARSE_ERROR, "Enum or construct keywords required after define keyword", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Failure here
+		return 0;
 	}
 }
 
@@ -5536,8 +5570,11 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 	//As of the start, the current block is the entry node
 	basic_block_t* current_block = entry_node;
 
+	//Refresh lookahead
+	lookahead = get_next_token(fl, &parser_line_num);
+
 	//As long as we aren't done
-	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
+	while(lookahead.tok != DONE){
 		//We'll now multiplex based on what we see here
 		
 		//We will see a function definition here. There is no direct control flow tie-in for 
@@ -5646,6 +5683,9 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 			num_errors++;
 			return NULL;
 		}
+
+		//Refresh our lookahead here
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//Return the root of the tree

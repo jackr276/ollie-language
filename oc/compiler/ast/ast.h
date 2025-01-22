@@ -340,8 +340,7 @@ struct postfix_expr_ast_node_t{
 
 //The construct definer node
 struct construct_definer_ast_node_t{
-	//Keep a reference to the type that was made for the construct
-	generic_type_t* created_construct;
+	u_int8_t status;
 };
 
 //The construct member list node
@@ -358,8 +357,7 @@ struct construct_member_ast_node_t{
 
 //The enum definer node
 struct enum_definer_ast_node_t{
-	//Holds a reference to the type
-	generic_type_t* created_enum;
+	u_int8_t status;
 };
 
 //The enum list node for the definition

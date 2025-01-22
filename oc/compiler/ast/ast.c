@@ -20,14 +20,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
 
 	switch (CLASS) {
-		//The starting node of the entire AST
-		case AST_NODE_CLASS_PROG:
-			//If we have this kind of node, we'll allocate and set
-			//the void ptr to be what we allocate
-			node->node = calloc(1, sizeof(prog_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_PROG;
-			break;
-
 		//The function specifier AST node
 		case AST_NODE_CLASS_FUNC_SPECIFIER:
 			//Just allocate the proper size and set the class
