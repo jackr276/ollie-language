@@ -50,7 +50,7 @@ basic_block_t* basic_block_alloc(cfg_t* cfg){
  * Add a predecessor to the target block. When we add a predecessor, the target
  * block is also implicitly made a successor of said predecessor
  */
-void add_predecessor(basic_block_t* target, basic_block_t* predecessor){
+void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_direction_t directedness){
 	//Let's check this
 	if(target->num_predecessors == MAX_PREDECESSORS){
 		//Internal error for the programmer
@@ -64,26 +64,29 @@ void add_predecessor(basic_block_t* target, basic_block_t* predecessor){
 	//Increment how many we have
 	(target->num_predecessors)++;
 
-	//We also need to reverse the roles and add target as a successor to "predecessor"
-	//Let's check this
-	if(predecessor->num_successors == MAX_SUCCESSORS){
-		//Internal error for the programmer
-		printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF SUCCESSORS");
-		exit(1);
-	}
+	//If we are trying to do a bidirectional link
+	if(directedness == LINKED_DIRECTION_BIDIRECTIONAL){
+		//We also need to reverse the roles and add target as a successor to "predecessor"
+		//Let's check this
+		if(predecessor->num_successors == MAX_SUCCESSORS){
+			//Internal error for the programmer
+			printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF SUCCESSORS");
+			exit(1);
+		}
 
-	//Otherwise we're set here
-	//Add this in
-	predecessor->successors[predecessor->num_successors] = target;
-	//Increment how many we have
-	(predecessor->num_successors)++;
+		//Otherwise we're set here
+		//Add this in
+		predecessor->successors[predecessor->num_successors] = target;
+		//Increment how many we have
+		(predecessor->num_successors)++;
+	}
 }
 
 
 /**
  * Add a successor to the target block
  */
-void add_successor(basic_block_t* target, basic_block_t* successor){
+void add_successor(basic_block_t* target, basic_block_t* successor, linked_direction_t directedness){
 	//Let's check this
 	if(target->num_successors == MAX_SUCCESSORS){
 		//Internal error for the programmer
@@ -97,19 +100,22 @@ void add_successor(basic_block_t* target, basic_block_t* successor){
 	//Increment how many we have
 	(target->num_successors)++;
 
-	//Now we'll also need to add in target as a predecessor of successor
-	//Let's check this
-	if(successor->num_predecessors == MAX_PREDECESSORS){
-		//Internal error for the programmer
-		printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF PREDECESSORS");
-		exit(1);
-	}
+	//If we are trying to do a bidirectional link
+	if(directedness == LINKED_DIRECTION_BIDIRECTIONAL){
+		//Now we'll also need to add in target as a predecessor of successor
+		//Let's check this
+		if(successor->num_predecessors == MAX_PREDECESSORS){
+			//Internal error for the programmer
+			printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF PREDECESSORS");
+			exit(1);
+		}
 
-	//Otherwise we're set here
-	//Add this in
-	successor->predecessors[successor->num_predecessors] = target;
-	//Increment how many we have
-	(successor->num_predecessors)++;
+		//Otherwise we're set here
+		//Add this in
+		successor->predecessors[successor->num_predecessors] = target;
+		//Increment how many we have
+		(successor->num_predecessors)++;
+	}
 }
 
 

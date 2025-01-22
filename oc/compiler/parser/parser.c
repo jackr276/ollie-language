@@ -34,6 +34,9 @@ u_int16_t num_errors = 0;
 //The current parser line number
 u_int16_t parser_line_num = 1;
 
+//Does the next node that we see need to be a leader? By default, it's a yes
+u_int8_t need_leader = 1;
+
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
@@ -5511,118 +5514,142 @@ static u_int8_t function_definition(FILE* fl){
 
 
 /**
- * Here we can either have a function definition or a declaration
- *
- * While this function really is just a multiplexing rule, it does have the important
- * job of finding the reference to the very first basic block and storing it
- *
- * <declaration-partition>::= <function-definition>
- *                        	| <declaration>
- *                        	| <define-statement>
- *                        	| <alias-statement>
- */
-static u_int8_t declaration_partition(FILE* fl, basic_block_t** block){
-	//Lookahead token
-	Lexer_item lookahead;
-	//Status variable
-	u_int8_t status = 0;
-
-	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//We know that we have a function here
-	//We consume the function token here, NOT in the function rule
-	if(lookahead.tok == FUNC){
-		/**
-		 * A function, before it is called, is completely disconnected from any kind of
-		 * control flow. As such, the function rule creates an entirely segregated control flow 
-		 * graph that is only entered/exited from when some other declaration makes an explicit call to it
-		 */
-		status = function_definition(fl);
-
-		//If the function defintion failed...
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Function definition failed", parser_line_num);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise it worked so
-		return 1;
-
-	//Otherwise, it could be a declaration statement
-	} else if(lookahead.tok == DEFINE){
-		//A define statement is 100% a compiler-only statement. It only defines a type. As such,
-		//there is no interest in us storing this in any control-flow graph
-		status = define_statement(fl);
-
-		//If we have a bad definition statement
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Type definition failed", parser_line_num);
-			num_errors++;
-			return 0;
-		}
-		//Otherwise it worked so
-		return 1;
-
-	//We could also have an alias statement
-	} else if(lookahead.tok == ALIAS){
-		//Again, an alaias statement is a 100% compiler only statement. It only defines a type. As such,
-		//there is no interest in us storing this in any control flow graph
-		status = alias_statement(fl);
-
-		//If we have a bad alias statement
-		if(status == 0){
-			print_parse_message(PARSE_ERROR, "Aliasing failed", parser_line_num);
-			num_errors++;
-			return 0;
-		}
-
-		//Otherwise it worked so
-		return 1;
-		
-	//Otherwise we could be seeing a let statement
-	} else if(lookahead.tok == LET){
-		basic_block_t* let_entry_block = let_statement(fl);
-
-		//If this is bad, we'll fail out
-
-	}
-}
-
-
-/**
  * Here is our entry point. The program rule is the entry point of our control-flow graph. This returns
  * a reference to the "start" basic block of the control flow graph in the program. We also pass down 
  * this reference as the current node we're operating on
  *
  * BNF Rule: <program>::= {<declaration-partition>}*
+ *
+ * <declaration-partition> ::= <function-definition>
+ * 							 | <let-statement>
+ * 							 | <declare-statement>
+ * 							 | <alias-statment> (COMPILER ONLY)
+ * 							 | <define-statement> (COMPILER ONLY)
  */
-static basic_block_t* program(FILE* fl){
+static basic_block_t* program(FILE* fl, cfg_t* cfg){
 	//Lookahead token
 	Lexer_item lookahead;
 	//Status var
 	u_int8_t status = 0;
-	//The first basic block
-	basic_block_t* first_block = NULL;
+	//The entry node. 
+	basic_block_t* entry_node = basic_block_alloc(cfg);
+	//As of the start, the current block is the entry node
+	basic_block_t* current_block = entry_node;
 
 	//As long as we aren't done
 	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
-		//Put the token back
-		push_back_token(fl, lookahead);
+		//We'll now multiplex based on what we see here
+		
+		//We will see a function definition here. There is no direct control flow tie-in for 
+		//a function immediately
+		if(lookahead.tok == FUNC){
+			//Define the function
+			status = function_definition(fl);
+			//If we fail
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Function defintion failed", parser_line_num);
+				//Fail out here by returning null
+				return NULL;
+			}
 
-		//Call declaration partition
-		status = declaration_partition(fl, &first_block);
+			//Otherwise it's fine, so we'll just keep moving along
 
-		//It failed, we'll bail right out if this is the case
-		if(status == 0){
-			//We failed here, we'll just return NULL
+		//Alias statements are a 100% compiler-only construct for the type system. As such, we will
+		//process them but they will not be added into the control flow
+		} else if(lookahead.tok == ALIAS){
+			//Define the alias
+			status = alias_statement(fl);
+
+			//If we fail here, we'll bail out by returning null
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid alias statement detected", parser_line_num);
+				return NULL;
+			}
+
+			//Otherwise we just keep moving along
+
+		//Define statements are also a 100% compiler only construct for the type system. As such, we will	
+		//process them but they will not be added into the control flow
+		} else if(lookahead.tok == DEFINE){
+			//Define the define statement 
+			status = define_statement(fl);
+
+			//If we fail here, we'll bail out by returning null
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid define statement detected", parser_line_num);
+				return NULL;
+			}
+
+			//Otherwise we just keep moving along
+		
+		//Declare statements are a control flow construct. The represent blocks. At this level, there are no jumps in
+		//the program. Each declare/let statement here will get its own basic block to hold it, and they are chained
+		//together in order of being seen
+		} else if(lookahead.tok == DECLARE){
+			//We'll first define it
+			top_level_statment_node_t* declare_node = declare_statement(fl);
+
+			//If it's null, we had a bad declaration block
+			if(declare_node == NULL){
+				print_parse_message(PARSE_ERROR, "Bad top level declaration statement given", parser_line_num);
+				return NULL;
+			}
+
+			//Is the declare node a leader?
+			if(declare_node->is_leader == 1){
+				//We'll create a whole new node for it and add it as a successor
+				basic_block_t* new_block = basic_block_alloc(cfg);
+
+				//Add the declare node as the very first statement
+				add_statement(new_block, declare_node);
+
+				//We've already seen a leader, so we don't need to see another one immediately
+				need_leader = 0;
+
+			//Otherwise if it isn't a leader, it just gets added into our current block
+			} else {
+				add_statement(current_block, declare_node);
+			}
+
+		//Let statements are a control flow construct. The represent blocks. At this level, there are no jumps in
+		//the program. Each declare/let statement here will get its own basic block to hold it, and they are chained
+		//together in order of being seen
+		} else if(lookahead.tok == LET){
+			//We'll first define it
+			top_level_statment_node_t* let_node = let_statement(fl);
+
+			//If it's null, we had a bad declaration block
+			if(let_node == NULL){
+				print_parse_message(PARSE_ERROR, "Bad top level let statement given", parser_line_num);
+				return NULL;
+			}
+
+			//Is the declare node a leader?
+			if(let_node->is_leader == 1){
+				//We'll create a whole new node for it and add it as a successor
+				basic_block_t* new_block = basic_block_alloc(cfg);
+
+				//Add the declare node as the very first statement
+				add_statement(new_block, let_node);
+
+				//We've already seen a leader, so we don't need to see another one immediately
+				need_leader = 0;
+
+			//Otherwise if it isn't a leader, it just gets added into our current block
+			} else {
+				add_statement(current_block, let_node);
+			}
+
+		//If we make it here then there is some kind of failure
+		} else {
+			print_parse_message(PARSE_ERROR, "Expected declare, define, let, alias or func keywords", parser_line_num);
+			num_errors++;
 			return NULL;
 		}
 	}
 
 	//Return the root of the tree
-	return first_block;
+	return entry_node;
 }
 
 
@@ -5663,7 +5690,7 @@ u_int8_t parse(FILE* fl){
 
 	//Create our global entry point to the CFG. We'll hold the root referece to all
 	//of our nodes
-	basic_block_t* control_flow_graph = program(fl);
+	basic_block_t* control_flow_graph = program(fl, cfg);
 	
 	//We know that the very first block in the CFG will be the basic block that comes
 	//out of the program rule

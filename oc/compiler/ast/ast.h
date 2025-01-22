@@ -194,9 +194,14 @@ struct generic_ast_node_t{
  * by the basic blocks of our CFG
  */
 struct top_level_statment_node_t{
+	//Is this a leader node? Leader nodes are nodes that are:
+	// 1.) The first statement seen
+	// 2.) The first statement that is the target of a branch
+	// 3.) The first statement that immediately follows a branch
+	u_int8_t is_leader;
 	//Acts as a singly linked list of nodes
 	top_level_statment_node_t* next;
-	//Hold the reference to the root node
+	//Hold the reference to the root node for the expression-level AST
 	generic_ast_node_t* root;
 };
 

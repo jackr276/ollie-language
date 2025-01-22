@@ -18,6 +18,14 @@ typedef struct cfg_t cfg_t;
 typedef struct basic_block_t basic_block_t;
 
 /**
+ * What is the directionality of our added node
+ */
+typedef enum linked_direction_t {
+	LINKED_DIRECTION_BIDIRECTIONAL,
+	LINKED_DIRECTION_UNIDIRECTIONAL
+} linked_direction_t;
+
+/**
  * We have a basic CFG structure that holds these references to making freeing
  */
 struct cfg_t{
@@ -63,10 +71,10 @@ cfg_t* create_cfg();
 basic_block_t* basic_block_alloc(cfg_t* cfg);
 
 //Add a predecessor to the target block
-void add_predecessor(basic_block_t* target, basic_block_t* predecessor);
+void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_direction_t directedness);
 
 //Add a successor to the target block
-void add_successor(basic_block_t* target, basic_block_t* successor);
+void add_successor(basic_block_t* target, basic_block_t* successor, linked_direction_t directedness);
 
 //Add a statement AST node refence to the basic block
 void add_statement(basic_block_t* target, top_level_statment_node_t* statement_node);
