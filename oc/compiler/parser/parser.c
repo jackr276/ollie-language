@@ -40,7 +40,6 @@ u_int16_t parser_line_num = 1;
 static generic_ast_node_t* cast_expression(FILE* fl);
 static generic_ast_node_t* type_specifier(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
-static generic_ast_node_t* conditional_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl);
 static generic_ast_node_t* declaration(FILE* fl);
 static generic_ast_node_t* compound_statement(FILE* fl);
@@ -279,7 +278,7 @@ static generic_ast_node_t* expression(FILE* fl){
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<identifier>({<conditional-expression>}?{, <conditional_expression>}*)
+ * BNF Rule: <function-call> ::= @<identifier>({<logical-or-expression>}?{, <logical-or-expression>}*)
  */
 static generic_ast_node_t* function_call(FILE* fl){
 	//For generic error printing
@@ -358,7 +357,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 	//So long as we don't see the R_PAREN we aren't done
 	while(1){
 		//Parameters are in the form of a conditional expression
-		current_param = conditional_expression(fl);
+		current_param = logical_or_expression(fl);
 
 		//We now have an error of some kind
 		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -581,8 +580,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  * that will be made. If not, we will simply pass the parent along. An assignment expression will return
  * a reference to the subtree created by it
  *
- * BNF Rule: <assignment-expression> ::= <conditional-expression> 
- * 									   | asn <unary-expression> := <conditional-expression>
+ * BNF Rule: <assignment-expression> ::= <logical-or-expression> 
+ * 									   | asn <unary-expression> := <logical-or-expression>
  *
  * TODO TYPE CHECKING REQUIRED
  */
@@ -604,7 +603,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		push_back_token(fl, lookahead);
 
 		//Simply let the conditional expression rule handle it
-		return conditional_expression(fl);
+		return logical_or_expression(fl);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
@@ -641,18 +640,18 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 
 	//Now that we're here we must see a valid conditional expression
-	generic_ast_node_t* conditional = conditional_expression(fl);
+	generic_ast_node_t* expr = logical_or_expression(fl);
 
 	//Fail case here
-	if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid right hand side given to assignment expression", current_line);
 		num_errors++;
 		//The conditional is already an error, so we'll just return it
-		return conditional;
+		return expr;
 	}
 
 	//Otherwise we know it worked, so we'll add the conditional in as the right child
-	add_child_node(asn_expr_node, conditional);
+	add_child_node(asn_expr_node, expr);
 
 	//Return the reference to the overall node
 	return asn_expr_node;
@@ -719,7 +718,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl){
  *
  * We expect that the caller has given back the [ token for this rule
  *
- * BNF Rule: <array-accessor> ::= [ <conditional-expression> ]
+ * BNF Rule: <array-accessor> ::= [ <logical-or--expression> ]
  *
  */
 static generic_ast_node_t* array_accessor(FILE* fl){
@@ -744,7 +743,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 
 	//Now we are required to see a valid constant expression representing what
 	//the actual index is. TODO TYPE CHECKING NEEDED
-	generic_ast_node_t* expr = conditional_expression(fl);
+	generic_ast_node_t* expr = logical_or_expression(fl);
 
 	//If we fail, automatic exit here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1824,21 +1823,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 
 	//Return the reference to the root node
 	return sub_tree_root;
-}
-
-
-/**
- * A conditional expression is simply used as a passthrough for a logical or expression,
- * but some important checks may be done here so we'll use it
- *
- * This rule will always return a reference to the root of the subtree it makes
- *
- * BNF Rule: <conditional-expression> ::= <logical-or-expression>
- */
-static generic_ast_node_t* conditional_expression(FILE* fl){
-	//We'll now hand the entire thing off to the logical-or-expression node
-	//and return the reference that it gives us
-	return logical_or_expression(fl);
 }
 
 
@@ -3481,7 +3465,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
  *
  * NOTE: We assume that the caller has already seen and consumed the if token if they make it here
  *
- * BNF Rule: <if-statement> ::= if( <conditional_expression> ) then <compound-statement> {else <if-statement> | <compound-statement>}*
+ * BNF Rule: <if-statement> ::= if( <logical-or-expression> ) then <compound-statement> {else <if-statement> | <compound-statement>}*
  */
 static generic_ast_node_t* if_statement(FILE* fl){
 	//Freeze the line number
@@ -3507,7 +3491,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	push(grouping_stack, lookahead);
 	
 	//We now need to see a valid conditional expression
-	generic_ast_node_t* expression_node = conditional_expression(fl);
+	generic_ast_node_t* expression_node = logical_or_expression(fl);
 
 	//If we see an invalid one
 	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3734,18 +3718,18 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 	push(grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional expression
-	generic_ast_node_t* conditional_expr_node = conditional_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 	//If it failed, we also fail
-	if(conditional_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to continue when statement", parser_line_num);
 		num_errors++;
 		//It's already an error so we'll just give it back
-		return conditional_expr_node;
+		return expr_node;
 	}
 
 	//If we get here we know that it worked, so we can add it as a child
-	add_child_node(continue_stmt, conditional_expr_node);
+	add_child_node(continue_stmt, expr_node);
 
 	//We need to now see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -3828,19 +3812,19 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	//Push to the stack for grouping
 	push(grouping_stack, lookahead);
 
-	//Now we need to see a valid conditional expression
-	generic_ast_node_t* conditional_expr_node = conditional_expression(fl);
+	//Now we need to see a valid expression
+	generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 	//If it failed, we also fail
-	if(conditional_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to break when statement", parser_line_num);
 		num_errors++;
 		//It's already an error so we'll just give it back
-		return conditional_expr_node;
+		return expr_node;
 	}
 
 	//If we get here we know that it worked, so we can add it as a child
-	add_child_node(break_stmt, conditional_expr_node);
+	add_child_node(break_stmt, expr_node);
 
 	//We need to now see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -3883,7 +3867,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we will have already consumed the ret keyword
  *
- * BNF Rule: <return-statement> ::= ret {<conditional-expression>}?;
+ * BNF Rule: <return-statement> ::= ret {<logical-or-expression>}?;
  */
 static generic_ast_node_t* return_statement(FILE* fl){
 	//Lookahead token
@@ -3904,18 +3888,18 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* conditional_expr = conditional_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 	//If this is bad, we fail out
-	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to return statement", parser_line_num);
 		num_errors++;
 		//It's already an error, so we'll just return it
-		return conditional_expr;
+		return expr_node;
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
-	add_child_node(return_stmt, conditional_expr);
+	add_child_node(return_stmt, expr_node);
 
 	//After the conditional, we just need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -3979,7 +3963,7 @@ static generic_ast_node_t* branch_statement(FILE* fl){
  *
  * NOTE: The caller has already consumed the switch keyword by the time we get here
  *
- * BNF Rule: <switch-statement> ::= switch on( <conditional-expression> ) { {<statement>}+ }
+ * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) { {<statement>}+ }
  */
 static generic_ast_node_t* switch_statement(FILE* fl){
 	//Freeze the line number
@@ -4016,18 +4000,18 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	push(grouping_stack, lookahead);
 
 	//Now we must see a valid conditional expression
-	generic_ast_node_t* conditional_expr = conditional_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 	//If we see an invalid one we fail right out
-	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid conditional expression provided to switch on", current_line);
 		num_errors++;
 		//It's already an error, so just send this up
-		return conditional_expr;
+		return expr_node;
 	}
 	
 	//Since we know it's valid, we can add this in as a child
-	add_child_node(switch_stmt_node, conditional_expr);
+	add_child_node(switch_stmt_node, expr_node);
 
 	//Now we must see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4119,7 +4103,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  *
  * NOTE: By the time that we make it here, we assume that we have already seen the while keyword
  *
- * BNF Rule: <while-statement> ::= while( <conditional-expression> ) do <compound-statement> 
+ * BNF Rule: <while-statement> ::= while( <logical-or-expression> ) do <compound-statement> 
  */
 static generic_ast_node_t* while_statement(FILE* fl){
 	//The lookahead token
@@ -4143,7 +4127,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	push(grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* conditional_expr = conditional_expression(fl);
+	generic_ast_node_t* conditional_expr = logical_or_expression(fl);
 
 	//Fail out if this happens
 	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4211,7 +4195,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we assume that we've already seen the "do" keyword
  *
- * BNF Rule: <do-while-statement> ::= do <compound-statement> while( <conditional-expression> );
+ * BNF Rule: <do-while-statement> ::= do <compound-statement> while( <logical-or-expression> );
  */
 static generic_ast_node_t* do_while_statement(FILE* fl){
 	//Freeze the current line number
@@ -4263,18 +4247,18 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	push(grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* conditional_expr = conditional_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 	//Fail out if this happens
-	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid expression in while part of do-while statement",  parser_line_num);
 		num_errors++;
 		//It's already an error so just give this back
-		return conditional_expr;
+		return expr_node;
 	}
 
 	//Otherwise we know it's good so we can add it in as a child
-	add_child_node(do_while_stmt_node, conditional_expr);
+	add_child_node(do_while_stmt_node, expr_node);
 
 	//After this point we need to see a right paren
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4317,7 +4301,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<conditional-expression>}? ; {<conditional-expression>}? ) do <compound-statement>
+ * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<logical-or-expression>}? ; {<logical-or-expression>}? ) do <compound-statement>
  */
 static generic_ast_node_t* for_statement(FILE* fl){
 	//Freeze the current line number
@@ -4417,18 +4401,18 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		push_back_token(fl, lookahead);
 
 		//Let this rule handle it
-		generic_ast_node_t* conditional_expr = conditional_expression(fl);
+		generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 		//If it fails, we fail too
-		if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 			print_parse_message(PARSE_ERROR, "Invalid conditional expression in for loop middle", parser_line_num);
 			num_errors++;
 			//It's already an error, so just send it up
-			return conditional_expr;
+			return expr_node;
 		}
 
 		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, conditional_expr);
+		add_child_node(for_stmt_node, expr_node);
 
 		//Now once we get here, we need to see a valid semicolon
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -4454,18 +4438,18 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 		//We now must see a valid conditional
 		//Let this rule handle it
-		generic_ast_node_t* conditional_expr = conditional_expression(fl);
+		generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 		//If it fails, we fail too
-		if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 			print_parse_message(PARSE_ERROR, "Invalid conditional expression in for loop", parser_line_num);
 			num_errors++;
 			//It's already an error, so just send it up
-			return conditional_expr;
+			return expr_node;
 		}
 
 		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, conditional_expr);
+		add_child_node(for_stmt_node, expr_node);
 
 		//We'll refresh the lookahead for our search here
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -5050,18 +5034,18 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	}
 
 	//Otherwise we saw it, so now we need to see a valid conditional expression
-	generic_ast_node_t* conditional_expr_node = conditional_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 	//If it fails, we fail out
-	if(conditional_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid conditional expression given as intializer", parser_line_num);
 		num_errors++;
 		//It's already an error so just give it back
-		return conditional_expr_node;
+		return expr_node;
 	}
 
 	//Otherwise it worked, so we'll add it in as a child
-	add_child_node(let_stmt_node, conditional_expr_node);
+	add_child_node(let_stmt_node, expr_node);
 
 	//The last thing that we are required to see before final assembly is a semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
