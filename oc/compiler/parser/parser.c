@@ -9,7 +9,6 @@
  * the programming language, and it will translate the source code into an "Intermediate Representation(IR)" that can be given to 
  * the optimizer
  *
- * This parser will do both parsing AND elaboration of macros in the future(not yet supported)
 */
 
 #include "parser.h"
@@ -46,6 +45,7 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* expression(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl);
+static u_int8_t definition(FILE* fl);
 
 
 /**
@@ -1944,8 +1944,8 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 
 /**
  * A construct definer is the definition of a construct. We require all parts of the construct to be defined here.
- * We also allow the potential for aliasing as a different type right off of the bat here. Like all other rules, 
- * this function returns a pointer to the subtree that it creates
+ * We also allow the potential for aliasing as a different type right off of the bat here. Since this is a compiler-specific
+ * rule, we only return success or failer
  *
  * REMEMBER: By the time we get here, we've already seen the define and construct keywords due to lookahead rules
  *
@@ -1953,7 +1953,7 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
  *
  * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
-static generic_ast_node_t* construct_definer(FILE* fl){
+static u_int8_t construct_definer(FILE* fl){
 	//For error printing
 	char info[2000];
 	//Freeze the line num
@@ -1962,6 +1962,8 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	Lexer_item lookahead;
 	//The actual type name that we have
 	char type_name[MAX_TYPE_NAME_LENGTH];
+	//The alias name
+	char alias_name[MAX_TYPE_NAME_LENGTH];
 	
 	//We already know that the type name will have enumerated in it
 	strcpy(type_name, "construct ");
@@ -1973,12 +1975,17 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Valid identifier required after construct keyword", parser_line_num);
 		num_errors++;
-		//Ident is already an error, just give it back
-		return ident;
+		//Destroy the node
+		deallocate_ast(ident);
+		//Fail out
+		return 1;
 	}
 
 	//Otherwise, we'll now add this identifier into the type name
 	strcat(type_name, ((identifier_ast_node_t*)(ident->node))->identifier);	
+
+	//Once we have this, the actual node is useless so we'll free it
+	deallocate_ast(ident);
 
 	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
 	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
@@ -1991,8 +1998,8 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 		//Also print out the type
 		print_type_name(found);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Now we are required to see a curly brace
@@ -2002,8 +2009,8 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	if(lookahead.tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
 		num_errors++;
-		//Create and return the error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Otherwise we'll push onto the stack for later matching
@@ -2015,8 +2022,9 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	//Automatic fail case here
 	if(mem_list->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid construct member list given in construct definition", parser_line_num);
-		//It's already an error, so we'll just allow it to propogate
-		return mem_list;
+		//We'll destroy it first
+		deallocate_ast(mem_list);
+		return 0;
 	}
 
 	//Otherwise we got past the list, and now we need to see a closing curly
@@ -2026,16 +2034,16 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	if(lookahead.tok != R_CURLY){
 		print_parse_message(PARSE_ERROR, "Closing curly brace required after member list", parser_line_num);
 		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 	
 	//Check for unamtched curlies
 	if(pop(grouping_stack).tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
 		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 	
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
@@ -2051,8 +2059,7 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 		//Sanity check
 		if(cursor->CLASS != AST_NODE_CLASS_CONSTRUCT_MEMBER){
 			print_parse_message(PARSE_ERROR, "Fatal internal parse error. Found non-construct member in member list", parser_line_num);
-			//Return an error and fail out
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return 0;
 		}
 
 		//Pick out the variable record
@@ -2069,20 +2076,10 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 
 	//Once we're here, the construct type is fully defined. We can now add it into the symbol table
 	insert_type(type_symtab, create_type_record(construct_type));
+
+	//Once we're done with this, the mem list itself has no use so we'll destroy it
+	deallocate_ast(mem_list);
 	
-	//Now we'll actually create the node itself
-	generic_ast_node_t* construct_definer_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_DEFINER);
-	//Save the construct type in here
-	((construct_definer_ast_node_t*)(construct_definer_node->node))->created_construct = construct_type;
-
-	//We'll now add a reference to the construct 
-	
-	//This node's first child will be the identifier
-	add_child_node(construct_definer_node, ident);
-
-	//The next node is the member list
-	add_child_node(construct_definer_node, mem_list);
-
 	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
 	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
 	//know that we're not aliasing however
@@ -2090,7 +2087,7 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 
 	//We're out of here, just return the node that we made
 	if(lookahead.tok == SEMICOLON){
-		return construct_definer_node;
+		return 1;
 	}
 	
 	//Otherwise, if this is correct, we should've seen the as keyword
@@ -2098,7 +2095,7 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition", parser_line_num);
 		num_errors++;
 		//Make an error and get out of here
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return 1;
 	}
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
@@ -2109,9 +2106,16 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
-		//It's already an error, so we'll just propogate it
-		return alias_ident;
+		//Deallocate and fail
+		deallocate_ast(alias_ident);
+		return 0;
 	}
+
+	//Let's grab the actual name out
+	strcpy(alias_name, ((identifier_ast_node_t*)(alias_ident->node))->identifier);
+
+	//Once we have this, the alias ident is of no use to us
+	deallocate_ast(alias_ident);
 
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -2120,68 +2124,60 @@ static generic_ast_node_t* construct_definer(FILE* fl){
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
 		num_errors++;
-		//Create and give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
-	//Now we have to check to make sure there are no name collisions
-	//Grab this for convenience
-	char* name = ((identifier_ast_node_t*)(alias_ident->node))->identifier;
-
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type(type_symtab, alias_name);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
-	//Now if we make it all the way here, we know that we have a valid name that we can
-	//alias with, so we'll first add the ident in to the tree
-	add_child_node(construct_definer_node, alias_ident);
-
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(name, construct_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_name, construct_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
 
-	//Give back the root level node
-	return construct_definer_node;
+	//Succeeded so
+	return 1;
 }
 
 
@@ -2328,14 +2324,14 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
 
 
 /**
- * An enumeration definition is where we see the actual definition of an enum. Like all other root nodes
- * in the language, it returns the root of the subtree that it created
+ * An enumeration definition is where we see the actual definition of an enum. Since this is a compiler
+ * only rule, we will only return success or failure from this node
  *
  * Important note: By the time we get here, we will have already consume the "define" and "enum" tokens
  *
  * BNF Rule: <enum-definer> ::= define enum <identifier> { <enum-member-list> } {as <identifier>}?;
  */
-static generic_ast_node_t* enum_definer(FILE* fl){
+static u_int8_t enum_definer(FILE* fl){
 	//For error printing
 	char info[2000];
 	//Freeze the current line number
@@ -2344,6 +2340,8 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	Lexer_item lookahead;
 	//The actual name of the enum
 	char name[MAX_TYPE_NAME_LENGTH];
+	//The alias name
+	char alias_name[MAX_TYPE_NAME_LENGTH];
 
 	//We already know that it will have this in the name
 	strcpy(name, "enum ");
@@ -2355,12 +2353,16 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid name given to enum definition", parser_line_num);
 		num_errors++;
-		//It's already an error so just return it
-		return ident;
+		//Deallocate and fail
+		deallocate_ast(ident);
+		return 0;
 	}
 
 	//Now if we get here we know that we found a valid ident, so we'll add it to the name
 	strcat(name, ((identifier_ast_node_t*)(ident->node))->identifier);
+
+	//Once we have this, we no longer need the ident node
+	deallocate_ast(ident);
 
 	//Now we need to check that this name isn't already currently in use. We only need to check against the
 	//type symtable, because nothing else could have enum in the name
@@ -2384,8 +2386,8 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	if(lookahead.tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Left curly expected before enumerator list", parser_line_num);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Push onto the stack for grouping
@@ -2397,8 +2399,9 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	//If it failed, we bail out
 	if(member_list->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid enumeration member list given in enum definition", current_line);
-		//It's already an error so just send it back up
-		return member_list;
+		//Destroy the member list
+		deallocate_ast(member_list);
+		return 0;
 	}
 
 	//Now that we get down here the only thing left syntatically is to check for the closing curly
@@ -2408,16 +2411,18 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	if(lookahead.tok != R_CURLY){
 		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enum member list", parser_line_num);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Destroy the member list
+		deallocate_ast(member_list);
+		return 0;
 	}
 
 	//We must also see matching ones here
 	if(pop(grouping_stack).tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected in enum defintion", parser_line_num);
 		num_errors++;
-		//Create and return the error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Destroy the member list
+		deallocate_ast(member_list);
+		return 0;
 	}
 
 	//Now that we know everything here has worked, we can finally create the enum type
@@ -2432,9 +2437,9 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 		//Sanity check here, this should be of type enum member
 		if(cursor->CLASS != AST_NODE_CLASS_ENUM_MEMBER){
 			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Found non-member node in member list for enum", parser_line_num);
-			//Bail right out if this happens
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return 0;
 		}
+
 		//Otherwise we're fine
 		//We'll now extract the symtab record that this node holds onto
 		symtab_variable_record_t* variable_rec = ((enum_member_ast_node_t*)(cursor->node))->member_var;
@@ -2454,16 +2459,8 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	//Now that this is all filled out, we can add this to the type symtab
 	insert_type(type_symtab, create_type_record(enum_type));
 
-	//Now once we get here, we will have added all of the sibling references in
-	//We can now also create the overall definer node
-	generic_ast_node_t* enum_def_node = ast_node_alloc(AST_NODE_CLASS_ENUM_DEFINER);
-	//We will also now link this type to it
-	((enum_definer_ast_node_t*)(enum_def_node->node))->created_enum = enum_type;
-
-	//The enum def node first has the name ident as its child
-	add_child_node(enum_def_node, ident);
-	//The next child will be the enum definer list
-	add_child_node(enum_def_node, member_list);
+	//Once we're here the member list is useless, so we'll deallocate it
+	deallocate_ast(member_list);
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
 	//for redefining variables immediately upon declaration. They are prefaced by the "As" keyword
@@ -2472,15 +2469,16 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 
 	//This means that we're out, so just give back the root node
 	if(lookahead.tok == SEMICOLON){
-		return enum_def_node;
+		//We're done
+		return 1;
 	}
 
 	//Otherwise, it is a requirement that we see the as keyword, so if we don't we're in trouble
 	if(lookahead.tok != AS){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after enum definition", parser_line_num);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
@@ -2491,10 +2489,17 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
-		//It's already an error, so we'll just propogate it
-		return alias_ident;
+		//Deallocate and fail
+		deallocate_ast(alias_ident);
+		return 0;
 	}
 
+	//Extract the alias name
+	strcpy(alias_name, ((identifier_ast_node_t*)(alias_ident->node))->identifier);
+
+	//Now that we're here we don't need the node anymore
+	deallocate_ast(alias_ident);
+	
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -2502,13 +2507,9 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after enum definition",  parser_line_num);
 		num_errors++;
-		//Create and give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
-
-	//Now we have to check to make sure there are no name collisions
-	//Grab this for convenience
-	char* alias_name = ((identifier_ast_node_t*)(alias_ident->node))->identifier;
 
 	//Check that it isn't some duplicated function name
 	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name);
@@ -2520,8 +2521,8 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 		//Also print out the function declaration
 		print_function_name(found_func);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -2534,8 +2535,8 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 		//Also print out the original declaration
 		print_variable_name(found_var);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -2548,13 +2549,9 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 		//Also print out the original declaration
 		print_type_name(found_type);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
-
-	//Now if we make it all the way here, we know that we have a valid name that we can
-	//alias with, so we'll first add the ident in to the tree
-	add_child_node(enum_def_node, alias_ident);
 
 	//Now we'll make the actual record for the aliased type
 	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num);
@@ -2562,8 +2559,8 @@ static generic_ast_node_t* enum_definer(FILE* fl){
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
 
-	//Give back the root level node
-	return enum_def_node;
+	//Return success
+	return 1;
 }
 
 
@@ -4437,7 +4434,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
  * NOTE: We assume that we have NOT consumed the { token by the time we make
  * it here
  *
- * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
+ * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}* {<definition>}*}
  */
 static generic_ast_node_t* compound_statement(FILE* fl){
 	//Lookahead token
@@ -4471,8 +4468,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 	while(lookahead.tok != R_CURLY){
 		//We can choose between a declaration or a statement
 		//All these keywords indicate a declaraion
-		if(lookahead.tok == DECLARE || lookahead.tok == LET || lookahead.tok == ALIAS
-		  || lookahead.tok == DEFINE){
+		if(lookahead.tok == DECLARE || lookahead.tok == LET){
 			//We'll let the actual rule handle it, so push the token back
 			push_back_token(fl, lookahead);
 
@@ -4487,6 +4483,23 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 
 			//Otherwise it's worked just fine, so we'll add it in as a child
 			add_child_node(compound_stmt_node, declaration_node);
+
+		//Otherwise we can see a definition of some kind. Definitions are compiler-only
+		//directives, and as such produce no nodes
+		} else if(lookahead.tok == DEFINE || lookahead.tok == ALIAS){
+			//Put the token back
+			push_back_token(fl, lookahead);
+
+			//Let's see if it worked
+			u_int8_t status = definition(fl);
+
+			//If we fail here we'll throw an error
+			if(status == 0){
+				//Return an error node
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//There is nothing to add into here, again these are 100% compiler directives
 
 		//Otherwise, we need to see a statement of some kind
 		} else {
@@ -4995,53 +5008,21 @@ static generic_ast_node_t* let_statement(FILE* fl){
 
 
 /**
- * A define statement allows users to define complex types like enumerateds and constructs and give them aliases. This rule is
- * already largely handled by the construct-definer and enum-definer rules that we've seen previously. Like all rules, this function
- * returns a root node to the tree it creates
- *
- * Remember: we've already seen and consumed the defined keyword by the time we get here
- *
- * BNF Rule: <define-statement> ::= define {<construct-definer> | <enum-definer>}
- */
-static generic_ast_node_t* define_statement(FILE* fl){
-	//Lookahead token
-	Lexer_item lookahead;
-
-	//We need to see ENUM or CONSTRUCT
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//Construct definer
-	if(lookahead.tok == CONSTRUCT){
-		return construct_definer(fl);
-	//Enum definer
-	} else if(lookahead.tok == ENUM){
-		return enum_definer(fl);
-	//Otherwise it's wrong
-	} else {
-		print_parse_message(PARSE_ERROR, "Enum or construct keywords required after define keyword", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-}
-
-
-/**
  * An alias statement allows us to redefine any currently defined type as some other type. It is probably the
- * simplest of any of these rules, but it still performs all type checking and symbol table manipulation. It is
- * always the child of a parent node
+ * simplest of any of these rules, but it still performs all type checking and symbol table manipulation. This is a compiler
+ * only directive, so no node is return. Simply success or failure is given back
  *
  * NOTE: By the time we make it here, we have already seeen the alias keyword
  *
  * BNF Rule: <alias-statement> ::= alias <type-specifier> as <identifier>;
  */
-static generic_ast_node_t* alias_statement(FILE* fl){
+static u_int8_t alias_statement(FILE* fl){
 	//For error printing
 	char info[2000];
+	//Store the ident name locally
+	char ident_name[MAX_TYPE_NAME_LENGTH];
 	//Our lookahead token
 	Lexer_item lookahead;
-
-	//Let's create the overall parent node
-	generic_ast_node_t* alias_stmt_node = ast_node_alloc(AST_NODE_CLASS_ALIAS_STMT);
 
 	//We need to first see a valid type specifier
 	generic_ast_node_t* type_spec_node = type_specifier(fl);
@@ -5050,12 +5031,17 @@ static generic_ast_node_t* alias_statement(FILE* fl){
 	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given to alias statement", parser_line_num);
 		num_errors++;
-		//It's already an error, so just give it back
-		return type_spec_node;
+		//Free it
+		deallocate_ast(type_spec_node);
+		//Fail out
+		return 0;
 	}
 
-	//We know it worked, so add it in as a child
-	add_child_node(alias_stmt_node, type_spec_node);
+	//Let's grab this now
+	generic_type_t* type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
+
+	//Once we have the reference, the actual node is useless so we'll free it
+	deallocate_ast(type_spec_node);
 
 	//We now need to see the as keyword
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5064,8 +5050,8 @@ static generic_ast_node_t* alias_statement(FILE* fl){
 	if(lookahead.tok != AS){
 		print_parse_message(PARSE_ERROR, "As keyword expected in alias statement", parser_line_num);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Otherwise we've made it, so now we need to see a valid identifier
@@ -5075,12 +5061,17 @@ static generic_ast_node_t* alias_statement(FILE* fl){
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
 		num_errors++;
-		//It's already an error so just give it back
-		return ident_node;
+		//Free the ident node
+		deallocate_ast(ident_node);
+		//Fail out
+		return 0;
 	}
 
-	//We know it worked, so add it in as a child
-	add_child_node(alias_stmt_node, ident_node);
+	//Let's extract the name
+	strcpy(ident_name, ((identifier_ast_node_t*)(ident_node->node))->identifier);
+
+	//Once we have the ident name, we no longer need the ident node
+	deallocate_ast(ident_node);
 
 	//Let's do our last syntax check--the semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5089,63 +5080,54 @@ static generic_ast_node_t* alias_statement(FILE* fl){
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of alias statement",  parser_line_num);
 		num_errors++;
-		//Create and reutnr and error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out here
+		return 0;
 	}
 
-	//Otherwise we know that the entire statement is syntactically valid and that the type
-	//we wish to alias exists. We now need to check for name duplication across all of our 
-	//symbol tables
-	//Let's grab the name for convenience
-	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
-
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, ident_name);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", ident_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, ident_name);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", ident_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type(type_symtab, ident_name);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", ident_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out
+		return 0;
 	}
 
-	//Grab this out too for neatness
-	generic_type_t* type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
-
 	//If we get here, we know that it actually worked, so we can create the alias
-	generic_type_t* aliased_type = create_aliased_type(name, type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(ident_name, type, parser_line_num);
 
 	//Let's now create the aliased record
 	symtab_type_record_t* aliased_record = create_type_record(aliased_type);
@@ -5153,11 +5135,47 @@ static generic_ast_node_t* alias_statement(FILE* fl){
 	//We'll store it in the symbol table
 	insert_type(type_symtab, aliased_record);
 
-	//Store a reference to it in the node
-	((alias_stmt_ast_node_t*)(alias_stmt_node->node))->alias = aliased_record;
-	
-	//Finally we're all set, so we'll give the node back
-	return alias_stmt_node;
+	//We succeeded so
+	return 1;
+}
+
+
+/**
+ * A definition is an alias or define statement. Since these statements are compiler directives
+ * in and of themselves, we will not return any nodes. Instead, we return 0 or 1 based on success 
+ * or failure
+ *
+ * NOTE: We assume that there is a define or alias token for us to use to switch based on
+ */
+static u_int8_t definition(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
+
+	//Switch based on what we have
+	if(lookahead.tok == DEFINE){
+		//We can now see construct or enum
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Switch based on what we have here
+		if(lookahead.tok == CONSTRUCT){
+			return construct_definer(fl);
+		} else if(lookahead.tok == ENUM){
+			return enum_definer(fl);
+		//Some weird error here
+		} else {
+			print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
+			num_errors++;
+			return 0;
+		}
+
+	} else if(lookahead.tok == ALIAS){
+		return alias_statement(fl);
+	//Some weird error here
+	} else {
+		print_parse_message(PARSE_ERROR, "Definition expected define or alias keywords, found neither", parser_line_num);
+		num_errors++;
+		return 0;
+	}
 }
 
 
@@ -5168,8 +5186,6 @@ static generic_ast_node_t* alias_statement(FILE* fl){
  *
  * <declaration> ::= <declare-statement> 
  * 				   | <let-statement> 
- * 				   | <define-statement> 
- * 				   | <alias-statement>
  */
 static generic_ast_node_t* declaration(FILE* fl){
 	//For error printing
@@ -5188,15 +5204,9 @@ static generic_ast_node_t* declaration(FILE* fl){
 	//We have a let statement
 	} else if(lookahead.tok == LET){
 		return let_statement(fl);
-	//We have a define statement
-	} else if(lookahead.tok == DEFINE){
-		return define_statement(fl);
-	//We have an alias statement
-	} else if(lookahead.tok == ALIAS){
-		return alias_statement(fl);
 	//Otherwise we have some weird error here
 	} else {
-		sprintf(info, "Saw \"%s\" when let, define, declare or alias was expected", lookahead.lexeme);
+		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		//Return an error node
@@ -5519,9 +5529,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
  *
  * <declaration-partition>::= <function-definition>
  *                        	| <declaration>
+ *                        	| <definition>
  */
 static generic_ast_node_t* declaration_partition(FILE* fl){
-	//Lookahead tokn
+	//Lookahead token
 	Lexer_item lookahead;
 
 	//Grab the next token
@@ -5533,6 +5544,22 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 		//We'll just let the function definition rule handle this. If it fails, 
 		//that will be caught above
 		return function_definition(fl);
+	
+	//We'll let the definition rule handle this
+	} else if(lookahead.tok == DEFINE || lookahead.tok == ALIAS){
+		//Put whatever we saw back
+		push_back_token(fl, lookahead);
+
+		//Call definition
+		u_int8_t status = definition(fl);
+
+		//If it's bad, we'll return an error node
+		if(status == 0){
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise we'll just return null, the caller will know what to do with it
+		return NULL;
 
 	//Otherwise it must be a declaration
 	} else {
@@ -5574,6 +5601,11 @@ static generic_ast_node_t* program(FILE* fl){
 
 		//Call declaration partition
 		generic_ast_node_t* current = declaration_partition(fl);
+
+		//If it was NULL, we had a define or alias statement, so we'll move along
+		if(current == NULL){
+			continue;
+		}
 
 		//It failed, we'll bail right out if this is the case
 		if(current->CLASS == AST_NODE_CLASS_ERR_NODE){
