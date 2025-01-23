@@ -11,7 +11,7 @@ func:static main(u_int32 arg_count, str_arr arg_vector) -> u_int32{
 
 	if(arg_count == 0) then {
 		asn arg_count := -1;
-		asn arg_vector := "hello";
+		//asn arg_vector := "hello";
 
 	} else if(arg_count <= -1) then {
 		let float32 a := .23;

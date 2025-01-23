@@ -215,8 +215,13 @@ struct identifier_ast_node_t{
 struct constant_ast_node_t{
 	//Holds the token for what kind of constant it is
 	Token constant_type;
-	//Holds the intialized value of the constant
-	char constant[1000];
+	//It's cheap enough for us to just hold all of these here
+	int32_t int_val;
+	float float_val;
+	char char_val;
+	char string_val[500];
+	//What is the type of the constant?
+	generic_type_t* type;
 };
 
 //Holds information about a parameter declaration. This will also hold 

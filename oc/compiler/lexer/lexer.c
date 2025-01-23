@@ -489,9 +489,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						//String literal pointer
 						lexeme_cursor = lexeme;
 
-						*lexeme_cursor = '\'';
-						lexeme_cursor++;
-
 						//Grab the next char
 						ch2 = get_next_char(fl);
 
@@ -509,10 +506,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.char_count = token_char_count;
 							return lex_item;
 						}
-
-						//Othwerise, add it in and get out
-						*lexeme_cursor = '\'';
-						lexeme_cursor++;
 
 						//Package and return
 						lex_item.tok = CHAR_CONST;
@@ -678,7 +671,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					lex_item.char_count = token_char_count;
 					return lex_item;
 				//Escape char
-				} else if (ch == '\\'){
+				} else if (ch == '\\'){ //TODO LOOK AT ME
 					//Consume the next character, whatever it is
 					is_ws(fgetc(fl), &line_num, parser_line_num);
 				} else {

@@ -366,7 +366,9 @@ void deallocate_ast(generic_ast_node_t* root){
 	}
 
 	//We can off the bat free it's data
-	free(root->node);
+	if(root->node != NULL){
+		free(root->node);
+	}
 
 	//Recursively free it's subtree first
 	generic_ast_node_t* sub_tree = root->first_child;

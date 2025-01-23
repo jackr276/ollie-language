@@ -29,6 +29,8 @@ heap_stack_t* grouping_stack;
 
 //The number of errors
 u_int16_t num_errors = 0;
+//The number of warnings
+u_int16_t num_warnings = 0;
 
 //The current parser line number
 u_int16_t parser_line_num = 1;
@@ -150,7 +152,7 @@ static generic_ast_node_t* label_identifier(FILE* fl){
 static generic_ast_node_t* constant(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
-	
+
 	//We should see one of the 4 constants here
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -160,27 +162,86 @@ static generic_ast_node_t* constant(FILE* fl){
 	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
 		case INT_CONST:
-			((constant_ast_node_t*)constant_node->node)->constant_type = INT_CONST;
+			((constant_ast_node_t*)(constant_node->node))->constant_type = INT_CONST;
+			//Store the int value we were given
+			((constant_ast_node_t*)(constant_node->node))->int_val = atoi(lookahead.lexeme);
+			//By default, int constants are of type s_int32
+			((constant_ast_node_t*)(constant_node->node))->type = lookup_type(type_symtab, "s_int32")->type;
 			break;
 		case FLOAT_CONST:
-			((constant_ast_node_t*)constant_node->node)->constant_type = FLOAT_CONST;
+			((constant_ast_node_t*)(constant_node->node))->constant_type = FLOAT_CONST;
+			//Store the float value we were given
+			((constant_ast_node_t*)(constant_node->node))->float_val = atof(lookahead.lexeme);
+			//By default, float constants are of type float32
+			((constant_ast_node_t*)(constant_node->node))->type = lookup_type(type_symtab, "float32")->type;
 			break;
 		case CHAR_CONST:
-			((constant_ast_node_t*)constant_node->node)->constant_type = CHAR_CONST;
+			((constant_ast_node_t*)(constant_node->node))->constant_type = CHAR_CONST;
+			//Store the char value that we were given
+			((constant_ast_node_t*)(constant_node->node))->float_val = *(lookahead.lexeme);
+			//Char consts are of type char(obviously)
+			((constant_ast_node_t*)(constant_node->node))->type = lookup_type(type_symtab, "char")->type;
 			break;
 		case STR_CONST:
-			((constant_ast_node_t*)constant_node->node)->constant_type = STR_CONST;
+			((constant_ast_node_t*)(constant_node->node))->constant_type = STR_CONST;
+			//String contants are of a char[] type. We will determine what the size of this char[] is here
+			//Let's first find the string length
+			u_int32_t length = strlen(lookahead.lexeme);
+
+			//If it's empty throw a warning
+			if(length == 0){
+				print_parse_message(WARNING, "0 length string given as constant", parser_line_num);
+				num_warnings++;
+				//This will fail out here
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Too long of a string
+			if(length > 499){
+				print_parse_message(PARSE_ERROR, "String literals may be at most 500 characters in length", parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Increment 1 to account for the null terminator
+			length++;
+
+			//So our type here is of char[length+1] because we have our null terminator
+			char type_name[MAX_TYPE_NAME_LENGTH];
+			//Compute what the name would be
+			sprintf(type_name, "char[%d]", length);
+
+			//Let's find the type if it's in the symtab
+			symtab_type_record_t* found_type = lookup_type(type_symtab, type_name);
+
+			//If we find it, great, and if not, we'll add it in
+			if(found_type == NULL){
+				//Grab the char type
+				generic_type_t* char_type = lookup_type(type_symtab, "char")->type;
+
+				//Create the char array
+				generic_type_t* char_arr = create_array_type(char_type, parser_line_num, length);
+				//Add this type into the symtab
+				insert_type(type_symtab, create_type_record(char_arr));
+				//Assign the type
+				((constant_ast_node_t*)(constant_node->node))->type = char_arr;
+
+			//Otherwise the type was defined by someone else, so we'll just reuse it
+			} else {
+				((constant_ast_node_t*)(constant_node->node))->type = found_type->type;
+			}
+			
+			//By the time we make it down here, the type has been accounted for
+			//We'll now copy the lexeme in
+			strcpy(((constant_ast_node_t*)(constant_node->node))->string_val, lookahead.lexeme);
 			break;
+
 		default:
 			print_parse_message(PARSE_ERROR, "Invalid constant given", parser_line_num);
 			num_errors++;
 			//Create and return an error node that will be propagated up
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
-
-	//If we made it here, then we know that we have a valid constant
-	//We'll now copy the lexeme that we saw in here to the constant
-	strcpy(((constant_ast_node_t*)constant_node->node)->constant, lookahead.lexeme);
 
 	//All went well so give the constant node back
 	return constant_node;
@@ -2942,7 +3003,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 			}
 
 			//Let's now grab the number of members
-			u_int32_t num_members = atoi(((constant_ast_node_t*)(constant_node->node))->constant);
+			u_int32_t num_members = ((constant_ast_node_t*)(constant_node->node))->int_val;
 
 			//Lets create the array type
 			generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_members);
@@ -5668,7 +5729,7 @@ u_int8_t parse(FILE* fl){
 	if(prog->CLASS == AST_NODE_CLASS_ERR_NODE){
 		status = 1;
 		char info[500];
-		sprintf(info, "Parsing failed with %d errors in %.8f seconds", num_errors, time_spent);
+		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", num_errors, num_warnings, time_spent);
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", parser_line_num);
 		printf("%s\n", info);
@@ -5677,7 +5738,7 @@ u_int8_t parse(FILE* fl){
 		status = 0;
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", parser_line_num);
-		printf("Parsing succeeded in %.8f seconds\n", time_spent);
+		printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
 		printf("=======================================================================\n\n");
 	}
 	
