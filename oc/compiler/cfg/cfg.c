@@ -3,6 +3,7 @@
 */
 
 #include "cfg.h"
+#include <cwchar>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -135,6 +136,40 @@ void add_statement(basic_block_t* target, top_level_statment_node_t* statement_n
 	target->exit_statement->next = statement_node;
 	//Update the tail reference
 	target->exit_statement = statement_node;
+}
+
+
+/**
+ * Merge two basic blocks. We always return a pointer to a, b will be deallocated
+ */
+basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
+	//The leader statement in b will be connected to a's tail
+	a->exit_statement->next = b->leader_statement;
+	//Now once they're connected we'll set a's exit to be b's exit
+	a->exit_statement = b->exit_statement;
+
+	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
+	//Let's merge predecessors first
+	for(u_int8_t i = 0; i < b->num_predecessors; i++){
+		//Tie it in
+		a->predecessors[a->num_predecessors] = b->predecessors[i];
+		//Increment how many predecessors a has
+		(a->num_predecessors)++;
+	}
+
+	//Now merge successors
+	for(u_int8_t i = 0; i < b->num_successors; i++){
+		//Tie it in
+		a->successors[a->num_successors] = b->successors[i];
+		//Increment how many successors a has
+		(a->num_successors)++;
+	}
+
+	//Once we're done here, b is no longer of use to us
+	basic_block_dealloc(b);
+
+	//Give back the pointer to a
+	return a;
 }
 
 

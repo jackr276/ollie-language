@@ -91,8 +91,6 @@ typedef struct switch_stmt_ast_node_t switch_stmt_ast_node_t;
 typedef struct while_stmt_ast_node_t while_stmt_ast_node_t;
 //An AST node for do-while statements
 typedef struct do_while_stmt_ast_node_t do_while_stmt_ast_node_t;
-//An AST node for for statements
-typedef struct for_stmt_ast_node_t for_stmt_ast_node_t;
 //An AST node for declaration statements
 typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 //An AST node for let statements
@@ -138,7 +136,6 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_SWITCH_STMT,
 	AST_NODE_CLASS_WHILE_STMT,
 	AST_NODE_CLASS_DO_WHILE_STMT,
-	AST_NODE_CLASS_FOR_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -175,10 +172,6 @@ struct generic_ast_node_t{
  * by the basic blocks of our CFG
  */
 struct top_level_statment_node_t{
-	//Is this a leader node? Leader nodes are nodes that are:
-	// 1.) The first statement seen
-	// 2.) The first statement that is the target of a branch
-	// 3.) The first statement that immediately follows a branch
 	//Acts as a singly linked list of nodes
 	top_level_statment_node_t* next;
 	//Hold the reference to the root node for the expression-level AST
@@ -399,12 +392,6 @@ struct while_stmt_ast_node_t{
 
 //A do-while statement
 struct do_while_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status;
-};
-
-//A for statement
-struct for_stmt_ast_node_t{
 	//Just hold status for now
 	u_int8_t status;
 };

@@ -37,6 +37,8 @@ u_int16_t parser_line_num = 1;
 //Does the next node that we see need to be a leader? By default, it's a yes
 u_int8_t need_leader = 1;
 
+//The current block that we are in
+basic_block_t* current_block;
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
@@ -48,7 +50,7 @@ static top_level_statment_node_t* declaration(FILE* fl);
 static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg);
 static basic_block_t* statement(FILE* fl);
 static top_level_statment_node_t* declare_statement(FILE* fl);
-static generic_ast_node_t* expression(FILE* fl);
+static top_level_statment_node_t* expression(FILE* fl);
 static top_level_statment_node_t* let_statement(FILE* fl);
 static u_int8_t define_statement(FILE* fl);
 
@@ -199,15 +201,16 @@ static generic_ast_node_t* constant(FILE* fl){
  *
  * BNF Rule: <expression> ::= <conditional-expression>
  */
-static generic_ast_node_t* expression(FILE* fl){
+static top_level_statment_node_t* expression(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Call the appropriate rule
-	generic_ast_node_t* expression_node = conditional_expression(fl);
+	top_level_statment_node_t* expression_node = conditional_expression(fl);
 	
 	//If it did fail, a message is appropriate here
 	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Top level expression invalid", current_line);
-		return expression_node;
+		//NULL = error
+		return NULL;
 	}
 
 	//Otherwise, we're all set so just give the node back
@@ -3192,12 +3195,12 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 
 
 /**
- * An expression statement can optionally have an expression in it. Like all rules, it returns 
- * a reference to the root of the subtree it creates
+ * An expression statement can optionally have an expression in it. An expression statement
+ * creates a top level statement node that it will return
  *
  * BNF Rule: <expression-statement> ::= {<expression>}?;
  */
-static generic_ast_node_t* expression_statement(FILE* fl){
+static top_level_statment_node_t* expression_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -4250,7 +4253,9 @@ static basic_block_t* for_statement(FILE* fl, cfg_t* cfg){
 	//The entry basic block for our for loop. The first block in our for loop will hold all of the initial statements in itself
 	basic_block_t* entry_block = basic_block_alloc(cfg);
 	//Keep a reference to the block that we'll point back to
-	basic_block_t* first_repetition_block = entry_block;
+	basic_block_t* first_repetition_block = basic_block_alloc(cfg);
+	//This block is a successor to the entry block
+	add_successor(entry_block, first_repetition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 	//We now need to first see a left paren
  	lookahead = get_next_token(fl, &parser_line_num);
@@ -4305,13 +4310,6 @@ static basic_block_t* for_statement(FILE* fl, cfg_t* cfg){
 		//Now once we get here, this statement will be added to the first basic block
 		add_statement(entry_block, asn_stmt);
 
-		//Once we make it here, we actually need to see another block, because the other block is what will
-		//repeat. As such, we'll make a new block and add it on here
-		first_repetition_block = basic_block_alloc(cfg);
-		//This block is a successor to the entry block
-		add_successor(entry_block, first_repetition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-
-
 	//We could also see the let keyword for a let_stmt
 	} else if(lookahead.tok == LET){
 		//On the contrary, the let statement rule assumes that let has already been consumed, so we won't
@@ -4329,12 +4327,6 @@ static basic_block_t* for_statement(FILE* fl, cfg_t* cfg){
 		//Now if we get here, this let statement will be a statement in our first block
 		add_statement(entry_block, let_stmt);
 		
-		//Once we make it here, we actually need to see another block, because the other block is what will
-		//repeat. As such, we'll make a new block and add it on here
-		first_repetition_block = basic_block_alloc(cfg);
-		//This block is a successor to the entry block
-		add_successor(entry_block, first_repetition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-
 	//Otherwise it had to be a semicolon, so if it isn't we fail
 	} else if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon expected in for statement declaration", current_line);
@@ -4352,14 +4344,12 @@ static basic_block_t* for_statement(FILE* fl, cfg_t* cfg){
 		push_back_token(fl, lookahead);
 
 		//Let this rule handle it
-		generic_ast_node_t* expr = expression(fl);
+		top_level_statment_node_t* expr = expression(fl);
 
 		//If it fails, we fail too
-		if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(expr == NULL){
 			print_parse_message(PARSE_ERROR, "Invalid conditional expression in for loop middle", parser_line_num);
 			num_errors++;
-			//Free it up
-			deallocate_ast(expr);
 			//Error out here
 			return NULL;
 		}
@@ -4375,13 +4365,9 @@ static basic_block_t* for_statement(FILE* fl, cfg_t* cfg){
 			return NULL;
 		}
 
-		//Now we know that everything here is valid, so we'll add it into the block
-		//First make the statement for expr
-		top_level_statment_node_t* stmt = top_lvl_stmt_alloc();
-		stmt->root = expr;
 
 		//Add it into the first repetition block
-		add_statement(first_repetition_block, stmt);
+		add_statement(first_repetition_block, expr);
 	}
 
 	//Once we make it here, we know that either the inside was blank and we saw a semicolon or it wasn't and we saw a valid conditional 
@@ -4396,22 +4382,18 @@ static basic_block_t* for_statement(FILE* fl, cfg_t* cfg){
 
 		//We now must see a valid conditional
 		//Let this rule handle it
-		generic_ast_node_t* expr = expression(fl);
+		top_level_statment_node_t* expr = expression(fl);
 
 		//If it fails, we fail too
-		if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(expr){
 			print_parse_message(PARSE_ERROR, "Invalid conditional expression in for loop", parser_line_num);
 			num_errors++;
 			//Null = error
 			return NULL;
 		}
 
-		//Now that it worked, we'll add it into the first repetition block
-		top_level_statment_node_t* stmt = top_lvl_stmt_alloc();
-		stmt->root = expr;
-
 		//Add it into the first repetition block
-		add_statement(first_repetition_block, stmt);
+		add_statement(first_repetition_block, expr);
 
 		//We'll refresh the lookahead for our search here
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -4476,6 +4458,8 @@ static basic_block_t* for_statement(FILE* fl, cfg_t* cfg){
  * basic block that we create here. There is an inefficiency here with the expression statement rule, in that it will create a block
  * when it doesn't really need one. This is an inefficiency that we are willing to accept, and is relatively minor
  *
+ * IMPORTANT NOTE: The first statement of anything that we return here is guaranteed to be a NON-REPEATER, so it can be merged safely
+ *
  * BNF Rule: <complex-statement> ::= <labeled-statement> 
  * 						   | <expression-statement> 
  * 						   | <compound-statement> 
@@ -4495,11 +4479,13 @@ static basic_block_t* complex_statement(FILE* fl, cfg_t* cfg){
 
 	//If we see a label ident, we know we're seeing a labeled statement
 	if(lookahead.tok == LABEL_IDENT || lookahead.tok == CASE || lookahead.tok == DEFAULT){
+		/* TODO
 		//This rule relies on these tokens, so we'll push them back
 		push_back_token(fl, lookahead);
 	
 		//Just return whatever the rule gives us
 		return labeled_statement(fl, cfg);
+		*/
 	
 	//If we see an L_CURLY, we are seeing a compound statement
 	} else if(lookahead.tok == L_CURLY){
@@ -4691,23 +4677,13 @@ static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 			//Set the current block to be the complex stmt block
 			current_block = complex_stmt_block;
 
-			/**
-			 * Do we actually need another block after this? We'll have a peek at the next token
-			 * to see if we do. If we don't, there's no point in adding an additional block
-			 */
-			//These rules don't make their own blocks, so if we see one of these we'll need a new block
-			if(lookahead.tok == DECLARE || lookahead.tok == LET || lookahead.tok == ASN){
-				//We actually need a fresh block for after this
-				basic_block_t* next = basic_block_alloc(cfg);
+			//We need a fresh block for after this
+			basic_block_t* next = basic_block_alloc(cfg);
 
-				//We'll add this one in as our most current block, to prime this for whatever we see next
-				add_successor(current_block, next, LINKED_DIRECTION_UNIDIRECTIONAL); 
-				//Set the current block to be this one
-				current_block = next;
-			}
-			//Otherwise we didn't need a new block and this is all fine as it is
-			//No matter what the token we used here needs to go back
-			push_back_token(fl, lookahead);
+			//We'll add this one in as our most current block, to prime this for whatever we see next
+			add_successor(current_block, next, LINKED_DIRECTION_UNIDIRECTIONAL); 
+			//Set the current block to be this one
+			current_block = next;
 
 		}
 

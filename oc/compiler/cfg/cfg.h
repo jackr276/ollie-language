@@ -70,6 +70,9 @@ cfg_t* create_cfg();
 //Allocate a basic block and return a reference to it
 basic_block_t* basic_block_alloc(cfg_t* cfg);
 
+//Give the ability to merge basic blocks
+basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b);
+
 //Add a predecessor to the target block
 void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_direction_t directedness);
 
