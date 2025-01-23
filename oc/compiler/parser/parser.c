@@ -41,14 +41,16 @@ u_int8_t need_leader = 1;
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
 static generic_ast_node_t* type_specifier(FILE* fl);
-static generic_ast_node_t* assignment_statement(FILE* fl);
+static top_level_statment_node_t* assignment_statement(FILE* fl);
 static generic_ast_node_t* conditional_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl);
-static generic_ast_node_t* declaration(FILE* fl);
+static top_level_statment_node_t* declaration(FILE* fl);
 static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg);
 static basic_block_t* statement(FILE* fl);
+static top_level_statment_node_t* declare_statement(FILE* fl);
 static generic_ast_node_t* expression(FILE* fl);
 static top_level_statment_node_t* let_statement(FILE* fl);
+static u_int8_t define_statement(FILE* fl);
 
 
 /**
@@ -489,7 +491,9 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  * is to be added into the control flow graph. It will create its own expression level
  * AST that accomodates our hybrid-IR approach
  *
- * BNF Rule: <assignment-statement> ::= <unary-expression> := <conditional-expression>
+ * REMEMBER: By the time we get here, we've already seen the asn keyword
+ *
+ * BNF Rule: <assignment-statement> ::= asn <unary-expression> := <conditional-expression>
  *
  * TODO TYPE CHECKING REQUIRED
  */
@@ -4446,11 +4450,13 @@ static generic_ast_node_t* for_statement(FILE* fl){
  * NOTE: We assume that we have NOT consumed the { token by the time we make
  * it here
  *
- * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*{<defintion>}*}
+ * BNF Rule: <compound-statement> ::= {{<declare-statement>}* {<let-statement>}* {<assignment-statement>}* {<complex-statement>}* {<defintion>}*}
  */
 static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 	//Lookahead token
 	Lexer_item lookahead;
+	//Status -- only for the compiler only directives
+	u_int8_t status = 0;
 
 	//We must first see a left curly
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4466,8 +4472,10 @@ static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 	//Push onto the grouping stack so we can check matching
 	push(grouping_stack, lookahead);
 
-	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
+	//Create our overall entry block
+	basic_block_t* entry_block = basic_block_alloc(cfg);
+	//Keep a reference to whatever the current block that we have is
+	basic_block_t* current_block = entry_block;
 
 	//Begin a new lexical scope for types and variables
 	initialize_type_scope(type_symtab);
@@ -4479,45 +4487,67 @@ static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 
 	//So long as we don't reach the end
 	while(lookahead.tok != R_CURLY){
-		//We can choose between a declaration or a statement
-		//All these keywords indicate a declaraion
-		if(lookahead.tok == DECLARE || lookahead.tok == LET || lookahead.tok == ALIAS
-		  || lookahead.tok == DEFINE){
-			//We'll let the actual rule handle it, so push the token back
-			push_back_token(fl, lookahead);
+		//We'll switch based on what we have here
+		//A let statement is always a part of whatever block we're currently in
+		if(lookahead.tok == LET){
+			//We'll first define it
+			top_level_statment_node_t* let_node = let_statement(fl);
 
-			//We now need to see a valid version
-			generic_ast_node_t* declaration_node = declaration(fl);
-
-			//If it's invalid, we pass right through, no error printing
-			if(declaration_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-				//Send NULL if bad
+			//If it's null, we had a bad declaration block
+			if(let_node == NULL){
+				print_parse_message(PARSE_ERROR, "Bad let statement given in compound statement", parser_line_num);
 				return NULL;
 			}
 
-			//Otherwise it's worked just fine, so we'll add it in as a child
-			add_child_node(compound_stmt_node, declaration_node);
+			//A let statement will always be under whatever block we have, so we'll just add it in
+			add_statement(current_block, let_node);
 
-		//Otherwise, we need to see a statement of some kind
-		} else {
-			//Put whatever we saw back
-			push_back_token(fl, lookahead);
-			
-			//We now need to see a valid statement
-			generic_ast_node_t* stmt_node = statement(fl);
+		// A declare statement is always part of whatever block we're currently in
+		} else if(lookahead.tok == DECLARE){
+			//We'll first define it
+			top_level_statment_node_t* declare_node = declare_statement(fl);
 
-			//If it's invalid we'll pass right through, no error printing
-			if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-				//Send it right back
-				return stmt_node;
+			//If it's null, we had a bad declaration block
+			if(declare_node == NULL){
+				print_parse_message(PARSE_ERROR, "Bad declare statement given in compound statement", parser_line_num);
+				return NULL;
 			}
 
-			//Otherwise, we'll add it as a child node
-			add_child_node(compound_stmt_node, stmt_node);
+			//A declare statement will always be under whatever block we have, so we'll just add it in
+			add_statement(current_block, declare_node);
+			
+		//A define statement is technically a compiler directive, so we'll just define it
+		} else if(lookahead.tok == DEFINE){
+			//If we get here, we'll let the define rule take it
+			status = define_statement(fl);
+
+			//Fail out if bad
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid type definition in compound statement", parser_line_num);
+				num_errors++;
+				return 0;
+			}
+
+			//Otherwise we'll just move along
+
+		//An alias statement is also technically a compiler directive, so we'll just let the rule define it
+		} else if(lookahead.tok == ALIAS){
+			//Let the rule handle it
+			status = define_statement(fl);
+
+			//Fail out if bad
+			if(status == 0){
+				print_parse_message(PARSE_ERROR, "Invalid alias statement in compound statement", parser_line_num);
+				num_errors++;
+				return 0;
+			}
+			
+			//Otherwise we just move right along
+
+		} else {
+
 		}
-		
-		//Whatever happened, once we get here we need to refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num);
+
 	}
 
 	//Once we've escaped out of the while loop, we know that the token we currently have
@@ -4526,8 +4556,8 @@ static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 	if(pop(grouping_stack).tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
 		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 
 	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
@@ -4535,8 +4565,8 @@ static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 	finalize_type_scope(type_symtab);
 	finalize_variable_scope(variable_symtab);
 
-	//And we're all done, so we'll return the reference to the root node
-	return compound_stmt_node;
+	//We always return the entry block here
+	return entry_block;
 }
 
 
@@ -5163,50 +5193,6 @@ static u_int8_t alias_statement(FILE* fl){
 
 
 /**
- * A declaration is a pass through rule that does not itself initialize a node. Instead, it will pass down to
- * the appropriate rule here and let them initialize the rule. Like all rules in a system, the declaration returns
- * a reference to the root node that it created
- *
- * <declaration> ::= <declare-statement> 
- * 				   | <let-statement> 
- * 				   | <define-statement> 
- * 				   | <alias-statement>
- */
-static generic_ast_node_t* declaration(FILE* fl){
-	//For error printing
-	char info[2000];
-	//Lookahead token
-	Lexer_item lookahead;
-
-	//We will multiplex based on what we see with the lookahead
-	//This rule also consumes the first token that it sees, so all downstream
-	//rules must account for that
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//We have a declare statement
-	if(lookahead.tok == DECLARE){
-		return declare_statement(fl);
-	//We have a let statement
-	} else if(lookahead.tok == LET){
-		return let_statement(fl);
-	//We have a define statement
-	} else if(lookahead.tok == DEFINE){
-		return define_statement(fl);
-	//We have an alias statement
-	} else if(lookahead.tok == ALIAS){
-		return alias_statement(fl);
-	//Otherwise we have some weird error here
-	} else {
-		sprintf(info, "Saw \"%s\" when let, define, declare or alias was expected", lookahead.lexeme);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-}
-
-
-/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
@@ -5484,7 +5470,6 @@ static u_int8_t function_definition(FILE* fl, cfg_t* cfg){
 	//This block will be stored in the function's record as it's entry point
 	function_record->entrance_block = compound_stmt_block;
 
-
 	//Finalize the variable scope for the parameter list
 	finalize_variable_scope(variable_symtab);
 
@@ -5627,10 +5612,7 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 		//Assignment statements are a control flow construct. They are statements. Each assignment node will either
 		//be a leader node or be in a chain of expression nodes in the basic block. If we get here, we know that we are 
 		//seeing an assignment statement
-		} else {
-			//Put whatever we saw back
-			push_back_token(fl, lookahead);
-
+		} else if(lookahead.tok == ASN) {
 			//We'll first define it
 			top_level_statment_node_t* asn_node = assignment_statement(fl);
 
@@ -5655,8 +5637,13 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 			} else {
 				add_statement(current_block, asn_node);
 			}
-		}
 
+		//Otherwise we have some sort of error
+		} else {
+			print_parse_message(PARSE_ERROR, "Declare, define, let, alias or asn keyword expected", parser_line_num);
+			num_errors++;
+			return 0;
+		}
 
 		//Refresh our lookahead here
 		lookahead = get_next_token(fl, &parser_line_num);

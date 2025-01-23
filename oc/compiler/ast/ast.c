@@ -262,13 +262,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_FOR_STMT;
 			break;
 
-		//A compound statement node
-		case AST_NODE_CLASS_COMPOUND_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(compound_stmt_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_COMPOUND_STMT;
-			break;
-
 		//A declare statement node
 		case AST_NODE_CLASS_DECL_STMT:
 			//Just allocate the proper size and set the class
