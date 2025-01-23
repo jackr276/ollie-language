@@ -194,8 +194,8 @@ static generic_ast_node_t* constant(FILE* fl){
 
 /**
  * An expression decays into a conditional expression. An expression
- * node is more of a "pass-through" rule, and itself does not make any children. It does
- * however return the reference of whatever it created
+ * node is more of a "pass-through" rule, and itself does not make any children. An expression
+ * returns a type of "top-level statement node" that will be used in our CFG blocks
  *
  * BNF Rule: <expression> ::= <conditional-expression>
  */
@@ -4234,21 +4234,23 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 
 
 /**
- * A for statement is the classic for loop that you'd expect. Like all other rules, this rule returns
- * a reference to the root of the subtree that it creates
+ * A for statement is the classic for loop that you'd expect. A for loop will always return a reference to the first 
+ * basic block that it produces
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
  * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<conditional-expression>}? ; {<conditional-expression>}? ) do <compound-statement>
  */
-static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
+static basic_block_t* for_statement(FILE* fl, cfg_t* cfg){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num; 
 	//Lookahead token
 	Lexer_item lookahead;
 
-	//We've already seen the for keyword, so let's create the root level node
-	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_CLASS_FOR_STMT);
+	//The entry basic block for our for loop. The first block in our for loop will hold all of the initial statements in itself
+	basic_block_t* entry_block = basic_block_alloc(cfg);
+	//Keep a reference to the block that we'll point back to
+	basic_block_t* first_repetition_block = entry_block;
 
 	//We now need to first see a left paren
  	lookahead = get_next_token(fl, &parser_line_num);
@@ -4257,8 +4259,8 @@ static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Left parenthesis expected after for keyword", parser_line_num);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 
 	//Push to the stack for later matching
@@ -4278,19 +4280,16 @@ static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 		//The assignment expression needs this keyword, so we'll put it back
 		push_back_token(fl, lookahead);
 		
-		//Let the assignment expression handle this
-		generic_ast_node_t* asn_expr = assignment_expression(fl);
+		//We may see an assignment statement
+		top_level_statment_node_t* asn_stmt = assignment_statement(fl);
 
 		//If it fails, we fail too
-		if(asn_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid assignment expression given to for loop", current_line);
+		if(asn_stmt == NULL){
+			print_parse_message(PARSE_ERROR, "Invalid assignment stmt given to for loop", current_line);
 			num_errors++;
-			//It's already an error, so just give it back
-			return asn_expr;
+			//NULL = error
+			return NULL;
 		}
-
-		//Otherwise it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, asn_expr);
 
 		//We'll refresh the lookahead for the eventual next step
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -4299,35 +4298,49 @@ static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 		if(lookahead.tok != SEMICOLON){
 			print_parse_message(PARSE_ERROR, "Semicolon expected in for statement declaration", parser_line_num);
 			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//Null out here
+			return NULL;
 		}
+
+		//Now once we get here, this statement will be added to the first basic block
+		add_statement(entry_block, asn_stmt);
+
+		//Once we make it here, we actually need to see another block, because the other block is what will
+		//repeat. As such, we'll make a new block and add it on here
+		first_repetition_block = basic_block_alloc(cfg);
+		//This block is a successor to the entry block
+		add_successor(entry_block, first_repetition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
 
 	//We could also see the let keyword for a let_stmt
 	} else if(lookahead.tok == LET){
 		//On the contrary, the let statement rule assumes that let has already been consumed, so we won't
 		//put it back here, we'll just call the rule
-		generic_ast_node_t* let_stmt = let_statement(fl);
+		top_level_statment_node_t* let_stmt = let_statement(fl);
 
 		//If it fails, we also fail
-		if(let_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(let_stmt == NULL){
 			print_parse_message(PARSE_ERROR, "Invalid let statement given to for loop", current_line);
 			num_errors++;
-			//It's already an error, so just give it back
-			return let_stmt;
+			//NULL = error
+			return NULL;
 		}
-
-		//Otherwise if we get here it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, let_stmt);
 		
-		//Remember -- let statements handle semicolons for us, so we don't need to check
+		//Now if we get here, this let statement will be a statement in our first block
+		add_statement(entry_block, let_stmt);
+		
+		//Once we make it here, we actually need to see another block, because the other block is what will
+		//repeat. As such, we'll make a new block and add it on here
+		first_repetition_block = basic_block_alloc(cfg);
+		//This block is a successor to the entry block
+		add_successor(entry_block, first_repetition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 	//Otherwise it had to be a semicolon, so if it isn't we fail
 	} else if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon expected in for statement declaration", current_line);
 		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//NULL = error
+		return NULL;
 	}
 
 	//Now we're in the middle of the for statement. We can optionally see a conditional expression here
@@ -4339,18 +4352,17 @@ static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 		push_back_token(fl, lookahead);
 
 		//Let this rule handle it
-		generic_ast_node_t* conditional_expr = conditional_expression(fl);
+		generic_ast_node_t* expr = expression(fl);
 
 		//If it fails, we fail too
-		if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
 			print_parse_message(PARSE_ERROR, "Invalid conditional expression in for loop middle", parser_line_num);
 			num_errors++;
-			//It's already an error, so just send it up
-			return conditional_expr;
+			//Free it up
+			deallocate_ast(expr);
+			//Error out here
+			return NULL;
 		}
-
-		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, conditional_expr);
 
 		//Now once we get here, we need to see a valid semicolon
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -4359,9 +4371,17 @@ static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 		if(lookahead.tok != SEMICOLON){
 			print_parse_message(PARSE_ERROR, "Semicolon expected after conditional expression in for loop", parser_line_num);
 			num_errors++;
-			//Return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//NULL = error
+			return NULL;
 		}
+
+		//Now we know that everything here is valid, so we'll add it into the block
+		//First make the statement for expr
+		top_level_statment_node_t* stmt = top_lvl_stmt_alloc();
+		stmt->root = expr;
+
+		//Add it into the first repetition block
+		add_statement(first_repetition_block, stmt);
 	}
 
 	//Once we make it here, we know that either the inside was blank and we saw a semicolon or it wasn't and we saw a valid conditional 
@@ -4376,18 +4396,22 @@ static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 
 		//We now must see a valid conditional
 		//Let this rule handle it
-		generic_ast_node_t* conditional_expr = conditional_expression(fl);
+		generic_ast_node_t* expr = expression(fl);
 
 		//If it fails, we fail too
-		if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
 			print_parse_message(PARSE_ERROR, "Invalid conditional expression in for loop", parser_line_num);
 			num_errors++;
-			//It's already an error, so just send it up
-			return conditional_expr;
+			//Null = error
+			return NULL;
 		}
 
-		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, conditional_expr);
+		//Now that it worked, we'll add it into the first repetition block
+		top_level_statment_node_t* stmt = top_lvl_stmt_alloc();
+		stmt->root = expr;
+
+		//Add it into the first repetition block
+		add_statement(first_repetition_block, stmt);
 
 		//We'll refresh the lookahead for our search here
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -4397,16 +4421,16 @@ static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 	if(lookahead.tok != R_PAREN){
 		print_parse_message(PARSE_ERROR, "Right parenthesis expected after for loop declaration", parser_line_num);
 		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//NULL = error
+		return NULL;
 	}
 
 	//Now check for matching
 	if(pop(grouping_stack).tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 	
 	//Now we need to see the do keyword
@@ -4416,27 +4440,33 @@ static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 	if(lookahead.tok != DO){
 		print_parse_message(PARSE_ERROR, "Do keyword expected after for loop declaration", parser_line_num);
 		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//NULL = error
+		return NULL;
 	}
 
 	//Now that we're all done, we need to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+	basic_block_t* compound_stmt_block = compound_statement(fl, cfg);
 
-	//If it's invalid, we'll fail out here
-	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		//No error message, just pass the failure up
-		return compound_stmt_node;
+	//If it's invalid we'll fail out
+	if(compound_stmt_block == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid body given to for loop", current_line);
+		num_errors++;
+		//NULL = error
+		return NULL;
 	}
-
-	//Otherwise if we make it here, we know that it worked so we'll add it as a child
-	add_child_node(for_stmt_node, compound_stmt_node);
 
 	//At the end, we'll finalize the lexical scope
 	finalize_variable_scope(variable_symtab);
 
+	//Now we need to link things up here. In our for stmt, the first repetition block will have a successor that 
+	//is the compound_stmt_block
+	add_successor(first_repetition_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//We also know that, since it's a loop, the compound statement block will itself point back to the first repetition block
+	add_successor(compound_stmt_block, first_repetition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
 	//It all worked here, so we'll return the root
-	return for_stmt_node;
+	return entry_block;
 }
 
 /**
