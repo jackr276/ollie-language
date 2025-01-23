@@ -3,7 +3,11 @@
 */
 alias char* as str;
 
-define construct
+define construct con{
+	s_int8 x;
+	s_int8 y;
+	char*[32] b;
+};
 
 func main(s_int32 argc, char** argv) -> str{
 	if(argc == 1) then {
