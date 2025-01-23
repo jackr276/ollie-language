@@ -20,7 +20,6 @@ typedef enum {
 	WHEN,
 	IF,
 	THEN,
-	ASN,
 	ELSE,
 	DO,
 	WHILE,

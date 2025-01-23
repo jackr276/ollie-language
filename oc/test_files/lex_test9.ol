@@ -10,7 +10,7 @@ define enum my_enum{
 func main(u_int32 argc, char** argv) -> u_int32{
 	while(argc < 5) do {
 		declare u_int32 i;
-		asn i := 3;
+		i := 3;
 	}
 
 	//Array of addresses
@@ -19,8 +19,8 @@ func main(u_int32 argc, char** argv) -> u_int32{
 	let custom_enum mine := ENUM_TYPE_1;
 	declare u_int32 j;
 
-	for(asn j := 0; j <= 33; j++) do {
-		asn j := j - 3;
+	for(j := 0; j <= 33; j++) do {
+		j := j - 3;
 	}
 
 	ret j;

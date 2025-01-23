@@ -45,10 +45,10 @@ static generic_ast_node_t* assignment_statement(FILE* fl);
 static generic_ast_node_t* conditional_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl);
 static generic_ast_node_t* declaration(FILE* fl);
-static basic_block_t* compound_statement(FILE* fl);
+static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg);
 static basic_block_t* statement(FILE* fl);
 static generic_ast_node_t* expression(FILE* fl);
-static generic_ast_node_t* let_statement(FILE* fl);
+static top_level_statment_node_t* let_statement(FILE* fl);
 
 
 /**
@@ -489,9 +489,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  * is to be added into the control flow graph. It will create its own expression level
  * AST that accomodates our hybrid-IR approach
  *
- * REMEMBER: By the time we get here, we've already seen and consumed the asn keyword
- *
- * BNF Rule: <assignment-statement> ::= asn <unary-expression> := <conditional-expression>
+ * BNF Rule: <assignment-statement> ::= <unary-expression> := <conditional-expression>
  *
  * TODO TYPE CHECKING REQUIRED
  */
@@ -4448,7 +4446,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
  * NOTE: We assume that we have NOT consumed the { token by the time we make
  * it here
  *
- * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*}
+ * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}*{<defintion>}*}
  */
 static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 	//Lookahead token
@@ -4623,60 +4621,16 @@ static basic_block_t* statement(FILE* fl){
 
 
 /**
- * A storage class specifier stores compiler directive about how a variable is to be stored.
- * Like all nodes, this node returns a reference to the root node that it creates
- *
- * IMPORTANT NOTE: This rule is unique in that it is NULLABLE. It will return NULL if it cannot
- * find anything. This is the caller's responsibility to handle
- *
- * BNF Rule: <storage-class-specifier> ::= static 
- * 										 | external 
- * 										 | register
- */
-static generic_ast_node_t* storage_class_specifier(FILE* fl){
-	//Lookahead token
-	Lexer_item lookahead;
-
-	//Let's see what we have
-	lookahead = get_next_token(fl,  &parser_line_num);
-
-	//If we have a valid lookahead
-	if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL || lookahead.tok == REGISTER){
-		//Construct and return our node
-		generic_ast_node_t* storage_class_spec = ast_node_alloc(AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER);
-
-		//Assign this based on what we found
-		if(lookahead.tok == STATIC){
-			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_STATIC;
-		} else if(lookahead.tok == EXTERNAL){
-			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_EXTERNAL;
-		} else {
-			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_REGISTER;
-		}
-
-		//We're all set, just return this node
-		return storage_class_spec;
-	//Otherwise, we'll put the token back and return NULL
-	} else{
-		//Return to the stream
-		push_back_token(fl, lookahead);
-		//Return NULL - CALLER'S RESPONSIBILITY TO HANDLE
-		return NULL;
-	}
-}
-
-
-/**
  * A declare statement is always the child of an overall declaration statement, so it will
  * be added as the child of the given parent node. A declare statement also performs all
- * needed type/repetition checks. Like all rules, this function returns a reference to the root
- * node that it's created.
+ * needed type/repetition checks. A declare statement is one of our basic statements in ollie
+ * lang, so it will always be given a top level statement node as a	return value
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
  * BNF Rule: <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <identifier>;
  */
-static generic_ast_node_t* declare_statement(FILE* fl){
+static top_level_statment_node_t* declare_statement(FILE* fl){
 	//For error printing
 	char info[2000];
 	//Freeze the current line number
@@ -4702,18 +4656,20 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		push_back_token(fl, lookahead);
 	}
 
-	//Now we can optionally see a storage class specifier here
-	generic_ast_node_t* storage_class_spec_node = storage_class_specifier(fl);
+	//Now we can optionally see a storage class specifier
+	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Now this node may be null, and if it is we don't have a storage specifier
-	if(storage_class_spec_node != NULL){
-		//There actually was a storage class, so we'll grab it
-		storage_class = ((storage_class_spec_ast_node_t*)(storage_class_spec_node->node))->storage_class;
-		
-		//We'll also add this node in as a child of the root node
-		add_child_node(decl_node, storage_class_spec_node);
-	} 
-	//If it was null, it just won't be the child, which is no big deal
+	//We can see one of these 3 storage classes here
+	if(lookahead.tok == REGISTER){
+		storage_class = STORAGE_CLASS_REGISTER;
+	} else if(lookahead.tok == STATIC){
+		storage_class = STORAGE_CLASS_STATIC;
+	} else if(lookahead.tok == EXTERNAL){
+		storage_class = STORAGE_CLASS_EXTERNAL;
+	} else {
+		//We found nothing, just put it back
+		push_back_token(fl, lookahead);
+	}
 	
 	//Now we are required to see a valid type specifier
 	generic_ast_node_t* type_spec_node = type_specifier(fl);
@@ -4722,7 +4678,10 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given in declaration", parser_line_num);
 		//It's already an error, so we'll just send it back up
-		return type_spec_node;
+		//Destroy the node
+		deallocate_ast(type_spec_node);
+		//Null = error
+		return NULL;
 	}
 
 	//We'll now add it in as a child node
@@ -4734,8 +4693,10 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given in declaration", parser_line_num);
 		num_errors++;
-		//It's already an error, just give it back
-		return ident_node;
+		//Destroy the node
+		deallocate_ast(ident_node);
+		//Null = error
+		return NULL;
 	}
 
 	//Now we'll add it as a child
@@ -4747,16 +4708,15 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon required at the end of declaration statement", parser_line_num);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 
 	//Let's get a pointer to the name for convenience
 	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
-	//the same scope may not share names. This is also true regarding functions and types globally
-	//Check that it isn't some duplicated function name
+	//the same scope may not share names. This is also true regarding functions and types globally Check that it isn't some duplicated function name symtab_function_record_t* found_func = lookup_function(function_symtab, name);
 	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
 
 	//Fail out here
@@ -4766,8 +4726,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		//Also print out the function declaration
 		print_function_name(found_func);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -4780,8 +4740,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		//Also print out the original declaration
 		print_type_name(found_type);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -4795,8 +4755,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		//Also print out the original declaration
 		print_variable_name(found_var);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
@@ -4813,6 +4773,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	declared_var->declare_or_let = 0;
 	//The line_number
 	declared_var->line_number = current_line;
+	//Store the storage class
+	declared_var->storage_class = storage_class;
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
@@ -4820,20 +4782,27 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	//Also store this record with the root node
 	((decl_stmt_ast_node_t*)(decl_node->node))->declared_var = declared_var;
 
+	//Let's now create the expression node that we will return 
+	top_level_statment_node_t* statement = top_lvl_stmt_alloc();
+
+	//The root here is the declaration node
+	statement->root = decl_node;
+
 	//All went well so we can return this
-	return decl_node;
+	return statement;
 }
 
 
 /**
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
- * performs type checking and inference and all needed symbol table manipulation
+ * performs type checking and inference and all needed symbol table manipulation. A let statement returns
+ * a top level statement node that holds a reference to the AST that it made
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
  * BNF Rule: <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <identifier> := <conditional-expression>;
  */
-static generic_ast_node_t* let_statement(FILE* fl){
+static top_level_statment_node_t* let_statement(FILE* fl){
 	//For error printing
 	char info[2000];
 	//The line number
@@ -4859,18 +4828,21 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		push_back_token(fl, lookahead);
 	}
 
-	//Now we can optionally see a storage class specifier here
-	generic_ast_node_t* storage_class_spec_node = storage_class_specifier(fl);
+	//Now we can optionally see a storage class specifier
+	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Now this node may be null, and if it is we don't have a storage specifier
-	if(storage_class_spec_node != NULL){
-		//There actually was a storage class, so we'll grab it
-		storage_class = ((storage_class_spec_ast_node_t*)(storage_class_spec_node->node))->storage_class;
-		
-		//We'll also add this node in as a child of the root node
-		add_child_node(let_stmt_node, storage_class_spec_node);
-	} 
-	//If it was null, it just won't be the child, which is no big deal
+	//We can see one of these 3 storage classes here
+	if(lookahead.tok == REGISTER){
+		storage_class = STORAGE_CLASS_REGISTER;
+	} else if(lookahead.tok == STATIC){
+		storage_class = STORAGE_CLASS_STATIC;
+	} else if(lookahead.tok == EXTERNAL){
+		storage_class = STORAGE_CLASS_EXTERNAL;
+	} else {
+		//We found nothing, just put it back
+		push_back_token(fl, lookahead);
+	}
+
 	
 	//Now we are required to see a valid type specifier
 	generic_ast_node_t* type_spec_node = type_specifier(fl);
@@ -4878,8 +4850,9 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	//If this fails, the whole thing is bunk
 	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given in let statement", parser_line_num);
-		//It's already an error, so we'll just send it back up
-		return type_spec_node;
+		num_errors++;
+		//Null = error
+		return NULL;
 	}
 
 	//We'll now add it in as a child node
@@ -4891,8 +4864,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given in let statement", parser_line_num);
 		num_errors++;
-		//It's already an error, just give it back
-		return ident_node;
+		//Null=error
+		return NULL;
 	}
 
 	//Now we'll add it as a child
@@ -4913,8 +4886,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		//Also print out the function declaration
 		print_function_name(found_func);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Return null here
+		return NULL;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -4927,8 +4900,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		//Also print out the original declaration
 		print_type_name(found_type);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -4942,8 +4915,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		//Also print out the original declaration
 		print_variable_name(found_var);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Null = error
+		return NULL;
 	}
 
 	//Now we know that it wasn't a duplicate, so we must see a valid assignment operator
@@ -4952,8 +4925,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	if(lookahead.tok != COLONEQ){
 		print_parse_message(PARSE_ERROR, "Assignment operator(:=) required after identifier in let statement", parser_line_num);
 		num_errors++;
-		//Create and return an error
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Return null here
+		return NULL;
 	}
 
 	//Otherwise we saw it, so now we need to see a valid conditional expression
@@ -4963,8 +4936,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	if(conditional_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid conditional expression given as intializer", parser_line_num);
 		num_errors++;
-		//It's already an error so just give it back
-		return conditional_expr_node;
+		//Error out
+		return NULL;
 	}
 
 	//Otherwise it worked, so we'll add it in as a child
@@ -4977,8 +4950,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon required at the end of let statement", parser_line_num);
 		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Error out
+		return NULL;
 	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
@@ -4995,6 +4968,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	declared_var->declare_or_let = 1;
 	//Save the line num
 	declared_var->line_number = current_line;
+	//Save the storage class
+	declared_var->storage_class = storage_class;
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
@@ -5002,8 +4977,14 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	//Add the reference into the root node
 	((let_stmt_ast_node_t*)(let_stmt_node->node))->declared_var = declared_var;
 
-	//Give back the let statement node here
-	return let_stmt_node;
+	//Create and return the top level node
+	top_level_statment_node_t* statement = top_lvl_stmt_alloc();
+
+	//Link it to the generic node
+	statement->root = let_stmt_node;
+
+	//Now give this back
+	return statement;
 }
 
 
@@ -5644,14 +5625,18 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 			}
 
 		//Assignment statements are a control flow construct. They are statements. Each assignment node will either
-		//be a leader node or be in a chain of expression nodes in the basic block
-		} else if(lookahead.tok == ASN){
+		//be a leader node or be in a chain of expression nodes in the basic block. If we get here, we know that we are 
+		//seeing an assignment statement
+		} else {
+			//Put whatever we saw back
+			push_back_token(fl, lookahead);
+
 			//We'll first define it
 			top_level_statment_node_t* asn_node = assignment_statement(fl);
 
 			//If it's null, we had a bad declaration block
 			if(asn_node == NULL){
-				print_parse_message(PARSE_ERROR, "Bad top level let statement given", parser_line_num);
+				print_parse_message(PARSE_ERROR, "Bad top level assignment statement given", parser_line_num);
 				return NULL;
 			}
 
@@ -5670,13 +5655,8 @@ static basic_block_t* program(FILE* fl, cfg_t* cfg){
 			} else {
 				add_statement(current_block, asn_node);
 			}
-
-		//If we make it here then there is some kind of failure
-		} else {
-			print_parse_message(PARSE_ERROR, "Expected declare, define, let, alias or func keywords", parser_line_num);
-			num_errors++;
-			return NULL;
 		}
+
 
 		//Refresh our lookahead here
 		lookahead = get_next_token(fl, &parser_line_num);
