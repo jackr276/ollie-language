@@ -3,7 +3,6 @@
 */
 
 #include "cfg.h"
-#include <cwchar>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -123,7 +122,7 @@ void add_successor(basic_block_t* target, basic_block_t* successor, linked_direc
 /**
  * Add a statement to the target block, following all standard linked-list protocol
  */
-void add_statement(basic_block_t* target, top_level_statment_node_t* statement_node){
+void add_statement(basic_block_t* target, top_level_statement_node_t* statement_node){
 	//Special case--we're adding the head
 	if(target->leader_statement == NULL){
 		//Assign this to be the head and the tail

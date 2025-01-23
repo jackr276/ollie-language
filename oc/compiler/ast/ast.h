@@ -25,6 +25,8 @@ typedef struct generic_ast_node_t generic_ast_node_t;
 typedef struct prog_ast_node_t prog_ast_node_t;
 //A function definition AST node
 typedef struct func_def_ast_node_t func_def_ast_node_t;
+//A function specifier node
+typedef struct func_specifier_ast_node_t func_specifier_ast_node_t;
 //A parameter list node
 typedef struct param_list_ast_node_t param_list_ast_node_t;
 //A parameter node
@@ -57,10 +59,14 @@ typedef struct function_call_ast_node_t function_call_ast_node_t;
 typedef struct construct_accessor_ast_node_t construct_accessor_ast_node_t;
 //An array accessor node
 typedef struct array_accessor_ast_node_t array_accessor_ast_node_t;
+//A construct definer node
+typedef struct construct_definer_ast_node_t construct_definer_ast_node_t;
 //A construct member list node
 typedef struct construct_member_list_ast_node_t construct_member_list_ast_node_t;
 //A construct member node
 typedef struct construct_member_ast_node_t construct_member_ast_node_t;
+//An enumerated definer node
+typedef struct enum_definer_ast_node_t enum_definer_ast_node_t;
 //An enumarated list node
 typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
 //An enumerated member node
@@ -91,19 +97,28 @@ typedef struct switch_stmt_ast_node_t switch_stmt_ast_node_t;
 typedef struct while_stmt_ast_node_t while_stmt_ast_node_t;
 //An AST node for do-while statements
 typedef struct do_while_stmt_ast_node_t do_while_stmt_ast_node_t;
+//An AST node for compound statements
+typedef struct compound_stmt_ast_node_t compound_stmt_ast_node_t;
+//An AST node for for statements
+typedef struct for_stmt_ast_node_t for_stmt_ast_node_t;
+//An AST node for alias statements
+typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 //An AST node for declaration statements
 typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 //An AST node for let statements
 typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
-
-//FOR CFG-A top level "statement" node
-typedef struct top_level_statment_node_t top_level_statment_node_t;
+//An AST node for storage class specifiers
+typedef struct storage_class_spec_ast_node_t storage_class_spec_ast_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
+	AST_NODE_CLASS_PROG,
+	AST_NODE_CLASS_ALIAS_STMT,
 	AST_NODE_CLASS_DECL_STMT,
 	AST_NODE_CLASS_LET_STMT,
 	AST_NODE_CLASS_FUNC_DEF,
+	AST_NODE_CLASS_FUNC_SPECIFIER,
+	AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER,
 	AST_NODE_CLASS_PARAM_LIST,
 	AST_NODE_CLASS_CONSTANT,
 	AST_NODE_CLASS_PARAM_DECL,
@@ -120,8 +135,10 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CONSTRUCT_ACCESSOR,
 	AST_NODE_CLASS_ARRAY_ACCESSOR,
 	AST_NODE_CLASS_FUNCTION_CALL,
+	AST_NODE_CLASS_CONSTRUCT_DEFINER,
 	AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST,
 	AST_NODE_CLASS_CONSTRUCT_MEMBER,
+	AST_NODE_CLASS_ENUM_DEFINER,
 	AST_NODE_CLASS_ENUM_MEMBER_LIST,
 	AST_NODE_CLASS_ENUM_MEMBER,
 	AST_NODE_CLASS_EXPR_STMT,
@@ -136,6 +153,8 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_SWITCH_STMT,
 	AST_NODE_CLASS_WHILE_STMT,
 	AST_NODE_CLASS_DO_WHILE_STMT,
+	AST_NODE_CLASS_FOR_STMT,
+	AST_NODE_CLASS_COMPOUND_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -146,17 +165,12 @@ typedef enum address_specifier_type_t{
 	ADDRESS_SPECIFIER_ADDRESS,
 } address_specifier_type_t;
 
-
-
 /**
  * Current implementation is an N-ary tree. Each node holds pointers to its
  * first child and next sibling. The generic node also holds a pointer 
  * to what the actual node is
 */
 struct generic_ast_node_t{
-	//The linked list structure for our CFG of statments. THIS IS SPECIFICALLY
-	//RESERVED FOR CFG USE
-	generic_ast_node_t* next_statement;
 	//These are the two pointers that make up the whole of the tree
 	generic_ast_node_t* first_child;
 	generic_ast_node_t* next_sibling;
@@ -167,23 +181,27 @@ struct generic_ast_node_t{
 };
 
 
-/**
- * This top level node holds the reference to an expression subtree. These references will be held
- * by the basic blocks of our CFG
- */
-struct top_level_statment_node_t{
-	//Acts as a singly linked list of nodes
-	top_level_statment_node_t* next;
-	//Hold the reference to the root node for the expression-level AST
-	generic_ast_node_t* root;
+//The starting AST node really only exists to hold the tree root
+struct prog_ast_node_t{
+	//The lexer item, really a formality
+	Lexer_item lex;
 };
 
 
 //Represents a top level function definition
 struct func_def_ast_node_t{
-	//Placeholder only
-	u_int8_t status;
+	//The symtable function record that is created in parallel
+	symtab_function_record_t* func_record;
 };
+
+
+//Holds the static or external keywords for a function
+struct func_specifier_ast_node_t{
+	//Just holds a token for us
+	Token funcion_storage_class_tok;
+	STORAGE_CLASS_T function_storage_class;
+};
+
 
 //Holds references to our parameter list
 struct param_list_ast_node_t{
@@ -295,6 +313,11 @@ struct postfix_expr_ast_node_t{
 	generic_type_t* inferred_type;
 };
 
+//The construct definer node
+struct construct_definer_ast_node_t{
+	//Keep a reference to the type that was made for the construct
+	generic_type_t* created_construct;
+};
 
 //The construct member list node
 struct construct_member_list_ast_node_t{
@@ -306,6 +329,12 @@ struct construct_member_list_ast_node_t{
 struct construct_member_ast_node_t{
 	//Keep a reference to the variable record
 	symtab_variable_record_t* member_var;
+};
+
+//The enum definer node
+struct enum_definer_ast_node_t{
+	//Holds a reference to the type
+	generic_type_t* created_enum;
 };
 
 //The enum list node for the definition
@@ -396,6 +425,24 @@ struct do_while_stmt_ast_node_t{
 	u_int8_t status;
 };
 
+//A for statement
+struct for_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status;
+};
+
+//A compound statement
+struct compound_stmt_ast_node_t{
+	//Just hold status for now
+	u_int8_t status;
+};
+
+//An alias stmt
+struct alias_stmt_ast_node_t{
+	//Hold the alias that we made
+	symtab_type_record_t* alias;
+};
+
 //A declaration stmt
 struct decl_stmt_ast_node_t{
 	//Hold the variable that we declaraed
@@ -408,16 +455,17 @@ struct let_stmt_ast_node_t{
 	symtab_variable_record_t* declared_var;
 };
 
+//Storage class specifier for variables
+struct storage_class_spec_ast_node_t{
+	//What storage class is it?
+	STORAGE_CLASS_T storage_class;
+};
+
 /**
  * Global node allocation function
  */
 generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS);
 
-
-/**
- * Allocate a top level statement
- */
-top_level_statment_node_t* top_lvl_stmt_alloc();
 
 /**
  * A helper function that will appropriately add a child node into the parent

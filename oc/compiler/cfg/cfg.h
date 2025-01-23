@@ -16,6 +16,8 @@
 typedef struct cfg_t cfg_t;
 //Basic blocks in our CFG
 typedef struct basic_block_t basic_block_t;
+typedef struct top_level_statement_node_t top_level_statement_node_t;
+
 
 /**
  * What is the directionality of our added node
@@ -37,6 +39,11 @@ struct cfg_t{
 	basic_block_t* root;
 };
 
+
+struct top_level_statement_node_t{
+	top_level_statement_node_t* next;
+	generic_ast_node_t* node;
+};
 
 /**
  * Define: a basic block is a sequence of consecutive 
@@ -60,8 +67,8 @@ struct basic_block_t{
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
-	top_level_statment_node_t* leader_statement;
-	top_level_statment_node_t* exit_statement;
+	top_level_statement_node_t* leader_statement;
+	top_level_statement_node_t* exit_statement;
 };
 
 //Allocate our global cfg structure
@@ -80,7 +87,7 @@ void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_d
 void add_successor(basic_block_t* target, basic_block_t* successor, linked_direction_t directedness);
 
 //Add a statement AST node refence to the basic block
-void add_statement(basic_block_t* target, top_level_statment_node_t* statement_node);
+void add_statement(basic_block_t* target, top_level_statement_node_t* statement_node);
 
 //Deallocate a basic block
 void basic_block_dealloc(basic_block_t* block);
