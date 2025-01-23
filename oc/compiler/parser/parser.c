@@ -47,6 +47,7 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* expression(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl);
+static generic_ast_node_t* logical_or_expression(FILE* fl);
 static u_int8_t definition(FILE* fl);
 
 
@@ -423,7 +424,7 @@ static generic_ast_node_t* function_call(FILE* fl){
  *
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
- * 									| (<expression>)
+ * 									| (<logical-or-expression>)
  * 									| <function-call>
  */
 static generic_ast_node_t* primary_expression(FILE* fl){
@@ -433,6 +434,9 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
+
+	//We first create the primary expression node
+	generic_ast_node_t* primary_expr_node = ast_node_alloc(AST_NODE_CLASS_PRIMARY_EXPR);
 	
 	//Grab the next token, we'll multiplex on this
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -471,8 +475,11 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//Otherwise, we will just return the node that we got
-		return ident;
+		//Let's add the ident in as a child of the overall node
+		add_child_node(primary_expr_node, ident);
+
+		//Store the inferred type
+		((primary_expr_ast_node_t*)(primary_expr_node->node))->inferred_type = found->type;
 
 	//We can also see a constant
 	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
@@ -483,8 +490,17 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//Call the constant rule to grab the constant node
 		generic_ast_node_t* constant_node = constant(fl);
 
-		//Whether it's null or not, we'll just give it back to the caller to handle
-		return constant_node;
+		//Fail out here if this happens
+		if(constant_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return constant_node;
+		}
+
+		//Otherwise we'll add this as a child node of the top level one
+		add_child_node(primary_expr_node, constant_node);
+
+		//Add the type information in
+		((primary_expr_ast_node_t*)(primary_expr_node->node))->inferred_type = ((constant_ast_node_t*)(constant_node->node))->type;
+
 
 	//This is the case where we are putting the expression
 	//In parens
@@ -492,8 +508,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//We'll push it up to the stack for matching
 		push(grouping_stack, lookahead);
 
-		//We are now required to see a valid expression
-		generic_ast_node_t* expr = expression(fl);
+		//We are now required to see a valid logical or expression expression
+		generic_ast_node_t* expr = logical_or_expression(fl);
 
 		//If it's an error, just give the node back
 		if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -520,16 +536,29 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//If we make it here, return the expression node
-		return expr;
+		//If we make it all the way down here, we can add this in as a child
+		add_child_node(primary_expr_node, expr);
+
+		//We'll also grab the inferred type info here
+		((primary_expr_ast_node_t*)(primary_expr_node->node))->inferred_type = ((binary_expr_ast_node_t*)(expr->node))->inferred_type;
+
 	
 	//Otherwise, if we see an @ symbol, we know it's a function call
 	} else if(lookahead.tok == AT){
 		//We will let this rule handle the function call
 		generic_ast_node_t* func_call = function_call(fl);
 
-		//Whatever it ends up being, we'll just return it
-		return func_call;
+		//If we failed here
+		if(func_call->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid function call detected", parser_line_num);
+			return func_call;
+		}
+
+		//Add this as a child of the overall node
+		add_child_node(primary_expr_node, func_call);
+
+		//We'll store the inferred type info here
+		((primary_expr_ast_node_t*)(primary_expr_node->node))->inferred_type = ((function_call_ast_node_t*)(func_call->node))->inferred_type;
 
 	//Generic fail case
 	} else {
@@ -539,6 +568,9 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//Create and return an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
+
+	//Give the primary expression node back
+	return primary_expr_node;
 }
 
 

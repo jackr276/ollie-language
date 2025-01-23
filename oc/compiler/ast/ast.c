@@ -42,6 +42,13 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_FUNC_DEF;
 			break;
 
+		//The primary expression node
+		case AST_NODE_CLASS_PRIMARY_EXPR:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(primary_expr_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_PRIMARY_EXPR;
+			break;
+
 		//The function specifier AST node
 		case AST_NODE_CLASS_PARAM_LIST:
 			//Just allocate the proper size and set the class
