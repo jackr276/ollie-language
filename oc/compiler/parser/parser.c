@@ -4241,7 +4241,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
  *
  * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<conditional-expression>}? ; {<conditional-expression>}? ) do <compound-statement>
  */
-static generic_ast_node_t* for_statement(FILE* fl){
+static generic_ast_node_t* for_statement(FILE* fl, cfg_t* cfg){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num; 
 	//Lookahead token
@@ -4439,6 +4439,86 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	return for_stmt_node;
 }
 
+/**
+ * A statement is a kind of multiplexing rule that just determines where we need to go to. Like all rules in the parser,
+ * this function returns a reference to the the root node that it creates, even though that actual root node is created 
+ * further down the chain. A statement always has a strict entry point, called a basic block. We will return a reference to the 
+ * basic block that we create here. There is an inefficiency here with the expression statement rule, in that it will create a block
+ * when it doesn't really need one. This is an inefficiency that we are willing to accept, and is relatively minor
+ *
+ * BNF Rule: <complex-statement> ::= <labeled-statement> 
+ * 						   | <expression-statement> 
+ * 						   | <compound-statement> 
+ * 						   | <if-statement> 
+ * 						   | <switch-statement> 
+ * 						   | <for-statement> 
+ * 						   | <do-while-statement> 
+ * 						   | <while-statement> 
+ * 						   | <branch-statement>
+ */
+static basic_block_t* complex_statement(FILE* fl, cfg_t* cfg){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//Let's grab the next item and see what we have here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a label ident, we know we're seeing a labeled statement
+	if(lookahead.tok == LABEL_IDENT || lookahead.tok == CASE || lookahead.tok == DEFAULT){
+		//This rule relies on these tokens, so we'll push them back
+		push_back_token(fl, lookahead);
+	
+		//Just return whatever the rule gives us
+		return labeled_statement(fl, cfg);
+	
+	//If we see an L_CURLY, we are seeing a compound statement
+	} else if(lookahead.tok == L_CURLY){
+		//The rule relies on it, so put it back
+		push_back_token(fl, lookahead);
+
+		//Return whatever the rule gives us
+		return compound_statement(fl, cfg);
+	
+	//If we see for, we are seeing a for statement
+	} else if(lookahead.tok == FOR){
+		//This rule relies on for already being consumed, so we won't put it back
+		return for_statement(fl, cfg);
+
+	//While statement
+	} else if(lookahead.tok == WHILE){
+		//This rule relies on while already being consumed, so we won't put it back
+		return while_statement(fl, cfg);
+
+	//Do while statement
+	} else if(lookahead.tok == DO){
+		//This rule relies on do already being consumed, so we won't put it back
+		return do_while_statement(fl, cfg);
+
+	//Switch statement
+	} else if(lookahead.tok == SWITCH){
+		//This rule relies on switch already being consumed, so we won't put it back
+		return switch_statement(fl, cfg);
+
+	//If statement
+	} else if(lookahead.tok == IF){
+		//This rule relies on if already being consumed, so we won't put it back
+		return if_statement(fl, cfg);
+
+	//Some kind of branch statement
+	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
+			|| lookahead.tok == RET){
+		//The branch rule needs these, so we'll put them back
+		push_back_token(fl, lookahead);
+		//return whatever this gives us
+		return branch_statement(fl, cfg);
+	} else {
+		//Otherwise, this is some kind of expression statement. We'll put the token back and
+		//return that
+		push_back_token(fl, lookahead);
+		return expression_statement(fl, cfg);
+	}
+}
+
 
 /**
  * A compound statement is denoted by the {} braces, and can decay in to 
@@ -4544,10 +4624,65 @@ static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 			
 			//Otherwise we just move right along
 
+		//We have an assignment statement here. It will always be a part of whatever block we're currently in
+		} else if(lookahead.tok == ASN){
+			//The rule handle it
+			top_level_statment_node_t* asn_node = assignment_statement(fl);
+
+			//If it failed we'll bail out here
+			if(asn_node == NULL){
+				print_parse_message(PARSE_ERROR, "Invalid assignment statement in compound statement", parser_line_num);
+				num_errors++;
+				return 0;
+			}
+
+			//An assignment statement will always be a part of whatever node that we're currently in
+			add_statement(current_block, asn_node);
+
+		//Otherwise, we have some kind of complex statement here. This complex statement will be handled by the special rule that we have
 		} else {
+			//Put the token back
+			push_back_token(fl, lookahead);
+
+			//Let the complex statement handle it
+			basic_block_t* complex_stmt_block = complex_statement(fl, cfg);
+
+			//If we have null, we fail out
+			if(complex_stmt_block == NULL){
+				print_parse_message(PARSE_ERROR, "Invalid complex statement in compound statement", parser_line_num);
+				num_errors++;
+				return 0;
+			}
+
+			//Otherwise once we make it down here, we have exited the control region of the complex block. As such, we'll need
+			//to add the block in and then create a new block for our current block
+			add_successor(current_block, complex_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+			//Set the current block to be the complex stmt block
+			current_block = complex_stmt_block;
+
+			/**
+			 * Do we actually need another block after this? We'll have a peek at the next token
+			 * to see if we do. If we don't, there's no point in adding an additional block
+			 */
+			//These rules don't make their own blocks, so if we see one of these we'll need a new block
+			if(lookahead.tok == DECLARE || lookahead.tok == LET || lookahead.tok == ASN){
+				//We actually need a fresh block for after this
+				basic_block_t* next = basic_block_alloc(cfg);
+
+				//We'll add this one in as our most current block, to prime this for whatever we see next
+				add_successor(current_block, next, LINKED_DIRECTION_UNIDIRECTIONAL); 
+				//Set the current block to be this one
+				current_block = next;
+			}
+			//Otherwise we didn't need a new block and this is all fine as it is
+			//No matter what the token we used here needs to go back
+			push_back_token(fl, lookahead);
 
 		}
 
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//Once we've escaped out of the while loop, we know that the token we currently have
@@ -4559,7 +4694,7 @@ static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 		//Null = error
 		return NULL;
 	}
-
+	
 	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
 	//"finalize" both of these scopes
 	finalize_type_scope(type_symtab);
@@ -4570,84 +4705,6 @@ static basic_block_t* compound_statement(FILE* fl, cfg_t* cfg){
 }
 
 
-/**
- * A statement is a kind of multiplexing rule that just determines where we need to go to. Like all rules in the parser,
- * this function returns a reference to the the root node that it creates, even though that actual root node is created 
- * further down the chain. A statement always has a strict entry point, called a basic block. We will return a reference to the 
- * basic block that we create here
- *
- * BNF Rule: <statement> ::= <labeled-statement> 
- * 						   | <expression-statement> 
- * 						   | <compound-statement> 
- * 						   | <if-statement> 
- * 						   | <switch-statement> 
- * 						   | <for-statement> 
- * 						   | <do-while-statement> 
- * 						   | <while-statement> 
- * 						   | <branch-statement>
- */
-static basic_block_t* statement(FILE* fl){
-	//Lookahead token
-	Lexer_item lookahead;
-
-	//Let's grab the next item and see what we have here
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see a label ident, we know we're seeing a labeled statement
-	if(lookahead.tok == LABEL_IDENT || lookahead.tok == CASE || lookahead.tok == DEFAULT){
-		//This rule relies on these tokens, so we'll push them back
-		push_back_token(fl, lookahead);
-	
-		//Just return whatever the rule gives us
-		return labeled_statement(fl);
-	
-	//If we see an L_CURLY, we are seeing a compound statement
-	} else if(lookahead.tok == L_CURLY){
-		//The rule relies on it, so put it back
-		push_back_token(fl, lookahead);
-
-		//Return whatever the rule gives us
-		return compound_statement(fl);
-	
-	//If we see for, we are seeing a for statement
-	} else if(lookahead.tok == FOR){
-		//This rule relies on for already being consumed, so we won't put it back
-		return for_statement(fl);
-
-	//While statement
-	} else if(lookahead.tok == WHILE){
-		//This rule relies on while already being consumed, so we won't put it back
-		return while_statement(fl);
-
-	//Do while statement
-	} else if(lookahead.tok == DO){
-		//This rule relies on do already being consumed, so we won't put it back
-		return do_while_statement(fl);
-
-	//Switch statement
-	} else if(lookahead.tok == SWITCH){
-		//This rule relies on switch already being consumed, so we won't put it back
-		return switch_statement(fl);
-
-	//If statement
-	} else if(lookahead.tok == IF){
-		//This rule relies on if already being consumed, so we won't put it back
-		return if_statement(fl);
-
-	//Some kind of branch statement
-	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
-			|| lookahead.tok == RET){
-		//The branch rule needs these, so we'll put them back
-		push_back_token(fl, lookahead);
-		//return whatever this gives us
-		return branch_statement(fl);
-	} else {
-		//Otherwise, this is some kind of expression statement. We'll put the token back and
-		//return that
-		push_back_token(fl, lookahead);
-		return expression_statement(fl);
-	}
-}
 
 
 /**
