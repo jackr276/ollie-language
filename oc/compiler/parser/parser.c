@@ -101,6 +101,8 @@ static generic_ast_node_t* identifier(FILE* fl){
 	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER); //Add the identifier into the node itself
 	//Copy the string we got into it
 	strcpy(((identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
+	//Default identifier type is s_int32
+	ident_node->inferred_type = lookup_type(type_symtab, "s_int32")->type;
 
 	//Return our reference to the node
 	return ident_node;
@@ -133,6 +135,8 @@ static generic_ast_node_t* label_identifier(FILE* fl){
 	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER); //Add the identifier into the node itself
 	//Copy the string we got into it
 	strcpy(((identifier_ast_node_t*)(label_ident_node->node))->identifier, lookahead.lexeme);
+	//By default a label identifier is of type u_int64(memory address)
+	label_ident_node->inferred_type = lookup_type(type_symtab, "u_int64")->type;
 
 	//Return our reference to the node
 	return label_ident_node;
@@ -166,21 +170,21 @@ static generic_ast_node_t* constant(FILE* fl){
 			//Store the int value we were given
 			((constant_ast_node_t*)(constant_node->node))->int_val = atoi(lookahead.lexeme);
 			//By default, int constants are of type s_int32
-			((constant_ast_node_t*)(constant_node->node))->type = lookup_type(type_symtab, "s_int32")->type;
+			constant_node->inferred_type = lookup_type(type_symtab, "s_int32")->type;
 			break;
 		case FLOAT_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = FLOAT_CONST;
 			//Store the float value we were given
 			((constant_ast_node_t*)(constant_node->node))->float_val = atof(lookahead.lexeme);
 			//By default, float constants are of type float32
-			((constant_ast_node_t*)(constant_node->node))->type = lookup_type(type_symtab, "float32")->type;
+			constant_node->inferred_type = lookup_type(type_symtab, "float32")->type;
 			break;
 		case CHAR_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = CHAR_CONST;
 			//Store the char value that we were given
 			((constant_ast_node_t*)(constant_node->node))->float_val = *(lookahead.lexeme);
 			//Char consts are of type char(obviously)
-			((constant_ast_node_t*)(constant_node->node))->type = lookup_type(type_symtab, "char")->type;
+			constant_node->inferred_type = lookup_type(type_symtab, "char")->type;
 			break;
 		case STR_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = STR_CONST;
@@ -224,11 +228,11 @@ static generic_ast_node_t* constant(FILE* fl){
 				//Add this type into the symtab
 				insert_type(type_symtab, create_type_record(char_arr));
 				//Assign the type
-				((constant_ast_node_t*)(constant_node->node))->type = char_arr;
+				constant_node->inferred_type = char_arr;
 
 			//Otherwise the type was defined by someone else, so we'll just reuse it
 			} else {
-				((constant_ast_node_t*)(constant_node->node))->type = found_type->type;
+				constant_node->inferred_type = found_type->type;
 			}
 			
 			//By the time we make it down here, the type has been accounted for
@@ -335,7 +339,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 	add_child_node(function_call_node, ident);
 
 	//Add the inferred type in for convenience as well
-	((function_call_ast_node_t*)(function_call_node->node))->inferred_type = function_record->return_type;
+	function_call_node->inferred_type = function_record->return_type;
 	
 	//We now need to see a left parenthesis for our param list
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -478,7 +482,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		add_child_node(primary_expr_node, ident);
 
 		//Store the inferred type
-		((primary_expr_ast_node_t*)(primary_expr_node->node))->inferred_type = found->type;
+		primary_expr_node->inferred_type = found->type;
 
 	//We can also see a constant
 	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
@@ -498,7 +502,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		add_child_node(primary_expr_node, constant_node);
 
 		//Add the type information in
-		((primary_expr_ast_node_t*)(primary_expr_node->node))->inferred_type = ((constant_ast_node_t*)(constant_node->node))->type;
+		primary_expr_node->inferred_type = ((constant_ast_node_t*)(constant_node->node))->type;
 
 
 	//This is the case where we are putting the expression
@@ -539,7 +543,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		add_child_node(primary_expr_node, expr);
 
 		//We'll also grab the inferred type info here
-		((primary_expr_ast_node_t*)(primary_expr_node->node))->inferred_type = ((binary_expr_ast_node_t*)(expr->node))->inferred_type;
+		primary_expr_node->inferred_type = expr->inferred_type;
 
 	
 	//Otherwise, if we see an @ symbol, we know it's a function call
@@ -557,7 +561,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		add_child_node(primary_expr_node, func_call);
 
 		//We'll store the inferred type info here
-		((primary_expr_ast_node_t*)(primary_expr_node->node))->inferred_type = ((function_call_ast_node_t*)(func_call->node))->inferred_type;
+		primary_expr_node->inferred_type = func_call->inferred_type;
 
 	//Generic fail case
 	} else {
@@ -928,7 +932,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	add_child_node(postfix_expr_node, primary_expr);
 
 	//Let's grab whatever type that we currently have
-	generic_type_t* current_type = ((primary_expr_ast_node_t*)(primary_expr->node))->inferred_type;
+	generic_type_t* current_type = primary_expr->inferred_type;
 	//Do any kind of dealiasing that we need to do
 	current_type = dealias_type(current_type);
 
@@ -1029,7 +1033,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	add_child_node(postfix_expr_node, unary_post_op);
 	
 	//Add the inferred type in
-	((postfix_expr_ast_node_t*)(postfix_expr_node->node))->inferred_type = return_type;
+	postfix_expr_node->inferred_type = return_type;
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;

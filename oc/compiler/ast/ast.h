@@ -268,16 +268,12 @@ struct asnmnt_expr_ast_node_t{
 
 //This node will hold data about any binary expression
 struct binary_expr_ast_node_t{
-	//What type does it produce?
-	generic_type_t* inferred_type;
 	//What operator is it
 	Token binary_operator;
 };
 
 //This node will hold data about any primary expression
 struct primary_expr_ast_node_t{
-	//What type does it produce?
-	generic_type_t* inferred_type;
 };
 
 //The cast expression node is reached if we actually make a cast
@@ -288,14 +284,10 @@ struct cast_expr_ast_node_t{
 
 //The function node call
 struct function_call_ast_node_t{
-	//What is the inferred type of the called function // may be removed
-	generic_type_t* inferred_type;
 };
 
 //The unary expression node
 struct unary_expr_ast_node_t{
-	//We will keep the inferred type here for convenience
-	generic_type_t* inferred_type;
 };
 
 //The unary operator node
@@ -313,14 +305,10 @@ struct construct_accessor_ast_node_t{
 //The array accessor AST Node. Doesn't really do much, just there
 //to represent what we're doing
 struct array_accessor_ast_node_t{
-	//What is the inferred type -- not yet implemented
-	generic_type_t* inferred_type;
 };
 
 //The postfix expression ast node. Does not do all that much currently
 struct postfix_expr_ast_node_t{
-	//What type do we think it is--not yet implemented
-	generic_type_t* inferred_type;
 };
 
 //The construct member list node
@@ -349,8 +337,6 @@ struct enum_member_ast_node_t{
 
 //An expression statement node
 struct expression_stmt_ast_node_t{
-	//The inferred type
-	generic_type_t* inferred_type;
 };
 
 //A case statement node
