@@ -216,6 +216,22 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 	return type;
 }
 
+/**
+ * This function will completely strip away any aliasing and return the raw type 
+ * that we have underneath
+ */
+generic_type_t* dealias_type(generic_type_t* type){
+	//Grab a cursor of sorts
+	generic_type_t* raw_type = type;
+
+	//So long as we keep having an alias
+	while(raw_type->type_class == TYPE_CLASS_ALIAS){
+		raw_type = raw_type->aliased_type->aliased_type;
+	}
+
+	//Give the stripped down type back
+	return raw_type;
+}
 
 /**
  * Provide a way of destroying a type variable easily

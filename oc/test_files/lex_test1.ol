@@ -4,9 +4,14 @@
 
 declare u_int8 j;
 
+alias u_int8[100] as int_arr;
+
 func:static main() -> u_int32* {
 	//Single line comment
-	let u_int8 i := 0;
+	declare int_arr j_arr;
+	asn j_arr[0][2] := 2;
+
+
     let u_int8* i_ptr := &i; //Another comment
 	
 	let u_int32 main := 1; //Illegal type redef

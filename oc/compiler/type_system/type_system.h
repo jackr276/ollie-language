@@ -121,7 +121,7 @@ struct pointer_type_t{
  */
 struct constructed_type_t{
 	//What types do we contain?.
-	//Each pointer in here refers to a variable
+	//Each pointer in here refers to a variable(in the symtab)
 	void* members[MAX_CONSTRUCT_MEMBERS];
 	//How many members are there?
 	u_int8_t num_members;
@@ -165,6 +165,11 @@ u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB);
  * Dynamically allocate and create a basic type
 */
 generic_type_t* create_basic_type(char* type_name, Token basic_type);
+
+/**
+ * Strip any aliasing away from a type that we have
+ */
+generic_type_t* dealias_type(generic_type_t* type);
 
 /**
  * Dynamically allocate and create a pointer type

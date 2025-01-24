@@ -670,7 +670,9 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  * BNF Rule: <construct-accessor> ::= => <variable-identifier> 
  * 								    | : <variable-identifier>
  */
-static generic_ast_node_t* construct_accessor(FILE* fl){
+static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current_type){
+	//For error printing
+	char info[2000];
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -686,11 +688,61 @@ static generic_ast_node_t* construct_accessor(FILE* fl){
 		//Error out
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
-	
+
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR);
+
 	//Put the token in to show what we have
 	((construct_accessor_ast_node_t*)(const_access_node->node))->tok = lookahead.tok;
+
+	//Grab a convenient reference to the type that we're working with
+	generic_type_t* working_type = dealias_type(*current_type);
+
+	//What is the type that we're referencing here
+	generic_type_t* referenced_type;
+
+	//If we have a =>, we need to have seen a pointer to a struct
+	if(lookahead.tok == ARROW_EQ){
+		//We need to specifically see a pointer to a struct for the current type
+		//If it's something else, we fail out here
+		if(working_type->type_class != TYPE_CLASS_POINTER){
+			sprintf(info, "Type \"%s\" cannot be accessed with the => operator. First defined here:", working_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_type_name(lookup_type(type_symtab, working_type->type_name));
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We can now pick out what type we're referencing(should be construct)
+		referenced_type = working_type->pointer_type->points_to;
+
+		//Now we know that its a pointer, but what does it point to?
+		if(referenced_type->type_class != TYPE_CLASS_CONSTRUCT){
+			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_type_name(lookup_type(type_symtab, referenced_type->type_name));
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//The working type is whatever we reference here
+		working_type = referenced_type;
+
+	//Otherwise we know that we have some kind of non-pointer here(or so we hope)
+	} else {
+		//We need to specifically see a struct here
+		if(working_type->type_class != TYPE_CLASS_CONSTRUCT){
+			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_type_name(lookup_type(type_symtab, working_type->type_name));
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//If we make it here we know that working type is a struct
+		//We'll assign here for convenience
+		referenced_type = working_type;
+	}
 
 	//Now we are required to see a valid variable identifier. TODO TYPE CHECKING
 	generic_ast_node_t* ident = identifier(fl); 
@@ -702,6 +754,41 @@ static generic_ast_node_t* construct_accessor(FILE* fl){
 		//It already is an error node so we'll return it
 		return ident;
 	}
+
+	//Grab this for nicety
+	char* member_name = ((identifier_ast_node_t*)(ident->node))->identifier;
+
+	//Let's find this type
+	symtab_variable_record_t* var_record = lookup_variable(variable_symtab, member_name); 
+
+	//If we can't find it we're out
+	if(var_record == NULL){
+		sprintf(info, "Variable \"%s\" is not a known member of any construct", member_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we've found it, but is it a part of our struct?
+	if(var_record->struct_defined_in == NULL){
+		sprintf(info, "Variable \"%s\" is not a known member of any construct. First defined here:", member_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(var_record);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}	
+
+	//If we get here we know that it was defined in a struct, but is it in our struct?
+	if(strcmp(var_record->struct_defined_in->type_name, working_type->type_name) != 0){
+		sprintf(info, "Construct \"%s\" does not have a member named \"%s\". First defined here:", working_type->type_name, member_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_type_name(lookup_type(type_symtab, working_type->type_name));
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise, we finally know that its correct. As such, we'll update the current type to be whatever this is
+	*current_type = var_record->type;
 
 	//Otherwise we know that it worked, so we'll add this guy in as a child of the overall construct
 	//accessor
@@ -718,7 +805,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl){
  *
  * We expect that the caller has given back the [ token for this rule
  *
- * BNF Rule: <array-accessor> ::= [ <logical-or--expression> ]
+ * BNF Rule: <array-accessor> ::= [ <logical-or-expression> ]
  *
  */
 static generic_ast_node_t* array_accessor(FILE* fl){
@@ -795,6 +882,8 @@ static generic_ast_node_t* array_accessor(FILE* fl){
  *						  | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Freeze the current line number
@@ -820,22 +909,47 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		//Just return what primary expr gave us
 		return primary_expr;
 	}
+	
+	//If we make it down to here, we know that we're trying to access a variable. As such, 
+	//we need to make sure that we don't see a constant here
+	if(primary_expr->first_child->CLASS == AST_NODE_CLASS_CONSTANT){
+		print_parse_message(PARSE_ERROR, "Constants are not assignable", current_line);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we at least know that it isn't a constant
 
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
 	//post operation, so we can make the node for it
 	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_CLASS_POSTFIX_EXPR);
-	
+
 	//This node will always have the primary expression as its first child
 	add_child_node(postfix_expr_node, primary_expr);
 
+	//Let's grab whatever type that we currently have
+	generic_type_t* current_type = ((primary_expr_ast_node_t*)(primary_expr->node))->inferred_type;
+	//Do any kind of dealiasing that we need to do
+	current_type = dealias_type(current_type);
+
 	//Now we can see as many construct accessor and array accessors as we can take
-	//TODO TYPE CHECKING NEEDED
 	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == ARROW_EQ){
 		//Let's see which rule it is
 		//We have an array accessor
 		if(lookahead.tok == L_BRACKET){
 			//Put the token back
 			push_back_token(fl, lookahead);
+
+			//Before we go on, let's see what we have as the current type here
+			if(current_type->type_class != TYPE_CLASS_ARRAY){
+				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				//Print it out
+				print_type_name(lookup_type(type_symtab, current_type->type_name));
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
 			//Let the array accessor handle it
 			generic_ast_node_t* array_acc = array_accessor(fl);
 			
@@ -846,18 +960,21 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 				//It's already an error, so we'll just give it back
 				return array_acc;
 			}
-			//TODO TYPE CHECKING
 
 			//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
 			//node
 			add_child_node(postfix_expr_node, array_acc);
 
+			//Based on this, the current type is whatever this array contains
+			current_type = dealias_type(current_type->array_type->member_type);
+
 		//Otherwise we have a construct accessor
 		} else {
 			//Put it back for the rule to deal with
 			push_back_token(fl, lookahead);
-			//Let's have the rule do it
-			generic_ast_node_t* constr_acc = construct_accessor(fl);
+
+			//Let's have the rule do it. (This will update current_type for us)
+			generic_ast_node_t* constr_acc = construct_accessor(fl, &current_type);
 
 			//We have our fail case here
 			if(constr_acc->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -867,7 +984,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 				return constr_acc;
 			}
 
-			//TODO TYPE CHECKING
 			//Otherwise we know it's good, so we'll add it in as a child
 			add_child_node(postfix_expr_node, constr_acc);
 		}
@@ -875,6 +991,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		//refresh the lookahead for the next iteration
 		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//We now have whatever the end type is stored in current type. Let's make sure it's raw
+	generic_type_t* return_type = dealias_type(current_type);
 
 	//Now once we get here, we know that we have something that isn't one of accessor rules
 	//It could however be postinc/postdec. Let's first see if it isn't
@@ -889,11 +1008,21 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	//Create the unary operator node
 	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
 
+	//Now we'll check if we can actually do this unary operation
+	if(return_type->type_class == TYPE_CLASS_CONSTRUCT){
+		print_parse_message(PARSE_ERROR, "Type \"%s\" cannot be postincremented/decremented", parser_line_num);
+		num_errors++;
+		return 0;
+	}
+
 	//Store the token
 	((unary_operator_ast_node_t*)(unary_post_op->node))->unary_operator = lookahead.tok;
 
 	//This will always be the last child of whatever we've built so far
 	add_child_node(postfix_expr_node, unary_post_op);
+	
+	//Add the inferred type in
+	((postfix_expr_ast_node_t*)(postfix_expr_node->node))->inferred_type = return_type;
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;
@@ -2146,6 +2275,8 @@ static u_int8_t construct_definer(FILE* fl){
 		construct_type->construct_type->members[construct_type->construct_type->num_members] = var;
 		//Increment the number of members
 		(construct_type->construct_type->num_members)++;
+		//Store what construct it came from
+		var->struct_defined_in = construct_type;
 
 		//Now that we've added it in, advance the cursor
 		cursor = cursor->next_sibling;
