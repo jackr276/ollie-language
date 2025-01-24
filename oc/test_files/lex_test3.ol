@@ -13,14 +13,15 @@ func:static main(u_int32 arg_count, str_arr arg_vector) -> u_int32{
 		asn arg_count := -1;
 		//asn arg_vector := "hello";
 
-	} else if(arg_count <= -1) then {
+	} else if(arg_count >= -1) then {
 		let float32 a := .23;
 		let float32 b := 2.322;
 		let float32 c := a + b;
+
 
 	} else {
 		asn arg_count := -2;
 	}
 
-	ret c >> 3;
+//	ret c >> 3;
 }

@@ -63,7 +63,7 @@ static u_int8_t is_ws(char ch, u_int16_t* line_num, u_int16_t* parser_line_num){
 static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 	Lexer_item lex_item;
 	//Wipe this clean
-	memset(lex_item.lexeme, 0, 1000*sizeof(char));
+	memset(lex_item.lexeme, 0, 500*sizeof(char));
 
 	//Assign our line number;
 	lex_item.line_num = line_number;
@@ -561,7 +561,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					default:
 						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$'){
 							//Erase this now
-							memset(lexeme, 0, 1000);
+							memset(lexeme, 0, 500);
 							//Reset the cursor
 							lexeme_cursor = lexeme;
 							//We are now in an identifier
@@ -572,7 +572,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						//If we get here we have the start of either an int or a real
 						} else if(ch >= '0' && ch <= '9'){
 							//Erase this now
-							memset(lexeme, 0, 1000);
+							memset(lexeme, 0, 500);
 							//Reset the cursor
 							lexeme_cursor = lexeme;
 							//We are not in an int

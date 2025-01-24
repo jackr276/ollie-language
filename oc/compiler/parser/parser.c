@@ -12,6 +12,7 @@
 */
 
 #include "parser.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -168,21 +169,34 @@ static generic_ast_node_t* constant(FILE* fl){
 		case INT_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = INT_CONST;
 			//Store the int value we were given
-			((constant_ast_node_t*)(constant_node->node))->int_val = atoi(lookahead.lexeme);
+			int32_t int_val = atoi(lookahead.lexeme);
+
+			((constant_ast_node_t*)(constant_node->node))->int_val = int_val;
+
 			//By default, int constants are of type s_int32
 			constant_node->inferred_type = lookup_type(type_symtab, "s_int32")->type;
 			break;
+
 		case FLOAT_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = FLOAT_CONST;
+			//Grab the float val
+			float float_val = atof(lookahead.lexeme);
+
 			//Store the float value we were given
-			((constant_ast_node_t*)(constant_node->node))->float_val = atof(lookahead.lexeme);
+			((constant_ast_node_t*)(constant_node->node))->float_val = float_val;
+
 			//By default, float constants are of type float32
 			constant_node->inferred_type = lookup_type(type_symtab, "float32")->type;
 			break;
+
 		case CHAR_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = CHAR_CONST;
+			//Grab the char val
+			char char_val = *(lookahead.lexeme);
+
 			//Store the char value that we were given
-			((constant_ast_node_t*)(constant_node->node))->float_val = *(lookahead.lexeme);
+			((constant_ast_node_t*)(constant_node->node))->char_val = char_val;
+
 			//Char consts are of type char(obviously)
 			constant_node->inferred_type = lookup_type(type_symtab, "char")->type;
 			break;
@@ -482,7 +496,6 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 		//Add the type information in
 		primary_expr_node->inferred_type = constant_node->inferred_type;
-
 
 	//This is the case where we are putting the expression
 	//In parens
@@ -983,6 +996,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	if(lookahead.tok != PLUSPLUS && lookahead.tok != MINUSMINUS){
 		//Put the token back
 		push_back_token(fl, lookahead);
+		//Assign the type
+		postfix_expr_node->inferred_type = return_type;
 		//And we'll give back what we had constructed so far
 		return postfix_expr_node;
 	}
@@ -1222,6 +1237,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//The cast expression will be linked in last
 		add_child_node(unary_node, cast_expr);
 
+		//Store the type that we have here
+		unary_node->inferred_type = cast_expr->inferred_type;
+
 		//Finally we're all done, so we can just give this back
 		return unary_node;
 	
@@ -1346,7 +1364,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
 	
-	//As long as we have a relational operators(* or % or /) 
+	//As long as we have a multiplication operators(* or % or /) 
 	while(lookahead.tok == MOD || lookahead.tok == STAR || lookahead.tok == F_SLASH){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
@@ -1533,6 +1551,9 @@ static generic_ast_node_t* shift_expression(FILE* fl){
  * other expression rules, a relational expression will return a subtree, whether that subtree
  * is made here or elsewhere
  *
+ * TYPE INFERENCE RULES: Relational expressions work on anything with the exception of arrays, constructs and
+ * enum types. A relational expression always returns a value of u_int8(boolean)
+ *
  * <relational-expression> ::= <shift-expression> 
  * 						     | <shift-expression> > <shift-expression> 
  * 						     | <shift-expression> < <shift-expression> 
@@ -1540,12 +1561,16 @@ static generic_ast_node_t* shift_expression(FILE* fl){
  * 						     | <shift-expression> <= <shift-expression>
  */
 static generic_ast_node_t* relational_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//For hold the return type: always u_int8
+	generic_type_t* rel_expr_ret_type = lookup_type(type_symtab, "u_int8")->type;
 
 	//No matter what, we do need to first see a valid shift expression
 	generic_ast_node_t* sub_tree_root = shift_expression(fl);
@@ -1571,7 +1596,6 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -1585,6 +1609,48 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
+
+		/**
+		 * We now must do type-legality checking. Inclusive or works
+		 * except for constructs, arrays and enums
+		 */
+		generic_type_t* temp_holder_type = temp_holder->inferred_type;
+		generic_type_t* right_child_type = right_child->inferred_type;
+		
+		//We do not allow bitwise or to be done on arrays, enums or constructs
+		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
+			print_parse_message(PARSE_ERROR, "Relational operators do not work with arrays, enums or constructs", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Additionally, we cannot use logical or with floats or voids
+		//Check the first node
+		if(temp_holder_type->type_class == TYPE_CLASS_BASIC){
+			//We do not allow the use of void types here
+			if(temp_holder_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//Check the second node
+		if(right_child_type->type_class == TYPE_CLASS_BASIC){
+			//We do not allow the use of void types here
+			if(right_child_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//Store what the type of this operation is
+		sub_tree_root->inferred_type = rel_expr_ret_type;
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
@@ -1606,15 +1672,22 @@ static generic_ast_node_t* relational_expression(FILE* fl){
  * An equality expression can be chained and descends into a relational expression. It will
  * always return a pointer to the subtree, whether that subtree is made here or elsewhere
  *
+ * TYPE INFERENCE RULES: An equality expression is guaranteed to return a type of u_int8(boolean).
+ * It can take in as input anything besides an array, construct, enum or void
+ *
  * BNF Rule: <equality-expression> ::= <relational-expression>{ (==|!=) <relational-expression> }*
  */
 static generic_ast_node_t* equality_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Grab and hold what we'll be returning
+	generic_type_t* equality_expr_ret_type = lookup_type(type_symtab, "u_int8")->type;
 
 	//No matter what, we do need to first see a valid relational expression
 	generic_ast_node_t* sub_tree_root = relational_expression(fl);
@@ -1639,7 +1712,6 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -1654,8 +1726,50 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 			return right_child;
 		}
 
+		/**
+		 * We now must do type-legality checking. Inclusive or works
+		 * except for constructs, arrays and enums
+		 */
+		generic_type_t* temp_holder_type = temp_holder->inferred_type;
+		generic_type_t* right_child_type = right_child->inferred_type;
+		
+		//We do not allow bitwise or to be done on arrays, enums or constructs
+		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
+			print_parse_message(PARSE_ERROR, "Equality operators do not work with arrays, enums or constructs", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Additionally, we cannot use logical or with floats or voids
+		//Check the first node
+		if(temp_holder_type->type_class == TYPE_CLASS_BASIC){
+			//We do not allow the use of void types here
+			if(temp_holder_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//Check the second node
+		if(right_child_type->type_class == TYPE_CLASS_BASIC){
+			//We do not allow the use of void types here
+			if(right_child_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
+
+		//Store what our return type is too
+		sub_tree_root->inferred_type = equality_expr_ret_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -5335,8 +5449,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
 	//Store its constant status
 	declared_var->is_constant = is_constant;
-	//Store the type
-	declared_var->type = type_spec_node->inferred_type;
+	//Store the type--make sure that we strip any aliasing off of it first
+	declared_var->type = dealias_type(type_spec_node->inferred_type);
 	//It was not initialized
 	declared_var->initialized = 0;
 	//It was declared
@@ -5470,8 +5584,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
+		print_variable_name(found_var); num_errors++;
 		//Return a fresh error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
@@ -5488,6 +5601,10 @@ static generic_ast_node_t* let_statement(FILE* fl){
 
 	//Otherwise we saw it, so now we need to see a valid conditional expression
 	generic_ast_node_t* expr_node = logical_or_expression(fl);
+
+	//We now need to complete type checking. Is what we're assigning to the new variable
+	//compatible with what we're given by the logical or expression here?
+	//TODO
 
 	//If it fails, we fail out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5979,8 +6096,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return return_type_node;
 	}
 
-	//Grab the type record. A reference to this will be stored in the function symbol table
-	generic_type_t* type = return_type_node->inferred_type;
+	//Grab the type record. A reference to this will be stored in the function symbol table. Make sure
+	//that we first dealias it
+	generic_type_t* type = dealias_type(return_type_node->inferred_type);
 
 	//Store the return type
 	function_record->return_type = type;
