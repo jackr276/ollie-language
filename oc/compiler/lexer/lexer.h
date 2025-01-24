@@ -38,6 +38,7 @@ typedef enum {
 	REGISTER,
 	CONSTANT,
 	TYPESIZE,
+	VARSIZE,
 	LINK,
 	COMPTIME,
 	RET,

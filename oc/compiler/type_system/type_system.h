@@ -61,6 +61,8 @@ struct generic_type_t{
 	TYPE_CLASS type_class;
 	//When was it defined: -1 = generic type
 	int32_t line_number;
+	//All generic types have a size
+	u_int32_t type_size;
 
 	/**
 	 * The following pointers will be null except for the one that the type class
@@ -82,8 +84,6 @@ struct generic_type_t{
 struct basic_type_t{
 	//What basic type is it
 	Token basic_type;
-	//What is the size of this type?
-	u_int32_t size;
 	//Is it a label?
 	u_int8_t is_label;
 };
@@ -97,8 +97,6 @@ struct array_type_t{
 	generic_type_t* member_type;
 	//Array bounds
 	u_int32_t num_members;
-	//The total size
-	u_int32_t size;
 };
 
 
@@ -110,8 +108,6 @@ struct array_type_t{
 struct pointer_type_t{
 	//What do we point to?
 	generic_type_t* points_to;
-	//What is the size
-	u_int32_t size; /* Always 8 for a pointer */
 };
 
 
@@ -125,8 +121,6 @@ struct constructed_type_t{
 	void* members[MAX_CONSTRUCT_MEMBERS];
 	//How many members are there?
 	u_int8_t num_members;
-	//What is the size?
-	u_int32_t size;
 };
 
 
@@ -140,8 +134,6 @@ struct enumerated_type_t{
 	void* tokens[MAX_ENUMERATED_MEMBERS];
 	//The current number of tokens
 	u_int8_t token_num;
-	//The size of the type
-	u_int32_t size;
 };
 
 

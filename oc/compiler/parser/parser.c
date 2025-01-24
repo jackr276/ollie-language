@@ -1012,7 +1012,14 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	if(return_type->type_class == TYPE_CLASS_CONSTRUCT){
 		print_parse_message(PARSE_ERROR, "Type \"%s\" cannot be postincremented/decremented", parser_line_num);
 		num_errors++;
-		return 0;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//If it's a constant and a string, we also can't do this
+	if(return_type->type_class == TYPE_CLASS_BASIC && return_type->basic_type->basic_type == STR_CONST){
+		print_parse_message(PARSE_ERROR, "Type \"%s\" cannot be postincremented/decremented", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Store the token
@@ -1036,7 +1043,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
  *
  * BNF Rule: <unary-expression> ::= <postfix-expression> 
  * 								  | <unary-operator> <cast-expression> 
- * 								  | typesize(<type-specifier>)
+ * 								  | typesize(<type-specifier>) * compiler directive *
+ * 								  | varsize(<logical-or-expression>) * compiler directive *
  *
  * Important notes for typesize: It is assumed that the type-specifier node will handle
  * any/all error checking that we need. Type specifier will throw an error if the type has 
@@ -1061,14 +1069,10 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we see the typesize keyword, we are locked in to the typesize rule
+	//The typesize rule is a compiler only directive. Since we know the size of all
+	//valid types at compile-time, we will be able to return an INT-CONST node with the
+	//size here
 	if(lookahead.tok == TYPESIZE){
-		//We've seen typesize, so that is our unary operator. To reflect this, we will create 
-		//a unary operator node for it
-		generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
-		//Assign the typesize operator to this
-		((unary_operator_ast_node_t*)(unary_op->node))->unary_operator = TYPESIZE;
-
-		//Now we have to look for the type
 		//We must then see left parenthesis
 		lookahead = get_next_token(fl, &parser_line_num);
 
@@ -1096,6 +1100,12 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			return type_spec;
 		}
 
+		//Once we've done this, we can grab the actual size of the type-specifier
+		u_int32_t type_size = ((type_spec_ast_node_t*)(type_spec->node))->type_record->type->type_size;
+
+		//And then we no longer need the type-spec node, we can just remove it
+		deallocate_ast(type_spec);
+
 		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
 		lookahead = get_next_token(fl, &parser_line_num);
 
@@ -1115,17 +1125,21 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//Otherwise if we make it all the way down here, we are done and can perform final assemble on the node
-		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+		//Create a constant node
+		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
+		//Store the actual value
+		((constant_ast_node_t*)(const_node->node))->int_val = type_size;
+		//Grab and store type info
+		//Constants are ALWAYS of type s_int32
+		((constant_ast_node_t*)(const_node->node))->type = lookup_type(type_symtab, "s_int32")->type;
 
-		//The unary node always has the operator as it's left hand side
-		add_child_node(unary_node, unary_op);
+		//Finally we'll return this constant node
+		return const_node;
 
-		//The next node will always be the type specifier
-		add_child_node(unary_node, type_spec);
+	} else if(lookahead.tok == VARSIZE){
 
-		//And we are done, so we'll send this out
-		return unary_node;
+		//TODO =========================================
 
 	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
 	//the exact same way
@@ -1164,6 +1178,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//postifix expression rule
 	} else {
 		push_back_token(fl, lookahead);
+		//Postfix already has type inference built in
 		return postfix_expression(fl);
 	}
 }

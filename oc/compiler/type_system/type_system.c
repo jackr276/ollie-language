@@ -57,19 +57,19 @@ generic_type_t* create_basic_type(char* type_name, Token basic_type){
 	//Now we can immediately determine the size based on what the actual type is
 	if(basic_type == CHAR || basic_type == S_INT8 || basic_type == U_INT8){
 		//1 BYTE
-		type->basic_type->size = 1;
+		type->type_size = 1;
 	} else if(basic_type == S_INT16 || basic_type == U_INT16){
 		//2 BYTES
-		type->basic_type->size = 2;
+		type->type_size = 2;
 	} else if(basic_type == U_INT32 || basic_type == S_INT32 || basic_type == FLOAT32){
 		//4 BYTES
-		type->basic_type->size = 4;
+		type->type_size = 4;
 	} else if(basic_type == VOID){
 		//0 BYTES - special case
-		type->basic_type->size = 0;
+		type->type_size = 0;
 	} else {
 		//Otheriwse is 8 BYTES
-		type->basic_type->size = 8;
+		type->type_size = 8;
 	}
 
 	//Give back the pointer, it will need to be freed eventually
@@ -103,7 +103,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	type->pointer_type->points_to = points_to;
 
 	//A pointer is always 8 bytes(Ollie lang is for x86-64 only)
-	type->pointer_type->size = 8;
+	type->type_size = 8;
 
 	return type;
 }
@@ -143,6 +143,11 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	
 	//Store the number of members
 	type->array_type->num_members = num_members;
+
+	/**
+	 * Array type sizes are always guaranteed to be 16-byte aligned for speed's sake
+	 */
+	u_int32_t type_size = ((points_to->type_size * num_members) + 15) & -16;
 
 	return type;
 }
