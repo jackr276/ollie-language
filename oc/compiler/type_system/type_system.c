@@ -8,30 +8,71 @@
 #include <string.h>
 #include <sys/types.h>
 
+
 /**
- * Are two types compatible?
-*/
-u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB){
-	//If they aren't the exact same type class, then they are not equivalent
+ * Are two types equivalent(as in, the exact same)
+ */
+u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
+	//If they are not in the same type class, then they are not equivalent
 	if(typeA->type_class != typeB->type_class){
 		return 0;
 	}
 
-	//If we make it here we know that they're the same class of type
-	if(typeA->type_class == TYPE_CLASS_BASIC){
-		//If they're the exact same type, no more checks are needed
-		if(typeA->basic_type->basic_type == typeB->basic_type->basic_type){
-			return 1;
+	//Now that we know they are in the same class, we need to check if they're the exact same
+	//If they are the exact same, return 1. Otherwise, return 0
+	if(strcmp(typeA->type_name, typeB->type_name) == 0){
+		return 1;
+	}
+
+	//Otherwise they aren't the exact same, so
+	return 0;
+}
+
+
+/**
+ * Are two types compatible with eachother
+ *
+ * TYPE COMPATIBILITY RULES:
+ * 	1.) Two constructs are compatible iff they are the exact same construct
+ * 	2.) Two enums are compatible iff they are the exact same enum
+ * 	3.)
+*/
+generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
+	//Handle construct types: very strict compatibility rules here
+	if(typeA->type_class == TYPE_CLASS_CONSTRUCT){
+		//If type B isn't a construct it's over
+		if(typeB->type_class != TYPE_CLASS_CONSTRUCT){
+			return NULL;
 		}
 
-		//However, we'll need to do some more intense checking here
-		
+		//Now if they don't have the exact same name, it's also over
+		if(strcmp(typeA->type_name, typeB->type_name) != 0){
+			return NULL;
+		}
 
+		//Otherwise they are compatible, so we'll return typeA
+		return typeA;
 	}
-	//TODO MORE NEEDED
-	
 
-	return 1;
+	//Handle enum types: also very strict compatibility rules here
+	if(typeA->type_class == TYPE_CLASS_ENUMERATED){
+		//If type B isn't an enum, we're out
+		if(typeB->type_class != TYPE_CLASS_ENUMERATED){
+			return NULL;
+		}
+
+		//Otherwise we need to ensure that their names are the exact same
+		if(strcmp(typeA->type_name, typeB->type_name) != 0){
+			return NULL;
+		}
+
+		//Otherwise return type A
+		return typeA;
+	}
+
+	//If they are both pointer types
+	//TODO FINISH ME
+	return NULL;
 }
 
 

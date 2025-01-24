@@ -148,9 +148,24 @@ struct aliased_type_t{
 
 
 /**
- * Are two types equivalent?
+ * Are two types the exact same?
+ *
+ * NOTE: WE NEED RAW TYPES FOR THIS RULE
  */
-u_int8_t types_compatible(generic_type_t* typeA, generic_type_t* typeB);
+u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB);
+
+/**
+ * Are two types compatible with eachother?
+ * 
+ * This function returns a reference to the type that you will get IF you try to operate
+ * on these types
+ *
+ * NOTE: WE NEED RAW TYPES FOR THIS RULE
+ * 
+ * ASSUMPTION: We assume that typeA is the type whom is being assigned to. So we're really asking
+ * "can I put something of typeB into a space that expects typeA?"
+ */
+generic_type_t* type_compatible(generic_type_t* typeA, generic_type_t* typeB);
 
 
 /**

@@ -44,7 +44,6 @@ static generic_ast_node_t* unary_expression(FILE* fl);
 static generic_ast_node_t* declaration(FILE* fl);
 static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
-static generic_ast_node_t* expression(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
 static u_int8_t definition(FILE* fl);
@@ -253,29 +252,6 @@ static generic_ast_node_t* constant(FILE* fl){
 
 
 /**
- * An expression decays into an assignment expression. An expression
- * node is more of a "pass-through" rule, and itself does not make any children. It does
- * however return the reference of whatever it created
- *
- * BNF Rule: <expression> ::= <assignment-expression>
- */
-static generic_ast_node_t* expression(FILE* fl){
-	u_int16_t current_line = parser_line_num;
-	//Call the appropriate rule
-	generic_ast_node_t* expression_node = assignment_expression(fl);
-	
-	//If it did fail, a message is appropriate here
-	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Top level expression invalid", current_line);
-		return expression_node;
-	}
-
-	//Otherwise, we're all set so just give the node back
-	return expression_node;
-}
-
-
-/**
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
@@ -357,6 +333,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 	//A node to hold our current parameter
 	generic_ast_node_t* current_param;
+
+	//A node to hold the current function parameter
 
 	//So long as we don't see the R_PAREN we aren't done
 	while(1){
@@ -3475,7 +3453,7 @@ static generic_ast_node_t* parameter_list(FILE* fl){
  * An expression statement can optionally have an expression in it. Like all rules, it returns 
  * a reference to the root of the subtree it creates
  *
- * BNF Rule: <expression-statement> ::= {<expression>}?;
+ * BNF Rule: <expression-statement> ::= {<assignment-expression>}?;
  */
 static generic_ast_node_t* expression_statement(FILE* fl){
 	//Freeze the line number
@@ -3499,7 +3477,7 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 	push_back_token(fl, lookahead);
 	
 	//Now we know that it's not empty, so we have to see a valid expression
-	generic_ast_node_t* expr_node = expression(fl);
+	generic_ast_node_t* expr_node = assignment_expression(fl);
 
 	//If this fails, the whole thing is over
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5511,51 +5489,12 @@ static generic_ast_node_t* declaration(FILE* fl){
 
 
 /**
- * A function specifier has two options, external or static. These will not be directly handled
- * by this rule, but we do return a node that holds what it is. This rule is entered
- * after we have seen the ":" keyword. Like all rules, this one returns a reference to the root
- * node of the function that it creates
- *
- */
-static generic_ast_node_t* function_specifier(FILE* fl){
-	//We need to see static or external keywords here
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
-	
-	//IF we got here, we need to see static or external
-	if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL){
-		//Create a new node
-		generic_ast_node_t* node = ast_node_alloc(AST_NODE_CLASS_FUNC_SPECIFIER);
-	
-		//Assign the token here and attach it to the tree
-		((func_specifier_ast_node_t*)(node->node))->funcion_storage_class_tok = lookahead.tok;
-
-		//Assign these for ease of use later in the parse tree
-		if(lookahead.tok == STATIC){
-			((func_specifier_ast_node_t*)(node->node))->function_storage_class = STORAGE_CLASS_STATIC;
-		} else {
-			((func_specifier_ast_node_t*)(node->node))->function_storage_class = STORAGE_CLASS_EXTERNAL;
-		}
-
-		//We succeeded, so just return the node that we have
-		return node;
-
-	//Fail case here
-	} else {
-		print_parse_message(PARSE_ERROR, "STATIC or EXTERNAL keywords expected after colon in function declaration", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-}
-
-
-/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= func {:<function-specifier>}? <identifer> ({<parameter-list>}?) -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= func {:static}? <identifer> ({<parameter-list>}?) -> <type-specifier> <compound-statement>
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
@@ -5578,25 +5517,21 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
 	lookahead = get_next_token(fl, &parser_line_num);
 	
-	//We've seen the option function specifier
+	//We've seen the option for a function specifier. 
 	if(lookahead.tok == COLON){
-		//If we see this, we must then see a valid function specifier
-		generic_ast_node_t* func_spec_node = function_specifier(fl);
+		//We need to see the optional static keyword here
+		lookahead = get_next_token(fl, &parser_line_num);
 
-		//Invalid function specifier -- error out
-		if(func_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			//Error will already be printed, simply fail out
-			//It's already an error, so just give it back
-			return func_spec_node;
+		//This is our fail case here
+		if(lookahead.tok != STATIC){
+			print_parse_message(PARSE_ERROR, "Static keyword expected after colon in function definition", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//Otherwise if we get here, this will be the first child of the function node
-		add_child_node(function_node, func_spec_node);
-
-		//Also stash this for later use
-		storage_class = ((func_specifier_ast_node_t*)(func_spec_node->node))->function_storage_class;
-
-	//Otherwise it's a plain function so put the token back
+		//Otherwise, we know that we have a static storage class
+		storage_class = STORAGE_CLASS_STATIC;
+	//Otherwise it's just the normal storage class
 	} else {
 		//Otherwise put the token back in the stream
 		push_back_token(fl, lookahead);
