@@ -239,8 +239,6 @@ struct param_decl_ast_node_t{
 
 //Holds information about a type
 struct type_spec_ast_node_t{
-	//Hold the type record
-	symtab_type_record_t* type_record;
 };
 
 

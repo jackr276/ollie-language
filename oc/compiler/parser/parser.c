@@ -46,6 +46,7 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
+//Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 
 
@@ -1085,7 +1086,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		}
 
 		//Once we've done this, we can grab the actual size of the type-specifier
-		u_int32_t type_size = ((type_spec_ast_node_t*)(type_spec->node))->type_record->type->type_size;
+		u_int32_t type_size = type_spec->inferred_type->type_size;
 
 		//And then we no longer need the type-spec node, we can just remove it
 		deallocate_ast(type_spec);
@@ -1306,7 +1307,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	add_child_node(cast_node, type_spec);
 
 	//Store the type information for faster retrieval later
-	((cast_expr_ast_node_t*)(cast_node->node))->casted_type = ((type_spec_ast_node_t*)(type_spec->node))->type_record->type;
+	((cast_expr_ast_node_t*)(cast_node->node))->casted_type = type_spec->inferred_type;
 
 	//We'll now add the unary expression as the right node
 	add_child_node(cast_node, right_hand_unary);
@@ -1883,6 +1884,9 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
  * A logical-and-expression will always return a reference to the root node of its subtree. That
  * root node can very well be an operator or it could just be a pass through
  *
+ * Type inference rule here: If we don't see any &&, we have whatever type the root has. Otherwise,
+ * we return a type of u_int8(boolean value)
+ *
  * BNF Rule: <logical-and-expression> ::= <inclusive-or-expression>{&&<inclusive-or-expression>}*
  */
 static generic_ast_node_t* logical_and_expression(FILE* fl){
@@ -1892,6 +1896,8 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Grab and hold this just in case we need it later
+	generic_type_t* l_and_ret_type = lookup_type(type_symtab, "u_int8")->type;
 
 	//No matter what, we do need to first see a valid inclusive or expression
 	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl);
@@ -1935,6 +1941,9 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
+		//We now know that the subtree root has a type of u_int8(boolean)
+		sub_tree_root->inferred_type = l_and_ret_type;
+
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -1955,6 +1964,9 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
  *
  * This will always return a reference to the root node of the tree
  *
+ * Type inference rules here: If we see one or more || symbols, we will return a type of u_int8(boolean).
+ * Otherwise, we return a type of whatever the first rule was
+ *
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
 static generic_ast_node_t* logical_or_expression(FILE* fl){
@@ -1964,6 +1976,8 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Hold this type just in case we need it
+	generic_type_t* l_or_ret_type = lookup_type(type_symtab, "u_int8")->type;
 
 	//No matter what, we do need to first see a logical and expression
 	generic_ast_node_t* sub_tree_root = logical_and_expression(fl);
@@ -1988,7 +2002,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -2003,8 +2016,26 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 			return right_child;
 		}
 
+		/**
+		 * We now must do type-legality checking. Logical or works on basically everything
+		 * except for constructs, arrays and enums
+		 */
+		generic_type_t* temp_holder_type = temp_holder->inferred_type;
+		generic_type_t* right_child_type = right_child->inferred_type;
+		
+		//We do not allow logical or to be done on arrays, enums or constructs
+		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
+			print_parse_message(PARSE_ERROR, "Logical or operator(||) does not work with arrays, enums or constructs", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
+		
+		//This means that the sub-tree-root has a type of u_int8(boolean value)
+		sub_tree_root->inferred_type = l_or_ret_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -2125,7 +2156,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	member_record->is_construct_member = 1;
 	member_record->line_number = parser_line_num;
 	//Store what the type is
-	member_record->type = ((type_spec_ast_node_t*)(type_spec)->node)->type_record->type;
+	member_record->type = type_spec->inferred_type;
 	//Store the constant status
 	member_record->is_constant = is_constant;
 	
@@ -3250,7 +3281,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 	//The type specifier node has already been fully created, so we just need to add the type reference
 	//and return it
 	//This will store a reference to whatever the type record is
-	((type_spec_ast_node_t*)(type_spec_node->node))->type_record = current_type_record;
+	type_spec_node->inferred_type =  current_type_record->type;
 
 	//Finally we can give back the node
 	return type_spec_node;
@@ -3374,7 +3405,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//Record if it's constant
 	param_record->is_constant = is_constant;
 	//Store the type as well, very important
-	param_record->type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
+	param_record->type = type_spec_node->inferred_type;
 
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
@@ -5079,7 +5110,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	//Store its constant status
 	declared_var->is_constant = is_constant;
 	//Store the type
-	declared_var->type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
+	declared_var->type = type_spec_node->inferred_type;
 	//It was not initialized
 	declared_var->initialized = 0;
 	//It was declared
@@ -5261,7 +5292,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	//Store its constant status
 	declared_var->is_constant = is_constant;
 	//Store the type
-	declared_var->type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
+	declared_var->type = type_spec_node->inferred_type;
 	//It was initialized
 	declared_var->initialized = 1;
 	//It was "letted" 
@@ -5311,7 +5342,7 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Let's grab this now
-	generic_type_t* type = ((type_spec_ast_node_t*)(type_spec_node->node))->type_record->type;
+	generic_type_t* type = type_spec_node->inferred_type;
 
 	//Once we have the reference, the actual node is useless so we'll free it
 	deallocate_ast(type_spec_node);
@@ -5723,10 +5754,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	}
 
 	//Grab the type record. A reference to this will be stored in the function symbol table
-	symtab_type_record_t* type = ((type_spec_ast_node_t*)(return_type_node->node))->type_record;
+	generic_type_t* type = return_type_node->inferred_type;
 
 	//Store the return type
-	function_record->return_type = type->type;
+	function_record->return_type = type;
 
 	//We can also add the return type node in as a child
 	add_child_node(function_node, return_type_node);
