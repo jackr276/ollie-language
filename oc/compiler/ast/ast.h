@@ -225,8 +225,6 @@ struct constant_ast_node_t{
 	float float_val;
 	char char_val;
 	char string_val[500];
-	//What is the type of the constant?
-	generic_type_t* type;
 };
 
 //Holds information about a parameter declaration. This will also hold 

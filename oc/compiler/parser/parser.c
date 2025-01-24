@@ -481,7 +481,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		add_child_node(primary_expr_node, constant_node);
 
 		//Add the type information in
-		primary_expr_node->inferred_type = ((constant_ast_node_t*)(constant_node->node))->type;
+		primary_expr_node->inferred_type = constant_node->inferred_type;
 
 
 	//This is the case where we are putting the expression
@@ -1117,7 +1117,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		((constant_ast_node_t*)(const_node->node))->int_val = type_size;
 		//Grab and store type info
 		//Constants are ALWAYS of type s_int32
-		((constant_ast_node_t*)(const_node->node))->type = lookup_type(type_symtab, "s_int32")->type;
+		const_node->inferred_type = lookup_type(type_symtab, "s_int32")->type;
 
 		//Finally we'll return this constant node
 		return const_node;
@@ -1815,6 +1815,9 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
  * An inclusive or expression will always return a reference to the root node of it's subtree. That node
  * could be an operator or it could be a passthrough
  *
+ * Type inference rule here: Inclusive or expression is valid on everything except for arrays, constructs and
+ * enums. We always return a type of s_int64 as a result
+ *
  * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression>{ | <exclusive-or-expression>}*
  */
 static generic_ast_node_t* inclusive_or_expression(FILE* fl){
@@ -1824,6 +1827,8 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Hold the return type if we need it
+	generic_type_t* i_or_ret_type = lookup_type(type_symtab, "s_int64")->type;
 
 	//No matter what, we do need to first see a valid exclusive or expression
 	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl);
@@ -1848,7 +1853,6 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -1863,6 +1867,21 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 			return right_child;
 		}
 
+		/**
+		 * We now must do type-legality checking. Inclusive or works
+		 * except for constructs, arrays and enums
+		 */
+		generic_type_t* temp_holder_type = temp_holder->inferred_type;
+		generic_type_t* right_child_type = right_child->inferred_type;
+		
+		//We do not allow logical or to be done on arrays, enums or constructs
+		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
+			print_parse_message(PARSE_ERROR, "Logical and operator(&&) does not work with arrays, enums or constructs", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -1890,6 +1909,8 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
  * BNF Rule: <logical-and-expression> ::= <inclusive-or-expression>{&&<inclusive-or-expression>}*
  */
 static generic_ast_node_t* logical_and_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -1911,7 +1932,6 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//There are now two options. If we do not see any &&'s, we just add 
 	//this node in as the child and move along. But if we do see && symbols, 
 	//we will on the fly construct a subtree here
-	//TODO FIXME
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//As long as we have a double and 
@@ -1923,7 +1943,6 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -1936,6 +1955,48 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
+		}
+
+		/**
+		 * We now must do type-legality checking. Logical and works on basically everything
+		 * except for constructs, arrays and enums
+		 */
+		generic_type_t* temp_holder_type = temp_holder->inferred_type;
+		generic_type_t* right_child_type = right_child->inferred_type;
+		
+		//We do not allow logical or to be done on arrays, enums or constructs
+		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
+			sprintf(info, "Attempt to logically-or(||) incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Additionally, we cannot use logical or with floats or voids
+		//Check the first node
+		if(temp_holder_type->type_class == TYPE_CLASS_BASIC){
+			if(temp_holder_type->basic_type->basic_type == FLOAT32
+			  || temp_holder_type->basic_type->basic_type == FLOAT64
+			  || temp_holder_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to logically-and types incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//Check the second node
+		if(right_child_type->type_class == TYPE_CLASS_BASIC){
+			if(right_child_type->basic_type->basic_type == FLOAT32
+			  || right_child_type->basic_type->basic_type == FLOAT64
+			  || right_child_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to logically-and types incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
@@ -1965,11 +2026,14 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
  * This will always return a reference to the root node of the tree
  *
  * Type inference rules here: If we see one or more || symbols, we will return a type of u_int8(boolean).
- * Otherwise, we return a type of whatever the first rule was
+ * Otherwise, we return a type of whatever the first rule was. Logical or does not work on constructs, enums,
+ * arrays and floats and void
  *
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
 static generic_ast_node_t* logical_or_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2027,10 +2091,39 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
 		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
 		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
-			print_parse_message(PARSE_ERROR, "Logical or operator(||) does not work with arrays, enums or constructs", parser_line_num);
+			sprintf(info, "Attempt to logically-or(||) incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
+
+		//Additionally, we cannot use logical or with floats or voids
+		//Check the first node
+		if(temp_holder_type->type_class == TYPE_CLASS_BASIC){
+			if(temp_holder_type->basic_type->basic_type == FLOAT32
+			  || temp_holder_type->basic_type->basic_type == FLOAT64
+			  || temp_holder_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to logically-or types incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//Check the second node
+		if(right_child_type->type_class == TYPE_CLASS_BASIC){
+			if(right_child_type->basic_type->basic_type == FLOAT32
+			  || right_child_type->basic_type->basic_type == FLOAT64
+			  || right_child_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to logically-or types incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//If we make it all the way down here, we know that we have valid types for our logical or operation
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 		
