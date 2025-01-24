@@ -149,6 +149,9 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	 */
 	u_int32_t type_size = ((points_to->type_size * num_members) + 15) & -16;
 
+	//Store this in here
+	type->type_size = type_size;
+
 	return type;
 }
 

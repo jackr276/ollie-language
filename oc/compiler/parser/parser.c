@@ -1044,7 +1044,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
  * BNF Rule: <unary-expression> ::= <postfix-expression> 
  * 								  | <unary-operator> <cast-expression> 
  * 								  | typesize(<type-specifier>) * compiler directive *
- * 								  | varsize(<logical-or-expression>) * compiler directive *
+ * 								  | sizeof(<logical-or-expression>) * compiler directive *
  *
  * Important notes for typesize: It is assumed that the type-specifier node will handle
  * any/all error checking that we need. Type specifier will throw an error if the type has 
@@ -1062,6 +1062,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
  * 								| --
  */
 static generic_ast_node_t* unary_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//The lookahead token
 	Lexer_item lookahead;
 
@@ -1094,7 +1096,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//If it's an error
 		if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Unable to perform cast on undefined type",  parser_line_num);
+			print_parse_message(PARSE_ERROR, "Unable to use typesize on undefined type",  parser_line_num);
 			num_errors++;
 			//It's already an error, so give it back that way
 			return type_spec;
@@ -1137,9 +1139,75 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Finally we'll return this constant node
 		return const_node;
 
-	} else if(lookahead.tok == VARSIZE){
+	} else if(lookahead.tok == SIZEOF){
+		//We must then see left parenthesis
+		lookahead = get_next_token(fl, &parser_line_num);
 
-		//TODO =========================================
+		//Fail case here
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after sizeof call", parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise we'll push to the stack for checking
+		push(grouping_stack, lookahead);
+
+		//We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
+		//actual expression result will be unused
+		generic_ast_node_t* expr_node = logical_or_expression(fl);
+		
+		//If it's an error
+		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Unable to use varsize on invalid expression",  parser_line_num);
+			num_errors++;
+			//It's already an error, so give it back that way
+			return expr_node;
+		}
+
+		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//Fail out here if we don't see it
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type specifer", parser_line_num);
+			num_errors++;
+			//Create and return the error
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We can also fail if we somehow see unmatched parenthesis
+		if(pop(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
+			num_errors++;
+			//Create and return the error
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
+		//type information for ourselves
+		generic_type_t* return_type = expr_node->inferred_type;
+
+		//One we get here, we have both nodes that we need
+		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+
+		//Create a constant node
+		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
+		//Store the actual value of the type size
+		((constant_ast_node_t*)(const_node->node))->int_val = return_type->type_size;
+		//Grab and store type info
+		//Constants are ALWAYS of type s_int32
+		const_node->inferred_type = lookup_type(type_symtab, "s_int32")->type;
+
+		//The first child is always the constant type
+		add_child_node(unary_node, const_node); 
+		//The second child is always the expression that we need to do
+		add_child_node(unary_node, expr_node);
+
+		//Finally we'll return this constant node
+		return const_node;
 
 	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
 	//the exact same way
