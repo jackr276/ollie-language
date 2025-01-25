@@ -1409,15 +1409,25 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
  * Additive expressions can be chained like some of the other expressions that we see below. It is guaranteed
  * to return a pointer to a sub-tree, whether that subtree is created here or elsewhere.
  *
+ * TYPE INFERENCE RULES: The return type here will be whichever type dominates. Dominance rules are as follows:
+ * 	1.) Larger bit-count values dominate smaller ones
+ * 	2.) Pointers dominate integers. Pointers and floating points are incompatible
+ *  3.) Floating point numbers dominate integers
+ *  4.) Unsigned will always dominate signed
+ *
  * BNF Rule: <additive-expression> ::= <multiplicative-expression>{ (+ | -) <multiplicative-expression>}*
  */
 static generic_ast_node_t* additive_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Hold the return type for us here
+	generic_type_t* return_type;
 
 	//No matter what, we do need to first see a valid multiplicative expression
 	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl);
@@ -1438,11 +1448,30 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
+		//Off the bat, if we have a construct or enum or array type here, we can't add to it
+		//Store this
+		TYPE_CLASS temp_holder_type_class = temp_holder->inferred_type->type_class;
+
+		//Fail case right here
+		if(temp_holder_type_class == TYPE_CLASS_CONSTRUCT || temp_holder_type_class == TYPE_CLASS_ARRAY
+		  || temp_holder_type_class == TYPE_CLASS_ENUMERATED){
+			sprintf(info, "Type %s cannot be added or subtracted from", temp_holder->inferred_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We also are not allowed to see a void type here
+		if(temp_holder->inferred_type->type_class == TYPE_CLASS_BASIC && temp_holder->inferred_type->basic_type->basic_type == VOID){
+			print_parse_message(PARSE_ERROR, "Void types cannot be added to or subtracted from", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -1457,6 +1486,137 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			return right_child;
 		}
 
+		//Let's now check to make sure that the right child also isn't some kind of disallowed
+		TYPE_CLASS right_child_type_class = right_child->inferred_type->type_class;
+
+		//Fail case right here
+		if(right_child_type_class == TYPE_CLASS_CONSTRUCT || right_child_type_class == TYPE_CLASS_ARRAY
+		  || right_child_type_class == TYPE_CLASS_ENUMERATED){
+			sprintf(info, "Type %s cannot be added or subtracted from", right_child->inferred_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We also are not allowed to see a void type here
+		if(right_child->inferred_type->type_class == TYPE_CLASS_BASIC && right_child->inferred_type->basic_type->basic_type == VOID){
+			print_parse_message(PARSE_ERROR, "Void types cannot be added to or subtracted from", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//If the temp holder is a pointer, the other one may not be a float of any kind
+		if(temp_holder->inferred_type->type_class == TYPE_CLASS_POINTER){
+			//One other basic check here. If the right child is also a pointer but they're different pointer types, we
+			//can't add them
+			if(right_child->inferred_type->type_class == TYPE_CLASS_POINTER){
+				//Let's see if they're the exact same pointer type
+				u_int8_t same = strcmp(temp_holder->inferred_type->type_name, right_child->inferred_type->type_name);
+
+				//We're attempting to add different pointer types
+				if(same != 0){
+					sprintf(info, "Attempt to add differnet pointer types of %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name);
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					num_errors++;
+					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				}
+
+				//Otherwise they are the same, but pointer addition is a real bad idea. We'll throw a warning
+				sprintf(info, "Adding two pointers of type %s will likely lead to segmentation faults", right_child->inferred_type->type_name);
+				print_parse_message(WARNING, info, parser_line_num);
+				num_warnings++;
+
+			//If it's a basic type
+			} else if(right_child->inferred_type->type_class == TYPE_CLASS_BASIC){
+				//We cannot add pointers and floating point numbers
+				if(right_child->inferred_type->basic_type->basic_type == FLOAT32 
+				  || right_child->inferred_type->basic_type->basic_type == FLOAT64){
+					print_parse_message(PARSE_ERROR, "Floating point numbers and pointers cannot added together", parser_line_num);
+					num_errors++;
+					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				}
+			}
+
+			//If we make it all the way down here, we know that we have a pointer + int or pointer + pointer. Either way, 
+			//the pointer will dominate
+			return_type = temp_holder->inferred_type;
+
+			//We've done all of our type checking, just jump out
+			goto additive_loop_end;
+		}
+
+		//Now let's check and see if the right child is a pointer and the roles are reversed
+		if(right_child->inferred_type->type_class == TYPE_CLASS_POINTER){
+			//If it's a basic type
+			if(temp_holder->inferred_type->type_class == TYPE_CLASS_BASIC){
+				//We cannot add pointers and floating point numbers
+				if(temp_holder->inferred_type->basic_type->basic_type == FLOAT32 
+				  || temp_holder->inferred_type->basic_type->basic_type == FLOAT64){
+					print_parse_message(PARSE_ERROR, "Floating point numbers and pointers cannot added together", parser_line_num);
+					num_errors++;
+					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				}
+			}
+
+			//If we make it all the way down here, we know that we have a pointer + int or pointer + pointer. Either way, 
+			//the pointer will dominate
+			return_type = right_child->inferred_type;
+
+			//We've done all of our type checking, just get out
+			goto additive_loop_end;
+		}
+		
+		//Once we get here, we know that the type class is a basic type class for both
+		Token temp_holder_type = temp_holder->inferred_type->basic_type->basic_type;
+		Token right_child_type = right_child->inferred_type->basic_type->basic_type;
+
+		//If the temp holder is a float64, the dominates so the return type will be too
+		if(temp_holder_type == FLOAT64 || right_child_type == FLOAT64){
+			return_type = temp_holder->inferred_type;
+		}
+
+		//Let's now check for type compatibility
+		if(temp_holder_type == FLOAT32){
+			//If we make it here then the final return type will be a float64
+			if(right_child_type == U_INT64 || right_child_type == S_INT64){
+				return_type = lookup_type(type_symtab, "float64")->type;
+			//Otherwise the float dominates
+			} else {
+				return_type = temp_holder->inferred_type;
+			}
+
+			//Hop out of here now
+			goto additive_loop_end;
+		}
+
+		//Otherwise if the roles are reversed...
+		//Let's now check for type compatibility
+		if(right_child_type == FLOAT32){
+			if(right_child_type == U_INT64 || right_child_type == S_INT64){
+				return_type = lookup_type(type_symtab, "float64")->type;
+			//Otherwise the float dominates
+			} else {
+				return_type = right_child->inferred_type;
+			}
+		
+			//Hop out of here now
+			goto additive_loop_end;
+		}
+
+		//If we make it here we know that we have ints for types, so we'll check according to our int rules
+		if(right_child_type == U_INT64 || temp_holder_type == U_INT64){
+			//Return type is by default u_int64
+			return_type = right_child->inferred_type;
+			goto additive_loop_end;
+		}
+
+		//Otherwise if we have a large signed int
+		if(right_child_type == S_INT64){
+			//TODO HERE
+
+		}
+
+	additive_loop_end:
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
