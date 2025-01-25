@@ -1610,15 +1610,159 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			goto additive_loop_end;
 		}
 
-		//Otherwise if we have a large signed int
-		if(right_child_type == S_INT64){
-			//TODO HERE
+		//If the temp holder is large and signed
+		if(temp_holder_type == S_INT64){
+			//If anything below this is unsigned, the whole thing becomes u_int64
+			if(right_child_type == U_INT32 || right_child_type == U_INT16 || right_child_type == U_INT8){
+				//Implicit case to unsigned
+				return_type = lookup_type(type_symtab, "u_int64")->type;
+			//Otherwise it's signed so the top level one will be signed
+			} else {
+				//Otherwise it's what temp holder had
+				return_type = temp_holder->inferred_type;
+			}
 
+			goto additive_loop_end;
+		}
+
+		//Now if the roles are reversed..
+		if(right_child_type == S_INT64){
+			//If anything below this is unsigned, the whole thing becomes u_int64
+			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
+				//Implicit case to signed
+				return_type = lookup_type(type_symtab, "u_int64")->type;
+			//Otherwise it's signed so the top level one will be signed
+			} else {
+				//Otherwise it's what the right child had
+				return_type = right_child->inferred_type;
+			}
+
+			goto additive_loop_end;
+		}
+
+		//Now check for S-int32
+		if(temp_holder_type == S_INT32){
+			//If anything below this is unsigned, the whole thing becomes u_int64
+			if(right_child_type == U_INT32 || right_child_type == U_INT16 || right_child_type == U_INT8){
+				//Implicit case to signed
+				return_type = lookup_type(type_symtab, "u_int32")->type;
+			//Otherwise it's signed so the top level one will be signed
+			} else {
+				//Otherwise it's what the right child had
+				return_type = right_child->inferred_type;
+			}
+
+			goto additive_loop_end;
+		}
+
+		//Now check for S-int32
+		if(right_child_type == S_INT32){
+			//If anything below this is unsigned, the whole thing becomes u_int64
+			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
+				//Implicit case to signed
+				return_type = lookup_type(type_symtab, "u_int32")->type;
+			//Otherwise it's signed so the top level one will be signed
+			} else {
+				//Otherwise it's what the right child had
+				return_type = right_child->inferred_type;
+			}
+
+			goto additive_loop_end;
+		}
+
+		//Now check for S-int16
+		if(right_child_type == S_INT16){
+			//If anything below this is unsigned, the whole thing becomes u_int64
+			if(temp_holder_type == U_INT32){
+				//Casted to unsigned
+				return_type = temp_holder->inferred_type;
+			} else if(temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
+				//Cast to unsigned
+				return_type = lookup_type(type_symtab, "u_int16")->type;
+			//Otherwise it's signed so the top level one will be signed
+			} else {
+				//Otherwise it's what the right child had
+				return_type = right_child->inferred_type;
+			}
+
+			goto additive_loop_end;
+		}
+
+		//Now check for S-int16
+		if(temp_holder_type == S_INT16){
+			//If anything below this is unsigned, the whole thing becomes u_int64
+			if(right_child_type == U_INT32){
+				//Casted to unsigned
+				return_type = right_child->inferred_type;
+			} else if(right_child_type == U_INT16 || right_child_type == U_INT8){
+				//Cast to unsigned
+				return_type = lookup_type(type_symtab, "u_int16")->type;
+			//Otherwise it's signed so the top level one will be signed
+			} else {
+				//Otherwise it's what the right child had
+				return_type = temp_holder->inferred_type;
+			}
+
+			goto additive_loop_end;
+		}
+
+		//Now check for S-int8 and char(same thing)
+		if(temp_holder_type == S_INT8 || temp_holder_type == CHAR){
+			//If anything below this is unsigned, the whole thing becomes u_int64
+			if(right_child_type == U_INT32 || right_child_type == U_INT16){
+				//Casted to unsigned
+				return_type = right_child->inferred_type;
+			} else if(right_child_type == U_INT8){
+				//Cast to unsigned
+				return_type = lookup_type(type_symtab, "u_int8")->type;
+			//Otherwise it's signed so the top level one will be signed
+			} else {
+				//Otherwise it's what the right child had
+				return_type = temp_holder->inferred_type;
+			}
+
+			goto additive_loop_end;
+		}
+
+		//Now check for S-int8 and char(same thing)
+		if(right_child_type == S_INT8 || right_child_type == CHAR){
+			//If anything below this is unsigned, the whole thing becomes u_int64
+			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16){
+				//Casted to unsigned
+				return_type = temp_holder->inferred_type;
+			} else if(right_child_type == U_INT8){
+				//Cast to unsigned
+				return_type = lookup_type(type_symtab, "u_int8")->type;
+			//Otherwise it's signed so the top level one will be signed
+			} else {
+				//Otherwise it's what the right child had
+				return_type = temp_holder->inferred_type;
+			}
+
+			goto additive_loop_end;
+		}
+		
+		//If we make it down here, and one of them is u_int32, then the ret type is u_int32
+		if(right_child_type == U_INT32){
+			return_type = right_child->inferred_type;
+		} else if(temp_holder_type == U_INT32){
+			return_type = temp_holder->inferred_type;
+		} else if(right_child_type == U_INT16){
+			return_type = right_child->inferred_type;
+		} else if(temp_holder_type == U_INT16){
+			return_type = temp_holder->inferred_type;
+		} else if(right_child_type == U_INT8){
+			return_type = right_child->inferred_type;
+		} else {
+			return_type = temp_holder->inferred_type;
 		}
 
 	additive_loop_end:
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
+		
+		//Now we can finally assign the sub tree type
+		sub_tree_root->inferred_type = return_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
