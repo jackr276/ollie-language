@@ -1478,12 +1478,16 @@ static generic_ast_node_t* additive_expression(FILE* fl){
  * A shift expression cannot be chained, so no recursion is needed here. It decays into an additive expression.
  * Just like other expression rules, a shift expression will return a subtree root, whether that subtree is 
  * rooted here or elsewhere
+ * 
+ * TYPE INFERENCE RULE: Shifting only works on integer types, and you can only shift by an integer amount
  *
  * BNF Rule: <shift-expression> ::= <additive-expression> 
  *								 |  <additive-expression> << <additive-expression> 
  *								 |  <additive-expression> >> <additive-expression>
  */
 static generic_ast_node_t* shift_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -1505,16 +1509,35 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
 	
-	//As long as we have a relational operators(== or !=) 
+	//We can optionally see some shift operators here
 	if(lookahead.tok == L_SHIFT || lookahead.tok == R_SHIFT){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
+
+		//Let's check the type of the temp holder. If it isn't a basic type, it's ruled out
+		if(temp_holder->inferred_type->type_class != TYPE_CLASS_BASIC){
+			sprintf(info, "Type %s cannot be bitwise shifted", temp_holder->inferred_type->type_name); 
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Even if it is a basic type, we need to ensure that it isn't a float or void.
+		//Extract for convenience
+		Token temp_holder_type = temp_holder->inferred_type->basic_type->basic_type;
+
+		//We can't have floats or voids
+		if(temp_holder_type == FLOAT32 || temp_holder_type == FLOAT64 || temp_holder_type == VOID){
+			sprintf(info, "Type %s cannot be bitwise shifted", temp_holder->inferred_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -1529,8 +1552,38 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 			return right_child;
 		}
 
+		//Let's check the type of the right child. If it isn't a basic type, it's ruled out
+		if(right_child->inferred_type->type_class != TYPE_CLASS_BASIC){
+			sprintf(info, "Type %s cannot be used as a shift amount", right_child->inferred_type->type_name); 
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Even if it is a basic type, we need to ensure that it isn't a float or void.
+		//Extract for convenience
+		Token right_child_type = right_child->inferred_type->basic_type->basic_type;
+
+		//We can't have floats or voids
+		if(right_child_type == FLOAT32 || right_child_type == FLOAT64 || right_child_type == VOID){
+			sprintf(info, "Type %s cannot be used as a shift amount", right_child->inferred_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+		
+		//Additionally, if it's a negative shift amount, we'll throw a warning
+		if(right_child_type == S_INT8 || right_child_type == S_INT16 || right_child_type == S_INT32 
+		   || right_child_type == S_INT64){
+			print_parse_message(WARNING, "Negative shift amounts will be treated as unsigned. Highly advised against using", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
+		//The return type is always the left child's type
+		sub_tree_root->inferred_type = temp_holder->inferred_type;
 
 	} else {
 		//Otherwise just push the token back
