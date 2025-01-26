@@ -3,7 +3,7 @@
 */
 
 func:static example(s_int32* my_arr, u_int8 max) -> void{
-	asn *(my_arr) := 2*3 + 6-1;
+	asn *(my_arr) := 2+3 + 6-1;
 	ret;
 }
 

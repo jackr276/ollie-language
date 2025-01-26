@@ -1340,15 +1340,26 @@ static generic_ast_node_t* cast_expression(FILE* fl){
  * will return a pointer to the root of the subtree that is created by it, whether that subtree
  * originated here or not
  *
+ * TYPE INFERENCE RULES: Multiplicative expressions always return the dominating type
+ * 	1.) Arrays, constructs enums and pointers are prohibited
+ *  2.) Floating point types dominate all other types
+ *  3.) If an operation contains signed and unsigned types, unsigned wins
+ *  4.) Larger bit count values dominate smaller ones
+ *  5.) Modular operators always return a type of u_int64
+ *
  * BNF Rule: <multiplicative-expression> ::= <cast-expression>{ (* | / | %) <cast-expression>}*
  */
 static generic_ast_node_t* multiplicative_expression(FILE* fl){
+	//For error printing
+	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Holding the return type
+	generic_type_t* return_type;
 
 	//No matter what, we do need to first see a valid cast expression expression
 	generic_ast_node_t* sub_tree_root = cast_expression(fl);
@@ -1358,7 +1369,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
-	
+
 	//There are now two options. If we do not see any *'s or %'s or /, we just add 
 	//this node in as the child and move along. But if we do see * or % or / symbols,
 	//we will on the fly construct a subtree here
@@ -1369,11 +1380,39 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
+		//Off the bat, if we have a construct or enum or array type here, we can't add to it
+		//Store this
+		TYPE_CLASS temp_holder_type_class = temp_holder->inferred_type->type_class;
+
+		//Fail case right here
+		if(temp_holder_type_class != TYPE_CLASS_BASIC){
+			sprintf(info, "Type %s is invalid for operators *, / and %s", temp_holder->inferred_type->type_name, "%");
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We also are not allowed to see a void type here
+		if(temp_holder->inferred_type->basic_type->basic_type == VOID){
+			print_parse_message(PARSE_ERROR, "Void types are invalid for operators *, / and %", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//If we saw a modulus operator and a float, that's also not allowed
+		if(lookahead.tok == MOD){
+			if(temp_holder->inferred_type->basic_type->basic_type == FLOAT32 || temp_holder->inferred_type->basic_type->basic_type == FLOAT64){
+				sprintf(info, "Type %s is invalid for modulus operator", temp_holder->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -1388,8 +1427,49 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			return right_child;
 		}
 
+		//Let's now check to make sure that the right child also isn't some kind of disallowed
+		TYPE_CLASS right_child_type_class = right_child->inferred_type->type_class;
+
+		//Fail case right here
+		if(right_child_type_class != TYPE_CLASS_BASIC){
+			sprintf(info, "Type %s is invalid for operators *, / and %s", temp_holder->inferred_type->type_name, "%");
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We also are not allowed to see a void type here
+		if(right_child->inferred_type->basic_type->basic_type == VOID){
+			print_parse_message(PARSE_ERROR, "Void types cannot be added to or subtracted from", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//If we saw a modulus operator and a float, that's also not allowed
+		if(lookahead.tok == MOD){
+			if(right_child->inferred_type->basic_type->basic_type == FLOAT32 || right_child->inferred_type->basic_type->basic_type == FLOAT64){
+				sprintf(info, "Type %s is invalid for modulus operator", right_child->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise if we make it down here, we actually know that the modulo operation worked. Modulo always returns an unsigned
+			//64 bit int. We'll set this and leave
+			return_type = lookup_type(type_symtab, "u_int64")->type;
+
+			goto multiplicative_loop_end;
+		}
+
+
+
+	//We end up here after all type checking
+	multiplicative_loop_end:
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
+
+		//Assign the node type
+		sub_tree_root->inferred_type = return_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -1462,7 +1542,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		}
 
 		//We also are not allowed to see a void type here
-		if(temp_holder->inferred_type->type_class == TYPE_CLASS_BASIC && temp_holder->inferred_type->basic_type->basic_type == VOID){
+		if(temp_holder_type_class == TYPE_CLASS_BASIC && temp_holder->inferred_type->basic_type->basic_type == VOID){
 			print_parse_message(PARSE_ERROR, "Void types cannot be added to or subtracted from", parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -1499,17 +1579,17 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		}
 
 		//We also are not allowed to see a void type here
-		if(right_child->inferred_type->type_class == TYPE_CLASS_BASIC && right_child->inferred_type->basic_type->basic_type == VOID){
+		if(right_child_type_class == TYPE_CLASS_BASIC && right_child->inferred_type->basic_type->basic_type == VOID){
 			print_parse_message(PARSE_ERROR, "Void types cannot be added to or subtracted from", parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
 		//If the temp holder is a pointer, the other one may not be a float of any kind
-		if(temp_holder->inferred_type->type_class == TYPE_CLASS_POINTER){
+		if(temp_holder_type_class == TYPE_CLASS_POINTER){
 			//One other basic check here. If the right child is also a pointer but they're different pointer types, we
 			//can't add them
-			if(right_child->inferred_type->type_class == TYPE_CLASS_POINTER){
+			if(right_child_type_class == TYPE_CLASS_POINTER){
 				//Let's see if they're the exact same pointer type
 				u_int8_t same = strcmp(temp_holder->inferred_type->type_name, right_child->inferred_type->type_name);
 
@@ -1527,7 +1607,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 				num_warnings++;
 
 			//If it's a basic type
-			} else if(right_child->inferred_type->type_class == TYPE_CLASS_BASIC){
+			} else if(right_child_type_class == TYPE_CLASS_BASIC){
 				//We cannot add pointers and floating point numbers
 				if(right_child->inferred_type->basic_type->basic_type == FLOAT32 
 				  || right_child->inferred_type->basic_type->basic_type == FLOAT64){
@@ -1546,9 +1626,9 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		}
 
 		//Now let's check and see if the right child is a pointer and the roles are reversed
-		if(right_child->inferred_type->type_class == TYPE_CLASS_POINTER){
+		if(right_child_type_class == TYPE_CLASS_POINTER){
 			//If it's a basic type
-			if(temp_holder->inferred_type->type_class == TYPE_CLASS_BASIC){
+			if(temp_holder_type_class == TYPE_CLASS_BASIC){
 				//We cannot add pointers and floating point numbers
 				if(temp_holder->inferred_type->basic_type->basic_type == FLOAT32 
 				  || temp_holder->inferred_type->basic_type->basic_type == FLOAT64){
