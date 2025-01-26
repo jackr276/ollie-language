@@ -84,7 +84,7 @@ static void print_parse_message(parse_message_type_t message_type, char* info, u
  */
 static generic_ast_node_t* identifier(FILE* fl){
 	//In case of error printing
-	char info[2000];
+	char info[1000];
 
 	//Grab the next token
 	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
@@ -118,7 +118,7 @@ static generic_ast_node_t* identifier(FILE* fl){
  */
 static generic_ast_node_t* label_identifier(FILE* fl){
 	//In case of error printing
-	char info[2000];
+	char info[1000];
 
 	//Grab the next token
 	Lexer_item lookahead = get_next_token(fl, &parser_line_num);
@@ -277,7 +277,7 @@ static generic_ast_node_t* constant(FILE* fl){
  */
 static generic_ast_node_t* function_call(FILE* fl){
 	//For generic error printing
-	char info[2000];
+	char info[1000];
 	//The current line num
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -474,7 +474,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -630,7 +630,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  */
 static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Info array for error printing
-	char info[2000];
+	char info[1000];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -715,7 +715,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  */
 static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current_type){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -926,7 +926,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Freeze the current line number
@@ -1108,7 +1108,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
  */
 static generic_ast_node_t* unary_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
 
@@ -1399,7 +1399,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
  */
 static generic_ast_node_t* multiplicative_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -1740,7 +1740,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
  */
 static generic_ast_node_t* additive_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2112,7 +2112,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
  */
 static generic_ast_node_t* shift_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2240,7 +2240,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
  */
 static generic_ast_node_t* relational_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2357,7 +2357,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
  */
 static generic_ast_node_t* equality_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2476,7 +2476,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
  */
 static generic_ast_node_t* and_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2596,7 +2596,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
  */
 static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2716,7 +2716,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
  */
 static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2835,7 +2835,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
  */
 static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2958,7 +2958,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
  */
 static generic_ast_node_t* logical_or_expression(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3079,7 +3079,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  */
 static generic_ast_node_t* construct_member(FILE* fl){
 	//The error printing string
-	char info[2000];
+	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Is it a constant variable?
@@ -3122,6 +3122,14 @@ static generic_ast_node_t* construct_member(FILE* fl){
 
 	//Grab this for convenience
 	char* name = ((identifier_ast_node_t*)(ident->node))->identifier;
+
+	//Array bounds checking real quick
+	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
+		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 
 	//Check that it isn't some duplicated function name
 	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
@@ -3275,7 +3283,7 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
  */
 static u_int8_t construct_definer(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Freeze the line num
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
@@ -3512,7 +3520,7 @@ static u_int8_t construct_definer(FILE* fl){
  */
 static generic_ast_node_t* enum_member(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 
 	//We really just need to see a valid identifier here
 	generic_ast_node_t* ident = identifier(fl);
@@ -3655,7 +3663,7 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
  */
 static u_int8_t enum_definer(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -4001,7 +4009,7 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
  */
 static generic_ast_node_t* type_name(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[1000];
 	//Lookahead token
 	Lexer_item lookahead;
 	//A temporary holder for the type name
@@ -4052,6 +4060,14 @@ static generic_ast_node_t* type_name(FILE* fl){
 			return type_ident;
 		}
 
+		//Array bounds checking
+		if(strlen(((identifier_ast_node_t*)(type_ident->node))->identifier) > MAX_TYPE_NAME_LENGTH - 10){
+			sprintf(info, "Type names may only be 200 characters long, but was given %s", ((identifier_ast_node_t*)(type_ident->node))->identifier);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
 		strcat(type_name, ((identifier_ast_node_t*)(type_ident->node))->identifier);
 
@@ -4093,6 +4109,14 @@ static generic_ast_node_t* type_name(FILE* fl){
 			return type_ident;
 		}
 
+		//Array bounds checking
+		if(strlen(((identifier_ast_node_t*)(type_ident->node))->identifier) > MAX_TYPE_NAME_LENGTH - 10){
+			sprintf(info, "Type names may only be 200 characters long, but was given %s", ((identifier_ast_node_t*)(type_ident->node))->identifier);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
 		strcat(type_name, ((identifier_ast_node_t*)(type_ident->node))->identifier);
 
@@ -4132,6 +4156,14 @@ static generic_ast_node_t* type_name(FILE* fl){
 			print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
 			//It's already an error so just give it back
 			return type_ident;
+		}
+
+		//Array bounds checking
+		if(strlen(((identifier_ast_node_t*)(type_ident->node))->identifier) > MAX_TYPE_NAME_LENGTH - 10){
+			sprintf(info, "Type names may only be 200 characters long, but was given %s", ((identifier_ast_node_t*)(type_ident->node))->identifier);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
 		//Grab a pointer for it for convenience
@@ -6112,6 +6144,14 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	//Let's get a pointer to the name for convenience
 	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
 
+	//Array bounds checking real quick
+	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
+		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return 0;
+	}
+
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
 	//Check that it isn't some duplicated function name
@@ -6258,6 +6298,14 @@ static generic_ast_node_t* let_statement(FILE* fl){
 
 	//Let's get a pointer to the name for convenience
 	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
+
+	//Array bounds checking real quick
+	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
+		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return 0;
+	}
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
@@ -6425,6 +6473,14 @@ static u_int8_t alias_statement(FILE* fl){
 		//Free the ident node
 		deallocate_ast(ident_node);
 		//Fail out
+		return 0;
+	}
+
+	//Array bounds checking real quick
+	if(strlen(((identifier_ast_node_t*)(ident_node->node))->identifier) > MAX_TYPE_NAME_LENGTH){
+		sprintf(info, "Type names may only be at most 200 characters long, was given: %s", ((identifier_ast_node_t*)(ident_node->node))->identifier);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
 		return 0;
 	}
 
@@ -6641,6 +6697,14 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
 	//Grab a reference for convenience
 	char* function_name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
+
+	//Array bounds checking real quick
+	if(strlen(function_name) > MAX_TYPE_NAME_LENGTH){
+		sprintf(info, "Function names may only be at most 200 characters long, was given: %s", function_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 
 	//Let's now do all of our checks for duplication before we go any further. This can
 	//save us time if it ends up being bad

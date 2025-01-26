@@ -63,7 +63,7 @@ static u_int8_t is_ws(char ch, u_int16_t* line_num, u_int16_t* parser_line_num){
 static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 	Lexer_item lex_item;
 	//Wipe this clean
-	memset(lex_item.lexeme, 0, 500*sizeof(char));
+	memset(lex_item.lexeme, 0, MAX_TOKEN_LENGTH*sizeof(char));
 
 	//Assign our line number;
 	lex_item.line_num = line_number;
@@ -154,6 +154,13 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 	//We'll run through character by character until we hit EOF
 	while((ch = get_next_char(fl)) != EOF){
+		//Check to make sure we aren't overrunning our bounds
+		if(token_char_count > MAX_TOKEN_LENGTH-1){
+			Lexer_item l;
+			l.tok = ERROR;
+			return l;
+		}
+
 		//Switch on the current state
 		switch(current_state){
 			case IN_START:
@@ -561,7 +568,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					default:
 						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$'){
 							//Erase this now
-							memset(lexeme, 0, 500);
+							memset(lexeme, 0, MAX_TOKEN_LENGTH);
 							//Reset the cursor
 							lexeme_cursor = lexeme;
 							//We are now in an identifier
@@ -572,7 +579,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						//If we get here we have the start of either an int or a real
 						} else if(ch >= '0' && ch <= '9'){
 							//Erase this now
-							memset(lexeme, 0, 500);
+							memset(lexeme, 0, MAX_TOKEN_LENGTH);
 							//Reset the cursor
 							lexeme_cursor = lexeme;
 							//We are not in an int

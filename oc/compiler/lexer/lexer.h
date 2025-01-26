@@ -9,6 +9,9 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+//The maximum token length is 500 
+#define MAX_TOKEN_LENGTH 500
+
 //All tokens that we can possible see
 //This list may grow as we go forward
 typedef enum {

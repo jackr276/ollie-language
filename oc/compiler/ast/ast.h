@@ -218,8 +218,8 @@ struct param_list_ast_node_t{
 
 //Holds information about a variable identifier that's been seen
 struct identifier_ast_node_t{
-	//Holds the lexeme of the identifer: max size 1000 bytes(may change)
-	char identifier[1000];
+	//Holds the lexeme of the identifer: max size 500 bytes(may change)
+	char identifier[MAX_TOKEN_LENGTH];
 };
 
 //Holds information about a constant
@@ -230,7 +230,7 @@ struct constant_ast_node_t{
 	int32_t int_val;
 	float float_val;
 	char char_val;
-	char string_val[500];
+	char string_val[MAX_TOKEN_LENGTH];
 };
 
 //Holds information about a parameter declaration. This will also hold 
