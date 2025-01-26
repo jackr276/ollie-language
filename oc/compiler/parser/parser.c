@@ -12,6 +12,7 @@
 */
 
 #include "parser.h"
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -626,7 +627,6 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  * BNF Rule: <assignment-expression> ::= <logical-or-expression> 
  * 									   | asn <unary-expression> := <logical-or-expression>
  *
- * TODO TYPE CHECKING REQUIRED
  */
 static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Info array for error printing
@@ -665,10 +665,9 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//Return the erroneous node as we fail up the tree
 		return left_hand_unary;
 	}
-
+	
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
-	//TODO add more with types
 
 	//Now we are required to see the := terminal
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -692,6 +691,24 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//The conditional is already an error, so we'll just return it
 		return expr;
 	}
+
+	//Let's now see if we have compatible types
+	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
+	generic_type_t* right_hand_type =  expr->inferred_type;
+
+	//Final type here
+	generic_type_t* final_type = types_compatible(left_hand_type, right_hand_type);
+	
+	//If they're not, we fail here
+	if(final_type == NULL){
+		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise the overall type is the final type
+	asn_expr_node->inferred_type = final_type;
 
 	//Otherwise we know it worked, so we'll add the conditional in as the right child
 	add_child_node(asn_expr_node, expr);

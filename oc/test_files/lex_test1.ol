@@ -18,6 +18,9 @@ func:static main() -> u_int32* {
 	let s_int8 my_int := 1;
 	let float32 my_float := 0.3;
 	let u_int32 i := 3;
+	declare float32 f;
+
+	asn f := i;
 
 	@test_func(my_float, i);
 
