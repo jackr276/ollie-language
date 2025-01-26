@@ -15,7 +15,8 @@ define enum type_enum{
 
 func:static main(char** argv, s_int8 argc) -> void{
 	let my_enum_type a := TYPE_NORMAL;
-	let u_int8 b := 9 + 3;
+	let u_int32 a := 32;
+	let u_int8 b := 9 * 7 + 3 * a;
 	//Should fail
 	while(b >= 9 && b <= "hi"){
 		b--;
