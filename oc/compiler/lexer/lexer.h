@@ -19,6 +19,7 @@ typedef enum {
 	ASN,
 	ALIAS,
 	WHEN,
+	DEFER,
 	IF,
 	THEN,
 	ELSE,

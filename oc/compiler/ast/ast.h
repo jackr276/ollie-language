@@ -105,6 +105,8 @@ typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 //An AST node for let statements
 typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
+//An AST node for defer statements
+typedef struct defer_stmt_ast_node_t defer_stmt_ast_node_t;
 //An AST node for storage class specifiers
 typedef struct storage_class_spec_ast_node_t storage_class_spec_ast_node_t;
 
@@ -112,6 +114,7 @@ typedef struct storage_class_spec_ast_node_t storage_class_spec_ast_node_t;
 typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PROG,
 	AST_NODE_CLASS_ALIAS_STMT,
+	AST_NODE_CLASS_DEFER_STMT,
 	AST_NODE_CLASS_DECL_STMT,
 	AST_NODE_CLASS_LET_STMT,
 	AST_NODE_CLASS_FUNC_DEF,
@@ -201,6 +204,9 @@ struct func_specifier_ast_node_t{
 	STORAGE_CLASS_T function_storage_class;
 };
 
+//Holds a defer statement for us
+struct defer_stmt_ast_node_t{
+};
 
 //Holds references to our parameter list
 struct param_list_ast_node_t{

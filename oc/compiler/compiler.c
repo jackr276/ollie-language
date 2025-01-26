@@ -11,7 +11,7 @@
  * The main entry point for the compiler. This will be expanded as time goes on
 */
 int main(int argc, char** argv){
-	
+
 	// ================== Front End ===========================
 	/**
 	 * The front end consists of the lexer and parser. When the front end

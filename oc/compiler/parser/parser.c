@@ -5866,6 +5866,36 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 
 
 /**
+ * A defer statement allows users to defer execution until after a function occurs
+ *
+ * Remember: By the time that we get here, we will have already seen the defer keyword
+ *
+ * <defer-statement> ::= defer <expression-statement>
+ */
+static generic_ast_node_t* defer_statement(FILE* fl){
+	//We must first see a valid expression statement
+	generic_ast_node_t* expr_node = expression_statement(fl);
+
+	//We have a bad expression, fail out here
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid statement given for deferral", parser_line_num);
+		num_errors++;
+		//It's already an error, just send it up
+		return expr_node;
+	}
+
+	//If we make it here we know that we're all set
+	generic_ast_node_t* defer_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT);
+
+	//Add the expression in as a child
+	add_child_node(defer_node, expr_node);
+
+	//Return the deferral here
+	return defer_node;
+}
+
+
+/**
  * A statement is a kind of multiplexing rule that just determines where we need to go to. Like all rules in the parser,
  * this function returns a reference to the the root node that it creates, even though that actual root node is created 
  * further down the chain
@@ -5879,6 +5909,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
  * 						   | <do-while-statement> 
  * 						   | <while-statement> 
  * 						   | <branch-statement>
+ * 						   | <defer-statement>
  */
 static generic_ast_node_t* statement(FILE* fl){
 	//Lookahead token
@@ -5907,6 +5938,11 @@ static generic_ast_node_t* statement(FILE* fl){
 	} else if(lookahead.tok == FOR){
 		//This rule relies on for already being consumed, so we won't put it back
 		return for_statement(fl);
+
+	//If we see this, we are seeing a defer statment
+	} else if(lookahead.tok == DEFER){
+		//This rule relies on the defer keyword already being consumed, so we won't put it back
+		return defer_statement(fl);
 
 	//While statement
 	} else if(lookahead.tok == WHILE){
