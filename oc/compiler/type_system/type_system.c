@@ -35,7 +35,10 @@ u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
  * TYPE COMPATIBILITY RULES:
  * 	1.) Two constructs are compatible iff they are the exact same construct
  * 	2.) Two enums are compatible iff they are the exact same enum
- * 	3.)
+ * 	3.) Pointers are compatible
+ * 	4.) If we're trying to put a small int into a large one that's fine
+ * 	5.) If we're trying to put a small float into a large one that's fine
+ * 	6.) Arrays are compatible if they point to the same type
 */
 generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 	//Handle construct types: very strict compatibility rules here
@@ -70,8 +73,125 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 		return typeA;
 	}
 
-	//If they are both pointer types
-	//TODO FINISH ME
+	//Handle array types. Array types are equivalent if they point to the same stuff:w
+	if(typeA->type_class == TYPE_CLASS_ARRAY){
+		//Store what type A points to
+		generic_type_t* type_a_points_to = typeA->array_type->member_type;
+		
+		//If type B is an array, it needs to point to what A points to
+		if(typeB->type_class == TYPE_CLASS_ARRAY){
+			if(types_equivalent(type_a_points_to, typeB->array_type->member_type) == 0){
+				return NULL;
+			}
+
+			//Otherwise return type A
+			return typeA;
+		}
+
+		//Otherwise this is null
+		return NULL;
+	}
+
+	//If type A is a pointer, we can assign it to another pointer or an array
+	if(typeA->type_class == TYPE_CLASS_POINTER){
+		//Store what type A points to
+		generic_type_t* type_a_points_to = typeA->pointer_type->points_to;
+		
+		//If it's a pointer, it needs to point to the same thing
+		if(typeB->type_class == TYPE_CLASS_POINTER){
+			if(types_equivalent(type_a_points_to, typeB->pointer_type->points_to) == 0){
+				return NULL;
+			}
+
+			//Otherwise it worked so
+			return typeA;
+		}
+
+		//If type B is an array, it needs to point to what A points to
+		if(typeB->type_class == TYPE_CLASS_ARRAY){
+			//Not the exact same, we fail out
+			if(types_equivalent(type_a_points_to, typeB->array_type->member_type) == 0){
+				return NULL;
+			}
+
+			//Otherwise it worked so
+			return typeA;
+		}
+	}
+
+	//Otherwise we know that we have a basic type here
+	Token typeA_basic_type = typeA->basic_type->basic_type;
+	Token typeB_basic_type = typeB->basic_type->basic_type;
+
+	//If one of these is void, they must both be void
+	if(typeA_basic_type == VOID){
+		//Type B also needs to be void
+		if(typeB_basic_type != VOID){
+			return NULL;
+		}
+
+		//Otherwise it worked
+		return typeA;
+	}
+
+	//If type A is a float64, we need to see a float64 or a float32
+	if(typeA_basic_type == FLOAT64){
+		//Fail case here
+		if(typeB_basic_type != FLOAT32 && typeB_basic_type != FLOAT64){
+			return NULL;
+		}
+
+		//Otherwise it worked
+		return typeA;
+	}
+	
+	//If type A is a float32, we need to see a float32
+	if(typeA_basic_type == FLOAT64){
+		//Fail case here
+		if(typeB_basic_type != FLOAT32){
+			return NULL;
+		}
+
+		//Otherwise it worked
+		return typeA;
+	}
+
+	//Now for ints, if we see an INT that is smaller, we're good
+	if(typeA_basic_type == S_INT64 || typeA_basic_type == U_INT64){
+		//It's only bad if we see floats or void
+		if(typeB_basic_type == VOID || typeB_basic_type == FLOAT32 || typeB_basic_type == FLOAT64){
+			return NULL;
+		}
+
+		//Otherwise it's fine so
+		return typeA;
+	}
+
+	//Now for ints, if we see an INT that is smaller, we're good
+	if(typeA_basic_type == U_INT32 || typeA_basic_type == S_INT32){
+		//It's only bad if we see floats or void
+		if(typeB_basic_type == VOID || typeB_basic_type == FLOAT32 || typeB_basic_type == FLOAT64
+		   || typeB_basic_type == S_INT64 || typeB_basic_type == U_INT64){
+			return NULL;
+		}
+
+		//Otherwise it's fine so
+		return typeA;
+	}
+
+	//Now for ints, if we see an INT that is smaller, we're good
+	if(typeA_basic_type == U_INT32 || typeA_basic_type == S_INT32){
+		//It's only bad if we see floats or void
+		if(typeB_basic_type == VOID || typeB_basic_type == FLOAT32 || typeB_basic_type == FLOAT64
+		   || typeB_basic_type == S_INT64 || typeB_basic_type == U_INT64){
+			return NULL;
+		}
+
+		//Otherwise it's fine so
+		return typeA;
+	}
+	
+	
 	return NULL;
 }
 

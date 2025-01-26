@@ -6,11 +6,19 @@ declare u_int8 j;
 
 alias u_int8[100] as int_arr;
 
+func test_func() -> void{
+	let u_int32 i := 1;
+
+	ret;
+}
+
 func:static main() -> u_int32* {
 	//Single line comment
 	declare int_arr j_arr;
 	let s_int8 my_int := 1;
 	let float64 my_float := 0.3;
+
+	@test_func(i);
 
 	declare s_int32[32] my_array;
 	
@@ -22,6 +30,8 @@ func:static main() -> u_int32* {
 
 	let u_int8 j /*also single line comment */:= 1;
 	let u_int8* j_ptr := &j;
+
+	@test_func(i);
 
 	ret *i + *j;
 }

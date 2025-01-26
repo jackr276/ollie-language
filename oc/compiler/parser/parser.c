@@ -346,27 +346,36 @@ static generic_ast_node_t* function_call(FILE* fl){
 	//Push onto the grouping stack once we see this
 	push(grouping_stack, lookahead);
 
+	//If we only have one paramater for our function, we had better only see an R_PAREN here
+	if(function_num_params == 0){
+		//Grab the next token
+		lookahead = get_next_token(fl, &parser_line_num);
+		
+		//If we don't see this it's bad
+		if(lookahead.tok != R_PAREN){
+			sprintf(info, "Function \"%s\" expects no parameters First declared here:", function_record->func_name);
+			print_parse_message(PARSE_ERROR, info, current_line);
+			//Print out the actual function record as well
+			print_function_name(function_record);
+			num_errors++;
+			//Return the error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise this worked just fine, so we'll jump out here
+		return function_call_node;
+	}
+
+	//Otherwise if we make it all the way here, we're going to need to do more complex checking
+
 	//A node to hold our current parameter
 	generic_ast_node_t* current_param;
 
 	//A node to hold the current function parameter
+	symtab_variable_record_t* current_function_param;
 
 	//So long as we don't see the R_PAREN we aren't done
 	while(1){
-		//Parameters are in the form of a conditional expression
-		current_param = logical_or_expression(fl);
-
-		//We now have an error of some kind
-		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Bad parameter passed to function call", current_line);
-			num_errors++;
-			//Return the error node -- it will propogate up the chain
-			return current_param;
-		}
-
-		//Otherwise it was fine. We'll first record that we saw one more parameter
-		num_params++;
-
 		//If we're exceeding the number of parameters, we'll fail out
 		if(num_params > function_num_params){
 			sprintf(info, "Function \"%s\" expects %d params, was given %d. First declared here:", function_name, function_num_params, num_params);
@@ -378,6 +387,21 @@ static generic_ast_node_t* function_call(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
+		//Grab the current function param
+		current_function_param = function_record->func_params[num_params].associate_var;
+
+		//Parameters are in the form of a conditional expression
+		current_param = logical_or_expression(fl);
+
+		//We now have an error of some kind
+		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Bad parameter passed to function call", current_line);
+			num_errors++;
+			//Return the error node -- it will propogate up the chain
+			return current_param;
+		}
+
+		
 		//We can now safely add this into the function call node as a child. In the function call node, 
 		//the parameters will appear in order from left to right
 		add_child_node(function_call_node, current_param);
@@ -398,6 +422,9 @@ static generic_ast_node_t* function_call(FILE* fl){
 			//Create and return an error node
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
+
+		//Otherwise it was fine. We'll first record that we saw one more parameter
+		num_params++;
 	}
 
 	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
@@ -1275,6 +1302,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 		//Let this handle it
 		return unary_expression(fl);
 	}
+
 	//Push onto the stack for matching
 	push(grouping_stack, lookahead);
 
@@ -1325,7 +1353,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	add_child_node(cast_node, type_spec);
 
 	//Store the type information for faster retrieval later
-	((cast_expr_ast_node_t*)(cast_node->node))->casted_type = type_spec->inferred_type;
+	cast_node->inferred_type = type_spec->inferred_type;
 
 	//We'll now add the unary expression as the right node
 	add_child_node(cast_node, right_hand_unary);
