@@ -165,8 +165,7 @@ u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB);
  * ASSUMPTION: We assume that typeA is the type whom is being assigned to. So we're really asking
  * "can I put something of typeB into a space that expects typeA?"
  */
-generic_type_t* type_compatible(generic_type_t* typeA, generic_type_t* typeB);
-
+generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB);
 
 /**
  * Dynamically allocate and create a basic type

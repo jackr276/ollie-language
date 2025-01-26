@@ -400,8 +400,28 @@ static generic_ast_node_t* function_call(FILE* fl){
 			//Return the error node -- it will propogate up the chain
 			return current_param;
 		}
+	
+		//Let's grab these to check for compatibility
+		generic_type_t* param_type = current_function_param->type;
+		generic_type_t* expr_type = current_param->inferred_type;
 
-		
+		//We now need to check the type equivalence here
+		generic_type_t* param_type_checked = types_compatible(param_type, expr_type);
+
+		//If this is null, it means that our check failed
+		if(param_type_checked == NULL){
+			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". First defined here:",
+		   			function_name, param_type->type_name, num_params, expr_type->type_name);
+			print_parse_message(PARSE_ERROR, info,  parser_line_num);
+			//Print out the actual function record as well
+			print_function_name(function_record);
+			num_errors++;
+			//Return the error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise it worked
+
 		//We can now safely add this into the function call node as a child. In the function call node, 
 		//the parameters will appear in order from left to right
 		add_child_node(function_call_node, current_param);

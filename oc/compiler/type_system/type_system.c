@@ -97,26 +97,20 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 		//Store what type A points to
 		generic_type_t* type_a_points_to = typeA->pointer_type->points_to;
 		
-		//If it's a pointer, it needs to point to the same thing
+		//If it's a pointer it's fine, no matter what it points to
 		if(typeB->type_class == TYPE_CLASS_POINTER){
-			if(types_equivalent(type_a_points_to, typeB->pointer_type->points_to) == 0){
-				return NULL;
-			}
-
 			//Otherwise it worked so
 			return typeA;
 		}
 
-		//If type B is an array, it needs to point to what A points to
+		//If it's an array it's also fine, arrays are pointers
 		if(typeB->type_class == TYPE_CLASS_ARRAY){
-			//Not the exact same, we fail out
-			if(types_equivalent(type_a_points_to, typeB->array_type->member_type) == 0){
-				return NULL;
-			}
-
 			//Otherwise it worked so
 			return typeA;
 		}
+
+		//Otherwise this failed
+		return NULL;
 	}
 
 	//Otherwise we know that we have a basic type here
@@ -146,7 +140,7 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 	}
 	
 	//If type A is a float32, we need to see a float32
-	if(typeA_basic_type == FLOAT64){
+	if(typeA_basic_type == FLOAT32){
 		//Fail case here
 		if(typeB_basic_type != FLOAT32){
 			return NULL;
@@ -180,10 +174,21 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 	}
 
 	//Now for ints, if we see an INT that is smaller, we're good
-	if(typeA_basic_type == U_INT32 || typeA_basic_type == S_INT32){
-		//It's only bad if we see floats or void
-		if(typeB_basic_type == VOID || typeB_basic_type == FLOAT32 || typeB_basic_type == FLOAT64
-		   || typeB_basic_type == S_INT64 || typeB_basic_type == U_INT64){
+	if(typeA_basic_type == U_INT16 || typeA_basic_type == S_INT16){
+		//If we don't see a smaller or same size one, we fail
+		if(typeB_basic_type != U_INT16 && typeB_basic_type != S_INT16 && typeB_basic_type != S_INT8 
+		  && typeB_basic_type != U_INT8 && typeB_basic_type != CHAR){
+			return NULL;
+		}
+
+		//Otherwise it's fine so
+		return typeA;
+	}
+	
+	//Now for ints, if we see an INT that is smaller, we're good
+	if(typeA_basic_type == U_INT8 || typeA_basic_type == S_INT8 || typeA_basic_type == CHAR){
+		//If we don't see a smaller or same size one, we fail
+		if(typeB_basic_type != S_INT8 && typeB_basic_type != U_INT8 && typeB_basic_type != CHAR){
 			return NULL;
 		}
 
@@ -192,6 +197,7 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 	}
 	
 	
+	//Generic fail case if we forgot something
 	return NULL;
 }
 
