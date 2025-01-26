@@ -12,7 +12,6 @@
 */
 
 #include "parser.h"
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -4197,11 +4196,17 @@ static generic_ast_node_t* type_name(FILE* fl){
 			//Create and return an error node
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
+		
+		//Dealias the type here
+		generic_type_t* dealiased_type = dealias_type(record->type);
+
+		//The true type record
+		symtab_type_record_t* true_type = lookup_type(type_symtab, dealiased_type->type_name);
 
 		//Otherwise if we get here we were able to find it, so we're good to move on
-		((type_name_ast_node_t*)(type_name_node->node))->type_record = record;
+		((type_name_ast_node_t*)(type_name_node->node))->type_record = true_type;
 		//Copy the name over here for convenience later
-		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, temp_name);
+		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, dealiased_type->type_name);
 		//We can also add in the type ident as a child node of the type name node
 		add_child_node(type_name_node, type_ident);
 
@@ -6406,6 +6411,23 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		//Create and return an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
+
+	//Extract the two types here
+	generic_type_t* left_hand_type = type_spec_node->inferred_type;
+	generic_type_t* right_hand_type = expr_node->inferred_type;
+
+	generic_type_t* return_type = types_compatible(left_hand_type, right_hand_type);
+
+	//Will be null if we have a failure
+	if(return_type == NULL){
+		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Store this just in case--most likely won't use
+	let_stmt_node->inferred_type = return_type;
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
