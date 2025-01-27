@@ -280,7 +280,7 @@ static generic_ast_node_t* constant(FILE* fl){
  */
 static generic_ast_node_t* function_call(FILE* fl){
 	//For generic error printing
-	char info[1000];
+	char info[1500];
 	//The current line num
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
