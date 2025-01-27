@@ -1358,11 +1358,80 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 			}
 
+			//Make sure that this isn't a void type either
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_BASIC && cast_expr->inferred_type->basic_type->basic_type == VOID){
+				sprintf(info, "Type %s is an invalid operand for logical not(!)", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
 			//Otherwise it is fine. Logical not returns 0 or 1, so it's return type will be of u_int8
 			return_type = lookup_type(type_symtab, "u_int8")->type;
 		
-		//Bitwise not works on anything that could fit into a register(8 bytes)
+		//Bitwise not works on integers only
 		} else if(lookahead.tok == B_NOT){
+			//If it's not a basic type, we fail immediately
+			if(cast_expr->inferred_type->type_class != TYPE_CLASS_BASIC){
+				sprintf(info, "Type %s is an invalid operand for bitwise not(~)", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise if we make it down here, it still may not be good. We can not use bitwise not on floats or void
+			if(cast_expr->inferred_type->basic_type->basic_type == FLOAT32 || cast_expr->inferred_type->basic_type->basic_type == FLOAT64
+			   || cast_expr->inferred_type->basic_type->basic_type == VOID){
+				sprintf(info, "Type %s is an invalid operand for bitwise not(~)", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise if we make it down here, the return type will be whatever type we put in
+			return_type = cast_expr->inferred_type;
+
+		//Positive and negative sign works on integers and floats, but nothing else
+		} else if(lookahead.tok == MINUS || lookahead.tok == PLUS){
+			//If it's not a basic type, we fail immediately
+			if(cast_expr->inferred_type->type_class != TYPE_CLASS_BASIC){
+				sprintf(info, "Type %s is an invalid operand for plus or minus operand", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise if we make it down here, it still may not be good. We can not use bitwise not on floats or void
+			if(cast_expr->inferred_type->basic_type->basic_type == VOID){
+				sprintf(info, "Type %s is an invalid operand for plus or minus operand", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//If we get all the way down here, the return type is what we had to begin with
+			return_type = cast_expr->inferred_type;
+
+		//preincrement and predecrement work on everything besides complex types
+		} else if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUSMINUS){
+			//If it's a complex type we fail immediately
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_ENUMERATED || cast_expr->inferred_type->type_class == TYPE_CLASS_CONSTRUCT){
+				sprintf(info, "Type %s is an invalid operand for ++ or -- operand", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//One other potential issue -- if we see  void here
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_BASIC && cast_expr->inferred_type->basic_type->basic_type == VOID){
+				sprintf(info, "Type %s is an invalid operand for ++ or -- operand", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise it worked just fine here. The return type is the same type that we had initially
+			return_type = cast_expr->inferred_type;
 
 		}
 
