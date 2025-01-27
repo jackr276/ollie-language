@@ -4,6 +4,9 @@ func:static main() -> u_int32 {
 	defer i++;
 
 	declare char* str;
+	declare void* void_ptr;
+	let u_int32 bad := *void_ptr;
+
 	let char* my_str := "I am a string";
 	
 	ret 3;

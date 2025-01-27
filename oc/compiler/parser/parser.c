@@ -1113,6 +1113,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
  *
  * For convenience, we will also handle any/all unary operators here
  *
+ * TYPE INFERENCE RULES: There are several separate rules that work here
+ * 	1.) * operator only works on pointers, and the return type is what the point points to
+ * 	2.) & operator works on everything except for void(you can't take the address of nothing)
+ *
  * BNF Rule: <unary-operator> ::= & 
  * 								| * 
  * 								| + 
@@ -1290,7 +1294,78 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			return cast_expr;
 		}
 
-		//Otherwise we know that it worked TODO TYPE CHECKING
+		//Holder for our return type
+		generic_type_t* return_type;
+
+		//Let's check the * case
+		if(lookahead.tok == STAR){
+			//If this is the case, then the cast expression had to have been a pointer or an array
+			if(cast_expr->inferred_type->type_class != TYPE_CLASS_POINTER && cast_expr->inferred_type->type_class != TYPE_CLASS_ARRAY){
+				sprintf(info, "Attempt to deference non-pointer type %s", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise if we made it here, we only have one final tripping point
+			//Ensure that we aren't trying to deref a null pointer
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && strcmp(cast_expr->inferred_type->type_name, "void*") == 0){
+				print_parse_message(PARSE_ERROR, "Attempt to derefence void*, you must cast before derefencing", parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise our dereferencing worked, so the return type will be whatever this points to
+			//Grab what it references whether its a pointer or an array
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER){
+				return_type = cast_expr->inferred_type->pointer_type->points_to;
+			} else {
+				return_type = cast_expr->inferred_type->array_type->member_type;
+			}
+
+		//Let's now check the & case
+		} else if (lookahead.tok == AND){
+			//Let's double check that we aren't taking the address of nothing
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_BASIC && cast_expr->inferred_type->basic_type->basic_type == VOID){
+				print_parse_message(PARSE_ERROR, "Type \"void\" cannot have it's address taken", parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was
+			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num);
+
+			//We'll check to see if this type is already in existence
+			symtab_type_record_t* type_record = lookup_type(type_symtab, pointer->type_name);
+
+			//It didn't exist, so we'll add it
+			if(type_record == NULL){
+				insert_type(type_symtab, create_type_record(pointer));
+				//Set the return type to be a pointer
+				return_type = pointer;
+			//Otherwise it does exist so we'll just grab whatever we got
+			} else {
+				return_type = type_record->type;
+			}
+
+		//Logical not(!) works on all basic types(minus void) and pointers
+		} else if(lookahead.tok == L_NOT){
+			//Let's check that we aren't trying to not a complex type
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_ENUMERATED || cast_expr->inferred_type->type_class == TYPE_CLASS_CONSTRUCT){
+				sprintf(info, "Type %s is an invalid operand for logical not(!)", cast_expr->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise it is fine. Logical not returns 0 or 1, so it's return type will be of u_int8
+			return_type = lookup_type(type_symtab, "u_int8")->type;
+		
+		//Bitwise not works on anything that could fit into a register(8 bytes)
+		} else if(lookahead.tok == B_NOT){
+
+		}
+
 		//One we get here, we have both nodes that we need
 		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
 
@@ -1301,7 +1376,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		add_child_node(unary_node, cast_expr);
 
 		//Store the type that we have here
-		unary_node->inferred_type = cast_expr->inferred_type;
+		unary_node->inferred_type = return_type;
 
 		//Finally we're all done, so we can just give this back
 		return unary_node;
