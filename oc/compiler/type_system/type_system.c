@@ -105,6 +105,10 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 
 		//If it's an array it's also fine, arrays are pointers
 		if(typeB->type_class == TYPE_CLASS_ARRAY){
+			if(types_compatible(type_a_points_to, typeB->array_type->member_type) == NULL){
+				return NULL;
+			}
+
 			//Otherwise it worked so
 			return typeA;
 		}

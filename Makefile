@@ -9,12 +9,11 @@ PARSER_PATH = ./oc/compiler/parser
 TYPE_SYSTEM_PATH = ./oc/compiler/type_system
 AST_PATH = ./oc/compiler/ast
 CFG_PATH = ./oc/compiler/cfg
+TEST_FILE_DIR = ./oc/test_files/
 OUT = ./oc/out
 PROGS = lexer_test symtab_test parser_test
 
 all: $(PROGS)
-
-compiler: compiler.o parser.o lexer.o
 
 ltest: lexer_test
 	cat ./oc/test_files/test_files.txt | xargs ./oc/out/lexer_test
@@ -91,6 +90,15 @@ symtab_test: symtab.o symtab_test.o lexer.o type_system.o
 symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o
 	$(CC) -o $(OUT)/symtab_testd $(OUT)/lexerd.o $(OUT)/symtab_testd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o
 
+compiler.o: ./oc/compiler/compiler.c 
+	$(CC) $(CFLAGS) -o $(OUT)/compiler.o ./oc/compiler/compiler.c
+
+compilerd.o: ./oc/compiler/compiler.c 
+	$(CC) $(CFLAGS) -g -o $(OUT)/compilerd.o ./oc/compiler/compiler.c
+
+oc: compiler.o parser.o lexer.o symtab.o stack.o type_system.o ast.o cfg.o
+	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o
+
 stest: symtab_test
 	$(OUT)/symtab_test
 
@@ -99,6 +107,9 @@ stestd: symtab_testd
 
 ptest: parser_test
 	cat ./oc/test_files/test_files.txt | xargs ./oc/out/parser_test
+
+compiler_test: oc
+	find $(TEST_FILE_DIR) -type f | xargs ./oc/out/oc
 
 clean:
 	rm -f ./oc/out/*

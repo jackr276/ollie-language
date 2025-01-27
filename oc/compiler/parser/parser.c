@@ -71,7 +71,7 @@ static void print_parse_message(parse_message_type_t message_type, char* info, u
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	printf("[LINE %d: PARSER %s]: %s\n", parse_message.line_num, type[parse_message.message], parse_message.info);
+	fprintf(stderr, "[LINE %d: PARSER %s]: %s\n", parse_message.line_num, type[parse_message.message], parse_message.info);
 }
 
 
@@ -7237,10 +7237,9 @@ static generic_ast_node_t* program(FILE* fl){
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
-u_int8_t parse(FILE* fl){
+front_end_results_package_t parse(FILE* fl){
 	num_errors = 0;
 	double time_spent;
-	u_int16_t status = 0;
 
 	//Start the timer
 	clock_t begin = clock();
@@ -7274,32 +7273,37 @@ u_int8_t parse(FILE* fl){
 	//Crude time calculation
 	time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 
+	//Initialize our results package here
+	front_end_results_package_t results;
+
 	//If we failed
 	if(prog->CLASS == AST_NODE_CLASS_ERR_NODE){
-		status = 1;
 		char info[500];
 		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", num_errors, num_warnings, time_spent);
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", parser_line_num);
 		printf("%s\n", info);
 		printf("=======================================================================\n\n");
+		//Failure here
+		results.success = 0;
 	} else {
-		status = 0;
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", parser_line_num);
 		printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
 		printf("=======================================================================\n\n");
+		//If we get here we know that we succeeded
+		results.success = 1;
 	}
-	
-	//Clean these both up for memory safety
-	destroy_stack(grouping_stack);
-	//Deallocate all symtabs
-	destroy_function_symtab(function_symtab);
-	destroy_variable_symtab(variable_symtab);
-	destroy_type_symtab(type_symtab);
-	
-	//Deallocate the AST
-	deallocate_ast(prog);
 
-	return status;
+	//Package up everything that we need
+	results.function_symtab = function_symtab;
+	results.variable_symtab = variable_symtab;
+	results.type_symtab = type_symtab;
+	//AST root
+	results.root = prog;
+
+	//Destroy the stack, no longer needed
+	destroy_stack(grouping_stack);
+
+	return results;
 }

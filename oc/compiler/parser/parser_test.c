@@ -7,6 +7,9 @@
 #include <sys/types.h>
 
 
+/**
+ * FOR TESTING PURPOSES ONLY: NOT MEMORY SAFE
+*/
 int main(int argc, char** argv){
 	if(argc < 2){
 		fprintf(stderr, "ERROR: Please provide a filename\n");
