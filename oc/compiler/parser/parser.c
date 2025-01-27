@@ -17,7 +17,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <time.h>
 
 //Variable and function symbol tables
 function_symtab_t* function_symtab;
@@ -58,7 +57,7 @@ static u_int8_t definition(FILE* fl);
 /**
  * Simply prints a parse message in a nice formatted way
 */
-static void print_parse_message(parse_message_type_t message_type, char* info, u_int16_t line_num){
+void print_parse_message(parse_message_type_t message_type, char* info, u_int16_t line_num){
 	//Build and populate the message
 	parse_message_t parse_message;
 	parse_message.message = message_type;
@@ -75,7 +74,7 @@ static void print_parse_message(parse_message_type_t message_type, char* info, u
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	fprintf(stderr, "[LINE %d: PARSER %s]: %s\n", parse_message.line_num, type[parse_message.message], parse_message.info);
+	fprintf(stderr, "\n[LINE %d: COMPILER %s]: %s\n", parse_message.line_num, type[parse_message.message], parse_message.info);
 }
 
 
@@ -335,6 +334,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 	//We'll also add in that the current function has called this one
 	call_function(current_function->call_graph_node, function_record->call_graph_node);
+	//We'll now note that this was indeed called
+	function_record->called = 1;
 
 	//Add the inferred type in for convenience as well
 	function_call_node->inferred_type = function_record->return_type;
@@ -7262,15 +7263,13 @@ static generic_ast_node_t* program(FILE* fl){
 */
 front_end_results_package_t parse(FILE* fl){
 	num_errors = 0;
-	double time_spent;
-
-	//Start the timer
-	clock_t begin = clock();
+	num_warnings = 0;
 
 	//Initialize all of our symtabs
 	function_symtab = initialize_function_symtab();
 	variable_symtab = initialize_variable_symtab();
 	type_symtab = initialize_type_symtab();
+
 	//Initialize the OS call graph
 	os = calloc(1, sizeof(call_graph_node_t));
 
@@ -7293,38 +7292,8 @@ front_end_results_package_t parse(FILE* fl){
 	//the root being here
 	generic_ast_node_t* prog = program(fl);
 
-	//Timer end
-	clock_t end = clock();
-	//Crude time calculation
-	time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-
 	//Initialize our results package here
 	front_end_results_package_t results;
-
-	//If we didn't find a main function, we're done here
-	if(os->num_callees == 0){
-		print_parse_message(PARSE_ERROR, "No main function found.", 0);
-		num_errors++;
-	}
-
-	//If we failed
-	if(prog->CLASS == AST_NODE_CLASS_ERR_NODE){
-		char info[500];
-		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", num_errors, num_warnings, time_spent);
-		printf("\n===================== Ollie Compiler Summary ==========================\n");
-		printf("Lexer processed %d lines\n", parser_line_num);
-		printf("%s\n", info);
-		printf("=======================================================================\n\n");
-		//Failure here
-		results.success = 0;
-	} else {
-		printf("\n===================== Ollie Compiler Summary ==========================\n");
-		printf("Lexer processed %d lines\n", parser_line_num);
-		printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
-		printf("=======================================================================\n\n");
-		//If we get here we know that we succeeded
-		results.success = 1;
-	}
 
 	//Package up everything that we need
 	results.function_symtab = function_symtab;
@@ -7334,6 +7303,11 @@ front_end_results_package_t parse(FILE* fl){
 	results.root = prog;
 	//Call graph OS root
 	results.os = os;
+	//Record how many errors that we had
+	results.num_errors = num_errors;
+	results.num_warnings = num_warnings;
+	//How many lines did we process?
+	results.lines_processed = parser_line_num;
 
 	//Destroy the stack, no longer needed
 	destroy_stack(grouping_stack);

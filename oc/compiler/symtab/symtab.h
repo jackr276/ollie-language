@@ -337,6 +337,13 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
  */
 symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name);
 
+
+/**
+ * Check for and print out any unused functions
+ */
+void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnings);
+
+
 /**
  * A printing function for development purposes
  */

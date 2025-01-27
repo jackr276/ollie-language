@@ -55,8 +55,19 @@ struct front_end_results_package_t{
 	type_symtab_t* type_symtab;
 	//Global call graph entry point
 	call_graph_node_t* os;
+	//Number of errors
+	u_int16_t num_errors;
+	//Number of warnings
+	u_int16_t num_warnings;
+	//The number of lines processed
+	u_int32_t lines_processed;
 };
 
+
+/**
+ * For printing formatted parser errors
+ */
+void print_parse_message(parse_message_type_t message_type, char* info, u_int16_t line_num);
 
 /**
  * Parse the entirety of the file. Returns 0 if successful

@@ -12,7 +12,7 @@ AST_PATH = ./oc/compiler/ast
 CFG_PATH = ./oc/compiler/cfg
 TEST_FILE_DIR = ./oc/test_files/
 OUT = ./oc/out
-PROGS = lexer_test symtab_test parser_test
+PROGS = lexer_test symtab_test parser_test oc
 
 all: $(PROGS)
 
@@ -109,7 +109,6 @@ oc: compiler.o parser.o lexer.o symtab.o stack.o type_system.o ast.o cfg.o call_
 oc_debug: compilerd.o parserd.o lexerd.o symtabd.o stackd.o type_systemd.o astd.o cfgd.o call_graphd.o
 	$(CC) -o $(OUT)/oc $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/stackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o
 
-
 stest: symtab_test
 	$(OUT)/symtab_test
 
@@ -120,7 +119,7 @@ ptest: parser_test
 	cat ./oc/test_files/test_files.txt | xargs ./oc/out/parser_test
 
 compiler_test: oc
-	find $(TEST_FILE_DIR) -type f | xargs ./oc/out/oc
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/oc
 
 clean:
 	rm -f ./oc/out/*

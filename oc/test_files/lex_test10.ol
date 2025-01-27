@@ -6,6 +6,12 @@ define construct my_struct{
 
 alias u_int8* as int_ptr;
 
+func unused() -> u_int16{
+	let char* str_literal := "I do nothing";
+
+	ret 2;
+}
+
 
 func my_func(u_int32 error_code) -> u_int32{
 	let u_int32 l := 0;

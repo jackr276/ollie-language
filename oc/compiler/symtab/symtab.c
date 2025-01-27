@@ -11,6 +11,14 @@
 #define LARGE_PRIME 611593
 static void print_generic_type(generic_type_t* type);
 
+/**
+ * Print a generic warning for the type system. This is used when variables/functions are 
+ * defined and not used
+ */
+static void print_warning(char* info, u_int16_t line_number){
+	fprintf(stderr, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info);
+}
+
 
 /**
  * Dynamically allocate a function symtab
@@ -177,6 +185,8 @@ symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T sto
 	record->hash = hash(name);
 	//Store the storage class
 	record->storage_class = storage_class;
+	//Was it ever called?
+	record->called = 0;
 
 	return record;
 }
@@ -553,11 +563,11 @@ void print_type_record(symtab_type_record_t* record){
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){
-	//If it's statis we'll add the keyword in
+	//If it's static we'll add the keyword in
 	if(record->storage_class == STORAGE_CLASS_STATIC){
-		printf("\n---> %d | func:static %s(", record->line_number, record->func_name);
+		printf("\t---> %d | func:static %s(", record->line_number, record->func_name);
 	} else {
-		printf("\n---> %d | func %s(", record->line_number, record->func_name);
+		printf("\t---> %d | func %s(", record->line_number, record->func_name);
 	}
 
 	//Print out the params
@@ -570,7 +580,7 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Final closing paren and return type
-	printf(") -> %s\n\n", record->return_type->type_name);
+	printf(") -> %s\n", record->return_type->type_name);
 }
 
 /**
@@ -603,7 +613,7 @@ void print_variable_name(symtab_variable_record_t* record){
 		if(record->declare_or_let == 1){
 			printf(" := <initializer>;\n\n");
 		} else {
-			printf(";\n\n");
+			printf(";\n");
 		}
 	}
 }
@@ -638,6 +648,38 @@ void print_type_name(symtab_type_record_t* record){
 
 	//Then print out the name
 	printf("%s\n\n", record->type->type_name);
+}
+
+
+/**
+ * Crawl the symtab and check for any unused functions
+ */
+void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnings){
+	//For any/all error printing
+	char info[1000];
+	//For temporary holding
+	symtab_function_record_t* record;
+
+	//Run through and free all function records
+	for(u_int16_t i = 0; i < KEYSPACE; i++){
+		record = symtab->records[i];
+
+		//We could have chaining here, so run through just in case
+		while(record != NULL){
+			if(record->called == 0){
+				//Generate a warning here
+				(*num_warnings)++;
+
+				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name);
+				print_warning(info, record->line_number);
+				//Also print where the function was defined
+				print_function_name(record);
+			}
+
+			//Advance record up
+			record = record->next;
+		}
+	}
 }
 
 
