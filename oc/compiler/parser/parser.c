@@ -23,7 +23,11 @@
 function_symtab_t* function_symtab;
 variable_symtab_t* variable_symtab;
 type_symtab_t* type_symtab;
+//The "operating system" function that is symbolically referenced here
+call_graph_node_t* os;
 
+//What is the current function that we are "in"
+symtab_function_record_t* current_function;
 
 //Our stack for storing variables, etc
 heap_stack_t* grouping_stack;
@@ -328,6 +332,9 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 	//The function IDENT will be the first child of this node
 	add_child_node(function_call_node, ident);
+
+	//We'll also add in that the current function has called this one
+	call_function(current_function->call_graph_node, function_record->call_graph_node);
 
 	//Add the inferred type in for convenience as well
 	function_call_node->inferred_type = function_record->return_type;
@@ -6985,10 +6992,26 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Set first thing
 	function_record->number_of_params = 0;
 	function_record->line_number = current_line;
+	//Create the call graph node
+	function_record->call_graph_node = create_call_graph_node(function_record);
 
 	//We'll put the function into the symbol table
 	//since we now know that everything worked
 	insert_function(function_symtab, function_record);
+
+	//We'll also flag that this is the current function
+	current_function = function_record;
+
+	/**
+	 * If this is the main function, we will record it as having been called by the operating 
+	 * system
+	 */
+	if(strcmp("main", function_name) == 0){
+		//By default, this function has been called
+		function_record->called = 1;
+		//And furthermore, it was called by the os
+		call_function(os, function_record->call_graph_node);
+	}
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -7248,6 +7271,8 @@ front_end_results_package_t parse(FILE* fl){
 	function_symtab = initialize_function_symtab();
 	variable_symtab = initialize_variable_symtab();
 	type_symtab = initialize_type_symtab();
+	//Initialize the OS call graph
+	os = calloc(1, sizeof(call_graph_node_t));
 
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
@@ -7276,6 +7301,12 @@ front_end_results_package_t parse(FILE* fl){
 	//Initialize our results package here
 	front_end_results_package_t results;
 
+	//If we didn't find a main function, we're done here
+	if(os->num_callees == 0){
+		print_parse_message(PARSE_ERROR, "No main function found.", 0);
+		num_errors++;
+	}
+
 	//If we failed
 	if(prog->CLASS == AST_NODE_CLASS_ERR_NODE){
 		char info[500];
@@ -7301,6 +7332,8 @@ front_end_results_package_t parse(FILE* fl){
 	results.type_symtab = type_symtab;
 	//AST root
 	results.root = prog;
+	//Call graph OS root
+	results.os = os;
 
 	//Destroy the stack, no longer needed
 	destroy_stack(grouping_stack);

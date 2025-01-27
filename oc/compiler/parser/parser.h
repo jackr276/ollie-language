@@ -11,6 +11,7 @@
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
 #include "../ast/ast.h"
+#include "../call_graph/call_graph.h"
 #include <sys/types.h>
 
 typedef struct parse_message_t parse_message_t;
@@ -52,6 +53,8 @@ struct front_end_results_package_t{
 	function_symtab_t* function_symtab;
 	variable_symtab_t* variable_symtab;
 	type_symtab_t* type_symtab;
+	//Global call graph entry point
+	call_graph_node_t* os;
 };
 
 
