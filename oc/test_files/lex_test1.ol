@@ -8,6 +8,8 @@ alias u_int8[100] as int_arr;
 
 func test_func(float32 my_float, void* ptr) -> void{
 	let u_int32 i := 1;
+	//Cast ptr to an int
+	asn i := *(<u_int32*>ptr);
 
 	ret;
 }

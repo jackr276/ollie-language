@@ -1065,23 +1065,25 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		return postfix_expr_node;
 	}
 
+	//If it's a complex type we fail immediately
+	if(return_type->type_class == TYPE_CLASS_ENUMERATED || return_type->type_class == TYPE_CLASS_CONSTRUCT){
+		sprintf(info, "Type %s is an invalid operand for ++ or -- operand", return_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//One other potential issue -- if we see  void here
+	if(return_type->type_class == TYPE_CLASS_BASIC && return_type->basic_type->basic_type == VOID){
+		sprintf(info, "Type %s is an invalid operand for ++ or -- operand", return_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
 	//Otherwise if we get here we know that we either have post inc or dec
 	//Create the unary operator node
 	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
-
-	//Now we'll check if we can actually do this unary operation
-	if(return_type->type_class == TYPE_CLASS_CONSTRUCT){
-		print_parse_message(PARSE_ERROR, "Type \"%s\" cannot be postincremented/decremented", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//If it's a constant and a string, we also can't do this
-	if(return_type->type_class == TYPE_CLASS_BASIC && return_type->basic_type->basic_type == STR_CONST){
-		print_parse_message(PARSE_ERROR, "Type \"%s\" cannot be postincremented/decremented", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
 
 	//Store the token
 	((unary_operator_ast_node_t*)(unary_post_op->node))->unary_operator = lookahead.tok;
@@ -1467,6 +1469,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
  * 						    	| < <type-specifier> > <unary-expression>
  */
 static generic_ast_node_t* cast_expression(FILE* fl){
+	//For error printing
+	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
 
@@ -1525,6 +1529,46 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 		return right_hand_unary;
 	}
 
+	//No we'll need to determine if we can actually cast here
+	//What we're trying to cast to
+	generic_type_t* casting_to_type = dealias_type(type_spec->inferred_type);
+	//What is being casted
+	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
+
+	//You can never cast a "void" to anything
+	if(being_casted_type->type_class == TYPE_CLASS_BASIC && being_casted_type->basic_type->basic_type == VOID){
+		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Likewise, you can never cast anything to void
+	if(casting_to_type->type_class == TYPE_CLASS_BASIC && casting_to_type->basic_type->basic_type == VOID){
+		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name, casting_to_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//You can never cast anything to be a construct
+	if(casting_to_type->type_class == TYPE_CLASS_CONSTRUCT){
+		print_parse_message(PARSE_ERROR, "No type can be casted to a construct type", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise if we've made it down to here, we can just use the types_compatible function to see what we can do
+	generic_type_t* return_type = types_compatible(casting_to_type, being_casted_type);
+
+	//This is our fail case
+	if(return_type == NULL){
+		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name, casting_to_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
 	//Now if we make it here, we know that type_spec is actually valid
 	//We'll now allocate a cast expression node
 	generic_ast_node_t* cast_node = ast_node_alloc(AST_NODE_CLASS_CAST_EXPR);
@@ -1533,7 +1577,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	add_child_node(cast_node, type_spec);
 
 	//Store the type information for faster retrieval later
-	cast_node->inferred_type = type_spec->inferred_type;
+	cast_node->inferred_type = return_type;
 
 	//We'll now add the unary expression as the right node
 	add_child_node(cast_node, right_hand_unary);
