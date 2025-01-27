@@ -2,7 +2,7 @@
 [![Lexer Test](https://github.com/jackr276/ollie-language/actions/workflows/lexer_CI.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/lexer_CI.yml)
 [![Symbol table test](https://github.com/jackr276/ollie-language/actions/workflows/symtab_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/symtab_test.yml)
 [![Parser test](https://github.com/jackr276/ollie-language/actions/workflows/parser_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/parser_test.yml)
-
+[![Global compiler test](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml)
 
 Syntax of ollie-lang in BNF Form
 Everything surrounded in angle brackets(\<>) is a nonterminal
