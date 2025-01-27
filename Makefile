@@ -7,6 +7,7 @@ STACK_PATH = ./oc/compiler/stack
 SYMTAB_PATH = ./oc/compiler/symtab
 PARSER_PATH = ./oc/compiler/parser
 TYPE_SYSTEM_PATH = ./oc/compiler/type_system
+CALL_GRAPH_PATH = ./oc/compiler/call_graph
 AST_PATH = ./oc/compiler/ast
 CFG_PATH = ./oc/compiler/cfg
 TEST_FILE_DIR = ./oc/test_files/
@@ -90,14 +91,24 @@ symtab_test: symtab.o symtab_test.o lexer.o type_system.o
 symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o
 	$(CC) -o $(OUT)/symtab_testd $(OUT)/lexerd.o $(OUT)/symtab_testd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o
 
+call_graph.o : $(CALL_GRAPH_PATH)/call_graph.c
+	$(CC) $(CFLAGS) $(CALL_GRAPH_PATH)/call_graph.c -o $(OUT)/call_graph.o
+
+call_graphd.o : $(CALL_GRAPH_PATH)/call_graph.c
+	$(CC) -g $(CFLAGS) $(CALL_GRAPH_PATH)/call_graph.c -o $(OUT)/call_graphd.o
+
 compiler.o: ./oc/compiler/compiler.c 
 	$(CC) $(CFLAGS) -o $(OUT)/compiler.o ./oc/compiler/compiler.c
 
 compilerd.o: ./oc/compiler/compiler.c 
 	$(CC) $(CFLAGS) -g -o $(OUT)/compilerd.o ./oc/compiler/compiler.c
 
-oc: compiler.o parser.o lexer.o symtab.o stack.o type_system.o ast.o cfg.o
-	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o
+oc: compiler.o parser.o lexer.o symtab.o stack.o type_system.o ast.o cfg.o call_graph.o
+	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o
+
+oc_debug: compilerd.o parserd.o lexerd.o symtabd.o stackd.o type_systemd.o astd.o cfgd.o call_graphd.o
+	$(CC) -o $(OUT)/oc $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/stackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o
+
 
 stest: symtab_test
 	$(OUT)/symtab_test

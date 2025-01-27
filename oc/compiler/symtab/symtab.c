@@ -657,6 +657,12 @@ void destroy_function_symtab(function_symtab_t* symtab){
 		while(record != NULL){
 			temp = record;
 			record = record->next;
+
+			//If the call graph node has been defined, we will free that too
+			if(temp->call_graph_node != NULL){
+				free(temp->call_graph_node);
+			}
+
 			free(temp);
 		}
 	}

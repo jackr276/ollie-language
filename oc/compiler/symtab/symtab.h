@@ -91,6 +91,10 @@ struct symtab_function_record_t{
 	generic_type_t* return_type;
 	//Has it been defined?(done to allow for predeclaration)
 	u_int8_t defined;
+	//Has it ever been called?
+	u_int8_t called;
+	//The associated call graph node with this function
+	void* call_graph_node;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
 };
