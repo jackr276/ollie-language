@@ -10,6 +10,7 @@
 #include "ast/ast.h"
 #include "parser/parser.h"
 #include "symtab/symtab.h"
+#include "cfg/cfg.h"
 
 /**
  * The main entry point for the compiler. This will be expanded as time goes on
@@ -32,7 +33,17 @@ int main(int argc, char** argv){
 
 	//Start the timer
 	clock_t begin = clock();
-	
+
+	// ================== Front End ===========================
+		/**
+		 * The front end consists of the lexer and parser. When the front end
+		 * completes, we are guaranteed the following:
+		 * 	1.) A syntactically correct program
+		 * 	2.) A fully complete symbol table for each area of the program
+		 * 	3.) The elaboration and elimination of all preprocessor/compiler-only operations
+		 *  4.) A fully fleshed out Abstract-Syntax-Tree(AST) that can be used by the middle end
+		*/
+
 	//We compile in one giant chain
 	for(u_int16_t i = 1; i < argc; i++){
 		//Grab whatever this file is
@@ -51,15 +62,6 @@ int main(int argc, char** argv){
 
 		//Otherwise we are all good to pass to the parser
 		
-		// ================== Front End ===========================
-		/**
-		 * The front end consists of the lexer and parser. When the front end
-		 * completes, we are guaranteed the following:
-		 * 	1.) A syntactically correct program
-		 * 	2.) A fully complete symbol table for each area of the program
-		 * 	3.) The elaboration and elimination of all preprocessor/compiler-only operations
-		 *  4.) A fully fleshed out Abstract-Syntax-Tree(AST) that can be used by the middle end
-		*/
 		//Parse the file
 		results = parse(fl);
 		//Timer end
@@ -72,13 +74,17 @@ int main(int argc, char** argv){
 		fclose(fl);
 	}
 
+	//Run through and check for any unused functions. This generates warnings for the user,
+	//and can be done before any construction of a CFG. As such, we do this here
 	check_for_unused_functions(results.function_symtab, &results.num_warnings);
 
-	//If we didn't find a main function, we're done here
-	if(results.os->num_callees == 0){
-		print_parse_message(PARSE_ERROR, "No main function found", 0);
-		results.num_errors++;
-	}
+	//============================= Middle End =======================================
+		/**
+	 	 * The middle end is responsible for control-flow checks and optimization for the parser. The first 
+		 * part of this is the construction of the control-flow-graph
+		*/
+
+
 
 	//If we failed
 	if(results.root->CLASS == AST_NODE_CLASS_ERR_NODE){

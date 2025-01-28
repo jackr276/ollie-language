@@ -6,11 +6,11 @@
 #define CFG_H
 #include <sys/types.h>
 #include "../ast/ast.h"
+#include "../parser/parser.h"
 
 //These may or may not change
 #define MAX_SUCCESSORS 50
 #define MAX_PREDECESSORS 50
-#define MAXIMUM_BLOCKS 5000
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
@@ -31,15 +31,19 @@ typedef enum linked_direction_t {
  * We have a basic CFG structure that holds these references to making freeing
  */
 struct cfg_t{
-	//An array of every single block we have
-	basic_block_t* blocks[MAXIMUM_BLOCKS];
 	//The current number of blocks
 	u_int32_t num_blocks;
 	//The overall root node
 	basic_block_t* root;
+	//The current block of the CFG
+	basic_block_t* current;
 };
 
 
+/**
+ * Each basic block contains a linked list of statements. These statements are
+ * one-way only, meaning that they have one way in and one way out of them
+ */
 struct top_level_statement_node_t{
 	top_level_statement_node_t* next;
 	generic_ast_node_t* node;
@@ -71,8 +75,9 @@ struct basic_block_t{
 	top_level_statement_node_t* exit_statement;
 };
 
-//Allocate our global cfg structure
-cfg_t* create_cfg();
+//Build the entire CFG from the AST. This function returns the CFG struct, which
+//always has the root block
+cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 //Allocate a basic block and return a reference to it
 basic_block_t* basic_block_alloc(cfg_t* cfg);

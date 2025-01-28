@@ -4,16 +4,33 @@
 
 #include "cfg.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
 //Our atomically incrementing integer
 static u_int16_t current_block_id = 0;
 
 /**
- * Dynamically create the overarching CFG structure
- */
-cfg_t* create_cfg(){
-	return calloc(1, sizeof(cfg_t));
+ * Simply prints a parse message in a nice formatted way. For the CFG, there
+ * are no parser line numbers
+*/
+static void print_cfg_message(parse_message_type_t message_type, char* info){
+	//Build and populate the message
+	parse_message_t parse_message;
+	parse_message.message = message_type;
+	parse_message.info = info;
+
+	//Fatal if error
+	if(message_type == PARSE_ERROR){
+		parse_message.fatal = 1;
+	}
+
+	//Now print it
+	//Mapped by index to the enum values
+	char* type[] = {"WARNING", "ERROR", "INFO"};
+
+	//Print this out on a single line
+	fprintf(stderr, "\n[COMPILER %s]: %s\n", type[parse_message.message], parse_message.info);
 }
 
 
@@ -36,9 +53,6 @@ basic_block_t* basic_block_alloc(cfg_t* cfg){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 	//Grab the unique ID for this block
 	created->block_id = increment_and_get();
-
-	//Add this into the CFG storage
-	cfg->blocks[cfg->num_blocks] = created;
 	//Increment the number of blocks
 	(cfg->num_blocks)++;
 
@@ -173,6 +187,48 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
+ * Build a CFG from the top-down using information derived from the parser front-end. This mainly consists
+ * of the AST, but is also helped by the call graph, and symbol tables
+ *
+ * If at any point we return NULL here, that represents a failure in construction
+ */
+cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings){
+	//Create the global cfg root
+	cfg_t* cfg = calloc(1, sizeof(cfg_t));
+
+	//We build the CFG from the ground up here
+	//We have the AST root
+	generic_ast_node_t* cursor = results.root->first_child;
+
+	//If this is null, we had an empty program of some kind
+	if(cursor == NULL){
+		print_cfg_message(PARSE_ERROR, "No top level CFG node has been detected");
+		(*num_errors)++;
+		return NULL;
+	}
+
+	//The AST root is the "PROG" node. It has children that are
+	//declarations, "lets" or functions. We will iterate through here and visit
+	//items so long as we aren't null
+	while(cursor != NULL){
+		if(cursor->CLASS == AST_NODE_CLASS_FUNC_DEF){
+
+		} else if(cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
+
+		} else if(cursor->CLASS == AST_NODE_CLASS_LET_STMT){
+
+		} else {
+			print_cfg_message(PARSE_ERROR, "Invalid top level node detected in AST");
+			(*num_errors)++;
+			return NULL;
+		}
+	}
+
+
+}
+
+
+/**
  * Deallocate a basic block
 */
 void basic_block_dealloc(basic_block_t* block){
@@ -187,15 +243,3 @@ void basic_block_dealloc(basic_block_t* block){
 }
 
 
-/**
- * CFG destructor function
-*/
-void dealloc_cfg(cfg_t* cfg){
-	//We'll loop over all of the blocks and free them one by one
-	for(u_int32_t i = 0; i < cfg->num_blocks; i++){
-		basic_block_dealloc(cfg->blocks[i]);
-	}
-
-	//Finally free the cfg itself
-	free(cfg);
-}

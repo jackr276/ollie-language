@@ -3992,6 +3992,9 @@ static u_int8_t enum_definer(FILE* fl){
 		//Associate the type here as well
 		variable_rec->type = enum_type;
 
+		//Increment the size here
+		enum_type->type_size += variable_rec->type->type_size;
+
 		//We will store this in the enum types records
 		enum_type->enumerated_type->tokens[enum_type->enumerated_type->token_num] = variable_rec;
 		//Increment the number of tokens by one
