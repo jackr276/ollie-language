@@ -130,6 +130,8 @@ static void put_back_char(FILE* fl){
 Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 	//We'll eventually return this
 	Lexer_item lex_item;
+	//Have we seen hexadecimal?
+	u_int8_t seen_hex = 0;
 
 	//If we're at the start -- added to avoid overcounts
 	if(ftell(fl) == 0){
@@ -622,6 +624,28 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 				if(ch >= '0' && ch <= '9'){
 					*lexeme_cursor = ch;
 					lexeme_cursor++;
+				} else if(ch == 'x' || ch == 'X'){
+					//Have we seen the hex code?
+					//Fail case here
+					if(seen_hex == 1){
+						Lexer_item err;
+						err.tok = ERROR;
+						return err;
+					}
+
+					if(*(lexeme_cursor-1) != '0'){
+						Lexer_item err;
+						err.tok = ERROR;
+						return err;
+
+					}
+
+					//Otherwise set this and add it in
+					seen_hex = 1;
+
+					*lexeme_cursor = ch;
+					lexeme_cursor++;
+				
 				} else if (ch == '.'){
 					//We're actually in a float const
 					current_state = IN_FLOAT;

@@ -7,7 +7,7 @@ declare u_int8 j;
 alias u_int8[100] as int_arr;
 
 func test_func(float32 my_float, void* ptr) -> void{
-	let u_int32 i := 1;
+	let float32 i := 0x01;
 	//Cast ptr to an int
 	asn i := *(<u_int32*>ptr);
 
@@ -17,12 +17,13 @@ func test_func(float32 my_float, void* ptr) -> void{
 func:static main() -> u_int32* {
 	//Single line comment
 	declare int_arr j_arr;
-	let s_int8 my_int := 1;
+	//let s_int8 my_int := 1;
 	let float32 my_float := 0.3;
 	let u_int32 i := 3;
 	declare float32 f;
 
-	asn f := i;
+//	asn f := i;
+	let u_int8* my_ptr := f;
 
 	@test_func(my_float, i);
 
