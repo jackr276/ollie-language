@@ -74,22 +74,34 @@ int main(int argc, char** argv){
 		fclose(fl);
 	}
 
+	//If the AST root is bad, there's no use in going on here
+	if(results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		goto final_printout;
+	}
+
 	//Run through and check for any unused functions. This generates warnings for the user,
 	//and can be done before any construction of a CFG. As such, we do this here
 	check_for_unused_functions(results.function_symtab, &results.num_warnings);
+
+	//We'll store the number of warnings and such here locally
+	u_int32_t num_warnings = results.num_warnings;
+	u_int32_t num_errors = results.num_errors;
 
 	//============================= Middle End =======================================
 		/**
 	 	 * The middle end is responsible for control-flow checks and optimization for the parser. The first 
 		 * part of this is the construction of the control-flow-graph
 		*/
+	cfg_t* cfg = build_cfg(results, &num_warnings, &num_errors);
 
 
 
+
+	final_printout:
 	//If we failed
-	if(results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(results.root->CLASS == AST_NODE_CLASS_ERR_NODE || num_errors > 0){
 		char info[500];
-		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", results.num_errors, results.num_warnings, time_spent);
+		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", num_errors, num_warnings, time_spent);
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", results.lines_processed);
 		printf("%s\n", info);
@@ -99,7 +111,7 @@ int main(int argc, char** argv){
 	} else {
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", results.lines_processed);
-		printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, results.num_warnings);
+		printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
 		printf("=======================================================================\n\n");
 		//If we get here we know that we succeeded
 		results.success = 1;

@@ -13,6 +13,9 @@
 static int32_t current_block_id = 0;
 //Do we need to see a leader statement?
 static u_int8_t need_leader = 0;
+//Keep global references to the number of errors and warnings
+u_int32_t* num_errors_ref;
+u_int32_t* num_warnings_ref;
 
 /**
  * Simply prints a parse message in a nice formatted way. For the CFG, there
@@ -205,11 +208,25 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 /**
  * Visit a declaration statement
  */
+basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
+	basic_block_t* decl_node_block = basic_block_alloc();
+
+	//TODO
+
+	return decl_node_block;
+}
 
 
 /**
  * Visit a top-level let statement
  */
+basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
+	basic_block_t* let_stmt_block = basic_block_alloc();
+
+	//TODO
+	
+	return let_stmt_block;
+}
 
 
 
@@ -219,7 +236,10 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  * node here. If we do not, we fail immediately
  */
 basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
+	basic_block_t* func_def_block = basic_block_alloc();
+	//TODO
 
+	return func_def_block;
 }
 
 
@@ -231,6 +251,10 @@ basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
  * If at any point we return NULL here, that represents a failure in construction
  */
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings){
+	//Store these locally so that we can reference them wherever we are
+	num_errors_ref = num_errors;
+	num_warnings_ref = num_warnings;
+
 	//Create the global cfg root
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
 
@@ -241,7 +265,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//If this is null, we had an empty program of some kind
 	if(cursor == NULL){
 		print_cfg_message(PARSE_ERROR, "No top level CFG node has been detected");
-		(*num_errors)++;
+		(*num_errors_ref)++;
 		return NULL;
 	}
 
@@ -249,6 +273,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//declarations, "lets" or functions. We will iterate through here and visit
 	//items so long as we aren't null
 	while(cursor != NULL){
+		//We can encounter a function definition first thing
 		if(cursor->CLASS == AST_NODE_CLASS_FUNC_DEF){
 			//Visit our function declaration here
 			basic_block_t* func_def_block = visit_function_declaration(cursor);
@@ -256,7 +281,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 			//If we have a -1, this means that the whole block is an error
 			if(func_def_block->block_id == -1){
 				print_cfg_message(PARSE_ERROR, "Invalid function definition block encountered");
-				(*num_errors)++;
+				(*num_errors_ref)++;
 				return NULL;
 			}
 
@@ -273,13 +298,61 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 				cfg->current = func_def_block;
 			}
 
+			//When we get out of a function, the next block will itself be a leader block
+			need_leader = 1;
+
+		//We can also encounter a declarative statement
 		} else if(cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
+			//Let's visit the decl statement node here
+			basic_block_t* decl_block = visit_declaration_statement(cursor);
 
+			//If we have -1, that means that this whole block is an error
+			if(decl_block->block_id == -1){
+				print_cfg_message(PARSE_ERROR, "Invalid top level declaration block encountered");
+				(*num_errors_ref)++;
+				return NULL;
+			}
+
+			//If we need a leader, then this block will be added as a successor
+			if(need_leader == 1){
+				add_successor(cfg->current, decl_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				//Update the current reference
+				cfg->current = decl_block;
+
+			//Otherwise, this block will be "merged" with whoever the current block is
+			} else {
+				//Merge blocks and maintain the CFG's current pointer
+				cfg->current = merge_blocks(cfg->current, decl_block);
+			}
+
+		//We can also encounter a let statement
 		} else if(cursor->CLASS == AST_NODE_CLASS_LET_STMT){
+			//Let's visit the decl statement node here
+			basic_block_t* let_block = visit_let_statement(cursor);
 
+			//If we have -1, that means that this whole block is an error
+			if(let_block->block_id == -1){
+				print_cfg_message(PARSE_ERROR, "Invalid top level let block encountered");
+				(*num_errors_ref)++;
+				return NULL;
+			}
+
+			//If we need a leader, then this block will be added as a successor
+			if(need_leader == 1){
+				add_successor(cfg->current, let_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				//Update the current reference
+				cfg->current = let_block;
+
+			//Otherwise, this block will be "merged" with whoever the current block is
+			} else {
+				//Merge blocks and maintain the CFG's current pointer
+				cfg->current = merge_blocks(cfg->current, let_block);
+			}
+
+		//We really should never get here, but we'll catch this if we do
 		} else {
 			print_cfg_message(PARSE_ERROR, "Invalid top level node detected in AST");
-			(*num_errors)++;
+			(*num_errors_ref)++;
 			return NULL;
 		}
 
