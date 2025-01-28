@@ -6861,7 +6861,7 @@ static generic_ast_node_t* declaration(FILE* fl){
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= func {:static}? <identifer> ({<parameter-list>}?) -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= func {:static}? <identifer> ({<parameter-list>}?) -> <type-specifier>{; | <compound-statement>}
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
@@ -6872,6 +6872,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
+	//Are we defining something that's already been defined implicitly?
+	u_int8_t defining_prev_implicit = 0;
 
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
@@ -6933,16 +6935,22 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//save us time if it ends up being bad
 	
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
-	symtab_function_record_t* found_function = lookup_function(function_symtab, function_name); 
+	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name); 
 
-	//Fail out if found
-	if(found_function != NULL){
-		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name);
+	//Fail out if found and it's already been defined
+	if(function_record != NULL && function_record->defined == 1){
+		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name);
 		print_parse_message(PARSE_ERROR, info, current_line);
-		print_function_name(found_function);
+		print_function_name(function_record);
 		num_errors++;
 		//Create and return an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+
+	//This is our interesting case. The function has been defined implicitly, and now we're trying to define it
+	//explicitly
+	} else if(function_record != NULL && function_record->defined == 0){
+		//Flag this
+		defining_prev_implicit = 1;
 	}
 
 	//Check for duplicated variables
@@ -6975,7 +6983,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	add_child_node(function_node, ident_node);
 
 	//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-	symtab_function_record_t* function_record = create_function_record(function_name, storage_class);
+	function_record = create_function_record(function_name, storage_class);
 	//Associate this with the function node
 	((func_def_ast_node_t*)(function_node->node))->func_record = function_record;
 	//Set first thing
@@ -6983,6 +6991,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	function_record->line_number = current_line;
 	//Create the call graph node
 	function_record->call_graph_node = create_call_graph_node(function_record);
+	//By default, this function has never been called
+	function_record->called = 0;
 
 	//We'll put the function into the symbol table
 	//since we now know that everything worked
@@ -7123,22 +7133,49 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//We can also add the return type node in as a child
 	add_child_node(function_node, return_type_node);
 
-	//We are finally required to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+	//Now we have a fork in the road here. We can either define the function implicitly here
+	//or we can do a full definition
+	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If this fails we'll just pass it through
-	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		return compound_stmt_node;
+	//If it's a semicolon, we're done
+	if(lookahead.tok == SEMICOLON){
+		printf("HERE\n");
+		//If this is the case, then we essentially have a compiler directive here. We'll return NULL
+		deallocate_ast(function_node);
+
+		//Finalize the variable scope
+		finalize_variable_scope(variable_symtab);
+		
+		//This function was not defined
+		function_record->defined = 0;
+		
+		//Return NULL here
+		return NULL;
+
+	} else {
+		push_back_token(fl, lookahead);
+		//Call compound statement
+
+		//We are finally required to see a valid compound statement
+		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+
+		//If this fails we'll just pass it through
+		if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return compound_stmt_node;
+		}
+	
+		//This function was defined
+		function_record->defined = 1;
+
+		//If we get here we know that it worked, so we'll add it in as a child
+		add_child_node(function_node, compound_stmt_node);
+		
+		//Finalize the variable scope for the parameter list
+		finalize_variable_scope(variable_symtab);
+
+		//All good so we can get out
+		return function_node;
 	}
-
-	//If we get here we know that it worked, so we'll add it in as a child
-	add_child_node(function_node, compound_stmt_node);
-
-	//Finalize the variable scope for the parameter list
-	finalize_variable_scope(variable_symtab);
-
-	//All good so we can get out
-	return function_node;
 }
 
 
@@ -7227,7 +7264,7 @@ static generic_ast_node_t* program(FILE* fl){
 		//Call declaration partition
 		generic_ast_node_t* current = declaration_partition(fl);
 
-		//If it was NULL, we had a define or alias statement, so we'll move along
+		//If it was NULL, we had a define or alias statement or implicit function declaration, so we'll move along
 		if(current == NULL){
 			continue;
 		}

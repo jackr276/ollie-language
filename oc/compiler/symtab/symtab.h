@@ -89,7 +89,7 @@ struct symtab_function_record_t{
 	STORAGE_CLASS_T storage_class;
 	//What's the return type?
 	generic_type_t* return_type;
-	//Has it been defined?(done to allow for predeclaration)
+	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;

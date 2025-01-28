@@ -652,7 +652,8 @@ void print_type_name(symtab_type_record_t* record){
 
 
 /**
- * Crawl the symtab and check for any unused functions
+ * Crawl the symtab and check for any unused functions. We generate some hopefully helpful
+ * warnings here for the user
  */
 void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnings){
 	//For any/all error printing
@@ -666,7 +667,15 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnin
 
 		//We could have chaining here, so run through just in case
 		while(record != NULL){
-			if(record->called == 0){
+			if(record->called == 0 && record->defined == 0){
+				//Generate a warning here
+				(*num_warnings)++;
+
+				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name);
+				print_warning(info, record->line_number);
+				//Also print where the function was defined
+				print_function_name(record);
+			} else if(record->called == 0 && record->defined == 1){
 				//Generate a warning here
 				(*num_warnings)++;
 
@@ -674,6 +683,16 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnin
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
+
+			} else if(record->called == 1 && record->defined == 0){
+				//Generate a warning here
+				(*num_warnings)++;
+
+				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name);
+				print_warning(info, record->line_number);
+				//Also print where the function was defined
+				print_function_name(record);
+
 			}
 
 			//Advance record up

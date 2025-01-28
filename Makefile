@@ -107,7 +107,7 @@ oc: compiler.o parser.o lexer.o symtab.o stack.o type_system.o ast.o cfg.o call_
 	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/stack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o
 
 oc_debug: compilerd.o parserd.o lexerd.o symtabd.o stackd.o type_systemd.o astd.o cfgd.o call_graphd.o
-	$(CC) -o $(OUT)/oc $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/stackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o
+	$(CC) -o $(OUT)/ocd $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/stackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o
 
 stest: symtab_test
 	$(OUT)/symtab_test

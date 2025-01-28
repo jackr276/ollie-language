@@ -296,6 +296,8 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//We build the CFG from the ground up here
 	//We have the AST root
 	generic_ast_node_t* cursor = results.root->first_child;
+	//By default we need to see a leader her
+	need_leader = 1;
 
 	//If this is null, we had an empty program of some kind
 	if(cursor == NULL){
@@ -348,8 +350,13 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 				return NULL;
 			}
 
+			//If the root is null, then this becomes the root
+			if(cfg->root == NULL){
+				cfg->root = decl_block;
+				//We also maintain a reference to the current block
+				cfg->current = decl_block;
 			//If we need a leader, then this block will be added as a successor
-			if(need_leader == 1){
+			} else if(need_leader == 1){
 				add_successor(cfg->current, decl_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 				//Update the current reference
 				cfg->current = decl_block;
@@ -372,12 +379,16 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 				return NULL;
 			}
 
+			//If the root is null then this becomes the root
+			if(cfg->root == NULL){
+				cfg->root = let_block;
+				//We also maintain a reference to the current block
+				cfg->current = let_block;
 			//If we need a leader, then this block will be added as a successor
-			if(need_leader == 1){
+			} else  if(need_leader == 1){
 				add_successor(cfg->current, let_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 				//Update the current reference
 				cfg->current = let_block;
-
 			//Otherwise, this block will be "merged" with whoever the current block is
 			} else {
 				//Merge blocks and maintain the CFG's current pointer
