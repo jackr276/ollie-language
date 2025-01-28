@@ -3,12 +3,16 @@
 */
 
 #include "cfg.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 
 //Our atomically incrementing integer
-static u_int16_t current_block_id = 0;
+//If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
+static int32_t current_block_id = 0;
+//Do we need to see a leader statement?
+static u_int8_t need_leader = 0;
 
 /**
  * Simply prints a parse message in a nice formatted way. For the CFG, there
@@ -38,7 +42,7 @@ static void print_cfg_message(parse_message_type_t message_type, char* info){
  * A helper function that makes a new block id. This ensures we have an atomically
  * increasing block ID
  */
-static u_int16_t increment_and_get(){
+static int32_t increment_and_get(){
 	current_block_id++;
 	return current_block_id;
 }
@@ -48,17 +52,29 @@ static u_int16_t increment_and_get(){
  * Allocate a basic block using calloc. NO data assignment
  * happens in this function
 */
-basic_block_t* basic_block_alloc(cfg_t* cfg){
+basic_block_t* basic_block_alloc(){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 	//Grab the unique ID for this block
 	created->block_id = increment_and_get();
-	//Increment the number of blocks
-	(cfg->num_blocks)++;
 
 	return created;
 }
 
+
+/**
+ * Deallocate a basic block
+*/
+void basic_block_dealloc(basic_block_t* block){
+	//Just in case
+	if(block == NULL){
+		printf("ERROR: Attempt to deallocate a null block");
+		exit(1);
+	}
+
+	//Otherwise its fine so
+	free(block);
+}
 
 /**
  * Add a predecessor to the target block. When we add a predecessor, the target
@@ -187,6 +203,28 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
+ * Visit a declaration statement
+ */
+
+
+/**
+ * Visit a top-level let statement
+ */
+
+
+
+/**
+ * Visit a function declaration. The start of a function declaration is
+ * always a leader statement. We expect that we see a function definition
+ * node here. If we do not, we fail immediately
+ */
+basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
+
+}
+
+
+
+/**
  * Build a CFG from the top-down using information derived from the parser front-end. This mainly consists
  * of the AST, but is also helped by the call graph, and symbol tables
  *
@@ -212,6 +250,28 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//items so long as we aren't null
 	while(cursor != NULL){
 		if(cursor->CLASS == AST_NODE_CLASS_FUNC_DEF){
+			//Visit our function declaration here
+			basic_block_t* func_def_block = visit_function_declaration(cursor);
+
+			//If we have a -1, this means that the whole block is an error
+			if(func_def_block->block_id == -1){
+				print_cfg_message(PARSE_ERROR, "Invalid function definition block encountered");
+				(*num_errors)++;
+				return NULL;
+			}
+
+			//If the CFG root is null, then this becomes the root
+			if(cfg->root == NULL){
+				cfg->root = func_def_block;
+				//We also maintain a reference to the current block
+				cfg->current = func_def_block;
+			//Otherwise, this block is a successor to the current block
+			} else {
+				//Add the successor in
+				add_successor(cfg->current, func_def_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				//Update the reference to whatever the current block is
+				cfg->current = func_def_block;
+			}
 
 		} else if(cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
 
@@ -222,24 +282,10 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 			(*num_errors)++;
 			return NULL;
 		}
+
+		//At the very end here, we refresh cursor with its next sibling
+		cursor = cursor->next_sibling;
 	}
 
-
+	return cfg;
 }
-
-
-/**
- * Deallocate a basic block
-*/
-void basic_block_dealloc(basic_block_t* block){
-	//Just in case
-	if(block == NULL){
-		printf("ERROR: Attempt to deallocate a null block");
-		exit(1);
-	}
-
-	//Otherwise its fine so
-	free(block);
-}
-
-

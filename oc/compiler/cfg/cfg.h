@@ -59,7 +59,7 @@ struct top_level_statement_node_t{
 */
 struct basic_block_t{
 	//The block ID: atomically increasing unsigned integer
-	u_int16_t block_id;
+	int32_t block_id;
 	//A basic block is a doubly-linked list node
 	//with a predecessor and a successor
 	//Edges represent where we can go on this graph
@@ -78,24 +78,6 @@ struct basic_block_t{
 //Build the entire CFG from the AST. This function returns the CFG struct, which
 //always has the root block
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings);
-
-//Allocate a basic block and return a reference to it
-basic_block_t* basic_block_alloc(cfg_t* cfg);
-
-//Give the ability to merge basic blocks
-basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b);
-
-//Add a predecessor to the target block
-void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_direction_t directedness);
-
-//Add a successor to the target block
-void add_successor(basic_block_t* target, basic_block_t* successor, linked_direction_t directedness);
-
-//Add a statement AST node refence to the basic block
-void add_statement(basic_block_t* target, top_level_statement_node_t* statement_node);
-
-//Deallocate a basic block
-void basic_block_dealloc(basic_block_t* block);
 
 //Deallocate our entire cfg structure
 void dealloc_cfg(cfg_t* cfg);
