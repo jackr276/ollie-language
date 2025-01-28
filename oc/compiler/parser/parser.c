@@ -18,26 +18,29 @@
 #include <string.h>
 #include <sys/types.h>
 
+//The function is reentrant
 //Variable and function symbol tables
-function_symtab_t* function_symtab;
-variable_symtab_t* variable_symtab;
-type_symtab_t* type_symtab;
+static function_symtab_t* function_symtab = NULL;
+static variable_symtab_t* variable_symtab = NULL;
+static type_symtab_t* type_symtab = NULL;
 //The "operating system" function that is symbolically referenced here
-call_graph_node_t* os;
+static call_graph_node_t* os = NULL;
+//The entire AST is rooted here
+static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
-symtab_function_record_t* current_function;
+static symtab_function_record_t* current_function = NULL;
 
 //Our stack for storing variables, etc
-heap_stack_t* grouping_stack;
+static heap_stack_t* grouping_stack = NULL;
 
 //The number of errors
-u_int16_t num_errors = 0;
+static u_int16_t num_errors = 0;
 //The number of warnings
-u_int16_t num_warnings = 0;
+static u_int16_t num_warnings = 0;
 
 //The current parser line number
-u_int16_t parser_line_num = 1;
+static u_int16_t parser_line_num = 1;
 
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
@@ -7222,12 +7225,15 @@ static generic_ast_node_t* program(FILE* fl){
 	//We really only care about the tok here
 	start.tok = START;
 	
-	//Create the ROOT of the tree
-	generic_ast_node_t* ast_root = ast_node_alloc(AST_NODE_CLASS_PROG);
+	//If prog is null we make it here
+	if(prog == NULL){
+		//Create the ROOT of the tree
+		prog = ast_node_alloc(AST_NODE_CLASS_PROG);
 
-	//Assign the lexer item to it for completeness
-	((prog_ast_node_t*)(ast_root->node))->lex = start;
-	
+		//Assign the lexer item to it for completeness
+		((prog_ast_node_t*)(prog->node))->lex = start;
+	}
+
 	//As long as we aren't done
 	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
 		//Put the token back
@@ -7248,12 +7254,12 @@ static generic_ast_node_t* program(FILE* fl){
 		}
 		
 		//Otherwise, we'll add this as a child of the root
-		add_child_node(ast_root, current);
+		add_child_node(prog, current);
 		//And then we'll keep right along
 	}
 
 	//Return the root of the tree
-	return ast_root;
+	return prog;
 }
 
 
@@ -7266,12 +7272,16 @@ front_end_results_package_t parse(FILE* fl){
 	num_warnings = 0;
 
 	//Initialize all of our symtabs
-	function_symtab = initialize_function_symtab();
-	variable_symtab = initialize_variable_symtab();
-	type_symtab = initialize_type_symtab();
+	if(function_symtab == NULL && type_symtab == NULL && variable_symtab == NULL){
+		function_symtab = initialize_function_symtab();
+		variable_symtab = initialize_variable_symtab();
+		type_symtab = initialize_type_symtab();
+	}
 
 	//Initialize the OS call graph
-	os = calloc(1, sizeof(call_graph_node_t));
+	if(os == NULL){
+		os = calloc(1, sizeof(call_graph_node_t));
+	}
 
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
@@ -7290,7 +7300,11 @@ front_end_results_package_t parse(FILE* fl){
 
 	//Global entry/run point, will give us a tree with
 	//the root being here
-	generic_ast_node_t* prog = program(fl);
+	prog = program(fl);
+
+	//Finalize the scopes
+	finalize_type_scope(type_symtab);
+	finalize_variable_scope(variable_symtab);
 
 	//Initialize our results package here
 	front_end_results_package_t results;

@@ -13,6 +13,10 @@ define enum type_enum{
 	TYPE_CHAR
 } as my_enum_type;
 
+func my_func(char** argv) -> void{
+	let char* a := argv;
+}
+
 func:static main(char** argv, s_int8 argc) -> void{
 	let my_enum_type a := TYPE_NORMAL;
 	let u_int32 a := 32;
