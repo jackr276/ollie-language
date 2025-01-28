@@ -1,5 +1,8 @@
 /**
  * This is the implementation file for the call graph defined in call_graph.h
+ *
+ * The call graph itself is entirely integrated into the symbol table. As such there is no need
+ * for any kind of "deallocation" function in the call graph
 */
 
 #include "call_graph.h"
@@ -36,6 +39,3 @@ void call_function(call_graph_node_t* caller, call_graph_node_t* callee){
 	//Increment how many of these that we have
 	(caller->num_callees)++;
 }
-
-
-

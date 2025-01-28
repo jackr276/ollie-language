@@ -52,10 +52,24 @@ static int32_t increment_and_get(){
 
 
 /**
+ * Create the memory necessary for a statement
+ */
+static top_level_statement_node_t* create_statement(generic_ast_node_t* node){
+	//Dynamically allocated, will be freed later
+	top_level_statement_node_t* stmt = calloc(1, sizeof(top_level_statement_node_t));
+	
+	//Add the node in here
+	stmt->node = node;
+
+	return stmt;
+}
+
+
+/**
  * Allocate a basic block using calloc. NO data assignment
  * happens in this function
 */
-basic_block_t* basic_block_alloc(){
+static basic_block_t* basic_block_alloc(){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 	//Grab the unique ID for this block
@@ -68,11 +82,25 @@ basic_block_t* basic_block_alloc(){
 /**
  * Deallocate a basic block
 */
-void basic_block_dealloc(basic_block_t* block){
+static void basic_block_dealloc(basic_block_t* block){
 	//Just in case
 	if(block == NULL){
 		printf("ERROR: Attempt to deallocate a null block");
 		exit(1);
+	}
+
+	//We'll need to go through here and free the statement linked list
+	top_level_statement_node_t* cursor = block->leader_statement;
+	top_level_statement_node_t* temp;
+
+	//So long as we see statements, we keep going
+	while(cursor != NULL){
+		temp = cursor;
+		//Move onto the next node
+		cursor = cursor->next;
+
+		//Free the temp var
+		free(temp);
 	}
 
 	//Otherwise its fine so
@@ -197,8 +225,8 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		(a->num_successors)++;
 	}
 
-	//Once we're done here, b is no longer of use to us
-	basic_block_dealloc(b);
+	//We will not deallocate here, we will merely free the block itself
+	free(b);
 
 	//Give back the pointer to a
 	return a;
@@ -209,9 +237,11 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  * Visit a declaration statement
  */
 basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
+	//This will likely be merged later, but we will still create it
 	basic_block_t* decl_node_block = basic_block_alloc();
-
-	//TODO
+	
+	//Create the needed 
+	decl_node_block->leader_statement = create_statement(decl_node);
 
 	return decl_node_block;
 }
@@ -219,12 +249,17 @@ basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
 
 /**
  * Visit a top-level let statement
+ * Let statements contain a root node that anchors a subtree containing everything that
+ * we need to know about them. All type info is stored here as well
  */
 basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
+	//Create the block
 	basic_block_t* let_stmt_block = basic_block_alloc();
 
-	//TODO
+	//We'll add the let statement node in as a statement
+	let_stmt_block->leader_statement = create_statement(let_stmt);
 	
+	//This block will most likely be merged, but still we will return it
 	return let_stmt_block;
 }
 

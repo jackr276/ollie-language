@@ -16,6 +16,7 @@
 typedef struct cfg_t cfg_t;
 //Basic blocks in our CFG
 typedef struct basic_block_t basic_block_t;
+//The top level statements that themselves make up a basic block
 typedef struct top_level_statement_node_t top_level_statement_node_t;
 
 
