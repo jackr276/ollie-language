@@ -30,6 +30,8 @@ static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
 static symtab_function_record_t* current_function = NULL;
+//What is the current variable that we are "in"
+static symtab_variable_record_t* current_var = NULL;
 
 //Our stack for storing variables, etc
 static heap_stack_t* grouping_stack = NULL;
@@ -520,6 +522,9 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//Now we will look this up in the variable symbol table
 		symtab_variable_record_t* found = lookup_variable(variable_symtab, var_name);
 
+		//Record the current var for later use
+		current_var = found;
+
 		//We now must see a variable that was intialized. If it was not
 		//initialized, then we have an issue
 		if(found == NULL){
@@ -679,6 +684,19 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
+	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
+	//this assignment is illegal
+	if(current_var->initialized == 1 && current_var->is_constant == 1){
+		sprintf(info, "Attempting to change the value of constant variable \"%s\". First defined here:", current_var->var_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(current_var);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Mark that this var was in fact initialized
+	current_var->initialized = 1;
+
 	//Now we are required to see the := terminal
 	lookahead = get_next_token(fl, &parser_line_num);
 	
@@ -719,6 +737,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Otherwise the overall type is the final type
 	asn_expr_node->inferred_type = final_type;
+
 
 	//Otherwise we know it worked, so we'll add the conditional in as the right child
 	add_child_node(asn_expr_node, expr);
@@ -859,6 +878,9 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 
 	//Otherwise, we finally know that its correct. As such, we'll update the current type to be whatever this is
 	*current_type = var_record->type;
+
+	//Mark the current variable too
+	current_var = var_record;
 
 	//Otherwise we know that it worked, so we'll add this guy in as a child of the overall construct
 	//accessor
@@ -6237,50 +6259,6 @@ static generic_ast_node_t* statement(FILE* fl){
 
 
 /**
- * A storage class specifier stores compiler directive about how a variable is to be stored.
- * Like all nodes, this node returns a reference to the root node that it creates
- *
- * IMPORTANT NOTE: This rule is unique in that it is NULLABLE. It will return NULL if it cannot
- * find anything. This is the caller's responsibility to handle
- *
- * BNF Rule: <storage-class-specifier> ::= static 
- * 										 | external 
- * 										 | register
- */
-static generic_ast_node_t* storage_class_specifier(FILE* fl){
-	//Lookahead token
-	Lexer_item lookahead;
-
-	//Let's see what we have
-	lookahead = get_next_token(fl,  &parser_line_num);
-
-	//If we have a valid lookahead
-	if(lookahead.tok == STATIC || lookahead.tok == EXTERNAL || lookahead.tok == REGISTER){
-		//Construct and return our node
-		generic_ast_node_t* storage_class_spec = ast_node_alloc(AST_NODE_CLASS_STORAGE_CLASS_SPECIFIER);
-
-		//Assign this based on what we found
-		if(lookahead.tok == STATIC){
-			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_STATIC;
-		} else if(lookahead.tok == EXTERNAL){
-			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_EXTERNAL;
-		} else {
-			((storage_class_spec_ast_node_t*)(storage_class_spec->node))->storage_class = STORAGE_CLASS_REGISTER;
-		}
-
-		//We're all set, just return this node
-		return storage_class_spec;
-	//Otherwise, we'll put the token back and return NULL
-	} else{
-		//Return to the stream
-		push_back_token(fl, lookahead);
-		//Return NULL - CALLER'S RESPONSIBILITY TO HANDLE
-		return NULL;
-	}
-}
-
-
-/**
  * A declare statement is always the child of an overall declaration statement, so it will
  * be added as the child of the given parent node. A declare statement also performs all
  * needed type/repetition checks. Like all rules, this function returns a reference to the root
@@ -6288,7 +6266,7 @@ static generic_ast_node_t* storage_class_specifier(FILE* fl){
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {constant}? {<storage-class-specifier>}? <type-specifier> <identifier>;
+ * BNF Rule: <declare-statement> ::= declare {constant}? {register | static}? <type-specifier> <identifier>;
  */
 static generic_ast_node_t* declare_statement(FILE* fl){
 	//For error printing
@@ -6316,17 +6294,19 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		push_back_token(fl, lookahead);
 	}
 
-	//Now we can optionally see a storage class specifier here
-	generic_ast_node_t* storage_class_spec_node = storage_class_specifier(fl);
+	//Grab the next token -- we could potentially see a storage class specifier
+	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Now this node may be null, and if it is we don't have a storage specifier
-	if(storage_class_spec_node != NULL){
-		//There actually was a storage class, so we'll grab it
-		storage_class = ((storage_class_spec_ast_node_t*)(storage_class_spec_node->node))->storage_class;
-		
-		//We'll also add this node in as a child of the root node
-		add_child_node(decl_node, storage_class_spec_node);
-	} 
+	//If we see a specifier here, we'll record it
+	if(lookahead.tok == REGISTER){
+		storage_class = STORAGE_CLASS_REGISTER;
+	} else if(lookahead.tok == STATIC){
+		storage_class = STORAGE_CLASS_STATIC;
+	} else {
+		//Put it back and move on
+		push_back_token(fl, lookahead);
+	}
+
 	//If it was null, it just won't be the child, which is no big deal
 	
 	//Now we are required to see a valid type specifier
@@ -6453,7 +6433,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {constant}? {<storage-class-specifier>}? <type-specifier> <identifier> := <conditional-expression>;
+ * BNF Rule: <let-statement> ::= let {constant}? {register | static}? <type-specifier> <identifier> := <conditional-expression>;
  */
 static generic_ast_node_t* let_statement(FILE* fl){
 	//For error printing
@@ -6481,17 +6461,19 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		push_back_token(fl, lookahead);
 	}
 
-	//Now we can optionally see a storage class specifier here
-	generic_ast_node_t* storage_class_spec_node = storage_class_specifier(fl);
+	//Grab the next token -- we could potentially see a storage class specifier
+	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Now this node may be null, and if it is we don't have a storage specifier
-	if(storage_class_spec_node != NULL){
-		//There actually was a storage class, so we'll grab it
-		storage_class = ((storage_class_spec_ast_node_t*)(storage_class_spec_node->node))->storage_class;
-		
-		//We'll also add this node in as a child of the root node
-		add_child_node(let_stmt_node, storage_class_spec_node);
-	} 
+	//If we see a specifier here, we'll record it
+	if(lookahead.tok == REGISTER){
+		storage_class = STORAGE_CLASS_REGISTER;
+	} else if(lookahead.tok == STATIC){
+		storage_class = STORAGE_CLASS_STATIC;
+	} else {
+		//Put it back and move on
+		push_back_token(fl, lookahead);
+	}
+
 	//If it was null, it just won't be the child, which is no big deal
 	
 	//Now we are required to see a valid type specifier

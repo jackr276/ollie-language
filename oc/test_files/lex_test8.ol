@@ -8,8 +8,11 @@ define construct my_struct{
 } as aliased_struct;
 
 func:static main(s_int32 argc, char** argv) -> u_int32 {
-	let u_int32 i := 0;
-	let u_int32 j := 0;
+	let constant u_int32 i := 0;
+	declare constant u_int32 j;
+
+	asn j := i;
+
 	let u_int32 k := 0;
 	let u_int32 l := 0;
 	declare float32[10] float_arr;
