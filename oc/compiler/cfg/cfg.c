@@ -3,6 +3,7 @@
 */
 
 #include "cfg.h"
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,8 +19,9 @@ u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
 
 //We predeclare up here to avoid needing any rearrangements
-basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node);
-basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt);
+static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node);
+static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt);
+static basic_block_t* visit_expression_statement(generic_ast_node_t* decl_node);
 
 
 
@@ -117,7 +119,7 @@ static void basic_block_dealloc(basic_block_t* block){
  * Add a predecessor to the target block. When we add a predecessor, the target
  * block is also implicitly made a successor of said predecessor
  */
-void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_direction_t directedness){
+static void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_direction_t directedness){
 	//Let's check this
 	if(target->num_predecessors == MAX_PREDECESSORS){
 		//Internal error for the programmer
@@ -153,7 +155,7 @@ void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_d
 /**
  * Add a successor to the target block
  */
-void add_successor(basic_block_t* target, basic_block_t* successor, linked_direction_t directedness){
+static void add_successor(basic_block_t* target, basic_block_t* successor, linked_direction_t directedness){
 	//Let's check this
 	if(target->num_successors == MAX_SUCCESSORS){
 		//Internal error for the programmer
@@ -189,7 +191,7 @@ void add_successor(basic_block_t* target, basic_block_t* successor, linked_direc
 /**
  * Add a statement to the target block, following all standard linked-list protocol
  */
-void add_statement(basic_block_t* target, top_level_statement_node_t* statement_node){
+static void add_statement(basic_block_t* target, top_level_statement_node_t* statement_node){
 	//Special case--we're adding the head
 	if(target->leader_statement == NULL){
 		//Assign this to be the head and the tail
@@ -208,7 +210,7 @@ void add_statement(basic_block_t* target, top_level_statement_node_t* statement_
 /**
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
  */
-basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
+static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//What if a was never even assigned?
 	if(a->exit_statement == NULL){
 		a->leader_statement = b->leader_statement;
@@ -247,9 +249,24 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
+ * Visit an expression statement. This can decay into a variety of non-control flow cases
+ */
+static basic_block_t* visit_expression_statement(generic_ast_node_t* expr_statement_node){
+	//This will probably be merged
+	basic_block_t* expression_stmt_block = basic_block_alloc();
+
+	//We can either have an assignment expression or a given non-assigned expression
+	//TODO
+
+
+	return expression_stmt_block;
+}
+
+
+/**
  * Visit a compound statement. This is usually a jumping off point for various other nodes
  */
-basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node){
+static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node){
 	//This will probably not be merged
 	basic_block_t* compound_stmt_block = basic_block_alloc();
 	//We will keep track of what the current "end" block is
@@ -294,8 +311,24 @@ basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node){
 				//Merge the block in, the current block pointer is unchanged
 				current_block = merge_blocks(current_block, let_block);
 			}
-		}
 
+		//If we encounter an expression statement
+		} else if(cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
+			//Let the subsidiary handle
+			basic_block_t* expr_block = visit_expression_statement(cursor); 
+
+			//If we need a leader, then we'll add this onto current
+			if(need_leader == 1){
+				//Add the decl block as a successor
+				add_successor(current_block, expr_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				//We'll also update the current reference
+				current_block = expr_block;
+			//Otherwise, we will just merge this block in
+			} else {
+				//Merge the block in, the current block pointer is unchanged
+				current_block = merge_blocks(current_block, expr_block);
+			}
+		}
 
 		//Go to the next sibling
 		cursor = cursor->next_sibling;
@@ -310,7 +343,7 @@ basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node){
 /**
  * Visit a declaration statement
  */
-basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
+static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
 	//This will likely be merged later, but we will still create it
 	basic_block_t* decl_node_block = basic_block_alloc();
 	
@@ -326,7 +359,7 @@ basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
  * Let statements contain a root node that anchors a subtree containing everything that
  * we need to know about them. All type info is stored here as well
  */
-basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
+static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
 	//Create the block
 	basic_block_t* let_stmt_block = basic_block_alloc();
 
@@ -347,7 +380,7 @@ basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
  * Since a function always has a compound statement in it, we will essentially
  * pass control off here to the compound statement rule
  */
-basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
+static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
 	basic_block_t* func_def_block = basic_block_alloc();
 
 	//The compound statement is always the last child of a function statement
