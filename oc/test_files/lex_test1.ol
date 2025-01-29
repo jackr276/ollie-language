@@ -16,7 +16,11 @@ func test_func(float32 my_float, void* ptr) -> void{
 	ret;
 }
 
-func:static main() -> u_int32* {
+func never_defined(float32 example) -> u_int32{
+	ret 2;
+}
+
+func:static main() -> s_int32* {
 	let u_int32 i := 1;
 	let u_int32 j := 1;
 	let u_int32* j_ptr := &j;

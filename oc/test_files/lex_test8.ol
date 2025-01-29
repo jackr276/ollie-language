@@ -7,7 +7,7 @@ define construct my_struct{
 	s_int8 c;
 } as aliased_struct;
 
-func:static main(s_int32 argc, char** argv) -> u_int32 {
+func:static main(s_int32 argc, char** argv) -> s_int32 {
 	let constant u_int32 i := 0;
 	declare constant u_int32 j;
 

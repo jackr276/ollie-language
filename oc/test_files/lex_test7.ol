@@ -9,7 +9,8 @@ define construct con{
 	char*[32] b;
 };
 
-func main(s_int32 argc, char** argv) -> str{
+func main(s_int32 argc, char** argv) -> s_int32
+{
 	if(argc == 1) then {
 		let str i := "hi";
 	} else if(argc >= 2) then {

@@ -1,4 +1,4 @@
-func main(u_int32 argc, char** argv) -> u_int32 {
+func main(u_int32 argc, char** argv) -> s_int32 {
 	let char x := 'a';
 	let char y := 'c';
 

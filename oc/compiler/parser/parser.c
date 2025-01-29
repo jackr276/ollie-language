@@ -23,6 +23,7 @@
 static function_symtab_t* function_symtab = NULL;
 static variable_symtab_t* variable_symtab = NULL;
 static type_symtab_t* type_symtab = NULL;
+
 //The "operating system" function that is symbolically referenced here
 static call_graph_node_t* os = NULL;
 //The entire AST is rooted here
@@ -608,7 +609,6 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 		//If we failed here
 		if(func_call->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid function call detected", parser_line_num);
 			return func_call;
 		}
 
@@ -6874,6 +6874,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	Lexer_item lookahead;
 	//Are we defining something that's already been defined implicitly?
 	u_int8_t defining_prev_implicit = 0;
+	//Is it the main function?
+	u_int8_t is_main_function = 0;
 
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
@@ -6947,70 +6949,75 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
 	//This is our interesting case. The function has been defined implicitly, and now we're trying to define it
-	//explicitly
+	//explicitly. We don't need to do any other checks if this is the case
 	} else if(function_record != NULL && function_record->defined == 0){
 		//Flag this
 		defining_prev_implicit = 1;
-	}
 
-	//Check for duplicated variables
-	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name); 
+	//Otherwise we're defining fresh, so all of these checks need to happen
+	} else {
+		//Check for duplicated variables
+		symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name); 
 
-	//Fail out if duplicate is found
-	if(found_variable != NULL){
-		sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_variable_name(found_variable);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
+		//Fail out if duplicate is found
+		if(found_variable != NULL){
+			sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name);
+			print_parse_message(PARSE_ERROR, info, current_line);
+			print_variable_name(found_variable);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 
-	//Check for duplicated type names
-	symtab_type_record_t* found_type = lookup_type(type_symtab, function_name); 
+		//Check for duplicated type names
+		symtab_type_record_t* found_type = lookup_type(type_symtab, function_name); 
 
-	//Fail out if duplicate has been found
-	if(found_type != NULL){
-		sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		print_type_name(found_type);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Fail out if duplicate has been found
+		if(found_type != NULL){
+			sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name);
+			print_parse_message(PARSE_ERROR, info, current_line);
+			print_type_name(found_type);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+
+		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
+		function_record = create_function_record(function_name, storage_class);
+		//Associate this with the function node
+		((func_def_ast_node_t*)(function_node->node))->func_record = function_record;
+		//Set first thing
+		function_record->number_of_params = 0;
+		function_record->line_number = current_line;
+		//Create the call graph node
+		function_record->call_graph_node = create_call_graph_node(function_record);
+		//By default, this function has never been called
+		function_record->called = 0;
+
+		//We'll put the function into the symbol table
+		//since we now know that everything worked
+		insert_function(function_symtab, function_record);
+
+		//We'll also flag that this is the current function
+		current_function = function_record;
+
+		/**
+		 * If this is the main function, we will record it as having been called by the operating 
+		 * system
+		 */
+		if(strcmp("main", function_name) == 0){
+			//By default, this function has been called
+			function_record->called = 1;
+			//It is the main function
+			is_main_function = 1;
+			//And furthermore, it was called by the os
+			call_function(os, function_record->call_graph_node);
+		}
 	}
 
 	//Once we make it here we know that the ident was good, so we can add it in as a child
 	add_child_node(function_node, ident_node);
-
-	//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-	function_record = create_function_record(function_name, storage_class);
-	//Associate this with the function node
-	((func_def_ast_node_t*)(function_node->node))->func_record = function_record;
-	//Set first thing
-	function_record->number_of_params = 0;
-	function_record->line_number = current_line;
-	//Create the call graph node
-	function_record->call_graph_node = create_call_graph_node(function_record);
-	//By default, this function has never been called
-	function_record->called = 0;
-
-	//We'll put the function into the symbol table
-	//since we now know that everything worked
-	insert_function(function_symtab, function_record);
-
-	//We'll also flag that this is the current function
-	current_function = function_record;
-
-	/**
-	 * If this is the main function, we will record it as having been called by the operating 
-	 * system
-	 */
-	if(strcmp("main", function_name) == 0){
-		//By default, this function has been called
-		function_record->called = 1;
-		//And furthermore, it was called by the os
-		call_function(os, function_record->call_graph_node);
-	}
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -7073,29 +7080,33 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//record for ease of access later
 	generic_ast_node_t* param_list_cursor = param_list_node->first_child;
 
-	//So long as this is not null
-	while(param_list_cursor != NULL){
-		//For dev use--sanity check
-		if(param_list_cursor->CLASS != AST_NODE_CLASS_PARAM_DECL){
-			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected declaration node in parameter list", parser_line_num);
-			num_errors++;
-			//Return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	if(defining_prev_implicit == 1){
+
+	} else {
+		//So long as this is not null
+		while(param_list_cursor != NULL){
+			//For dev use--sanity check
+			if(param_list_cursor->CLASS != AST_NODE_CLASS_PARAM_DECL){
+				print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected declaration node in parameter list", parser_line_num);
+				num_errors++;
+				//Return an error node
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//The variable record for this param node
+			symtab_variable_record_t* param_rec = ((param_decl_ast_node_t*)(param_list_cursor->node))->param_record;
+
+			//We'll add it in as a reference to the function
+			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
+			//Increment the parameter count
+			(function_record->number_of_params)++;
+
+			//Set the associated function record
+			param_rec->parent_function = function_record;
+
+			//Push the cursor up by 1
+			param_list_cursor = param_list_cursor->next_sibling;
 		}
-
-		//The variable record for this param node
-		symtab_variable_record_t* param_rec = ((param_decl_ast_node_t*)(param_list_cursor->node))->param_record;
-
-		//We'll add it in as a reference to the function
-		function_record->func_params[function_record->number_of_params].associate_var = param_rec;
-		//Increment the parameter count
-		(function_record->number_of_params)++;
-
-		//Set the associated function record
-		param_rec->parent_function = function_record;
-
-		//Push the cursor up by 1
-		param_list_cursor = param_list_cursor->next_sibling;
 	}
 
 	//Once we get down here, the entire parameter list has been stored properly
@@ -7127,6 +7138,35 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//that we first dealias it
 	generic_type_t* type = dealias_type(return_type_node->inferred_type);
 
+	//SPECIAL CASE : The main function must return a type of s_int32
+	if(is_main_function == 1){
+		//If it's not a basic type we fail
+		if(type->type_class != TYPE_CLASS_BASIC){
+			print_parse_message(PARSE_ERROR, "The main function must return a type of s_int32.", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Now we know that it is a basic type, but is it an s_int32?
+		if(type->basic_type->basic_type != S_INT32){
+			print_parse_message(PARSE_ERROR, "The main function must return a type of s_int32.", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+		//Otherwise it's fine
+	}
+
+	//If we're defining a function that was previously implicit, the types have to match exactly
+	if(defining_prev_implicit == 1){
+		if(strcmp(type->type_name, function_record->return_type->type_name) != 0){
+			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_function_name(function_record);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+	}
+
 	//Store the return type
 	function_record->return_type = type;
 
@@ -7139,7 +7179,16 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//If it's a semicolon, we're done
 	if(lookahead.tok == SEMICOLON){
-		printf("HERE\n");
+		//The main function may not be defined implicitly
+		if(is_main_function == 1){
+			print_parse_message(PARSE_ERROR, "The main function may not be defined implicitly. Implicit definition here:", parser_line_num);
+			print_function_name(function_record);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise it should be ok
+
 		//If this is the case, then we essentially have a compiler directive here. We'll return NULL
 		deallocate_ast(function_node);
 

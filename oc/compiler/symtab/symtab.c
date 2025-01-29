@@ -580,7 +580,14 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Final closing paren and return type
-	printf(") -> %s\n", record->return_type->type_name);
+	printf(") -> %s", record->return_type->type_name);
+
+	//If it was defined implicitly, we'll print a semicol
+	if(record->defined == 0){
+		printf(";\n");
+	} else {
+		printf("{...\n");
+	}
 }
 
 /**

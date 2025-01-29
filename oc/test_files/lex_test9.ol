@@ -1,4 +1,4 @@
-func main(u_int32 argc, char** argv) -> u_int32{
+func main(u_int32 argc, char** argv) -> s_int32{
 	while(argc < 5) do {
 		declare u_int32 i;
 		asn i := 3;
