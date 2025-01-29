@@ -33,6 +33,8 @@ static generic_ast_node_t* prog = NULL;
 static symtab_function_record_t* current_function = NULL;
 //What is the current variable that we are "in"
 static symtab_variable_record_t* current_var = NULL;
+//What is the type of our current var
+static generic_type_t* current_var_type = NULL;
 
 //Our stack for storing variables, etc
 static heap_stack_t* grouping_stack = NULL;

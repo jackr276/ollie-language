@@ -203,10 +203,17 @@ void add_statement(basic_block_t* target, top_level_statement_node_t* statement_
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
  */
 basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
-	//The leader statement in b will be connected to a's tail
-	a->exit_statement->next = b->leader_statement;
-	//Now once they're connected we'll set a's exit to be b's exit
-	a->exit_statement = b->exit_statement;
+	//What if a was never even assigned?
+	if(a->exit_statement == NULL){
+		a->leader_statement = b->leader_statement;
+		a->exit_statement = b->exit_statement;
+	} else {
+		//Otherwise it's a "true merge"
+		//The leader statement in b will be connected to a's tail
+		a->exit_statement->next = b->leader_statement;
+		//Now once they're connected we'll set a's exit to be b's exit
+		a->exit_statement = b->exit_statement;
+	}
 
 	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
 	//Let's merge predecessors first
@@ -234,13 +241,28 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
+ * Visit a compound statement
+ */
+basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node){
+	//This will probably not be merged
+	basic_block_t* compound_stmt_block = basic_block_alloc();
+
+	//Create 
+
+
+	//We always give back the very first block here
+	return compound_stmt_block;
+}
+
+
+/**
  * Visit a declaration statement
  */
 basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
 	//This will likely be merged later, but we will still create it
 	basic_block_t* decl_node_block = basic_block_alloc();
 	
-	//Create the needed 
+	//Create the needed leader statement
 	decl_node_block->leader_statement = create_statement(decl_node);
 
 	return decl_node_block;
@@ -275,6 +297,31 @@ basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
  */
 basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
 	basic_block_t* func_def_block = basic_block_alloc();
+
+	//The next thing that a function declaration sees is a compound statement
+	if(func_def_node->first_child->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Did not find compound statement as the first node in a function block.");
+		(*num_errors_ref)++;
+		//Create and give back an erroneous block
+		basic_block_t* err_block = basic_block_alloc();
+		err_block->block_id = -1;
+		return err_block;
+	}
+
+	//Otherwise, we can visit the compound statement
+	basic_block_t* compound_stmt_block = visit_compound_statement(func_def_node->first_child);
+
+	//If it's a failure, we error out
+	if(compound_stmt_block->block_id == -1){
+		//Print our message out
+		print_cfg_message(PARSE_ERROR, "Invalid compound statement encountered in function definition");
+		//Send this up the chain
+		return compound_stmt_block;
+	}
+
+	//At the end, we'll merge the compound statement block with the function definition block
+	merge_blocks(func_def_block, compound_stmt_block);
+	
 
 	return func_def_block;
 }

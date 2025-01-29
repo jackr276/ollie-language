@@ -15,7 +15,7 @@ func test_func(float32 my_float, void* ptr) -> void{
 
 	declare s_int32[200] my_arr;
 
-	asn my_arr[3.2] := 2;
+	asn my_arr[3] := 2.23;
 
 	let void my := ptr;
 
