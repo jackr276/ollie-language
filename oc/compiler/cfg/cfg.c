@@ -21,7 +21,7 @@ u_int32_t* num_warnings_ref;
 static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node);
 static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt);
 static basic_block_t* visit_expression_statement(generic_ast_node_t* decl_node);
-
+static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node);
 
 
 /**
@@ -257,7 +257,19 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	return a;
 }
 
-basic_block_t* visit_unary_expr(generic_ast_node_t* unary_expr_node){
+
+/**
+ * An if statement always invokes some kind of control flow
+ */
+static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node){
+	//Create our basic block
+	basic_block_t* if_stmt_block = basic_block_alloc();
+
+	//Grab a cursor that we will use to crawl the if statement
+	generic_ast_node_t* cursor = if_stmt_node->first_child;
+
+	//We need to first see the expression inside of the if statement
+	
 
 }
 
@@ -278,9 +290,17 @@ basic_block_t* visit_assignment_expression(generic_ast_node_t* assignment_expr_n
 		return create_and_return_err();
 	}
 
-	//We'll let the usual rule handle it otherwise
-	
+	//We'll walk the subtree creating statements
+	while(cursor != NULL){
+		//Create the statement
+		top_level_statement_node_t* stmt = create_statement(cursor);
 
+		//Add it into the node
+		add_statement(asn_expr_block, stmt);
+
+		//Advance the cursor
+		cursor = cursor->next_sibling;
+	}
 
 	return asn_expr_block;
 }
@@ -298,10 +318,15 @@ static basic_block_t* visit_expression_statement(generic_ast_node_t* expr_statem
 		//Let the assignment expression rule handle it
 		basic_block_t* asn_expr_block = visit_assignment_expression(expr_statement_node->first_child);
 
-		//expression_stmt_block = merge_blocks(expression_stmt_block, *b)
+		//Merge the two statements here
+		expression_stmt_block = merge_blocks(expression_stmt_block, asn_expr_block);
 
 	} else {
+		//Otherwise, for now, we'll just add this in as a statement
+		top_level_statement_node_t* stmt = create_statement(expr_statement_node->first_child);
 
+		//Add this into the current block
+		add_statement(expression_stmt_block, stmt);
 	}
 
 
@@ -374,6 +399,42 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 				//Merge the block in, the current block pointer is unchanged
 				current_block = merge_blocks(current_block, expr_block);
 			}
+
+		//If this is the case we're just gonna call ourself recursively
+		} else if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+			//Let the subsidiary handle
+			basic_block_t* compound_stmt_block = visit_compound_statement(cursor); 
+
+			//If we need a leader
+			if(need_leader == 1){
+				//Add the decl block as a successor
+				add_successor(current_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				//We'll also update the current reference
+				current_block = compound_stmt_block;
+			//Otherwise, we will just merge this block in
+			} else {
+				//Merge the block in, the current block pointer is unchanged
+				current_block = merge_blocks(current_block, compound_stmt_block);
+			}
+		
+		//This is the first kind of block where any actual control flow happens
+		} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
+			/*
+			//Let the subsidiary handle
+			basic_block_t* if_stmt_block = visit_if_statement(cursor);
+
+			//If we need to see a leader statement
+			if(need_leader == 1){
+				//Add the if block as a successor
+				add_successor(current_block, if_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				//We'll also update the current reference
+				current_block = if_stmt_block;
+			//Otherwise, we will just merge this block in
+			} else {
+				//Merge the block in, the current block pointer is unchanged
+				current_block = merge_blocks(current_block, if_stmt_block);
+			}
+			*/
 		}
 
 		//Go to the next sibling
@@ -392,9 +453,12 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
 	//This will likely be merged later, but we will still create it
 	basic_block_t* decl_node_block = basic_block_alloc();
-	
-	//Create the needed leader statement
-	decl_node_block->leader_statement = create_statement(decl_node);
+
+	//There is only one statement here
+	top_level_statement_node_t* stmt = create_statement(decl_node);
+
+	//Add the statement in
+	add_statement(decl_node_block, stmt);
 
 	return decl_node_block;
 }
@@ -409,8 +473,11 @@ static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
 	//Create the block
 	basic_block_t* let_stmt_block = basic_block_alloc();
 
-	//We'll add the let statement node in as a statement
-	let_stmt_block->leader_statement = create_statement(let_stmt);
+	//There is only one statement here
+	top_level_statement_node_t* stmt = create_statement(let_stmt);
+
+	//Add the statement in
+	add_statement(let_stmt_block, stmt);
 	
 	//This block will most likely be merged, but still we will return it
 	return let_stmt_block;

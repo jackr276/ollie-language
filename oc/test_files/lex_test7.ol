@@ -11,7 +11,7 @@ define construct con{
 
 func main(s_int32 argc, char** argv) -> s_int32
 {
-	if(argc == 1) then {
+	if(argv) then {
 		let str i := "hi";
 	} else if(argc >= 2) then {
 		if(argc == 3) then {

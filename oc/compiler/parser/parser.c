@@ -5028,6 +5028,9 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
  * BNF Rule: <if-statement> ::= if( <logical-or-expression> ) then <compound-statement> {else <if-statement> | <compound-statement>}*
  */
 static generic_ast_node_t* if_statement(FILE* fl){
+	//For error printing
+	char info[1000];
+
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -5061,7 +5064,19 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		return expression_node;
 	}
 
-	//TODO TYPE CHECKING
+	/**
+	 * The expression of this type must be compatible at the very list with a u_int64
+	 */
+	symtab_type_record_t* int_type = lookup_type(type_symtab, "u_int64");
+
+	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
+	if(expression_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, expression_node->inferred_type) == NULL){
+		sprintf(info, "If statements require an int or pointer type to be in their condition, but was given type \"%s\"", expression_node->inferred_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
 	//If we make it here, we can add this in as the first child to the root node
 	add_child_node(if_stmt, expression_node);
 
