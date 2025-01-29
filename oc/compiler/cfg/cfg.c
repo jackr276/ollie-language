@@ -17,6 +17,12 @@ static u_int8_t need_leader = 0;
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
 
+//We predeclare up here to avoid needing any rearrangements
+basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node);
+basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt);
+
+
+
 /**
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
@@ -241,13 +247,59 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
- * Visit a compound statement
+ * Visit a compound statement. This is usually a jumping off point for various other nodes
  */
 basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node){
 	//This will probably not be merged
 	basic_block_t* compound_stmt_block = basic_block_alloc();
+	//We will keep track of what the current "end" block is
+	basic_block_t* current_block = compound_stmt_block;
 
-	//Create 
+	//We will iterate over all of the children in this compound statement
+	generic_ast_node_t* cursor = compound_stmt_node->first_child;
+
+	//By default, we do not immediately need a leader block here(compound_stmt_block is the leader block)
+	need_leader = 0;
+
+	//So long as we have stuff in here
+	while(cursor != NULL){
+		//If we encounter a declaration statement
+		if(cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
+			basic_block_t* decl_block = visit_declaration_statement(cursor); 
+
+			//If we need a leader, then we'll add this onto current
+			if(need_leader == 1){
+				//Add the decl block as a successor
+				add_successor(current_block, decl_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				//We'll also update the current reference
+				current_block = decl_block;
+			//Otherwise, we will just merge this block in
+			} else {
+				//Merge the block in, the current block pointer is unchanged
+				current_block = merge_blocks(current_block, decl_block);
+			}
+		//If we encounter a let statement
+		} else if(cursor->CLASS == AST_NODE_CLASS_LET_STMT){
+			//Let the subsidiary handle
+			basic_block_t* let_block = visit_let_statement(cursor); 
+
+			//If we need a leader, then we'll add this onto current
+			if(need_leader == 1){
+				//Add the decl block as a successor
+				add_successor(current_block, let_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				//We'll also update the current reference
+				current_block = let_block;
+			//Otherwise, we will just merge this block in
+			} else {
+				//Merge the block in, the current block pointer is unchanged
+				current_block = merge_blocks(current_block, let_block);
+			}
+		}
+
+
+		//Go to the next sibling
+		cursor = cursor->next_sibling;
+	}
 
 
 	//We always give back the very first block here
@@ -298,9 +350,17 @@ basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
 basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
 	basic_block_t* func_def_block = basic_block_alloc();
 
+	//The compound statement is always the last child of a function statement
+	generic_ast_node_t* func_cursor = func_def_node->first_child;	
+
+	//Get to the end for now
+	while(func_cursor->next_sibling != NULL){
+		func_cursor = func_cursor->next_sibling;
+	}
+
 	//The next thing that a function declaration sees is a compound statement
-	if(func_def_node->first_child->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Did not find compound statement as the first node in a function block.");
+	if(func_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Did not find compound statement as the last node in a function block.");
 		(*num_errors_ref)++;
 		//Create and give back an erroneous block
 		basic_block_t* err_block = basic_block_alloc();
@@ -309,7 +369,7 @@ basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
 	}
 
 	//Otherwise, we can visit the compound statement
-	basic_block_t* compound_stmt_block = visit_compound_statement(func_def_node->first_child);
+	basic_block_t* compound_stmt_block = visit_compound_statement(func_cursor);
 
 	//If it's a failure, we error out
 	if(compound_stmt_block->block_id == -1){
