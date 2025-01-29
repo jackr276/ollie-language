@@ -19,6 +19,7 @@ u_int32_t* num_warnings_ref;
 
 //We predeclare up here to avoid needing any rearrangements
 static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node);
+static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node);
 static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt);
 static basic_block_t* visit_expression_statement(generic_ast_node_t* decl_node);
 static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node);
@@ -264,13 +265,99 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node){
 	//Create our basic block
 	basic_block_t* if_stmt_block = basic_block_alloc();
+	//Create an "end block". This is very important because the end block here
+	//creates an anchor where all of our other statements go
+	basic_block_t* end_block = basic_block_alloc();
 
 	//Grab a cursor that we will use to crawl the if statement
 	generic_ast_node_t* cursor = if_stmt_node->first_child;
 
 	//We need to first see the expression inside of the if statement
+	top_level_statement_node_t* expr_stmt = create_statement(cursor);
 	
+	//Add this statement into the if_statement block
+	add_statement(if_stmt_block, expr_stmt);
 
+	//Move the cursor up
+	cursor = cursor->next_sibling;
+
+	//Following this, we'll see a compound statement
+	basic_block_t* compound_stmt_block = visit_compound_statement(cursor);
+
+	//This compount_statement is always a control-flow successor to the condition
+	add_successor(if_stmt_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	
+	//We now need to navigate all the way down to this block's end
+	basic_block_t* compound_block_end = compound_stmt_block;
+	
+	//So long as this isn't 0, we haven't reached the end
+	while(compound_block_end->num_successors != 0){
+		//Drill down some more
+		compound_block_end = compound_block_end->successors[0];
+	}
+
+	//This block will have it's own successor, the end statement block
+	add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//Now moving forward here, we do have the option to see an "else" section
+	cursor = cursor->next_sibling;
+
+	//If this is null, then we're done here
+	if(cursor == NULL){
+		return if_stmt_block;
+	}
+
+	//But if it isn't null, it's our else node -- which could be an else or another if(if-else) 
+	if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+		//We'll invoke the compound statement again here
+		compound_stmt_block = visit_compound_statement(cursor);
+		//We'll then add this in same as before
+		//This compount_statement is always a control-flow successor to the condition
+		add_successor(if_stmt_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+		//We now need to navigate all the way down to this block's end
+		compound_block_end = compound_stmt_block;
+	
+		//So long as this isn't 0, we haven't reached the end
+		while(compound_block_end->num_successors != 0){
+			//Drill down some more
+			compound_block_end = compound_block_end->successors[0];
+		}
+
+		//This block will have it's own successor, the end statement block
+		add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+		//Once we're done get out
+		return if_stmt_block;
+
+	//If we see another if statement
+	} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
+		//Otherwise we'll invoke this very rule
+		basic_block_t* else_if_block = visit_if_statement(cursor);
+
+		//This block is a successor to the parent
+		add_successor(if_stmt_block, else_if_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+		//Again, we'll need to drill all the way to the very end of this block
+		//We now need to navigate all the way down to this block's end
+		basic_block_t* if_block_end = else_if_block;
+	
+		//So long as this isn't 0, we haven't reached the end
+		while(if_block_end->num_successors != 0){
+			//Drill down some more
+			if_block_end = if_block_end->successors[0];
+		}
+
+		//Merge these two blocks
+		merge_blocks(if_block_end, end_block);
+
+		//And bail out
+		return if_stmt_block;
+
+	} else {
+		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Found unknown non-null block in if statement");
+		return create_and_return_err();
+	}
 }
 
 
@@ -405,36 +492,56 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			//Let the subsidiary handle
 			basic_block_t* compound_stmt_block = visit_compound_statement(cursor); 
 
+			//We'll also need a reference to the end block
+			basic_block_t* cursor = compound_stmt_block;
+
+			//If there are more than 0 successors, we need to keep going
+			while(cursor->num_successors != 0){
+				cursor = cursor->successors[0];
+			}
+
 			//If we need a leader
 			if(need_leader == 1){
 				//Add the decl block as a successor
 				add_successor(current_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-				//We'll also update the current reference
-				current_block = compound_stmt_block;
+				//We'll also update the current reference to be the very end of this bloc
+				current_block = cursor;
 			//Otherwise, we will just merge this block in
 			} else {
 				//Merge the block in, the current block pointer is unchanged
-				current_block = merge_blocks(current_block, compound_stmt_block);
+				merge_blocks(current_block, compound_stmt_block);
+				//Update the current block here
+				current_block = cursor;
 			}
 		
 		//This is the first kind of block where any actual control flow happens
 		} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
-			/*
+			
 			//Let the subsidiary handle
 			basic_block_t* if_stmt_block = visit_if_statement(cursor);
+
+			//We'll also need a reference to the end block
+			basic_block_t* cursor = if_stmt_block;
+
+			//If there are more than 0 successors, we need to keep going
+			while(cursor->num_successors != 0){
+				cursor = cursor->successors[0];
+			}
 
 			//If we need to see a leader statement
 			if(need_leader == 1){
 				//Add the if block as a successor
 				add_successor(current_block, if_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 				//We'll also update the current reference
-				current_block = if_stmt_block;
+				current_block = cursor;
 			//Otherwise, we will just merge this block in
 			} else {
 				//Merge the block in, the current block pointer is unchanged
-				current_block = merge_blocks(current_block, if_stmt_block);
+				merge_blocks(current_block, if_stmt_block);
+				//Update the current reference
+				current_block = cursor;
 			}
-			*/
+			
 		}
 
 		//Go to the next sibling
