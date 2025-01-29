@@ -13,6 +13,12 @@ func test_func(float32 my_float, void* ptr) -> void{
 	//Cast ptr to an int
 	asn i := *(<u_int32*>ptr);
 
+	declare s_int32[200] my_arr;
+
+	asn my_arr[3.2] := 2;
+
+	let void my := ptr;
+
 	//Example call
 	asn i := @never_defined(3.2222);
 

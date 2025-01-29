@@ -18,6 +18,7 @@ int main(int argc, char** argv){
 	FILE* fl;
 
 	for(int32_t i = 1; i < argc; i++){
+		printf("Testing file %s\n", argv[i]);
 		fl = fopen(argv[i], "r");
 		parse(fl);
 		fclose(fl);

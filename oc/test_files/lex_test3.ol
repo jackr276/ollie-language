@@ -23,5 +23,5 @@ func:static main(u_int32 arg_count, str_arr arg_vector) -> s_int32{
 		asn arg_count := -2;
 	}
 
-//	ret c >> 3;
+	ret c >> 3;
 }

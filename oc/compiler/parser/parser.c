@@ -906,6 +906,8 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
  *
  */
 static generic_ast_node_t* array_accessor(FILE* fl){
+	//For error printing
+	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Freeze the current line
@@ -926,7 +928,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	push(grouping_stack, lookahead);
 
 	//Now we are required to see a valid constant expression representing what
-	//the actual index is. TODO TYPE CHECKING NEEDED
+	//the actual index is.
 	generic_ast_node_t* expr = logical_or_expression(fl);
 
 	//If we fail, automatic exit here
@@ -935,6 +937,17 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 		num_errors++;
 		//It's already an error so we'll just return it
 		return expr;
+	}
+
+	//We use a u_int32 as our reference
+	generic_type_t* reference_type = lookup_type(type_symtab, "u_int32")->type;
+
+	//Let's make sure that this is an int
+	if(types_compatible(reference_type, expr->inferred_type) == NULL){
+		sprintf(info, "Array accessing requires types compatible with \"u_int32\", but instead got \"%s\"", expr->inferred_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets
@@ -5411,8 +5424,30 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If we see a semicolon, we can just leave
 	if(lookahead.tok == SEMICOLON){
+		//If this is the case, the return type had better be void
+		if(strcmp(current_function->return_type->type_name, "void") != 0){
+			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name, current_function->return_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print the function name
+			print_function_name(current_function);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//If we get out then we're fine
+		
 		return return_stmt;
+
 	} else {
+		//If we get here, but we do expect a void return, then this is an issue
+		if(strcmp(current_function->return_type->type_name, "void") == 0){
+			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print the function name
+			print_function_name(current_function);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 		//Put it back if no
 		push_back_token(fl, lookahead);
 	}
@@ -6344,6 +6379,13 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		return type_spec_node;
 	}
 
+	//One thing here, we aren't allowed to see void
+	if(strcmp(type_spec_node->inferred_type->type_name, "void") == 0){
+		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
 	//We'll now add it in as a child node
 	add_child_node(decl_node, type_spec_node);
 
@@ -6509,6 +6551,13 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given in let statement", parser_line_num);
 		//It's already an error, so we'll just send it back up
 		return type_spec_node;
+	}
+	
+	//One thing here, we aren't allowed to see void
+	if(strcmp(type_spec_node->inferred_type->type_name, "void") == 0){
+		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//We'll now add it in as a child node
@@ -6978,6 +7027,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	} else if(function_record != NULL && function_record->defined == 0){
 		//Flag this
 		defining_prev_implicit = 1;
+		//Set this as well
+		current_function = function_record;
 
 	//Otherwise we're defining fresh, so all of these checks need to happen
 	} else {
