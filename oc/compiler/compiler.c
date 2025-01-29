@@ -64,11 +64,6 @@ int main(int argc, char** argv){
 		
 		//Parse the file
 		results = parse(fl);
-		//Timer end
-		clock_t end = clock();
-		//Crude time calculation
-		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-
 
 		//Close the file
 		fclose(fl);
@@ -94,8 +89,16 @@ int main(int argc, char** argv){
 		*/
 	cfg_t* cfg = build_cfg(results, &num_warnings, &num_errors);
 
-
-
+	//FOR NOW -- deallocate this stuff
+	deallocate_ast(results.root);
+	destroy_function_symtab(results.function_symtab);
+	destroy_type_symtab(results.type_symtab);
+	destroy_variable_symtab(results.variable_symtab);
+	
+	//Timer end
+	clock_t end = clock();
+	//Crude time calculation
+	time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 
 	final_printout:
 	//If we failed
@@ -117,12 +120,6 @@ int main(int argc, char** argv){
 		results.success = 1;
 	}
 
-	//FOR NOW -- deallocate this stuff
-	deallocate_ast(results.root);
-	destroy_function_symtab(results.function_symtab);
-	destroy_type_symtab(results.type_symtab);
-	destroy_variable_symtab(results.variable_symtab);
-	
 	printf("==========================================================================================\n\n");
 	// ========================================================
 }
