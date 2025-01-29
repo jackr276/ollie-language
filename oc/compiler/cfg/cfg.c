@@ -3,7 +3,6 @@
 */
 
 #include "cfg.h"
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,6 +113,17 @@ static void basic_block_dealloc(basic_block_t* block){
 	//Otherwise its fine so
 	free(block);
 }
+
+
+/**
+ * Helper for returning error blocks. Error blocks always have an ID of -1
+ */
+static basic_block_t* create_and_return_err(){
+	basic_block_t* err_block = basic_block_alloc();
+	err_block->block_id = -1;
+	return err_block;
+}
+
 
 /**
  * Add a predecessor to the target block. When we add a predecessor, the target
@@ -247,6 +257,34 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	return a;
 }
 
+basic_block_t* visit_unary_expr(generic_ast_node_t* unary_expr_node){
+
+}
+
+
+/**
+ * Visit an assignment expression. This should be quite simple, as there are only two children
+ */
+basic_block_t* visit_assignment_expression(generic_ast_node_t* assignment_expr_node){
+	//Create our basic block
+	basic_block_t* asn_expr_block = basic_block_alloc();
+
+	//We'll need to walk this node's subtree with a cursor
+	generic_ast_node_t* cursor = assignment_expr_node->first_child;
+
+	//If this first child is not a unary expression, we bail out
+	if(cursor->CLASS != AST_NODE_CLASS_UNARY_EXPR){
+		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Expected unary expression as the first child of assignment expression");
+		return create_and_return_err();
+	}
+
+	//We'll let the usual rule handle it otherwise
+	
+
+
+	return asn_expr_block;
+}
+
 
 /**
  * Visit an expression statement. This can decay into a variety of non-control flow cases
@@ -256,7 +294,15 @@ static basic_block_t* visit_expression_statement(generic_ast_node_t* expr_statem
 	basic_block_t* expression_stmt_block = basic_block_alloc();
 
 	//We can either have an assignment expression or a given non-assigned expression
-	//TODO
+	if(expr_statement_node->first_child->CLASS == AST_NODE_CLASS_ASNMNT_EXPR){
+		//Let the assignment expression rule handle it
+		basic_block_t* asn_expr_block = visit_assignment_expression(expr_statement_node->first_child);
+
+		//expression_stmt_block = merge_blocks(expression_stmt_block, *b)
+
+	} else {
+
+	}
 
 
 	return expression_stmt_block;
@@ -396,9 +442,7 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Did not find compound statement as the last node in a function block.");
 		(*num_errors_ref)++;
 		//Create and give back an erroneous block
-		basic_block_t* err_block = basic_block_alloc();
-		err_block->block_id = -1;
-		return err_block;
+		return create_and_return_err();
 	}
 
 	//Otherwise, we can visit the compound statement

@@ -1509,8 +1509,25 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//postifix expression rule
 	} else {
 		push_back_token(fl, lookahead);
+		//We'll still make a top level tree here to avoid ambiguity
+		generic_ast_node_t* unary_expr_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+
+		//Let this handle the heavy lifting
+		generic_ast_node_t* postfix_expr_node = postfix_expression(fl);
+
+		//If this is NULL, just send it up the chain
+		if(postfix_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return postfix_expr_node;
+		}
+
+		//Otherwise he is the unary expression node here
+		add_child_node(unary_expr_node, postfix_expr_node);
+
+		//This type info is also sent up
+		unary_expr_node->inferred_type = postfix_expr_node->inferred_type;
+
 		//Postfix already has type inference built in
-		return postfix_expression(fl);
+		return unary_expr_node;
 	}
 }
 
