@@ -269,10 +269,12 @@ basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
  * Visit a function declaration. The start of a function declaration is
  * always a leader statement. We expect that we see a function definition
  * node here. If we do not, we fail immediately
+ *
+ * Since a function always has a compound statement in it, we will essentially
+ * pass control off here to the compound statement rule
  */
 basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
 	basic_block_t* func_def_block = basic_block_alloc();
-	//TODO
 
 	return func_def_block;
 }

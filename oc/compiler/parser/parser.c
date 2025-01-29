@@ -248,8 +248,13 @@ static generic_ast_node_t* constant(FILE* fl){
 
 				//Create the char array
 				generic_type_t* char_arr = create_array_type(char_type, parser_line_num, length);
+
+				//The record for the string
+				symtab_type_record_t* str_rec = create_type_record(char_arr);
+
 				//Add this type into the symtab
-				insert_type(type_symtab, create_type_record(char_arr));
+				insert_type(type_symtab, str_rec);
+
 				//Assign the type
 				constant_node->inferred_type = char_arr;
 
@@ -5393,6 +5398,8 @@ static generic_ast_node_t* break_statement(FILE* fl){
  * BNF Rule: <return-statement> ::= ret {<logical-or-expression>}?;
  */
 static generic_ast_node_t* return_statement(FILE* fl){
+	//For error printing
+	char info[1500];
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -5419,6 +5426,24 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		num_errors++;
 		//It's already an error, so we'll just return it
 		return expr_node;
+	}
+
+	//Let's do some type checking here
+	if(current_function == NULL){
+		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//If the current function's return type is not compatible with the return type here, we'll bail out
+	if(types_compatible(current_function->return_type, expr_node->inferred_type) == NULL){
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name, current_function->return_type->type_name,
+		  		expr_node->inferred_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function
+		print_function_name(current_function);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node

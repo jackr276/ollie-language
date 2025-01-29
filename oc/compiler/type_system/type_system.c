@@ -117,6 +117,12 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 		return NULL;
 	}
 
+	//If we make it down here, we know that type A is a basic type. If type B isn't,
+	//then we're done here
+	if(typeB->type_class != TYPE_CLASS_BASIC){
+		return NULL;
+	}
+
 	//Otherwise we know that we have a basic type here
 	Token typeA_basic_type = typeA->basic_type->basic_type;
 	Token typeB_basic_type = typeB->basic_type->basic_type;
