@@ -7080,8 +7080,49 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//record for ease of access later
 	generic_ast_node_t* param_list_cursor = param_list_node->first_child;
 
+	//If we are defining a previously implicit function, we'll need to check the types & order
 	if(defining_prev_implicit == 1){
+		//How many params do we have
+		u_int8_t param_count = 0;
+		//The internal function record param
+		symtab_variable_record_t* func_param;
 
+		//So long as this isn't null
+		while(param_list_cursor != NULL){
+			//If at any point this is more than the number of parameters this function is meant to have,
+			//we bail
+			if(param_count > function_record->number_of_params){
+				sprintf(info, "Function \"%s\" was defined implicitly to only have %d parameters. First defined here:", function_record->func_name, function_record->number_of_params);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				//Print the function out too
+				print_function_name(function_record);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Grab this out for reference
+			func_param = function_record->func_params[param_count].associate_var;
+			//The variable record for this param node
+			symtab_variable_record_t* param_rec = ((param_decl_ast_node_t*)(param_list_cursor->node))->param_record;
+
+			//Let's now compare the types here
+			if(strcmp(param_rec->type->type_name, func_param->type->type_name) != 0){
+				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_function_name(function_record);
+				num_errors++;
+			}
+
+			//Otherwise it's fine, so we'll overwrite the entire thing in the record
+			function_record->func_params[param_count].associate_var = param_rec;
+
+			//Advance this
+			param_list_cursor = param_list_cursor->next_sibling;
+			//One more param
+			param_count++;
+		}
+
+	//Otherwise we are defining from scratch here
 	} else {
 		//So long as this is not null
 		while(param_list_cursor != NULL){
@@ -7187,6 +7228,15 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
+		//If we're for some reason defining a previous implicit function
+		if(defining_prev_implicit == 1){
+			sprintf(info, "Function \"%s\" was already defined implicitly here:", function_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_function_name(function_record);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//Otherwise it should be ok
 
 		//If this is the case, then we essentially have a compiler directive here. We'll return NULL
@@ -7215,6 +7265,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	
 		//This function was defined
 		function_record->defined = 1;
+
+		//Where was this function defined
+		function_record->line_number = current_line;
 
 		//If we get here we know that it worked, so we'll add it in as a child
 		add_child_node(function_node, compound_stmt_node);
