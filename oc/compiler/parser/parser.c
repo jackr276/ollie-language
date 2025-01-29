@@ -5723,6 +5723,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  * BNF Rule: <while-statement> ::= while( <logical-or-expression> ) do <compound-statement> 
  */
 static generic_ast_node_t* while_statement(FILE* fl){
+	//For error printing
+	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
 
@@ -5752,6 +5754,19 @@ static generic_ast_node_t* while_statement(FILE* fl){
 		num_errors++;
 		//It's already an error so just give this back
 		return conditional_expr;
+	}
+
+	/**
+	 * The expression of this type must be compatible at the very list with a u_int64
+	 */
+	symtab_type_record_t* int_type = lookup_type(type_symtab, "u_int64");
+
+	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
+	if(conditional_expr->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, conditional_expr->inferred_type) == NULL){
+		sprintf(info, "If statements require an int or pointer type to be in their condition, but was given type \"%s\"", conditional_expr->inferred_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Otherwise we know it's good so we can add it in as a child

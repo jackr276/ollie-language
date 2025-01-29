@@ -19,6 +19,15 @@ func main(s_int32 argc, char** argv) -> s_int32{
 	asn my_structure:b := 3;
 	asn my_structure:c := 32.2;
 
-	
+	//Sample call
+	@test_func(2);
 
+	let u_int32 idx := 0;
+
+	while(idx < 15) do{
+		@test_func(2);
+		idx++;
+	}
+
+	ret my_structure:b;
 }

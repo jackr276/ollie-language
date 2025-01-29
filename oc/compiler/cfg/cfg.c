@@ -260,6 +260,55 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
+ * A while statement is a looping control flow statement that can point back to itself
+ */
+static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node){
+	//Create our entry block
+	basic_block_t* while_stmt_block = basic_block_alloc();
+	//Also create our end block
+	basic_block_t* end_block = basic_block_alloc();
+
+	//Due to the way a while loop works, the end block is also a direct successor to the first block
+	add_successor(while_stmt_block, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//We'll use a cursor to crawl through the statements
+	generic_ast_node_t* cursor = while_stmt_node->first_child;
+
+	//The very first thing that we will see here is a statement
+	top_level_statement_node_t* expr_statement = create_statement(cursor);
+
+	//This statement will be added to our block here
+	add_statement(while_stmt_block, expr_statement);
+
+	//Advance the cursor
+	cursor = cursor->next_sibling;
+
+	//Following this, the only thing left to see is a compound statment
+	basic_block_t* compound_stmt_block = visit_compound_statement(cursor);
+
+	//The compound statement block is a successor to the first block
+	add_successor(while_stmt_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//We now need to navigate all the way down to this block's end
+	basic_block_t* compound_block_end = compound_stmt_block;
+	
+	//So long as this isn't 0, we haven't reached the end
+	while(compound_block_end->num_successors != 0){
+		//Drill down some more
+		compound_block_end = compound_block_end->successors[0];
+	}
+
+	//Once we get here, we have the very end of the compound statement block
+	//This block's direct successor is the top block
+	add_successor(compound_block_end, while_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+
+	//Finally we are all set here, so we will return
+	return while_stmt_block;
+}
+
+
+/**
  * An if statement always invokes some kind of control flow
  */
 static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node){
@@ -542,6 +591,24 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 				current_block = cursor;
 			}
 			
+		//We've encountered a while statement
+		} else if(cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
+			//Let the subsidiary handle
+			basic_block_t* while_stmt_block = visit_while_statement(cursor);
+
+			//We'll also need a reference to the end block
+			basic_block_t* cursor = while_stmt_block;
+
+			//If there are more than 0 successors, we need to keep going
+			while(cursor->num_successors != 0){
+				cursor = cursor->successors[0];
+			}
+
+			//If we see a while statement, we actually never merge it
+			//Add the if block as a successor
+			add_successor(current_block, while_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			//We'll also update the current reference
+			current_block = cursor;
 		}
 
 		//Go to the next sibling
