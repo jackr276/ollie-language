@@ -864,6 +864,28 @@ static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
 }
 
 
+/**
+ * We will perform reachability analysis on the function CFG. We wish to know if the function
+ * returns from every control path
+ */
+static void perform_function_reachability_analysis(generic_ast_node_t* function_node, basic_block_t* entry_block){
+	//If the function returns void, there is no need for any reachability analysis, it will return when 
+	//the function runs off anyway
+	if(strcmp(((func_def_ast_node_t*)(function_node->node))->func_record->return_type->type_name, "void") == 0){
+		return;
+	}
+
+	//The idea here is very simple. If we can walk the function tree and every control path leads 
+	//to a return statement, we return null from every control path
+
+	//We'll need a cursor to walk the tree
+	basic_block_t* block_cursor = entry_block;
+
+	
+
+
+}
+
 
 /**
  * Visit a function declaration. The start of a function declaration is
@@ -921,6 +943,9 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	
 	//The end of the compound statement points to the end block
 	add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//Perform our reachability analysis here--this will produce appropriate warnings
+	perform_function_reachability_analysis(func_def_node, func_def_block);
 
 	return func_def_block;
 }

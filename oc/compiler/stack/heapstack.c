@@ -3,7 +3,7 @@
  * The implementation of the stack functions defined by the API in stack.h
  */
 
-#include "stack.h"
+#include "heapstack.h"
 #include <stdio.h>
 #include <stdlib.h>
 

@@ -4,8 +4,8 @@
  * operations like push, pop and peek, and provides cleanup support as well
  */
 
-#ifndef STACK_H
-#define STACK_H
+#ifndef HEAP_STACK_H
+#define HEAP_STACK_H
 
 #include <sys/types.h>
 #include "../lexer/lexer.h"
@@ -60,4 +60,4 @@ Lexer_item peek(heap_stack_t* stack);
  */
 void destroy_stack(heap_stack_t* stack);
 
-#endif
+#endif /* HEAP_STACK_H */

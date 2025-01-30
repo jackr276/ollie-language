@@ -6,6 +6,16 @@ define construct my_struct {
 } as my_struct;
 
 
+func my_func(u_int32 args, float32 my_float) -> u_int32{
+	if(args == 0) then {
+		ret args;
+	} else if(args > 0) then {
+		ret 0;
+	} else {
+		asn my_float := 32.2;
+	}
+}
+
 func test_func(u_int32 i) -> void{
 	asn i := 32;
 }

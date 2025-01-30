@@ -9,8 +9,8 @@
 #include "../parser/parser.h"
 
 //These may or may not change
-#define MAX_SUCCESSORS 50
-#define MAX_PREDECESSORS 50
+#define MAX_SUCCESSORS 10
+#define MAX_PREDECESSORS 10
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
