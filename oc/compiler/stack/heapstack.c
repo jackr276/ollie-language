@@ -27,17 +27,23 @@ heap_stack_t* create_stack(){
 /**
  * Push data to the top of the stack
  */
-void push(heap_stack_t* stack, Lexer_item l){
+void push(heap_stack_t* stack, void* data){
 	//Just in case
 	if(stack == NULL){
 		printf("ERROR: Stack was never initialized\n");
 		return;
 	}
 
+	//Just in case
+	if(data == NULL){
+		printf("ERROR: Cannot enter null data\n");
+		return;
+	}
+
 	//Allocate a new node
 	stack_node_t* new = (stack_node_t*)malloc(sizeof(stack_node_t));
 	//Store the data
-	new->l = l;
+	new->data = data;
 
 	//Attach to the front of the stack
 	new->next = stack->top;
@@ -52,28 +58,25 @@ void push(heap_stack_t* stack, Lexer_item l){
 /**
  * Pop the head off of the stack and return the data
  */
-Lexer_item pop(heap_stack_t* stack){
-	Lexer_item l;
-	l.tok = BLANK;
-
+void* pop(heap_stack_t* stack){
 	//Just in case
 	if(stack == NULL){
 		printf("ERROR: Stack was never initialized\n");
-		return l;
+		return NULL;
 	}
 
 	//Special case: we have an empty stack
 	if(stack->top == NULL){
-		return l;
+		return NULL;
 	}
 
 	//If there are no nodes return 0
 	if(stack->num_nodes == 0){
-		return l;
+		return NULL;
 	}
 
 	//Grab the data
-	Lexer_item top = stack->top->l;
+	void* top = stack->top->data;
 	
 	stack_node_t* temp = stack->top;
 
@@ -92,33 +95,32 @@ Lexer_item pop(heap_stack_t* stack){
 /**
  * Peek the top of the stack without removing it
  */
-Lexer_item peek(heap_stack_t* stack){
-	Lexer_item l;
-	l.tok = BLANK;
-
+void* peek(heap_stack_t* stack){
 	//Just in case
 	if(stack == NULL){
 		printf("ERROR: Stack was never initialized\n");
-		return l;
+		return NULL;
 	}
 
 	//If the top is NULL, just return NULL
 	if(stack->top == NULL){
-		return l;
+		return NULL;
 	}
 
 	//If there are no nodes return 0
 	if(stack->num_nodes == 0){
-		return l;
+		return NULL;
 	}
 
 	//Return the data pointer
-	return stack->top->l;
+	return stack->top->data;
 }
 
 
 /**
  * Completely free all memory in the stack
+ *
+ * NOTE: This does nothing to touch whatever void* actually is
  */
 void destroy_stack(heap_stack_t* stack){
 	//Just in case...
