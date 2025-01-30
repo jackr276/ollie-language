@@ -30,6 +30,14 @@ func main(s_int32 argc, char** argv) -> s_int32{
 		@test_func(2);
 		idx++;
 	}
+	
+	asn idx := 23;
+
+	do{
+		idx--;
+		@test_func(idx);
+
+	} while (idx > 0);
 
 	ret my_structure:b;
 }
