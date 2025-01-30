@@ -37,7 +37,10 @@ func main(s_int32 argc, char** argv) -> s_int32{
 		idx--;
 		@test_func(idx);
 
-		ret idx;
+		if(idx == 12) then {
+			ret idx;
+			asn idx := 23;
+		}
 
 	} while (idx > 0);
 
@@ -49,5 +52,5 @@ func main(s_int32 argc, char** argv) -> s_int32{
 
 	ret my_structure:b;
 
-	//let u_int32 my_integer := 0x02;
+	let u_int32 my_integer := 0x02;
 }

@@ -63,6 +63,8 @@ struct basic_block_t{
 	int32_t block_id;
 	//Is this block ok to merge?
 	u_int8_t good_to_merge;
+	//Is it a return statement
+	u_int8_t is_return_stmt;
 	//A basic block is a doubly-linked list node
 	//with a predecessor and a successor
 	//Edges represent where we can go on this graph

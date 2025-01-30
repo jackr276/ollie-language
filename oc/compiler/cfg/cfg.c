@@ -325,7 +325,7 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, bas
 	basic_block_t* compound_block_end = compound_stmt_block;
 	
 	//So long as this isn't 0, we haven't reached the end
-	while(compound_block_end->num_successors != 0){
+	while(compound_block_end->is_return_stmt == 0 && compound_block_end->num_successors != 0){
 		//Drill down some more
 		compound_block_end = compound_block_end->successors[0];
 	}
@@ -360,7 +360,7 @@ static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt
 	basic_block_t* compound_block_end = compound_stmt_block;
 	
 	//So long as this isn't 0, we haven't reached the end
-	while(compound_block_end->num_successors != 0){
+	while(compound_block_end->is_return_stmt == 0 && compound_block_end->num_successors != 0){
 		//Drill down some more
 		compound_block_end = compound_block_end->successors[0];
 	}
@@ -428,7 +428,7 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node,
 	basic_block_t* compound_block_end = compound_stmt_block;
 	
 	//So long as this isn't 0, we haven't reached the end
-	while(compound_block_end->num_successors != 0){
+	while(compound_block_end->is_return_stmt == 0 && compound_block_end->num_successors != 0){
 		//Drill down some more
 		compound_block_end = compound_block_end->successors[0];
 	}
@@ -475,7 +475,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	basic_block_t* compound_block_end = compound_stmt_block;
 	
 	//So long as this isn't 0, we haven't reached the end
-	while(compound_block_end->num_successors != 0){
+	while(compound_block_end->is_return_stmt == 0 && compound_block_end->num_successors != 0){
 		//Drill down some more
 		compound_block_end = compound_block_end->successors[0];
 	}
@@ -503,7 +503,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		compound_block_end = compound_stmt_block;
 	
 		//So long as this isn't 0, we haven't reached the end
-		while(compound_block_end->num_successors != 0){
+		while(compound_block_end->is_return_stmt == 0 && compound_block_end->num_successors != 0){
 			//Drill down some more
 			compound_block_end = compound_block_end->successors[0];
 		}
@@ -527,7 +527,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		basic_block_t* if_block_end = else_if_block;
 	
 		//So long as this isn't 0, we haven't reached the end
-		while(if_block_end->num_successors != 0){
+		while(if_block_end->is_return_stmt == 0 && if_block_end->num_successors != 0){
 			//Drill down some more
 			if_block_end = if_block_end->successors[0];
 		}
@@ -609,12 +609,14 @@ static basic_block_t* visit_expression_statement(generic_ast_node_t* expr_statem
  * Visit a compound statement. This is usually a jumping off point for various other nodes
  */
 static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end){
+	//For error printing
+	char info[1000];
 	//This will probably not be merged
 	basic_block_t* compound_stmt_block = basic_block_alloc();
+	//The end block
+	basic_block_t* compound_stmt_block_end = basic_block_alloc();
 	//We will keep track of what the current "end" block is
 	basic_block_t* current_block = compound_stmt_block;
-	//Have we seen a return statement or not?
-	u_int8_t seen_return = 0;
 
 	//We will iterate over all of the children in this compound statement
 	generic_ast_node_t* cursor = compound_stmt_node->first_child;
@@ -624,12 +626,6 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 	//So long as we have stuff in here
 	while(cursor != NULL){
-		//Any code past this point is unreachable
-		if(seen_return == 1){
-			print_cfg_message(WARNING, "Unreachable code detected");
-			(*num_warnings_ref)++;
-		}
-
 		//If we encounter a declaration statement
 		if(cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
 			basic_block_t* decl_block = visit_declaration_statement(cursor); 
@@ -688,7 +684,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			basic_block_t* cursor = compound_stmt_block;
 
 			//If there are more than 0 successors, we need to keep going
-			while(cursor->num_successors != 0){
+			while(cursor->is_return_stmt == 0 && cursor->num_successors != 0){
 				cursor = cursor->successors[0];
 			}
 
@@ -716,7 +712,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			basic_block_t* cursor = if_stmt_block;
 
 			//If there are more than 0 successors, we need to keep going
-			while(cursor->num_successors != 0){
+			while(cursor->is_return_stmt == 0 && cursor->num_successors != 0){
 				cursor = cursor->successors[0];
 			}
 
@@ -743,7 +739,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			basic_block_t* cursor = while_stmt_block;
 
 			//If there are more than 0 successors, we need to keep going
-			while(cursor->num_successors != 0){
+			while(cursor->is_return_stmt == 0 && cursor->num_successors != 0){
 				cursor = cursor->successors[0];
 			}
 
@@ -762,7 +758,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			basic_block_t* cursor = do_while_stmt_block;
 
 			//If there are more than 0 successors, we need to keep going
-			while(cursor->num_successors != 0){
+			while(cursor->is_return_stmt == 0 && cursor->num_successors != 0){
 				cursor = cursor->successors[0];
 			}
 
@@ -779,7 +775,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			basic_block_t* cursor = for_stmt_block;
 
 			//If there are more than 0 successors, we need to keep going
-			while(cursor->num_successors != 0){
+			while(cursor->is_return_stmt == 0 && cursor->num_successors != 0){
 				cursor = cursor->successors[0];
 			}
 
@@ -808,9 +804,17 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 			//No matter what, this current block now points to the function's end
 			add_successor(current_block, function_block_end, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+			//Mark it as a return statement
+			current_block->is_return_stmt = 1;
 			
-			//Set the flag here
-			seen_return = 1;
+			//If the next sibling isn't null, we have unreachable code
+			if(cursor->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after a return statement");
+				(*num_warnings_ref)++;
+			}
+
+			break;
 		}
 
 		//Go to the next sibling
@@ -899,7 +903,7 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	basic_block_t* compound_block_end = compound_stmt_block;
 
 	//So long as this isn't 0, we haven't reached the end
-	while(compound_block_end->num_successors != 0){
+	while(compound_block_end->num_successors == 0 && compound_block_end->is_return_stmt == 1){
 		//Drill down some more
 		compound_block_end = compound_block_end->successors[0];
 	}
