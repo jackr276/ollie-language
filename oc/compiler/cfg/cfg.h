@@ -61,6 +61,8 @@ struct top_level_statement_node_t{
 struct basic_block_t{
 	//The block ID: atomically increasing unsigned integer
 	int32_t block_id;
+	//Is this block ok to merge?
+	u_int8_t good_to_merge;
 	//A basic block is a doubly-linked list node
 	//with a predecessor and a successor
 	//Edges represent where we can go on this graph

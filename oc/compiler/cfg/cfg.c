@@ -25,6 +25,7 @@ static basic_block_t* visit_expression_statement(generic_ast_node_t* decl_node);
 static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node);
 static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node);
 static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node);
+static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node);
 
 
 /**
@@ -258,6 +259,85 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//Give back the pointer to a
 	return a;
+}
+
+
+/**
+ * A for statement is another control flow statement that loops
+ */
+static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node){
+	//Create our entry block
+	basic_block_t* for_stmt_entry_block = basic_block_alloc();
+	//The current block we're operating with
+	basic_block_t* current = for_stmt_entry_block;	
+	
+	//Create our end block
+	basic_block_t* end_block = basic_block_alloc();
+	//This end block is ok to merge
+	end_block->good_to_merge = 1;
+
+	//Grab a cursor for the for statemeent
+	generic_ast_node_t* cursor = for_stmt_node->first_child;
+
+	//The first node that we see could be a let_statement
+	if(cursor->CLASS == AST_NODE_CLASS_LET_STMT || cursor->CLASS == AST_NODE_CLASS_ASNMNT_EXPR){
+		//This block is OK to merge
+		current->good_to_merge = 1;
+		
+		//Create the statement
+		top_level_statement_node_t* expr_stmt = create_statement(cursor);
+
+		//We'll add it in as a statement to our block
+		add_statement(current, expr_stmt);
+
+		//Since the next thing that we see will be the loop, we need a fresh block
+		basic_block_t* next_block = basic_block_alloc();
+
+		//This block is a strict successor of current
+		add_successor(current, next_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		
+		//Current is this block
+		current = next_block;
+
+		//Move the cursor up
+		cursor = cursor->next_sibling;
+	}
+
+	//So long as we don't see the compound statement, keep going
+	while(cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		//We add the expression as a statement
+		top_level_statement_node_t* current_stmt = create_statement(cursor);
+
+		//Add this statement into the current block
+		add_statement(current, current_stmt);
+
+		//Move cursor up
+		cursor = cursor->next_sibling;
+	}
+
+	//We know that the current block points directly to the end block
+	add_successor(current, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//Once we get here, the cursor will be on the compound statement
+	basic_block_t* compound_stmt_block = visit_compound_statement(cursor);
+
+	//We now need to navigate all the way down to this block's end
+	basic_block_t* compound_block_end = compound_stmt_block;
+	
+	//So long as this isn't 0, we haven't reached the end
+	while(compound_block_end->num_successors != 0){
+		//Drill down some more
+		compound_block_end = compound_block_end->successors[0];
+	}
+
+	//The current block goes right to the compound statement
+	add_successor(current, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//We also know that the end of the compound statement points directly to the beginning(current)
+	add_successor(compound_block_end, current, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//All done now
+	return for_stmt_entry_block;
 }
 
 
@@ -681,6 +761,29 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			//We don't merge do-whiles, they will always be a successor
 			add_successor(current_block, do_while_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 			//Update the current cursor
+			current_block = cursor;
+		//We've encountered a for-statement
+		} else if(cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
+			//Let the subsidiary handle it
+			basic_block_t* for_stmt_block = visit_for_statement(cursor);
+
+			//We'll also need a reference to the end block
+			basic_block_t* cursor = for_stmt_block;
+
+			//If there are more than 0 successors, we need to keep going
+			while(cursor->num_successors != 0){
+				cursor = cursor->successors[0];
+			}
+
+			//If the for_stmt_block is ok to merge, we'll do that
+			if(for_stmt_block->good_to_merge == 1){
+				current_block = merge_blocks(current_block, for_stmt_block);
+			//Otherwise, we'll add it in as a successor
+			} else {
+				add_successor(current_block, for_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			}
+
+			//Whatever happened, the new current block is the end of the for statement
 			current_block = cursor;
 		}
 

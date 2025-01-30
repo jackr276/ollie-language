@@ -39,5 +39,11 @@ func main(s_int32 argc, char** argv) -> s_int32{
 
 	} while (idx > 0);
 
+	//Example for loop
+	for(let u_int32 i := 0; i <= 234; asn i := i + 2) do{
+		@test_func(i);
+	}
+
+
 	ret my_structure:b;
 }

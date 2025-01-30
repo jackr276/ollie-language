@@ -5775,7 +5775,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(conditional_expr->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, conditional_expr->inferred_type) == NULL){
-		sprintf(info, "If statements require an int or pointer type to be in their condition, but was given type \"%s\"", conditional_expr->inferred_type->type_name);
+		sprintf(info, "While statements require an int or pointer type to be in their condition, but was given type \"%s\"", conditional_expr->inferred_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -5842,6 +5842,8 @@ static generic_ast_node_t* while_statement(FILE* fl){
  * BNF Rule: <do-while-statement> ::= do <compound-statement> while( <logical-or-expression> );
  */
 static generic_ast_node_t* do_while_statement(FILE* fl){
+	//For error printing
+	char info[1000];
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -5901,6 +5903,18 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 		return expr_node;
 	}
 
+	/**
+	 * The expression of this type must be compatible at the very list with a u_int64
+	 */
+	symtab_type_record_t* int_type = lookup_type(type_symtab, "u_int64");
+
+	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
+	if(expr_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, expr_node->inferred_type) == NULL){
+		sprintf(info, "Do-while statements require an int or pointer type to be in their condition, but was given type \"%s\"", expr_node->inferred_type->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 	//Otherwise we know it's good so we can add it in as a child
 	add_child_node(do_while_stmt_node, expr_node);
 
@@ -5945,7 +5959,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<logical-or-expression>}? ; {<logical-or-expression>}? ) do <compound-statement>
+ * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<logical-or-expression>}? ; {<assignment-expression>}? ) do <compound-statement>
  */
 static generic_ast_node_t* for_statement(FILE* fl){
 	//Freeze the current line number
@@ -6082,7 +6096,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 		//We now must see a valid conditional
 		//Let this rule handle it
-		generic_ast_node_t* expr_node = logical_or_expression(fl);
+		generic_ast_node_t* expr_node = assignment_expression(fl);
 
 		//If it fails, we fail too
 		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
