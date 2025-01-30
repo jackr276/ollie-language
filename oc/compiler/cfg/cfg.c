@@ -19,13 +19,13 @@ u_int32_t* num_warnings_ref;
 
 //We predeclare up here to avoid needing any rearrangements
 static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node);
-static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node);
+static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end);
 static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt);
 static basic_block_t* visit_expression_statement(generic_ast_node_t* decl_node);
-static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node);
-static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node);
-static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node);
-static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node);
+static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end);
+static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node, basic_block_t* function_block_end);
+static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node, basic_block_t* function_block_end);
+static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, basic_block_t* function_block_end);
 
 
 /**
@@ -265,7 +265,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 /**
  * A for statement is another control flow statement that loops
  */
-static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node){
+static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, basic_block_t* function_block_end){
 	//Create our entry block
 	basic_block_t* for_stmt_entry_block = basic_block_alloc();
 	//The current block we're operating with
@@ -319,7 +319,7 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node){
 	add_successor(current, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 	//Once we get here, the cursor will be on the compound statement
-	basic_block_t* compound_stmt_block = visit_compound_statement(cursor);
+	basic_block_t* compound_stmt_block = visit_compound_statement(cursor, function_block_end);
 
 	//We now need to navigate all the way down to this block's end
 	basic_block_t* compound_block_end = compound_stmt_block;
@@ -344,7 +344,7 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node){
 /**
  * A do-while statement is another control flow statement that can also point back to itself
  */
-static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node){
+static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node, basic_block_t* function_block_end){
 	//Create our entry block
 	basic_block_t* do_while_stmt_block = basic_block_alloc();
 	//Also create the ending bloc
@@ -354,7 +354,7 @@ static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt
 	generic_ast_node_t* cursor = do_while_stmt_node->first_child;
 
 	//The very first thing that we will see is a compound statement
-	basic_block_t* compound_stmt_block = visit_compound_statement(cursor);
+	basic_block_t* compound_stmt_block = visit_compound_statement(cursor, function_block_end);
 
 	//We now need to navigate all the way down to this block's end
 	basic_block_t* compound_block_end = compound_stmt_block;
@@ -397,7 +397,7 @@ static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt
 /**
  * A while statement is a looping control flow statement that can point back to itself
  */
-static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node){
+static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node, basic_block_t* function_block_end){
 	//Create our entry block
 	basic_block_t* while_stmt_block = basic_block_alloc();
 	//Also create our end block
@@ -419,7 +419,7 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node)
 	cursor = cursor->next_sibling;
 
 	//Following this, the only thing left to see is a compound statment
-	basic_block_t* compound_stmt_block = visit_compound_statement(cursor);
+	basic_block_t* compound_stmt_block = visit_compound_statement(cursor, function_block_end);
 
 	//The compound statement block is a successor to the first block
 	add_successor(while_stmt_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
@@ -446,7 +446,7 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node)
 /**
  * An if statement always invokes some kind of control flow
  */
-static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node){
+static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end){
 	//Create our basic block
 	basic_block_t* if_stmt_block = basic_block_alloc();
 	//Create an "end block". This is very important because the end block here
@@ -466,7 +466,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node){
 	cursor = cursor->next_sibling;
 
 	//Following this, we'll see a compound statement
-	basic_block_t* compound_stmt_block = visit_compound_statement(cursor);
+	basic_block_t* compound_stmt_block = visit_compound_statement(cursor, function_block_end);
 
 	//This compount_statement is always a control-flow successor to the condition
 	add_successor(if_stmt_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
@@ -494,7 +494,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node){
 	//But if it isn't null, it's our else node -- which could be an else or another if(if-else) 
 	if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 		//We'll invoke the compound statement again here
-		compound_stmt_block = visit_compound_statement(cursor);
+		compound_stmt_block = visit_compound_statement(cursor, function_block_end);
 		//We'll then add this in same as before
 		//This compount_statement is always a control-flow successor to the condition
 		add_successor(if_stmt_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
@@ -517,7 +517,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node){
 	//If we see another if statement
 	} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
 		//Otherwise we'll invoke this very rule
-		basic_block_t* else_if_block = visit_if_statement(cursor);
+		basic_block_t* else_if_block = visit_if_statement(cursor, function_block_end);
 
 		//This block is a successor to the parent
 		add_successor(if_stmt_block, else_if_block, LINKED_DIRECTION_UNIDIRECTIONAL);
@@ -608,11 +608,13 @@ static basic_block_t* visit_expression_statement(generic_ast_node_t* expr_statem
 /**
  * Visit a compound statement. This is usually a jumping off point for various other nodes
  */
-static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node){
+static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end){
 	//This will probably not be merged
 	basic_block_t* compound_stmt_block = basic_block_alloc();
 	//We will keep track of what the current "end" block is
 	basic_block_t* current_block = compound_stmt_block;
+	//Have we seen a return statement or not?
+	u_int8_t seen_return = 0;
 
 	//We will iterate over all of the children in this compound statement
 	generic_ast_node_t* cursor = compound_stmt_node->first_child;
@@ -622,6 +624,12 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 	//So long as we have stuff in here
 	while(cursor != NULL){
+		//Any code past this point is unreachable
+		if(seen_return == 1){
+			print_cfg_message(WARNING, "Unreachable code detected");
+			(*num_warnings_ref)++;
+		}
+
 		//If we encounter a declaration statement
 		if(cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
 			basic_block_t* decl_block = visit_declaration_statement(cursor); 
@@ -674,7 +682,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 		//If this is the case we're just gonna call ourself recursively
 		} else if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 			//Let the subsidiary handle
-			basic_block_t* compound_stmt_block = visit_compound_statement(cursor); 
+			basic_block_t* compound_stmt_block = visit_compound_statement(cursor, function_block_end); 
 
 			//We'll also need a reference to the end block
 			basic_block_t* cursor = compound_stmt_block;
@@ -702,7 +710,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 		} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
 			
 			//Let the subsidiary handle
-			basic_block_t* if_stmt_block = visit_if_statement(cursor);
+			basic_block_t* if_stmt_block = visit_if_statement(cursor, function_block_end);
 
 			//We'll also need a reference to the end block
 			basic_block_t* cursor = if_stmt_block;
@@ -729,7 +737,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 		//We've encountered a while statement
 		} else if(cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
 			//Let the subsidiary handle
-			basic_block_t* while_stmt_block = visit_while_statement(cursor);
+			basic_block_t* while_stmt_block = visit_while_statement(cursor, function_block_end);
 
 			//We'll also need a reference to the end block
 			basic_block_t* cursor = while_stmt_block;
@@ -748,7 +756,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 		//We've encountered a do-while statement
 		} else if(cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
 			//Let the subsidiary handle
-			basic_block_t* do_while_stmt_block = visit_do_while_statement(cursor);
+			basic_block_t* do_while_stmt_block = visit_do_while_statement(cursor, function_block_end);
 
 			//We'll also need a reference to the end block
 			basic_block_t* cursor = do_while_stmt_block;
@@ -765,7 +773,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 		//We've encountered a for-statement
 		} else if(cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
 			//Let the subsidiary handle it
-			basic_block_t* for_stmt_block = visit_for_statement(cursor);
+			basic_block_t* for_stmt_block = visit_for_statement(cursor, function_block_end);
 
 			//We'll also need a reference to the end block
 			basic_block_t* cursor = for_stmt_block;
@@ -785,11 +793,29 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 			//Whatever happened, the new current block is the end of the for statement
 			current_block = cursor;
+
+		//We've encountered a return statement
+		} else if(cursor->CLASS == AST_NODE_CLASS_RET_STMT){
+			//There are really two options here -- we could see a blank return statement
+			//or an expression one
+			//If this isn't null, we'll add the expression in
+			if(cursor->first_child != NULL){
+				//Create the statement
+				top_level_statement_node_t* ret_stmt = create_statement(cursor->first_child);
+				//Add it in
+				add_statement(current_block, ret_stmt);
+			}
+
+			//No matter what, this current block now points to the function's end
+			add_successor(current_block, function_block_end, LINKED_DIRECTION_UNIDIRECTIONAL);
+			
+			//Set the flag here
+			seen_return = 1;
 		}
 
 		//Go to the next sibling
 		cursor = cursor->next_sibling;
-	}
+	} 
 
 
 	//We always give back the very first block here
@@ -844,7 +870,10 @@ static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
  * pass control off here to the compound statement rule
  */
 static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
+	//Create the block for ourselves here
 	basic_block_t* func_def_block = basic_block_alloc();
+	//Also create the ending block that we'll need
+	basic_block_t* end_block = basic_block_alloc();
 
 	//The compound statement is always the last child of a function statement
 	generic_ast_node_t* func_cursor = func_def_node->first_child;	
@@ -863,7 +892,17 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	}
 
 	//Otherwise, we can visit the compound statement
-	basic_block_t* compound_stmt_block = visit_compound_statement(func_cursor);
+	basic_block_t* compound_stmt_block = visit_compound_statement(func_cursor, end_block);
+
+	//Again, we'll need to drill all the way to the very end of this block
+	//We now need to navigate all the way down to this block's end
+	basic_block_t* compound_block_end = compound_stmt_block;
+
+	//So long as this isn't 0, we haven't reached the end
+	while(compound_block_end->num_successors != 0){
+		//Drill down some more
+		compound_block_end = compound_block_end->successors[0];
+	}
 
 	//If it's a failure, we error out
 	if(compound_stmt_block->block_id == -1){
@@ -876,6 +915,8 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	//At the end, we'll merge the compound statement block with the function definition block
 	merge_blocks(func_def_block, compound_stmt_block);
 	
+	//The end of the compound statement points to the end block
+	add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 	return func_def_block;
 }
@@ -937,9 +978,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 				//Update the reference to whatever the current block is
 				cfg->current = func_def_block;
 			}
-
-			//When we get out of a function, the next block will itself be a leader block
-			need_leader = 1;
 
 		//We can also encounter a declarative statement
 		} else if(cursor->CLASS == AST_NODE_CLASS_DECL_STMT){

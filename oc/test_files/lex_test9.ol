@@ -20,4 +20,6 @@ func main(u_int32 argc, char** argv) -> s_int32{
 
 
 	ret j;
+
+	let u_int32 my_int := 234;
 }

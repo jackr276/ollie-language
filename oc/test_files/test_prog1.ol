@@ -37,6 +37,8 @@ func main(s_int32 argc, char** argv) -> s_int32{
 		idx--;
 		@test_func(idx);
 
+		ret idx;
+
 	} while (idx > 0);
 
 	//Example for loop
@@ -46,4 +48,6 @@ func main(s_int32 argc, char** argv) -> s_int32{
 
 
 	ret my_structure:b;
+
+	//let u_int32 my_integer := 0x02;
 }
