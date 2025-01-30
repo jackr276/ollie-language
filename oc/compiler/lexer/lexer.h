@@ -73,6 +73,7 @@ typedef enum {
 	LABEL_IDENT, /* Label idents always start with $ */
 	POUND, /* # */
 	INT_CONST,
+	LONG_CONST,
 	FLOAT_CONST,
 	STR_CONST,
 	CHAR_CONST,

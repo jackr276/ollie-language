@@ -225,6 +225,7 @@ struct constant_ast_node_t{
 	Token constant_type;
 	//It's cheap enough for us to just hold all of these here
 	int32_t int_val;
+	int64_t long_val;
 	float float_val;
 	char char_val;
 	char string_val[MAX_TOKEN_LENGTH];

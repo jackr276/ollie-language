@@ -651,6 +651,17 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					current_state = IN_FLOAT;
 					*lexeme_cursor = ch;
 					lexeme_cursor++;
+
+				} else if (ch == 'l'){
+					//We have seen a long constant
+					current_state = IN_START;
+					lex_item.tok = LONG_CONST;
+					strcpy(lex_item.lexeme, lexeme);
+					lex_item.line_num = line_num;
+					lex_item.char_count = token_char_count;
+
+					return lex_item;
+
 				} else {
 					//Otherwise we're out
 					//"Put back" the char

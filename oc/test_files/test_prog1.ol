@@ -19,6 +19,8 @@ func main(s_int32 argc, char** argv) -> s_int32{
 	asn my_structure:b := 3;
 	asn my_structure:c := 32.2;
 
+	let s_int64 j := 2342l;
+
 	//Sample call
 	@test_func(2);
 

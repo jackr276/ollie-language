@@ -11,6 +11,8 @@ func main(u_int32 argc, char** argv) -> s_int32{
 
 	declare u_int32 j;
 
+	let s_int64 long := 234l;
+
 	
 	for(asn j := 0; j <= 33; j++) do {
 		asn j := j - 3;

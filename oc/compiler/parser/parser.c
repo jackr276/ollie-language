@@ -188,6 +188,17 @@ static generic_ast_node_t* constant(FILE* fl){
 			constant_node->inferred_type = lookup_type(type_symtab, "s_int32")->type;
 			break;
 
+		case LONG_CONST:
+			((constant_ast_node_t*)(constant_node->node))->constant_type = LONG_CONST;
+			//Store the int value we were given
+			int64_t long_val = atol(lookahead.lexeme);
+
+			((constant_ast_node_t*)(constant_node->node))->long_val = long_val;
+
+			//By default, int constants are of type s_int64 
+			constant_node->inferred_type = lookup_type(type_symtab, "s_int64")->type;
+			break;
+
 		case FLOAT_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = FLOAT_CONST;
 			//Grab the float val
@@ -211,6 +222,7 @@ static generic_ast_node_t* constant(FILE* fl){
 			//Char consts are of type char(obviously)
 			constant_node->inferred_type = lookup_type(type_symtab, "char")->type;
 			break;
+
 		case STR_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = STR_CONST;
 			//String contants are of a char[] type. We will determine what the size of this char[] is here
@@ -550,7 +562,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 	//We can also see a constant
 	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
-			  || lookahead.tok == CHAR_CONST){
+			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST){
 		//Again put the token back
 		push_back_token(fl, lookahead);
 
