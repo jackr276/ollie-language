@@ -33,7 +33,7 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, bas
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
 */
-static void print_cfg_message(parse_message_type_t message_type, char* info){
+static void print_cfg_message(parse_message_type_t message_type, char* info, u_int16_t line_number){
 	//Build and populate the message
 	parse_message_t parse_message;
 	parse_message.message = message_type;
@@ -49,7 +49,7 @@ static void print_cfg_message(parse_message_type_t message_type, char* info){
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	fprintf(stderr, "\n[COMPILER %s]: %s\n", type[parse_message.message], parse_message.info);
+	fprintf(stderr, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[parse_message.message], parse_message.info);
 }
 
 
@@ -540,7 +540,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		return if_stmt_block;
 
 	} else {
-		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Found unknown non-null block in if statement");
+		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Found unknown non-null block in if statement", cursor->line_number);
 		return create_and_return_err();
 	}
 }
@@ -558,7 +558,7 @@ basic_block_t* visit_assignment_expression(generic_ast_node_t* assignment_expr_n
 
 	//If this first child is not a unary expression, we bail out
 	if(cursor->CLASS != AST_NODE_CLASS_UNARY_EXPR){
-		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Expected unary expression as the first child of assignment expression");
+		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Expected unary expression as the first child of assignment expression", cursor->line_number);
 		return create_and_return_err();
 	}
 
@@ -813,7 +813,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			
 			//If the next sibling isn't null, we have unreachable code
 			if(cursor->next_sibling != NULL){
-				print_cfg_message(WARNING, "Unreachable code detected after a return statement");
+				print_cfg_message(WARNING, "Unreachable code detected after a return statement", cursor->next_sibling->line_number);
 				(*num_warnings_ref)++;
 			}
 
@@ -928,7 +928,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		//Extract the function name
 		char* func_name = ((func_def_ast_node_t*)(function_node->node))->func_record->func_name;
 		sprintf(info, "Function \"%s\" does not return in %d control paths", func_name, dead_ends);
-		print_cfg_message(WARNING, info);
+		print_cfg_message(WARNING, info, function_node->line_number);
 		(*num_warnings_ref)+=dead_ends;
 	}
 }
@@ -958,7 +958,7 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 
 	//The next thing that a function declaration sees is a compound statement
 	if(func_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Did not find compound statement as the last node in a function block.");
+		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Did not find compound statement as the last node in a function block.", func_cursor->line_number);
 		(*num_errors_ref)++;
 		//Create and give back an erroneous block
 		return create_and_return_err();
@@ -980,7 +980,7 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	//If it's a failure, we error out
 	if(compound_stmt_block->block_id == -1){
 		//Print our message out
-		print_cfg_message(PARSE_ERROR, "Invalid compound statement encountered in function definition");
+		print_cfg_message(PARSE_ERROR, "Invalid compound statement encountered in function definition", func_cursor->line_number);
 		//Send this up the chain
 		return compound_stmt_block;
 	}
@@ -1024,7 +1024,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//If this is null, we had an empty program of some kind
 	if(cursor == NULL){
-		print_cfg_message(PARSE_ERROR, "No top level CFG node has been detected");
+		print_cfg_message(PARSE_ERROR, "No top level CFG node has been detected", 0);
 		(*num_errors_ref)++;
 		return NULL;
 	}
@@ -1040,7 +1040,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 			//If we have a -1, this means that the whole block is an error
 			if(func_def_block->block_id == -1){
-				print_cfg_message(PARSE_ERROR, "Invalid function definition block encountered");
+				print_cfg_message(PARSE_ERROR, "Invalid function definition block encountered", cursor->line_number);
 				(*num_errors_ref)++;
 				return NULL;
 			}
@@ -1074,7 +1074,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 			//If we have -1, that means that this whole block is an error
 			if(decl_block->block_id == -1){
-				print_cfg_message(PARSE_ERROR, "Invalid top level declaration block encountered");
+				print_cfg_message(PARSE_ERROR, "Invalid top level declaration block encountered", cursor->line_number);
 				(*num_errors_ref)++;
 				return NULL;
 			}
@@ -1103,7 +1103,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 			//If we have -1, that means that this whole block is an error
 			if(let_block->block_id == -1){
-				print_cfg_message(PARSE_ERROR, "Invalid top level let block encountered");
+				print_cfg_message(PARSE_ERROR, "Invalid top level let block encountered", cursor->line_number);
 				(*num_errors_ref)++;
 				return NULL;
 			}
@@ -1126,7 +1126,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 		//We really should never get here, but we'll catch this if we do
 		} else {
-			print_cfg_message(PARSE_ERROR, "Invalid top level node detected in AST");
+			print_cfg_message(PARSE_ERROR, "Invalid top level node detected in AST", cursor->line_number);
 			(*num_errors_ref)++;
 			return NULL;
 		}
