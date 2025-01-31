@@ -115,6 +115,8 @@ static generic_ast_node_t* identifier(FILE* fl){
 	strcpy(((identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
 	//Default identifier type is s_int32
 	ident_node->inferred_type = lookup_type(type_symtab, "s_int32")->type;
+	//Add the line number
+	ident_node->line_number = parser_line_num;
 
 	//Return our reference to the node
 	return ident_node;
@@ -149,6 +151,8 @@ static generic_ast_node_t* label_identifier(FILE* fl){
 	strcpy(((identifier_ast_node_t*)(label_ident_node->node))->identifier, lookahead.lexeme);
 	//By default a label identifier is of type u_int64(memory address)
 	label_ident_node->inferred_type = lookup_type(type_symtab, "u_int64")->type;
+	//Add the line number
+	label_ident_node->line_number = parser_line_num;
 
 	//Return our reference to the node
 	return label_ident_node;
@@ -174,6 +178,8 @@ static generic_ast_node_t* constant(FILE* fl){
 
 	//Create our constant node
 	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+	//Add the line number
+	constant_node->line_number = parser_line_num;
 
 	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
@@ -488,6 +494,9 @@ static generic_ast_node_t* function_call(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Add the line number in
+	function_call_node->line_number = current_line;
+
 	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
 }
@@ -513,6 +522,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 	//We first create the primary expression node
 	generic_ast_node_t* primary_expr_node = ast_node_alloc(AST_NODE_CLASS_PRIMARY_EXPR);
+	//Add the line number
+	primary_expr_node->line_number = current_line;
 	
 	//Grab the next token, we'll multiplex on this
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -686,6 +697,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//If we make it here however, that means that we did see the assign keyword. Since
 	//this is the case, we'll make a new assignment node and take the appropriate actions here 
 	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_CLASS_ASNMNT_EXPR);	
+	//Add in the line number
+	asn_expr_node->line_number = current_line;
 
 	//Now we must see a valid unary expression. The unary expression's parent
 	//will itself be the assignment expression node
@@ -799,6 +812,8 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR);
+	//Add the line number
+	const_access_node->line_number = current_line;
 
 	//Put the token in to show what we have
 	((construct_accessor_ast_node_t*)(const_access_node->node))->tok = lookahead.tok;
@@ -985,6 +1000,8 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 
 	//Now that we've done all of our checks have been done, we can create the actual node
 	generic_ast_node_t* array_acc_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_ACCESSOR);
+	//Add the line number
+	array_acc_node->line_number = current_line;
 	//TODO encode type info later
 	//The conditional expression is a child of this node
 	add_child_node(array_acc_node, expr);
@@ -1047,6 +1064,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
 	//post operation, so we can make the node for it
 	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_CLASS_POSTFIX_EXPR);
+	//Add the line number
+	postfix_expr_node->line_number = current_line;
 
 	//This node will always have the primary expression as its first child
 	add_child_node(postfix_expr_node, primary_expr);
@@ -1261,6 +1280,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//Create a constant node
 		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+		//Add the line number
+		const_node->line_number = parser_line_num;
+		//Add the constant
 		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
 		//Store the actual value
 		((constant_ast_node_t*)(const_node->node))->int_val = type_size;
@@ -1323,6 +1345,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//One we get here, we have both nodes that we need
 		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+		//Add the line number
+		unary_node->line_number = parser_line_num;
 
 		//Create a constant node
 		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
@@ -1513,6 +1537,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//Store the type that we have here
 		unary_node->inferred_type = return_type;
+		//Store the line number
+		unary_node->line_number = parser_line_num;
 
 		//Finally we're all done, so we can just give this back
 		return unary_node;
@@ -1537,6 +1563,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//This type info is also sent up
 		unary_expr_node->inferred_type = postfix_expr_node->inferred_type;
+		//Store the line number
+		unary_expr_node->line_number = parser_line_num;
 
 		//Postfix already has type inference built in
 		return unary_expr_node;
@@ -1663,6 +1691,8 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 
 	//We'll now add the unary expression as the right node
 	add_child_node(cast_node, right_hand_unary);
+	//Store the line number
+	cast_node->line_number = parser_line_num;
 
 	//Finally, we're all set to go here, so we can return the root reference
 	return cast_node;
@@ -2006,6 +2036,8 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 	//If we get here, it means that we did not see the token we need, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(fl, lookahead);
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -2379,6 +2411,8 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 	//If we get here, it means that we did not see the token we need, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(fl, lookahead);
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -2503,6 +2537,8 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 
 	//Once we make it here, the subtree root is either just the shift expression or it is the
 	//shift expression rooted at the relational operator
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -2626,6 +2662,8 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 
 	//Once we make it here, the subtree root is either just the shift expression or it is the
 	//shift expression rooted at the relational operator
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -2743,6 +2781,8 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(fl, lookahead);
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -2864,6 +2904,8 @@ static generic_ast_node_t* and_expression(FILE* fl){
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(fl, lookahead);
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -2985,6 +3027,8 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(fl, lookahead);
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -3104,6 +3148,8 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(fl, lookahead);
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -3224,6 +3270,8 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(fl, lookahead);
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//We simply give back the sub tree root
 	return sub_tree_root;
@@ -3349,6 +3397,8 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 	//If we get here, it means that we did not see the "DOUBLE OR" token, so we are done. We'll put
 	//the token back and add this in as a subtree of the parent
 	push_back_token(fl, lookahead);
+	//Store the line number
+	sub_tree_root->line_number = parser_line_num;
 
 	//Return the reference to the root node
 	return sub_tree_root;
@@ -3484,6 +3534,8 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	add_child_node(member_node, type_spec);
 	//The second child will be the ident node
 	add_child_node(member_node, ident);
+	//Store the line number
+	member_node->line_number = parser_line_num;
 
 	//All went well so we can send this up the chain
 	return member_node;
@@ -3550,6 +3602,8 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 
 	//If we get here we know that it's right, but we'll still allow the other rule to handle it
 	push_back_token(fl, lookahead);
+	//Store the parser line number
+	member_list->line_number = parser_line_num;
 
 	//Give the member list back
 	return member_list;
@@ -4264,6 +4318,8 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
 	((type_address_specifier_ast_node_t*)(type_addr_node)->node)->address_type = ADDRESS_SPECIFIER_ARRAY;
 	//Since it's an array, it will have a child that is the constant node
 	add_child_node(type_addr_node, constant_node);
+	//Store the line number
+	type_addr_node->line_number = parser_line_num;
 	
 	//Finally we'll give the node back
 	return type_addr_node;
@@ -4482,6 +4538,8 @@ static generic_ast_node_t* type_name(FILE* fl){
 		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, dealiased_type->type_name);
 		//We can also add in the type ident as a child node of the type name node
 		add_child_node(type_name_node, type_ident);
+		//Store the line number
+		type_name_node->line_number = parser_line_num;
 
 		//Once we make it here, we should be all set to get out
 		return type_name_node;
@@ -4627,6 +4685,8 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 	//and return it
 	//This will store a reference to whatever the type record is
 	type_spec_node->inferred_type =  current_type_record->type;
+	//Store the line number
+	type_spec_node->line_number = parser_line_num;
 
 	//Finally we can give back the node
 	return type_spec_node;
@@ -4757,6 +4817,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 
 	//We'll also save the associated record in the node
 	((param_decl_ast_node_t*)(parameter_decl_node->node))->param_record = param_record;
+	//Store the line number
+	parameter_decl_node->line_number = parser_line_num;
 
 	//Finally, we'll send this node back
 	return parameter_decl_node;
@@ -4820,6 +4882,8 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 	//for the caller to handle
 	push_back_token(fl, lookahead);
 
+	//Store the line number
+	param_list_node->line_number = parser_line_num;
 	//Now we're done here, so we'll just give the root node back
 	return param_list_node;
 }
@@ -4878,6 +4942,8 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Store the line number
+	expr_stmt_node->line_number = parser_line_num;
 	//Otherwise we're all set
 	return expr_stmt_node;
 }
@@ -5185,6 +5251,8 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		add_child_node(if_stmt, else_compound_stmt);
 	}
 	
+	//Store the line number
+	if_stmt->line_number = current_line;
 	//Once we reach the end, return the root level node
 	return if_stmt;
 }
@@ -5252,6 +5320,8 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 	//Then we'll sotre the label record in the jump statement for ease of use later
 	((jump_stmt_ast_node_t*)(jump_stmt->node))->label_record = label_record;
 
+	//Store the line number
+	jump_stmt->line_number = parser_line_num;
 	//Finally we'll give back the root reference
 	return jump_stmt;
 }
@@ -5347,6 +5417,8 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 	
+	//Store the line number
+	continue_stmt->line_number = parser_line_num;
 	//If we make it all the way down here, it worked so we can return the root node
 	return continue_stmt;
 }
@@ -5442,6 +5514,8 @@ static generic_ast_node_t* break_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 	
+	//Store the line number
+	break_stmt->line_number = parser_line_num;
 	//If we make it all the way down here, it worked so we can return the root node
 	return break_stmt;
 }
@@ -5541,6 +5615,8 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Add in the line number
+	return_stmt->line_number = parser_line_num;
 	//If we get here we're all good, just return the parent
 	return return_stmt;
 }
@@ -5721,6 +5797,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	finalize_type_scope(type_symtab);
 	finalize_variable_scope(variable_symtab);
 
+	//Return the line number
+	switch_stmt_node->line_number = current_line;
 	//If we make it here, all went well
 	return switch_stmt_node;
 }
@@ -5739,6 +5817,8 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
 
 	//First create the actual node
 	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_CLASS_WHILE_STMT);
@@ -5827,6 +5907,8 @@ static generic_ast_node_t* while_statement(FILE* fl){
 
 	//Otherwise we'll add it in as a child
 	add_child_node(while_stmt_node, compound_stmt_node);
+	//Store the current line number
+	while_stmt_node->line_number = current_line;
 
 	//And we'll return the root reference
 	return while_stmt_node;
@@ -5947,6 +6029,8 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 		//Create and return an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
+	//Store the line number
+	do_while_stmt_node->line_number = current_line;
 	
 	//Otherwise if we made it here, everything went well
 	return do_while_stmt_node;
@@ -6154,6 +6238,8 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 	//At the end, we'll finalize the lexical scope
 	finalize_variable_scope(variable_symtab);
+	//Store the line number
+	for_stmt_node->line_number = current_line;
 
 	//It all worked here, so we'll return the root
 	return for_stmt_node;
@@ -6272,6 +6358,8 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 	//"finalize" both of these scopes
 	finalize_type_scope(type_symtab);
 	finalize_variable_scope(variable_symtab);
+	//Add in the line number
+	compound_stmt_node->line_number = parser_line_num;
 
 	//And we're all done, so we'll return the reference to the root node
 	return compound_stmt_node;
@@ -6302,6 +6390,9 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 
 	//Add the expression in as a child
 	add_child_node(defer_node, expr_node);
+
+	//Add the line number
+	defer_node->line_number = parser_line_num;
 
 	//Return the deferral here
 	return defer_node;
@@ -6563,6 +6654,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 
 	//Also store this record with the root node
 	((decl_stmt_ast_node_t*)(decl_node->node))->declared_var = declared_var;
+	//Store the line number
+	decl_node->line_number = current_line;
 
 	//All went well so we can return this
 	return decl_node;
@@ -6782,6 +6875,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	
 	//Add the reference into the root node
 	((let_stmt_ast_node_t*)(let_stmt_node->node))->declared_var = declared_var;
+	//Store the line number
+	let_stmt_node->line_number = current_line;
 
 	//Give back the let statement node here
 	return let_stmt_node;
@@ -7426,6 +7521,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Finalize the variable scope for the parameter list
 		finalize_variable_scope(variable_symtab);
 
+		//Store the line number
+		function_node->line_number = current_line;
+
 		//All good so we can get out
 		return function_node;
 	}
@@ -7532,6 +7630,9 @@ static generic_ast_node_t* program(FILE* fl){
 		add_child_node(prog, current);
 		//And then we'll keep right along
 	}
+
+	//Line number is 0
+	prog->line_number = 0;
 
 	//Return the root of the tree
 	return prog;

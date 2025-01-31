@@ -175,6 +175,8 @@ struct generic_ast_node_t{
 	generic_ast_node_t* next_sibling;
 	//What kind of node is it?
 	ast_node_class_t CLASS;
+	//What line number is this from
+	u_int16_t line_number;
 	//This is where we hold the actual node
 	void* node;
 };

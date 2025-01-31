@@ -1045,17 +1045,26 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 				return NULL;
 			}
 
+			//We need to drill to the bottom of this block
+			basic_block_t* cursor = func_def_block;
+
+			//So long as we aren't at the end
+			while(cursor->num_successors != 0){
+				cursor = cursor->successors[0];
+			}
+			//Once we get here, we'll have the bottom
+
 			//If the CFG root is null, then this becomes the root
 			if(cfg->root == NULL){
 				cfg->root = func_def_block;
 				//We also maintain a reference to the current block
-				cfg->current = func_def_block;
+				cfg->current = cursor;
 			//Otherwise, this block is a successor to the current block
 			} else {
 				//Add the successor in
-				add_successor(cfg->current, func_def_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				add_successor(cursor, func_def_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 				//Update the reference to whatever the current block is
-				cfg->current = func_def_block;
+				cfg->current = cursor;
 			}
 
 		//We can also encounter a declarative statement
