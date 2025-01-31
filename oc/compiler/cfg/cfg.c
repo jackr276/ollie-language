@@ -462,13 +462,13 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node,
 
 
 /**
- * An if statement always invokes some kind of control flow
+ * An if statement always invokes a kind of control flow itself.
  */
 static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end){
-	//Create our basic block
+	//Create the basic entry block
 	basic_block_t* if_stmt_block = basic_block_alloc();
-	//Create an "end block". This is very important because the end block here
-	//creates an anchor where all of our other statements go
+
+	//All blocks flow through the end block
 	basic_block_t* end_block = basic_block_alloc();
 
 	//Grab a cursor that we will use to crawl the if statement
@@ -492,20 +492,30 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	//We now need to navigate all the way down to this block's end
 	basic_block_t* compound_block_end = compound_stmt_block;
 	
-	//So long as this isn't 0, we haven't reached the end
-	while(compound_block_end->direct_successor != NULL){
+	//So long as this isn't null and it isn't a return statement
+	while(compound_block_end->direct_successor != NULL && compound_block_end->is_return_stmt == 0){
 		//Drill down some more
 		compound_block_end = compound_block_end->direct_successor;
 	}
 
-	//This block will have it's own successor, the end statement block
-	add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	//If this is not a return statement, we'll add it here. If it is a return statement, then control flow never
+	//returns to the "end_block", so we will not add it in here
+	if(compound_block_end->is_return_stmt == 0){
+		//This block will have it's own successor, the end statement block
+		add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	}
 
 	//Now moving forward here, we do have the option to see an "else" section
 	cursor = cursor->next_sibling;
 
 	//If this is null, then we're done here
 	if(cursor == NULL){
+		//We'll need the fail case to point to the "end block"
+		add_successor(if_stmt_block, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		//The primary successor is the end block
+		if_stmt_block->direct_successor = end_block;
+
+		//Give the block back
 		return if_stmt_block;
 	}
 
@@ -513,8 +523,9 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 		//We'll invoke the compound statement again here
 		compound_stmt_block = visit_compound_statement(cursor, function_block_end);
+
 		//We'll then add this in same as before
-		//This compount_statement is always a control-flow successor to the condition
+		//This compound_statement is always a control-flow successor to the condition
 		add_successor(if_stmt_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 		//We now need to navigate all the way down to this block's end
@@ -564,69 +575,32 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 
 
 /**
- * Visit an assignment expression. This should be quite simple, as there are only two children
- */
-basic_block_t* visit_assignment_expression(generic_ast_node_t* assignment_expr_node){
-	//Create our basic block
-	basic_block_t* asn_expr_block = basic_block_alloc();
-
-	//We'll need to walk this node's subtree with a cursor
-	generic_ast_node_t* cursor = assignment_expr_node->first_child;
-
-	//If this first child is not a unary expression, we bail out
-	if(cursor->CLASS != AST_NODE_CLASS_UNARY_EXPR){
-		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Expected unary expression as the first child of assignment expression", cursor->line_number);
-		return create_and_return_err();
-	}
-
-	//We'll walk the subtree creating statements
-	while(cursor != NULL){
-		//Create the statement
-		top_level_statement_node_t* stmt = create_statement(cursor);
-
-		//Add it into the node
-		add_statement(asn_expr_block, stmt);
-
-		//Advance the cursor
-		cursor = cursor->next_sibling;
-	}
-
-	return asn_expr_block;
-}
-
-
-/**
  * Visit an expression statement. This can decay into a variety of non-control flow cases
  */
 static basic_block_t* visit_expression_statement(generic_ast_node_t* expr_statement_node){
-	//This will probably be merged
-	basic_block_t* expression_stmt_block = basic_block_alloc();
+	//We'll create our block here
+	basic_block_t* expr_block = basic_block_alloc();
 
-	//We can either have an assignment expression or a given non-assigned expression
-	if(expr_statement_node->first_child->CLASS == AST_NODE_CLASS_ASNMNT_EXPR){
-		//Let the assignment expression rule handle it
-		basic_block_t* asn_expr_block = visit_assignment_expression(expr_statement_node->first_child);
-
-		//Merge the two statements here
-		expression_stmt_block = merge_blocks(expression_stmt_block, asn_expr_block);
-
-	} else {
-		//Otherwise, for now, we'll just add this in as a statement
-		top_level_statement_node_t* stmt = create_statement(expr_statement_node->first_child);
-
-		//Add this into the current block
-		add_statement(expression_stmt_block, stmt);
+	//We'll look at whatever our first node here is
+	if(expr_statement_node->first_child == NULL){
+		print_cfg_message(PARSE_ERROR, "Null node given in expression statement", expr_statement_node->line_number);
+		(*num_errors_ref)++;
+		exit(1);
 	}
 
+	//Otherwise, we'll just create a statement here
+	top_level_statement_node_t* expr_stmt = create_statement(expr_statement_node->first_child);
 
-	return expression_stmt_block;
+	//Add this statement into the block
+	add_statement(expr_block, expr_stmt);
+	
+	//This is all for now, so we'll just return the block
+	return expr_block;
 }
 
 
 /**
  * Visit a compound statement. This is usually a jumping off point for various other nodes
- *
- * TODO RETHINK HOW THIS IS STRUCTURED
  */
 static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end){
 	//For error printing
@@ -638,9 +612,6 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 	//We will iterate over all of the children in this compound statement
 	generic_ast_node_t* ast_cursor = compound_stmt_node->first_child;
-
-	//By default, we do not immediately need a leader block here(compound_stmt_block is the leader block)
-	need_leader = 0;
 
 	//So long as our ast cursor is live
 	while(ast_cursor != NULL){
@@ -783,6 +754,8 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 			//No matter what, this current block now points to the function's end
 			add_successor(current_block, function_block_end, LINKED_DIRECTION_UNIDIRECTIONAL);
+			//Just for insurance
+			current_block->direct_successor = function_block_end;
 
 			//Mark it as a return statement
 			current_block->is_return_stmt = 1;
@@ -882,7 +855,8 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			/**
 			 * Now we can perform our checks. 
 			 */
-			if(block_cursor->is_exit_block == 0 && block_cursor->num_successors == 0){
+			//If this block is not an exit block but it has no direct successors, it is bad
+			if(block_cursor->direct_successor == NULL && block_cursor->is_return_stmt == 0){
 				dead_ends++;
 			}
 		}
@@ -961,14 +935,18 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	basic_block_t* compound_block_end = compound_stmt_block;
 
 	//In theory, we can keep going until we don't see any more direct successors
-	while(compound_block_end->direct_successor != NULL){
+	while(compound_block_end->direct_successor != NULL && compound_block_end->is_return_stmt == 0){
+		printf("HERE\n");
 		//Keep drilling down
 		compound_block_end = compound_block_end->direct_successor;
 	}
 
-	//The end of the compound statement points to the end block
-	add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-	
+	//If it isn't a return statement, we'll add the end block in
+	if(compound_block_end->is_return_stmt == 0){
+		//The end of the compound statement points to the end block
+		add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	}
+
 	//At the end, we'll merge the compound statement block with the function definition start block
 	merge_blocks(func_def_block, compound_stmt_block);
 	
