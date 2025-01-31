@@ -69,6 +69,10 @@ int main(int argc, char** argv){
 		fclose(fl);
 	}
 
+	//We'll store the number of warnings and such here locally
+	u_int32_t num_warnings = results.num_warnings;
+	u_int32_t num_errors = results.num_errors;
+
 	//If the AST root is bad, there's no use in going on here
 	if(results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
 		goto final_printout;
@@ -77,11 +81,6 @@ int main(int argc, char** argv){
 	//Run through and check for any unused functions. This generates warnings for the user,
 	//and can be done before any construction of a CFG. As such, we do this here
 	check_for_unused_functions(results.function_symtab, &results.num_warnings);
-
-	//We'll store the number of warnings and such here locally
-	u_int32_t num_warnings = results.num_warnings;
-	u_int32_t num_errors = results.num_errors;
-
 	//============================= Middle End =======================================
 		/**
 	 	 * The middle end is responsible for control-flow checks and optimization for the parser. The first 
