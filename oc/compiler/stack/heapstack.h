@@ -49,6 +49,11 @@ void push(heap_stack_t* stack, void* data);
 void* pop(heap_stack_t* stack);
 
 /**
+ * Is the stack empty or not
+ */
+u_int8_t is_empty(heap_stack_t* stack);
+
+/**
  * Return the top value of the stack, but do not
  * remove it
  */

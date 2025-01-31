@@ -4,6 +4,7 @@
  */
 
 #include "heapstack.h"
+#include <bits/types/stack_t.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -114,6 +115,15 @@ void* peek(heap_stack_t* stack){
 
 	//Return the data pointer
 	return stack->top->data;
+}
+
+
+/**
+ * Is the stack empty or not? Return 1 if empty
+ */
+u_int8_t is_empty(heap_stack_t* stack){
+	//Should be redundant but was having weird errors
+	return stack->num_nodes == 0 && stack->top == NULL;
 }
 
 

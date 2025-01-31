@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include "../ast/ast.h"
 #include "../parser/parser.h"
+#include "../stack/heapstack.h"
 
 //These may or may not change
 #define MAX_SUCCESSORS 10
@@ -65,6 +66,10 @@ struct basic_block_t{
 	u_int8_t good_to_merge;
 	//Is it a return statement
 	u_int8_t is_return_stmt;
+	//Was this block visited by traverser?
+	u_int8_t visited;
+	//Is this block an exit block?
+	u_int8_t is_exit_block;
 	//A basic block is a doubly-linked list node
 	//with a predecessor and a successor
 	//Edges represent where we can go on this graph
@@ -87,4 +92,4 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 //Deallocate our entire cfg structure
 void dealloc_cfg(cfg_t* cfg);
 
-#endif
+#endif /* CFG_H */

@@ -3,6 +3,7 @@
 */
 
 #include "cfg.h"
+#include <bits/types/stack_t.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -607,6 +608,8 @@ static basic_block_t* visit_expression_statement(generic_ast_node_t* expr_statem
 
 /**
  * Visit a compound statement. This is usually a jumping off point for various other nodes
+ *
+ * TODO RETHINK HOW THIS IS STRUCTURED
  */
 static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end){
 	//For error printing
@@ -681,11 +684,11 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			basic_block_t* compound_stmt_block = visit_compound_statement(cursor, function_block_end); 
 
 			//We'll also need a reference to the end block
-			basic_block_t* cursor = compound_stmt_block;
+			basic_block_t* block_cursor = compound_stmt_block;
 
 			//If there are more than 0 successors, we need to keep going
-			while(cursor->is_return_stmt == 0 && cursor->num_successors != 0){
-				cursor = cursor->successors[0];
+			while(block_cursor->is_return_stmt == 0 && block_cursor->num_successors != 0){
+				block_cursor = block_cursor->successors[0];
 			}
 
 			//If we need a leader
@@ -693,13 +696,13 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 				//Add the decl block as a successor
 				add_successor(current_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 				//We'll also update the current reference to be the very end of this bloc
-				current_block = cursor;
+				current_block = block_cursor;
 			//Otherwise, we will just merge this block in
 			} else {
 				//Merge the block in, the current block pointer is unchanged
 				merge_blocks(current_block, compound_stmt_block);
 				//Update the current block here
-				current_block = cursor;
+				current_block = block_cursor;
 			}
 		
 		//This is the first kind of block where any actual control flow happens
@@ -822,6 +825,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 	} 
 
 
+
 	//We always give back the very first block here
 	return compound_stmt_block;
 }
@@ -869,21 +873,64 @@ static basic_block_t* visit_let_statement(generic_ast_node_t* let_stmt){
  * returns from every control path
  */
 static void perform_function_reachability_analysis(generic_ast_node_t* function_node, basic_block_t* entry_block){
+	//For error printing
+	char info[1000];
+	//The number of dead-ends
+	u_int32_t dead_ends = 0;
+
 	//If the function returns void, there is no need for any reachability analysis, it will return when 
 	//the function runs off anyway
 	if(strcmp(((func_def_ast_node_t*)(function_node->node))->func_record->return_type->type_name, "void") == 0){
 		return;
 	}
 
+	//We'll need a stack for our DFS
+	heap_stack_t* stack = create_stack();
+
 	//The idea here is very simple. If we can walk the function tree and every control path leads 
 	//to a return statement, we return null from every control path
-
-	//We'll need a cursor to walk the tree
-	basic_block_t* block_cursor = entry_block;
-
 	
+	//We'll need a cursor to walk the tree
+	basic_block_t* block_cursor;
 
+	//Push the source node
+	push(stack, entry_block);
 
+	//So long as the stack is not empty
+	while(is_empty(stack) == 0){
+		//Grab the current one off of the stack
+		block_cursor = pop(stack);
+
+		//If this wasn't visited
+		if(block_cursor->visited == 0){
+			/**
+			 * Now we can perform our checks. 
+			 */
+			if(block_cursor->is_exit_block == 0 && block_cursor->num_successors == 0){
+				dead_ends++;
+			}
+		}
+
+		//Mark this one as seen
+		block_cursor->visited = 1;
+
+		//We'll now add in all of the childen
+		for(u_int8_t i = 0; i < block_cursor->num_successors; i++){
+			//If we haven't seen it yet, add it to the list
+			if(block_cursor->successors[i]->visited == 0){
+				push(stack, block_cursor->successors[i]);
+			}
+		}
+	}
+
+	//Once we escape our while loop, we can actually see what the analysis said
+	if(dead_ends > 0){
+		//Extract the function name
+		char* func_name = ((func_def_ast_node_t*)(function_node->node))->func_record->func_name;
+		sprintf(info, "Function \"%s\" does not return in %d control paths", func_name, dead_ends);
+		print_cfg_message(WARNING, info);
+		(*num_warnings_ref)+=dead_ends;
+	}
 }
 
 
@@ -943,6 +990,9 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	
 	//The end of the compound statement points to the end block
 	add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	
+	//The compound block end is an exit block
+	end_block->is_exit_block = 1;
 
 	//Perform our reachability analysis here--this will produce appropriate warnings
 	perform_function_reachability_analysis(func_def_node, func_def_block);
