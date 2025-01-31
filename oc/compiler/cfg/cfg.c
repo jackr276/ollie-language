@@ -465,6 +465,9 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node,
  * An if statement always invokes a kind of control flow itself.
  */
 static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end){
+	//Does it return through path 1(the regular IF path)
+	u_int8_t rets_through_1 = 0;
+
 	//Create the basic entry block
 	basic_block_t* if_stmt_block = basic_block_alloc();
 
@@ -503,6 +506,11 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	if(compound_block_end->is_return_stmt == 0){
 		//This block will have it's own successor, the end statement block
 		add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	} else {
+		printf("HERE\n");
+		//If it's a return statement, however, there is no successor here
+		//Mark this in case we need later
+		rets_through_1 = 1;
 	}
 
 	//Now moving forward here, we do have the option to see an "else" section
@@ -522,23 +530,38 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	//But if it isn't null, it's our else node -- which could be an else or another if(if-else) 
 	if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 		//We'll invoke the compound statement again here
-		compound_stmt_block = visit_compound_statement(cursor, function_block_end);
+		basic_block_t* else_compound_stmt_block = visit_compound_statement(cursor, function_block_end);
+		//The else block's end
+		basic_block_t* else_compound_block_end;
 
 		//We'll then add this in same as before
 		//This compound_statement is always a control-flow successor to the condition
-		add_successor(if_stmt_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(if_stmt_block, else_compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 		//We now need to navigate all the way down to this block's end
-		compound_block_end = compound_stmt_block;
+		else_compound_block_end = else_compound_stmt_block;
 	
-		//So long as this isn't 0, we haven't reached the end
- 		while(compound_block_end->direct_successor != NULL){
+		//So long as it has a direct successor and it's not a return statement
+ 		while(else_compound_block_end->direct_successor != NULL && else_compound_block_end->is_return_stmt == 0){
 			//Drill down some more
-			compound_block_end = compound_block_end->direct_successor;
+			else_compound_block_end = else_compound_block_end->direct_successor;
 		}
 
-		//This block will have it's own successor, the end statement block
-		add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		//If it isn't a return statement, it's successor is the end block
+		if(else_compound_block_end->is_return_stmt == 0){
+			add_successor(else_compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+			//If it already returns through 1, we need to mark this as the direct successor
+			if(rets_through_1 == 1){
+				//We'll mark this compound block as the direct successor for flow reasons
+				if_stmt_block->direct_successor = else_compound_stmt_block;
+			}
+		//Otherwise, it is a return statement
+		} else {
+			//Since this is a return statement, the direct successor is whatever happens in 1. Our rule
+			//always stands as "we default to first path"
+			if_stmt_block->direct_successor = compound_stmt_block;
+		}
 
 		//Once we're done get out
 		return if_stmt_block;
@@ -665,16 +688,29 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			//Let the subsidiary handle
 			basic_block_t* if_stmt_block = visit_if_statement(ast_cursor, function_block_end);
 
+			//Merge the block in, the current block pointer is unchanged
+			merge_blocks(current_block, if_stmt_block);
+
 			//We'll also need a reference to the end block
 			basic_block_t* block_cursor = if_stmt_block;
 
-			//Keep going until we've hit the very end
-			while(block_cursor->direct_successor != NULL){
+			//Keep going until we have no successors OR the block cursor is a return statement
+			while(block_cursor->direct_successor != NULL && block_cursor->is_return_stmt == 0){
 				block_cursor = block_cursor->direct_successor;
 			}
 
-			//Merge the block in, the current block pointer is unchanged
-			merge_blocks(current_block, if_stmt_block);
+			//If the end block is itself a return block, we're out of here. This means that the if statement
+			//returns through every control path
+			if(block_cursor->is_return_stmt == 1){
+				//Throw a warning
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(WARNING, "If statements returns through all control paths, all following code unreachable", ast_cursor->next_sibling->line_number);
+					(*num_warnings_ref)++;
+				}
+				//Hop out
+				break;
+			}
+
 			//Update the current reference
 			current_block = block_cursor;
 			
@@ -754,7 +790,8 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 			//No matter what, this current block now points to the function's end
 			add_successor(current_block, function_block_end, LINKED_DIRECTION_UNIDIRECTIONAL);
-			//Just for insurance
+
+			//Just for insurance -- the current block's direct successor is the end block
 			current_block->direct_successor = function_block_end;
 
 			//Mark it as a return statement
@@ -855,9 +892,18 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			/**
 			 * Now we can perform our checks. 
 			 */
-			//If this block is not an exit block but it has no direct successors, it is bad
-			if(block_cursor->direct_successor == NULL && block_cursor->is_return_stmt == 0){
+			//If the direct successor is the exit, but it's not a return statement
+			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->is_exit_block == 1
+			  && block_cursor->is_return_stmt == 0){
+				//One more dead end
 				dead_ends++;
+				//Go to the next iteration
+				continue;
+			}
+
+			//If it is a return statement none of its children are relevant
+			if(block_cursor->is_return_stmt == 1){
+				continue;
 			}
 		}
 
@@ -936,7 +982,6 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 
 	//In theory, we can keep going until we don't see any more direct successors
 	while(compound_block_end->direct_successor != NULL && compound_block_end->is_return_stmt == 0){
-		printf("HERE\n");
 		//Keep drilling down
 		compound_block_end = compound_block_end->direct_successor;
 	}
@@ -944,8 +989,12 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	//If it isn't a return statement, we'll add the end block in
 	if(compound_block_end->is_return_stmt == 0){
 		//The end of the compound statement points to the end block
+		//This represents "falling off of" the function
 		add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	} else {
+		if(compound_block_end->direct_successor->is_exit_block == 0) printf("ERROR");
 	}
+	//The return statement will already be pointing to the end point
 
 	//At the end, we'll merge the compound statement block with the function definition start block
 	merge_blocks(func_def_block, compound_stmt_block);
