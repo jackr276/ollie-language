@@ -75,6 +75,9 @@ struct basic_block_t{
 	//Edges represent where we can go on this graph
 	basic_block_t* predecessors[MAX_PREDECESSORS];
 	basic_block_t* successors[MAX_SUCCESSORS];
+	//For convenience here. This is the successor that we use to
+	//"drill" to the bottom
+	basic_block_t* direct_successor;
 	//Hold onto the number of both that we have
 	u_int8_t num_predecessors;
 	u_int8_t num_successors;
