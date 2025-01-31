@@ -181,7 +181,6 @@ static void add_successor(basic_block_t* target, basic_block_t* successor, linke
 
 	//If it's the very first successor, we'll also mark it as the "direct successor" for convenience
 	if(target->num_successors == 0){
-		printf("HERE");
 		target->direct_successor = successor;
 	}
 	//We'll of course still add it in in the bottom
@@ -632,177 +631,152 @@ static basic_block_t* visit_expression_statement(generic_ast_node_t* expr_statem
 static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end){
 	//For error printing
 	char info[1000];
-	//This will probably not be merged
+	//Create the compound statement block
 	basic_block_t* compound_stmt_block = basic_block_alloc();
 	//We will keep track of what the current "end" block is
 	basic_block_t* current_block = compound_stmt_block;
 
 	//We will iterate over all of the children in this compound statement
-	generic_ast_node_t* cursor = compound_stmt_node->first_child;
+	generic_ast_node_t* ast_cursor = compound_stmt_node->first_child;
 
 	//By default, we do not immediately need a leader block here(compound_stmt_block is the leader block)
 	need_leader = 0;
 
-	//So long as we have stuff in here
-	while(cursor != NULL){
+	//So long as our ast cursor is live
+	while(ast_cursor != NULL){
 		//If we encounter a declaration statement
-		if(cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
+		if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
 			//Create the block
-			basic_block_t* decl_block = visit_declaration_statement(cursor); 
+			basic_block_t* decl_block = visit_declaration_statement(ast_cursor);
 
 			//The blocks here will always merge
 			//Merge the block in, the current block pointer is unchanged
 			current_block = merge_blocks(current_block, decl_block);
 
 		//If we encounter a let statement
-		} else if(cursor->CLASS == AST_NODE_CLASS_LET_STMT){
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
 			//Let the subsidiary handle
-			basic_block_t* let_block = visit_let_statement(cursor); 
+			basic_block_t* let_block = visit_let_statement(ast_cursor);
 
 			//The blocks here will always merge
 			//Merge the block in, the current block pointer is unchanged
 			current_block = merge_blocks(current_block, let_block);
 
 		//If we encounter an expression statement
-		} else if(cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
 			//Let the subsidiary handle
-			basic_block_t* expr_block = visit_expression_statement(cursor); 
+			basic_block_t* expr_block = visit_expression_statement(ast_cursor);
 
-			//If we need a leader, then we'll add this onto current
-			if(need_leader == 1){
-				//Add the decl block as a successor
-				add_successor(current_block, expr_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-				//We'll also update the current reference
-				current_block = expr_block;
-			//Otherwise, we will just merge this block in
-			} else {
-				//Merge the block in, the current block pointer is unchanged
-				current_block = merge_blocks(current_block, expr_block);
-			}
+			//This block will always be merged with whomever current is
+			current_block = merge_blocks(current_block, expr_block);
 
-		//If this is the case we're just gonna call ourself recursively
-		} else if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+		//A recursive call of sorts
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 			//Let the subsidiary handle
-			basic_block_t* compound_stmt_block = visit_compound_statement(cursor, function_block_end); 
+			basic_block_t* compound_stmt_block = visit_compound_statement(ast_cursor, function_block_end); 
 
 			//We'll also need a reference to the end block
 			basic_block_t* block_cursor = compound_stmt_block;
 
-			//If there are more than 0 successors, we need to keep going
+			//So long as we have a direct successor, we haven't reached the end
 			while(block_cursor->direct_successor != NULL){
 				block_cursor = block_cursor->direct_successor;
 			}
 
-			//If we need a leader
-			if(need_leader == 1){
-				//Add the decl block as a successor
-				add_successor(current_block, compound_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-				//We'll also update the current reference to be the very end of this bloc
-				current_block = block_cursor;
 			//Otherwise, we will just merge this block in
-			} else {
-				//Merge the block in, the current block pointer is unchanged
-				merge_blocks(current_block, compound_stmt_block);
-				//Update the current block here
-				current_block = block_cursor;
-			}
+			//Merge the block in, the current block pointer is unchanged
+			merge_blocks(current_block, compound_stmt_block);
+			//Update the current block here
+			current_block = block_cursor;
 		
 		//This is the first kind of block where any actual control flow happens
-		} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
-			
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IF_STMT){
 			//Let the subsidiary handle
-			basic_block_t* if_stmt_block = visit_if_statement(cursor, function_block_end);
+			basic_block_t* if_stmt_block = visit_if_statement(ast_cursor, function_block_end);
 
 			//We'll also need a reference to the end block
-			basic_block_t* cursor = if_stmt_block;
+			basic_block_t* block_cursor = if_stmt_block;
 
-			//If there are more than 0 successors, we need to keep going
-			while(cursor->direct_successor != NULL){
-				cursor = cursor->direct_successor;
+			//Keep going until we've hit the very end
+			while(block_cursor->direct_successor != NULL){
+				block_cursor = block_cursor->direct_successor;
 			}
 
-			//If we need to see a leader statement
-			if(need_leader == 1){
-				//Add the if block as a successor
-				add_successor(current_block, if_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-				//We'll also update the current reference
-				current_block = cursor;
-			//Otherwise, we will just merge this block in
-			} else {
-				//Merge the block in, the current block pointer is unchanged
-				merge_blocks(current_block, if_stmt_block);
-				//Update the current reference
-				current_block = cursor;
-			}
+			//Merge the block in, the current block pointer is unchanged
+			merge_blocks(current_block, if_stmt_block);
+			//Update the current reference
+			current_block = block_cursor;
 			
 		//We've encountered a while statement
-		} else if(cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
 			//Let the subsidiary handle
-			basic_block_t* while_stmt_block = visit_while_statement(cursor, function_block_end);
+			basic_block_t* while_stmt_block = visit_while_statement(ast_cursor, function_block_end);
 
 			//We'll also need a reference to the end block
-			basic_block_t* cursor = while_stmt_block;
+			basic_block_t* block_cursor = while_stmt_block;
 
-			//If there are more than 0 successors, we need to keep going
-			while(cursor->direct_successor != NULL && cursor->is_return_stmt == 0){
-				cursor = cursor->direct_successor;
+			//So long as we haven't hit the very bottom
+			while(block_cursor->direct_successor != NULL){
+				block_cursor = block_cursor->direct_successor;
 			}
 
-			//If we see a while statement, we actually never merge it
-			//Add the if block as a successor
+			//A while statement will always be a successor, never merged
 			add_successor(current_block, while_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 			//We'll also update the current reference
-			current_block = cursor;
+			current_block = block_cursor;
 
 		//We've encountered a do-while statement
-		} else if(cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
 			//Let the subsidiary handle
-			basic_block_t* do_while_stmt_block = visit_do_while_statement(cursor, function_block_end);
+			basic_block_t* do_while_stmt_block = visit_do_while_statement(ast_cursor, function_block_end);
 
 			//We'll also need a reference to the end block
-			basic_block_t* cursor = do_while_stmt_block;
+			basic_block_t* block_cursor = do_while_stmt_block;
 
-			//If there are more than 0 successors, we need to keep going
-			while(cursor->direct_successor != NULL && cursor->is_return_stmt == 0){
-				cursor = cursor->direct_successor;
+			//So long as there's a direct successor, keep going
+			while(block_cursor->direct_successor != NULL){
+				block_cursor = block_cursor->direct_successor;
 			}
 
 			//We don't merge do-whiles, they will always be a successor
 			add_successor(current_block, do_while_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 			//Update the current cursor
-			current_block = cursor;
+			current_block = block_cursor;
+
 		//We've encountered a for-statement
-		} else if(cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
 			//Let the subsidiary handle it
-			basic_block_t* for_stmt_block = visit_for_statement(cursor, function_block_end);
+			basic_block_t* for_stmt_block = visit_for_statement(ast_cursor, function_block_end);
 
 			//We'll also need a reference to the end block
-			basic_block_t* cursor = for_stmt_block;
+			basic_block_t* block_cursor = for_stmt_block;
 
-			//If there are more than 0 successors, we need to keep going
-			while(cursor->direct_successor != NULL && cursor->is_return_stmt == 0){
-				cursor = cursor->direct_successor;
+			//Keep going until there are no more direct successors
+			while(block_cursor->direct_successor != NULL){
+				block_cursor = block_cursor->direct_successor;
 			}
 
 			//If the for_stmt_block is ok to merge, we'll do that
 			if(for_stmt_block->good_to_merge == 1){
-				current_block = merge_blocks(current_block, for_stmt_block);
+				//Merge the two blocks
+				merge_blocks(current_block, for_stmt_block);
+
 			//Otherwise, we'll add it in as a successor
 			} else {
 				add_successor(current_block, for_stmt_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 			}
 
 			//Whatever happened, the new current block is the end of the for statement
-			current_block = cursor;
+			current_block = block_cursor;
 
 		//We've encountered a return statement
-		} else if(cursor->CLASS == AST_NODE_CLASS_RET_STMT){
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_RET_STMT){
 			//There are really two options here -- we could see a blank return statement
 			//or an expression one
 			//If this isn't null, we'll add the expression in
-			if(cursor->first_child != NULL){
+			if(ast_cursor->first_child != NULL){
 				//Create the statement
-				top_level_statement_node_t* ret_stmt = create_statement(cursor->first_child);
+				top_level_statement_node_t* ret_stmt = create_statement(ast_cursor->first_child);
 				//Add it in
 				add_statement(current_block, ret_stmt);
 			}
@@ -814,16 +788,18 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			current_block->is_return_stmt = 1;
 			
 			//If the next sibling isn't null, we have unreachable code
-			if(cursor->next_sibling != NULL){
-				print_cfg_message(WARNING, "Unreachable code detected after a return statement", cursor->next_sibling->line_number);
+			if(ast_cursor->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after a return statement", ast_cursor->next_sibling->line_number);
 				(*num_warnings_ref)++;
 			}
 
+			//We'll exit immediately here. A return statement is the functional end of our compound statement, all other subsequent
+			//statements will be ignored
 			break;
 		}
 
 		//Go to the next sibling
-		cursor = cursor->next_sibling;
+		ast_cursor = ast_cursor->next_sibling;
 	} 
 
 	//We always give back the very first block here
@@ -943,7 +919,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
  * pass control off here to the compound statement rule
  */
 static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_node){
-	//Create the block for ourselves here
+	//The entry block
 	basic_block_t* func_def_block = basic_block_alloc();
 	//Also create the ending block that we'll need. This end block in a way marks the actual
 	//end of the function. All exit paths in the function flow directly to the end_block
@@ -955,12 +931,12 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	//The compound statement is always the last child of a function statement
 	generic_ast_node_t* func_cursor = func_def_node->first_child;	
 
-	//Get to the end for now
+	//Get to the end for now so that we'll actually have the compound statement
 	while(func_cursor->next_sibling != NULL){
 		func_cursor = func_cursor->next_sibling;
 	}
 
-	//The next thing that a function declaration sees is a compound statement
+	//The next thing that a function declaration sees is a compound statement. If we don't see it, we're in trouble
 	if(func_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
 		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Did not find compound statement as the last node in a function block.", func_cursor->line_number);
 		(*num_errors_ref)++;
@@ -968,7 +944,8 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 		return create_and_return_err();
 	}
 
-	//Otherwise, we can visit the compound statement
+	//Otherwise, we can visit the compound statement. This function is guaranteed to return a reference to the starting block of
+	//the compound statement
 	basic_block_t* compound_stmt_block = visit_compound_statement(func_cursor, end_block);
 
 	//If it's a failure, we error out
@@ -983,22 +960,20 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 	//We now need to navigate all the way down to this block's end
 	basic_block_t* compound_block_end = compound_stmt_block;
 
-	//So long as this isn't 0, we haven't reached the end
+	//In theory, we can keep going until we don't see any more direct successors
 	while(compound_block_end->direct_successor != NULL){
-		//Drill down some more
+		//Keep drilling down
 		compound_block_end = compound_block_end->direct_successor;
 	}
 
-	//At the end, we'll merge the compound statement block with the function definition block
-	merge_blocks(func_def_block, compound_stmt_block);
-	
 	//The end of the compound statement points to the end block
 	add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 	
-	printf("IS END: %d\n", compound_block_end->direct_successor->is_exit_block);
-
+	//At the end, we'll merge the compound statement block with the function definition start block
+	merge_blocks(func_def_block, compound_stmt_block);
+	
 	//Perform our reachability analysis here--this will produce appropriate warnings
-	//perform_function_reachability_analysis(func_def_node, func_def_block);
+	perform_function_reachability_analysis(func_def_node, func_def_block);
 
 	return func_def_block;
 }
@@ -1022,8 +997,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//We build the CFG from the ground up here
 	//We have the AST root
 	generic_ast_node_t* cursor = results.root->first_child;
-	//By default we need to see a leader here for the first node
-	need_leader = 1;
+	//The first node will be null, so we don't need to see a leader
 
 	//If this is null, we had an empty program of some kind
 	if(cursor == NULL){
@@ -1038,7 +1012,8 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	while(cursor != NULL){
 		//We can encounter a function definition first thing
 		if(cursor->CLASS == AST_NODE_CLASS_FUNC_DEF){
-			//Visit our function declaration here
+			//Visit our function declaration here. This function returns a reference
+			//to the very first block in here
 			basic_block_t* func_def_block = visit_function_declaration(cursor);
 
 			//If we have a -1, this means that the whole block is an error
@@ -1051,30 +1026,39 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 			//We need to drill to the bottom of this block
 			basic_block_t* bottom_block = func_def_block;
 
-			//So long as we aren't at the end
+			//The blocks are designed so that the "direct successor" is the route
+			//from the top of the function to the bottom of it. As such, we keep going until
+			//there are no more direct successors
 			while(bottom_block->direct_successor != NULL){
-				printf("IS END: %d\n", bottom_block->direct_successor->is_exit_block);
 				bottom_block = bottom_block->direct_successor;
 			}
 			
 			//Developer check -- do we have the end block?
+			//This should be marked as the "exit block"
 			if(bottom_block->is_exit_block == 0){
 				print_cfg_message(PARSE_ERROR, "Fatal internal compiler error. Could not find function exit block", cursor->line_number);
 				return NULL;
 			}
 
-			//Once we get here, we'll have the bottom
-
 			//If the CFG root is null, then this becomes the root
 			if(cfg->root == NULL){
 				cfg->root = func_def_block;
-				//We also maintain a reference to the current block
+				//We also maintain a reference to the current block. Since we'll be
+				//adding to the end, the current block is the bottom block
 				cfg->current = bottom_block; 
+
 			//Otherwise, this block is a successor to the current block
 			} else {
-				//Add the successor in
-				add_successor(cfg->current, func_def_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-				//Update the reference to whatever the current block is
+				//If this block is entirely empty, we will merge the other block into it
+				if(cfg->current->leader_statement == NULL){
+					merge_blocks(cfg->current, func_def_block);
+				//Otherwise, this block is a successor
+				} else {
+					//Add the successor in
+					add_successor(cfg->current, func_def_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				}
+
+				//No matter what happened, the new current block is the end block
 				cfg->current = bottom_block;
 			}
 
@@ -1095,14 +1079,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 				cfg->root = decl_block;
 				//We also maintain a reference to the current block
 				cfg->current = decl_block;
-
-			//If we need a leader, then this block will be added as a successor
-			} else if(need_leader == 1){
-				add_successor(cfg->current, decl_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-				//Update the current reference
-				cfg->current = decl_block;
-				//After we see one leader, we don't need another
-				need_leader = 0;
 
 			//Otherwise, this block will be "merged" with whoever the current block is
 			} else {
@@ -1127,13 +1103,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 				cfg->root = let_block;
 				//We also maintain a reference to the current block
 				cfg->current = let_block;
-			//If we need a leader, then this block will be added as a successor
-			} else if(need_leader == 1){
-				add_successor(cfg->current, let_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-				//Update the current reference
-				cfg->current = let_block;
-				//After we see one leader, we don't need another
-				need_leader = 0;
 			//Otherwise, this block will be "merged" with whoever the current block is
 			} else {
 				//Merge blocks and maintain the CFG's current pointer
@@ -1151,5 +1120,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 		cursor = cursor->next_sibling;
 	}
 
+	//We'll return a reference to the overall cfg structure
 	return cfg;
 }
