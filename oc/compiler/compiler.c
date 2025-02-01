@@ -86,7 +86,7 @@ int main(int argc, char** argv){
 	 	 * The middle end is responsible for control-flow checks and optimization for the parser. The first 
 		 * part of this is the construction of the control-flow-graph
 		*/
-	cfg_t* cfg = build_cfg(results, &num_warnings, &num_errors);
+	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
 
 	//FOR NOW -- deallocate this stuff
 	deallocate_ast(results.root);

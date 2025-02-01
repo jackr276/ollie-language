@@ -3,11 +3,12 @@ let u_int32 i := 0;
 declare u_int32 j;
 
 
-/*
+
 func test_func() -> s_int32 {
+	let u_int32 i := 232;
 	ret 2;
 }
-*/
+
 
 
 /*

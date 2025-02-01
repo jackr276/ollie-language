@@ -235,6 +235,8 @@ static void add_statement(basic_block_t* target, top_level_statement_node_t* sta
 
 /**
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
+ *
+ * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
  */
 static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//Just to double check
@@ -353,8 +355,6 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		}
 	}
 	
-	printf("FOUND %d BLOCKS\n", num_blocks);
-
 	//Once we escape our while loop, we can actually see what the analysis said
 	if(dead_ends > 0){
 		//Extract the function name
@@ -410,6 +410,38 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			} else {
 				current_block = merge_blocks(current_block, let_block); 
 			}
+
+		//If we have a return statement -- SPECIAL CASE HERE
+		} else if (ast_cursor->CLASS == AST_NODE_CLASS_RET_STMT){
+			//If for whatever reason the block is null, we'll create it
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//Whatever the current block is, this is being added to it
+			//If it's a non-blank return
+			if(ast_cursor->first_child != NULL){
+				//Create the statement for the return
+				top_level_statement_node_t* ret_expr = create_statement(ast_cursor->first_child);
+				//Add it into current
+				add_statement(current_block, ret_expr);
+			}
+
+			//The current block will now be marked as a return statement
+			current_block->is_return_stmt = 1;
+
+			//The current block's direct and only successor is the function exit block
+			add_successor(current_block, function_block_end, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+			//If there is anything after this statement, it is UNREACHABLE
+			if(ast_cursor->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
+				(*num_warnings_ref)++;
+			}
+
+			//We're completely done here
+			return starting_block;
 		}
 
 		//Advance to the next child
@@ -417,6 +449,8 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 	}
 
 	//We always return the starting block
+	//It is possible that we have a completely NULL compound statement. This returns
+	//NULL in that event
 	return starting_block;
 }
 
@@ -425,7 +459,9 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
-static basic_block_t* visit_function_definition(generic_ast_node_t* prog_node){
+static basic_block_t* visit_function_definition(generic_ast_node_t* function_node){
+	//For error printing
+	char info[1000];
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc();
 	//The ending block
@@ -434,7 +470,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* prog_node){
 	function_ending_block->is_exit_block = 1;
 
 	//We don't care about anything until we reach the compound statement
-	generic_ast_node_t* func_cursor = NULL;
+	generic_ast_node_t* func_cursor = function_node->first_child;
 
 	//Let's get to the compound statement
 	while(func_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
@@ -444,9 +480,43 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* prog_node){
 	//Once we get here, we know that func cursor is the compound statement that we want
 	basic_block_t* compound_stmt_block = visit_compound_statement(func_cursor, function_ending_block);
 
-	//Once we're done with the compound statement, we will merge it into the function
-	merge_blocks(function_starting_block, compound_stmt_block);
+	//If this compound statement is NULL(which is possible) we just add the starting and ending
+	//blocks as successors
+	if(compound_stmt_block == NULL){
+		add_successor(function_starting_block, function_ending_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 		
+		//We'll also throw a warning
+		sprintf(info, "Function \"%s\" was given no body", ((func_def_ast_node_t*)(function_node->node))->func_record->func_name);
+		print_cfg_message(WARNING, info, func_cursor->line_number);
+		//One more warning
+		(*num_warnings_ref)++;
+
+	//Otherwise we merge them
+	} else {
+		//Once we're done with the compound statement, we will merge it into the function
+		merge_blocks(function_starting_block, compound_stmt_block);
+	}
+
+	//Let's see if we actually made it all the way through and found a return
+	basic_block_t* compound_stmt_cursor = function_starting_block;
+
+	//Until we hit the end
+	while(compound_stmt_cursor->direct_successor != NULL){
+		compound_stmt_cursor = compound_stmt_cursor->direct_successor;
+	}
+
+	//Once we hit the end, if this isn't an exit block, we'll make it one
+	if(compound_stmt_cursor->is_exit_block == 0){
+		//We'll add this in as the ending block
+		add_successor(compound_stmt_cursor, function_ending_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		compound_stmt_cursor->direct_successor = function_ending_block;
+	}
+
+	if(function_starting_block->direct_successor == NULL){
+		printf("ERROR NULL SUCCESSOR\n");
+	}
+
+	perform_function_reachability_analysis(function_node, function_starting_block);
 
 	//We always return the start block
 	return function_starting_block;
@@ -514,7 +584,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//We could have a case where the current block is entirely empty. If this happens,
 			//we'll merge the two blocks
 			} else if(current_block->leader_statement == NULL) {
-				merge_blocks(current_block, function_block);
+				current_block = merge_blocks(current_block, function_block);
 			//Otherwise, we'll add this as a successor to the current block
 			} else {
 				add_successor(current_block, function_block, LINKED_DIRECTION_UNIDIRECTIONAL);
@@ -529,7 +599,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 				current_block = current_block->direct_successor;
 			}
 
-			//Finally once we get down here, we have our proper current bloc
+			//Finally once we get down here, we have our proper current block
 
 		//Process a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
