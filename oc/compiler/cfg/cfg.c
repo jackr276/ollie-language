@@ -366,8 +366,90 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 }
 
 
-static basic_block_t* visit_function_definition(generic_ast_node_t* prog_node){
+/**
+ * A compound statement also acts as a sort of multiplexing block. It runs through all of it's statements, calling
+ * the appropriate functions and making the appropriate additions
+ *
+ * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
+ */
+static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end){
+	//The global starting block
+	basic_block_t* starting_block = NULL;
+	//The current block
+	basic_block_t* current_block = starting_block;
 
+	//Grab our very first thing here
+	generic_ast_node_t* ast_cursor = compound_stmt_node->first_child;
+	
+	//Roll through the entire subtree
+	while(ast_cursor != NULL){
+		//We've found a declaration statement
+		if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
+			//We'll visit the block here
+			basic_block_t* decl_block = visit_declaration_statement(ast_cursor);
+
+			//If the start block is null, then this is the start block. Otherwise, we merge it in
+			if(starting_block == NULL){
+				starting_block = decl_block;
+				current_block = decl_block;
+			//Just merge with current
+			} else {
+				current_block = merge_blocks(current_block, decl_block); 
+			}
+
+		//We've found a let statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
+			//We'll visit the block here
+			basic_block_t* let_block = visit_let_statement(ast_cursor);
+
+			//If the start block is null, then this is the start block. Otherwise, we merge it in
+			if(starting_block == NULL){
+				starting_block = let_block;
+				current_block = let_block;
+			//Just merge with current
+			} else {
+				current_block = merge_blocks(current_block, let_block); 
+			}
+		}
+
+		//Advance to the next child
+		ast_cursor = ast_cursor->next_sibling;
+	}
+
+	//We always return the starting block
+	return starting_block;
+}
+
+
+/**
+ * A function definition will always be considered a leader statement. As such, it
+ * will always have it's own separate block
+ */
+static basic_block_t* visit_function_definition(generic_ast_node_t* prog_node){
+	//The starting block
+	basic_block_t* function_starting_block = basic_block_alloc();
+	//The ending block
+	basic_block_t* function_ending_block = basic_block_alloc();
+	//We very clearly mark this as an ending block
+	function_ending_block->is_exit_block = 1;
+
+	//We don't care about anything until we reach the compound statement
+	generic_ast_node_t* func_cursor = NULL;
+
+	//Let's get to the compound statement
+	while(func_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		func_cursor = func_cursor->next_sibling;
+	}
+
+	//Once we get here, we know that func cursor is the compound statement that we want
+	basic_block_t* compound_stmt_block = visit_compound_statement(func_cursor, function_ending_block);
+
+	//Once we're done with the compound statement, we will merge it into the function
+	merge_blocks(function_starting_block, compound_stmt_block);
+		
+
+	//We always return the start block
+	return function_starting_block;
 }
 
 
@@ -421,8 +503,35 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
+		//Process a function statement
 		if(ast_cursor->CLASS == AST_NODE_CLASS_FUNC_DEF){
+			//Visit the function definition
+			basic_block_t* function_block = visit_function_definition(ast_cursor);
+			
+			//If the start block is null, this becomes the start block
+			if(start_block == NULL){
+				start_block = function_block;
+			//We could have a case where the current block is entirely empty. If this happens,
+			//we'll merge the two blocks
+			} else if(current_block->leader_statement == NULL) {
+				merge_blocks(current_block, function_block);
+			//Otherwise, we'll add this as a successor to the current block
+			} else {
+				add_successor(current_block, function_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			}
 
+			//We now need to find where the end of the function block is to have that as our current reference
+			current_block = function_block;
+
+			//So long as we don't see the exit statement, we keep going
+			while(current_block->is_exit_block == 0){
+				//Always follow the path of the direct successor
+				current_block = current_block->direct_successor;
+			}
+
+			//Finally once we get down here, we have our proper current bloc
+
+		//Process a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
 			//We'll visit the block here
 			basic_block_t* let_block = visit_let_statement(ast_cursor);
@@ -433,7 +542,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 				current_block = let_block;
 			//Just merge with current
 			} else {
-				merge_blocks(current_block, let_block); 
+				current_block =	merge_blocks(current_block, let_block); 
 			}
 
 		//Visit a declaration statement
@@ -447,7 +556,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 				current_block = decl_block;
 			//Just merge with current
 			} else {
-				merge_blocks(current_block, decl_block); 
+				current_block = merge_blocks(current_block, decl_block); 
 			}
 
 		//Some weird error here

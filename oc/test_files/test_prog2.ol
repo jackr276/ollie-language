@@ -18,12 +18,8 @@ func main(u_int32 argc, char** argv)->s_int32{
 	let u_int32 b := 0;
 	let u_int32 sadf := 0;
 
-	{
-		let u_int32 my_it := 324;
-	}
 
 	declare u_int32 j;
 
- 	ret i;
 }
 */
