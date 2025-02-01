@@ -379,6 +379,8 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	
 	//Mark if we have a return statement
 	u_int8_t returns_through_main_path = 0;
+	//Mark if we return through an else path
+	u_int8_t returns_through_second_path = 0;
 
 	//Let's grab a cursor to walk the tree
 	generic_ast_node_t* cursor = if_stmt_node->first_child;
@@ -399,27 +401,31 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	}
 
 	//Now that we know it is, we'll invoke the compound statement rule
-	basic_block_t* compound_stmt_entry = visit_compound_statement(cursor, function_block_end);
+	basic_block_t* if_compound_stmt_entry = visit_compound_statement(cursor, function_block_end);
 
 	//If this is null, whole thing fails
-	if(compound_stmt_entry == NULL){
-		print_cfg_message(WARNING, "Empty compound found in if-statement", cursor->line_number);
+	if(if_compound_stmt_entry == NULL){
+		print_cfg_message(WARNING, "Empty if clause in if-statement", cursor->line_number);
 		(*num_warnings_ref)++;
-
 	} else {
 		//Add the if statement node in as a direct successor
-		add_successor(entry_block, compound_stmt_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(entry_block, if_compound_stmt_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 		//Now we'll find the end of this statement
-		basic_block_t* compound_stmt_end = compound_stmt_entry;
+		basic_block_t* if_compound_stmt_end = if_compound_stmt_entry;
 
 		//Once we've visited, we'll need to drill to the end of this compound statement
-		while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0){
-			compound_stmt_end = compound_stmt_end->direct_successor;
+		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->is_return_stmt == 0){
+			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
 		}
 
 		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
-		returns_through_main_path = compound_stmt_end->is_return_stmt;
+		returns_through_main_path = if_compound_stmt_end->is_return_stmt;
+
+		//If it doesn't return through the main path, the successor is the end node
+		if(returns_through_main_path == 0){
+			add_successor(if_compound_stmt_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		}
 	}
 
 	//This may be the end
@@ -432,6 +438,60 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		//We can leave now
 		return entry_block;
 	}
+
+	//If we make it here, we know that we have either an if or an if-else block
+	//Advance the cursor
+	cursor = cursor->next_sibling;
+	
+	//If we have a compound statement, we'll handle it as an "else" clause
+	if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+		//Visit the else statement
+		basic_block_t* else_compound_stmt_entry = visit_compound_statement(cursor, function_block_end);
+
+		//If this is NULL, we'll send a warning and hop out -- no need for more processing here
+		if(else_compound_stmt_entry == NULL){
+			print_cfg_message(WARNING, "Empty else clause in if-else statement", cursor->line_number);
+			(*num_warnings_ref)++;
+
+			//The entry block's direct successor is the end statement
+			entry_block->direct_successor = end_block;
+
+			//Just get out if this happens
+			return entry_block;
+		}
+
+		//Otherwise, we'll add this in as a successor
+		add_successor(entry_block, else_compound_stmt_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+		//Now we'll find the end of this statement
+		basic_block_t* else_compound_stmt_end = else_compound_stmt_entry;
+
+		//Once we've visited, we'll need to drill to the end of this compound statement
+		while(else_compound_stmt_end->direct_successor != NULL && else_compound_stmt_end->is_return_stmt == 0){
+			else_compound_stmt_end = else_compound_stmt_end->direct_successor;
+		}
+
+		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
+		returns_through_second_path = else_compound_stmt_end->is_return_stmt;
+
+		//If it isn't a return statement, then it's successor is the entry block
+		if(returns_through_second_path == 0){
+			add_successor(else_compound_stmt_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		}
+
+
+		/**
+		 * Rules for a direct successor
+		 * 	1.) If both statements are return statements, the entire thing is a return statement
+		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
+		 * 	3.) If both don't return, we default to the "if" clause
+		 */
+		if(returns_through_main_path == 1 && returns_through_second_path == 1){
+
+		}
+
+
+	}	
 
 
 	//We always return the entry block
