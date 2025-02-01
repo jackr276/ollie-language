@@ -365,6 +365,78 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 	}
 }
 
+/**
+ * Process the if-statement subtree into the equivalent CFG form
+ *
+ * We make use of the "direct successor" nodes as a direct path through the if statements. We ensure that 
+ * these direct paths always exist in such if-statements
+ */
+static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end){
+	//We always have an entry block here
+	basic_block_t* entry_block = basic_block_alloc();
+	//We also always have an end block
+	basic_block_t* end_block = basic_block_alloc();
+	
+	//Mark if we have a return statement
+	u_int8_t returns_through_main_path = 0;
+
+	//Let's grab a cursor to walk the tree
+	generic_ast_node_t* cursor = if_stmt_node->first_child;
+
+	//The very first child should be an expression, so we'll just add it in to the top
+	top_level_statement_node_t* if_expr = create_statement(cursor);
+
+	//Add it into the start block
+	add_statement(entry_block, if_expr);
+
+	//No we'll move one step beyond, the next node must be a compound statement
+	cursor = cursor->next_sibling;
+
+	//If it isn't, that's an issue
+	if(cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		print_cfg_message(PARSE_ERROR, "Expected compound statement in if node", cursor->line_number);
+		exit(1);
+	}
+
+	//Now that we know it is, we'll invoke the compound statement rule
+	basic_block_t* compound_stmt_entry = visit_compound_statement(cursor, function_block_end);
+
+	//If this is null, whole thing fails
+	if(compound_stmt_entry == NULL){
+		print_cfg_message(WARNING, "Empty compound found in if-statement", cursor->line_number);
+		(*num_warnings_ref)++;
+
+	} else {
+		//Add the if statement node in as a direct successor
+		add_successor(entry_block, compound_stmt_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+		//Now we'll find the end of this statement
+		basic_block_t* compound_stmt_end = compound_stmt_entry;
+
+		//Once we've visited, we'll need to drill to the end of this compound statement
+		while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0){
+			compound_stmt_end = compound_stmt_end->direct_successor;
+		}
+
+		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
+		returns_through_main_path = compound_stmt_end->is_return_stmt;
+	}
+
+	//This may be the end
+	if(cursor->next_sibling == NULL){
+		//If this is the case, the end block is a direct successor
+		add_successor(entry_block, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		//For traversal reasons, we want this as the direct successor
+		entry_block->direct_successor = end_block;
+
+		//We can leave now
+		return entry_block;
+	}
+
+
+	//We always return the entry block
+	return entry_block;
+}
 
 /**
  * A compound statement also acts as a sort of multiplexing block. It runs through all of it's statements, calling
@@ -395,6 +467,40 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			//Just merge with current
 			} else {
 				current_block = merge_blocks(current_block, decl_block); 
+			}
+
+		//If we've found an assignment expression
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASNMNT_EXPR){
+			//Create the statement
+			top_level_statement_node_t* asn_expr_stmt = create_statement(ast_cursor);
+
+			//If the starting block is null, we'll make it
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+				//Add the statement
+				add_statement(current_block, asn_expr_stmt);
+
+			//Otherwise just add it in to current
+			} else {
+				add_statement(current_block, asn_expr_stmt);
+			}
+
+		//We've found a generic statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
+			//Create the statement
+			top_level_statement_node_t* expr_stmt = create_statement(ast_cursor);
+
+			//If the starting block is null, we'll make it
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+				//Add the statement
+				add_statement(current_block, expr_stmt);
+
+			//Otherwise just add it in to current
+			} else {
+				add_statement(current_block, expr_stmt);
 			}
 
 		//We've found a let statement
@@ -442,6 +548,38 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 			//We're completely done here
 			return starting_block;
+
+		//We've found an if-statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IF_STMT){
+			//We'll now enter the if statement
+			basic_block_t* if_stmt_start = visit_if_statement(ast_cursor, function_block_end);
+			
+			//Once we have the if statement start, we'll add it in as a successor
+			if(starting_block == NULL){
+				starting_block = if_stmt_start;
+				current_block = if_stmt_start;
+			} else {
+				//Add this in as the current block
+				current_block = merge_blocks(current_block, if_stmt_start);
+			}
+
+			//Now we'll find the end of the if statement block
+			//So long as we haven't hit the end and it isn't a return statement
+			while (current_block->direct_successor != NULL && current_block->is_return_stmt == 0){
+				current_block = current_block->direct_successor;
+			}
+
+			//If it is a return statement, that means that this if statement returns through every path. We'll leave 
+			//if this is the case
+			if(current_block->is_return_stmt){
+				//Throw a warning if this happens
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after if-else block that returns through every control path", ast_cursor->line_number);
+					(*num_warnings_ref)++;
+				}
+				//Give it back
+				return starting_block;
+			}
 		}
 
 		//Advance to the next child

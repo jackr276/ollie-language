@@ -6,7 +6,13 @@ declare u_int32 j;
 
 func test_func() -> s_int32 {
 	let u_int32 i := 232;
-	ret 2;
+
+	if(i == 2) then{
+		asn i := i + 2;
+		ret i;
+	}
+
+	ret 32;
 }
 
 
@@ -22,5 +28,6 @@ func main(u_int32 argc, char** argv)->s_int32{
 
 	declare u_int32 j;
 
+	ret j + a;
 }
 */
