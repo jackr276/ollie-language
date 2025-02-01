@@ -271,6 +271,8 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//Also make note of any direct succession
 	a->direct_successor = b->direct_successor;
 	a->is_exit_block = b->is_exit_block;
+	//If we're merging return statements
+	a->is_return_stmt = b->is_return_stmt;
 
 	//We will not deallocate here, we will merely free the block itself
 	free(b);
@@ -507,7 +509,6 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		//This block will have it's own successor, the end statement block
 		add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 	} else {
-		printf("HERE\n");
 		//If it's a return statement, however, there is no successor here
 		//Mark this in case we need later
 		rets_through_1 = 1;
@@ -991,10 +992,7 @@ static basic_block_t* visit_function_declaration(generic_ast_node_t* func_def_no
 		//The end of the compound statement points to the end block
 		//This represents "falling off of" the function
 		add_successor(compound_block_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
-	} else {
-		if(compound_block_end->direct_successor->is_exit_block == 0) printf("ERROR");
-	}
-	//The return statement will already be pointing to the end point
+	} 
 
 	//At the end, we'll merge the compound statement block with the function definition start block
 	merge_blocks(func_def_block, compound_stmt_block);
@@ -1076,8 +1074,8 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 			//Otherwise, this block is a successor to the current block
 			} else {
-				//If this block is entirely empty, we will merge the other block into it
-				if(cfg->current->leader_statement == NULL){
+				//If the current block is not an exit block, merge this in
+				if(cfg->current->is_exit_block == 0){
 					merge_blocks(cfg->current, func_def_block);
 				//Otherwise, this block is a successor
 				} else {
