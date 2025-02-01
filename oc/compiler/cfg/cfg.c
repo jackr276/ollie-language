@@ -479,18 +479,25 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 			add_successor(else_compound_stmt_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 		}
 
-
 		/**
 		 * Rules for a direct successor
 		 * 	1.) If both statements are return statements, the entire thing is a return statement
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 1 && returns_through_second_path == 1){
-
+		if(returns_through_main_path == 0 && returns_through_second_path == 1){
+			//The direct successor is the main path
+			entry_block->direct_successor = if_compound_stmt_entry;
+		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
+			//The direct successor is the else path
+			entry_block->direct_successor = else_compound_stmt_entry;
+		} else {
+			//If there's anything else, we default to the first path
+			entry_block->direct_successor = if_compound_stmt_entry;
 		}
 
-
+		//We're done here, send it back
+		return entry_block;
 	}	
 
 
