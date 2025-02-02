@@ -322,7 +322,10 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		block_cursor = pop(stack);
 
 		//If this wasn't visited
-		if(block_cursor->visited != 1){
+		if(block_cursor->visited == 0){
+			//Mark this one as seen
+			block_cursor->visited = 1;
+
 			/**
 			 * Now we can perform our checks. 
 			 */
@@ -340,14 +343,10 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 				continue;
 			}
 		}
-
-		//Mark this one as seen
-		block_cursor->visited = 1;
-
 		//We'll now add in all of the childen
 		for(u_int8_t i = 0; i < block_cursor->num_successors; i++){
 			//If we haven't seen it yet, add it to the list
-			if(block_cursor->successors[i]->visited != 1){
+			if(block_cursor->successors[i]->visited == 0){
 				push(stack, block_cursor->successors[i]);
 			}
 		}
@@ -371,7 +370,11 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
  * Process the if-statement subtree into the equivalent CFG form
  *
  * We make use of the "direct successor" nodes as a direct path through the if statements. We ensure that 
- * these direct paths always exist in such if-statements
+ * these direct paths always exist in such if-statements. 
+ *
+ * The sub-structure that this tree creates has only two options:
+ * 	1.) Every node flows through a return, in which case nobody hits the exit block
+ * 	2.) The main path flows through the end block, out of the structure
  */
 static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end, basic_block_t* end_block){
 	//We always have an entry block here -- the end block is made for us
@@ -428,10 +431,13 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		}
 	}
 
-	//This may be the end
+	//This is the end if we have a lone "if"
 	if(cursor->next_sibling == NULL){
 		//If this is the case, the end block is a direct successor
 		add_successor(entry_block, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+		//If it is the parent, then we want there to be an exit here. If it's not the parent, then
+		//we want the other area to handle it
 		//For traversal reasons, we want this as the direct successor
 		entry_block->direct_successor = end_block;
 
@@ -485,7 +491,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 0 && returns_through_second_path == 1){
+		if(returns_through_main_path == 0){
 			//The direct successor is the main path
 			entry_block->direct_successor = if_compound_stmt_entry;
 		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
@@ -501,8 +507,11 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	
 	//Otherwise we have an "else if" clause 
 	} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
-		//Visit the if statment
+		//Visit the if statment, this one is not a parent
 		basic_block_t* else_if_entry = visit_if_statement(cursor, function_block_end, end_block);
+
+		//Add this as a successor to the entrant
+		add_successor(entry_block, else_if_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
 	
 		//Once we visit this, we'll navigate to the end
 		basic_block_t* else_if_end = else_if_entry;
@@ -521,21 +530,18 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 			printf("DOES NOT TRACK END BLOCK\n");
 		}
 
-		//Unlike before, we won't need to add any succession to the end block here,
-		//but we may need to modify things to point correctly
-
 		/**
 		 * Rules for a direct successor
 		 * 	1.) If both statements are return statements, the entire thing is a return statement
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 0 && returns_through_second_path == 1){
+		if(returns_through_main_path == 0){
 			//The direct successor is the main path
 			entry_block->direct_successor = if_compound_stmt_entry;
 		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
 			//The direct successor is the else path
-			entry_block->direct_successor = else_if_end;
+			entry_block->direct_successor = else_if_entry;
 		} else {
 			//If there's anything else, we default to the first path
 			entry_block->direct_successor = if_compound_stmt_entry;
