@@ -5,8 +5,9 @@ declare u_int32 j;
 
 
 func test_func() -> s_int32 {
-	//let u_int32 i := 232;
+	let u_int32 i := 232;
 
+	while(i >= 232) do{
 	if(i == 2) then{
 		asn i := i + 2;
 		ret i;
@@ -15,6 +16,12 @@ func test_func() -> s_int32 {
 		//ret i;
 	} else {
 		asn i := i + 1;
+		ret i;
+	}
+	}
+
+	while(i >= 0) do{
+		i--;
 		ret i;
 	}
 

@@ -367,6 +367,80 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 
 
 /**
+ * A while statement is a very simple control flow construct. As always, the "direct successor" path is the path
+ * that reliably leads us down and out
+ */
+static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node, basic_block_t* function_block_end){
+	//Create our entry block
+	basic_block_t* while_statement_entry_block = basic_block_alloc();
+	//And create our exit block
+	basic_block_t* while_statement_end_block = basic_block_alloc();
+
+	//The direct successor to the entry block is the end block
+	add_successor(while_statement_entry_block, while_statement_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	//Just to be sure
+	while_statement_entry_block->direct_successor = while_statement_end_block;
+	
+	//Grab a cursor to the while statement node
+	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
+
+	//The very first child will the expression that we have
+	top_level_statement_node_t* expr_statement = create_statement(ast_cursor);	
+
+	//The very next node is a compound statement
+	ast_cursor = ast_cursor->next_sibling;
+
+	//If it isn't, we'll error out. This is really only for dev use
+	if(ast_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		print_cfg_message(PARSE_ERROR, "Found node that is not a compound statement in while-loop subtree", while_stmt_node->line_number);
+		exit(0);
+	}
+
+	//Now that we know it's a compound statement, we'll let the subsidiary handle it
+	basic_block_t* compound_stmt_start = visit_compound_statement(ast_cursor, function_block_end);
+
+	//If it's null, that means that we were given an empty while loop here
+	if(compound_stmt_start == NULL){
+		//For the user to see
+		print_cfg_message(WARNING, "While loop has empty body, has no effect", while_stmt_node->line_number);
+		(*num_warnings_ref)++;
+		//We'll just return now
+		return while_statement_entry_block;
+	}
+
+	//Otherwise it isn't null, so we can add it as a successor
+	add_successor(while_statement_entry_block, compound_stmt_start, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//Let's now find the end of the compound statement
+	basic_block_t* compound_stmt_end = compound_stmt_start;
+
+	//So long as it isn't null or return
+	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0) {
+		compound_stmt_end = compound_stmt_end->direct_successor;
+	}
+	
+	//If we make it to the end and this ending statement is a return, that means that we always return
+	//Throw a warning
+	if(compound_stmt_end->is_return_stmt == 1){
+		//It is only an error though -- the user is allowed to do this
+		print_cfg_message(WARNING, "While loop body returns in all control paths. It will only execute at most once", while_stmt_node->line_number);
+		(*num_warnings_ref)++;
+	}
+
+	//No matter what, the successor to this statement is the top of the loop
+	add_successor(compound_stmt_end, while_statement_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//If it is not a return statement, verify that this is the direct successor
+	if(compound_stmt_end->is_return_stmt == 0){
+		compound_stmt_end->direct_successor = while_statement_entry_block;
+	}
+
+	//Now we're done, so
+	return while_statement_entry_block;
+}
+
+
+/**
  * Process the if-statement subtree into the equivalent CFG form
  *
  * We make use of the "direct successor" nodes as a direct path through the if statements. We ensure that 
@@ -690,6 +764,9 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 				current_block = current_block->direct_successor;
 			}
 			
+			/*
+			 * DEVELOPER USE MESSAGE
+			 */
 			if(current_block->is_return_stmt == 0 && current_block != if_end_block){
 				printf("END BLOCK REFERENCE LOST");
 			}
@@ -705,6 +782,25 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 				//Give it back
 				return starting_block;
 			}
+		
+		//Handle a while statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
+			//Visit the while statement
+			basic_block_t* while_stmt_entry_block = visit_while_statement(ast_cursor, function_block_end);
+
+			//We'll now add it in
+			if(starting_block == NULL){
+				starting_block = while_stmt_entry_block;
+				current_block = starting_block;
+			//We never merge while statements -- it will always be a successor
+			} else {
+				//Add as a successor
+				add_successor(current_block, while_stmt_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			}
+
+			//Now we'll drill to the end here. This is easier than before, because the direct successor to
+			//the entry block of a while statement is always the end block
+			current_block = while_stmt_entry_block->direct_successor;
 		}
 
 		//Advance to the next child
