@@ -400,6 +400,9 @@ static generic_ast_node_t* function_call(FILE* fl){
 			//Return the error node
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
+		
+		//Be sure to clear the stack out
+		pop_token(grouping_stack);
 
 		//Otherwise this worked just fine, so we'll jump out here
 		return function_call_node;
@@ -6348,6 +6351,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 	//is an R_CURLY
 	//We still must check for matching
 	if(pop_token(grouping_stack).tok != L_CURLY){
+		printf("%d\n", lookahead.tok);
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
 		num_errors++;
 		//Return an error node

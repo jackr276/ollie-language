@@ -12,7 +12,7 @@ func test_func() -> s_int32 {
 		ret i;
 	} else if(i == 3) then {
 		asn i := 32;
-		ret i;
+		//ret i;
 	} else {
 		asn i := i + 1;
 		ret i;
@@ -24,7 +24,7 @@ func test_func() -> s_int32 {
 
 
 
-/*
+
 func main(u_int32 argc, char** argv)->s_int32{
 	let u_int32 i := 0;
 	let u_int32 a := 0;
@@ -32,9 +32,23 @@ func main(u_int32 argc, char** argv)->s_int32{
 	let u_int32 b := 0;
 	let u_int32 sadf := 0;
 
+	if(i == 0) then {
+		if(j == a) then{
+			asn a := 3;	
+		} else if (j > a) then {
+			ret j;
+		}
+	} else if( i == 1) then{
+		let u_int32 i_copy := i;
+	} else {
+		@test_func();
+		let u_int32 j_copy := i;
+	}
+
+
 
 	declare u_int32 j;
 
 	ret j + a;
 }
-*/
+
