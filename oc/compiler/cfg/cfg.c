@@ -516,6 +516,11 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		//Once we get here, we either have an end block or a return statement
 		returns_through_second_path = else_if_end->is_return_stmt;
 
+		//If it doesnt return through the second path, then the end better be the original end
+		if(returns_through_second_path == 0 && else_if_end != end_block){
+			printf("DOES NOT TRACK END BLOCK\n");
+		}
+
 		//Unlike before, we won't need to add any succession to the end block here,
 		//but we may need to modify things to point correctly
 
