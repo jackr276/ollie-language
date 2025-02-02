@@ -122,7 +122,7 @@ stestd: symtab_testd
 	$(OUT)/symtab_testd
 
 ptest: parser_test
-	cat ./oc/test_files/test_files.txt | xargs ./oc/out/parser_test
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/parser_test
 
 compiler_test: oc
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/oc

@@ -20,7 +20,14 @@ int main(int argc, char** argv){
 	for(int32_t i = 1; i < argc; i++){
 		printf("Testing file %s\n", argv[i]);
 		fl = fopen(argv[i], "r");
+
+		//If it failed
+		if(fl == NULL){
+			printf("COULD NOT OPEN FILE %s\n", argv[i]);
+		}
+
 		parse(fl);
+
 		fclose(fl);
 	}
 	
