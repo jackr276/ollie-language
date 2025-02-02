@@ -22,7 +22,7 @@ static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node)
 static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end);
 static basic_block_t* visit_let_statement(generic_ast_node_t* let_node);
 static basic_block_t* visit_expression_statement(generic_ast_node_t* decl_node);
-static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end);
+static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end, basic_block_t* end_block);
 static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node, basic_block_t* function_block_end);
 static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node, basic_block_t* function_block_end);
 static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, basic_block_t* function_block_end);
@@ -315,7 +315,6 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 
 	//Push the source node
 	push(stack, entry_block);
-	u_int8_t num_blocks = 0;
 
 	//So long as the stack is not empty
 	while(is_empty(stack) == 0){
@@ -323,8 +322,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		block_cursor = pop(stack);
 
 		//If this wasn't visited
-		if(block_cursor->visited == 0){
-			num_blocks++;
+		if(block_cursor->visited != 1){
 			/**
 			 * Now we can perform our checks. 
 			 */
@@ -349,7 +347,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		//We'll now add in all of the childen
 		for(u_int8_t i = 0; i < block_cursor->num_successors; i++){
 			//If we haven't seen it yet, add it to the list
-			if(block_cursor->successors[i]->visited == 0){
+			if(block_cursor->successors[i]->visited != 1){
 				push(stack, block_cursor->successors[i]);
 			}
 		}
@@ -359,11 +357,15 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 	if(dead_ends > 0){
 		//Extract the function name
 		char* func_name = ((func_def_ast_node_t*)(function_node->node))->func_record->func_name;
-		sprintf(info, "Function \"%s\" does not return in %d control paths", func_name, dead_ends);
+		sprintf(info, "Non-void function \"%s\" does not return a value in all control paths", func_name);
 		print_cfg_message(WARNING, info, function_node->line_number);
 		(*num_warnings_ref)+=dead_ends;
 	}
+
+	//Destroy the stack once we're done
+	destroy_stack(stack);
 }
+
 
 /**
  * Process the if-statement subtree into the equivalent CFG form
@@ -371,11 +373,9 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
  * We make use of the "direct successor" nodes as a direct path through the if statements. We ensure that 
  * these direct paths always exist in such if-statements
  */
-static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end){
-	//We always have an entry block here
+static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end, basic_block_t* end_block){
+	//We always have an entry block here -- the end block is made for us
 	basic_block_t* entry_block = basic_block_alloc();
-	//We also always have an end block
-	basic_block_t* end_block = basic_block_alloc();
 	
 	//Mark if we have a return statement
 	u_int8_t returns_through_main_path = 0;
@@ -498,11 +498,52 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 
 		//We're done here, send it back
 		return entry_block;
-	}	
+	
+	//Otherwise we have an "else if" clause 
+	} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
+		//Visit the if statment
+		basic_block_t* else_if_entry = visit_if_statement(cursor, function_block_end, end_block);
+	
+		//Once we visit this, we'll navigate to the end
+		basic_block_t* else_if_end = else_if_entry;
 
+		//We'll drill down to the end -- so long as we don't hit the end block and we don't hit a return statement
+		while(else_if_end->direct_successor != NULL && else_if_end->is_return_stmt == 0){
+			//Keep track of the immediate predecessor
+			else_if_end = else_if_end->direct_successor;
+		}
 
-	//We always return the entry block
-	return entry_block;
+		//Once we get here, we either have an end block or a return statement
+		returns_through_second_path = else_if_end->is_return_stmt;
+
+		//Unlike before, we won't need to add any succession to the end block here,
+		//but we may need to modify things to point correctly
+
+		/**
+		 * Rules for a direct successor
+		 * 	1.) If both statements are return statements, the entire thing is a return statement
+		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
+		 * 	3.) If both don't return, we default to the "if" clause
+		 */
+		if(returns_through_main_path == 0 && returns_through_second_path == 1){
+			//The direct successor is the main path
+			entry_block->direct_successor = if_compound_stmt_entry;
+		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
+			//The direct successor is the else path
+			entry_block->direct_successor = else_if_end;
+		} else {
+			//If there's anything else, we default to the first path
+			entry_block->direct_successor = if_compound_stmt_entry;
+		}
+
+		return entry_block;
+	
+	//Some weird error here
+	} else {
+		print_cfg_message(PARSE_ERROR, "Improper node found after if-statement", cursor->line_number);
+		(*num_errors_ref)++;
+		exit(0);
+	}
 }
 
 /**
@@ -618,8 +659,10 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 		//We've found an if-statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IF_STMT){
+			//Create the end block here for pointer reasons
+			basic_block_t* if_end_block = basic_block_alloc();
 			//We'll now enter the if statement
-			basic_block_t* if_stmt_start = visit_if_statement(ast_cursor, function_block_end);
+			basic_block_t* if_stmt_start = visit_if_statement(ast_cursor, function_block_end, if_end_block);
 			
 			//Once we have the if statement start, we'll add it in as a successor
 			if(starting_block == NULL){
@@ -635,10 +678,14 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			while (current_block->direct_successor != NULL && current_block->is_return_stmt == 0){
 				current_block = current_block->direct_successor;
 			}
+			
+			if(current_block->is_return_stmt == 0 && current_block != if_end_block){
+				printf("END BLOCK REFERENCE LOST");
+			}
 
 			//If it is a return statement, that means that this if statement returns through every path. We'll leave 
 			//if this is the case
-			if(current_block->is_return_stmt){
+			if(current_block->is_return_stmt == 1){
 				//Throw a warning if this happens
 				if(ast_cursor->next_sibling != NULL){
 					print_cfg_message(WARNING, "Unreachable code detected after if-else block that returns through every control path", ast_cursor->line_number);
