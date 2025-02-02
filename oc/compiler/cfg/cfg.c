@@ -240,9 +240,14 @@ static void add_statement(basic_block_t* target, top_level_statement_node_t* sta
  */
 static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//Just to double check
-	if(a == NULL || b == NULL){
+	if(a == NULL){
 		print_cfg_message(PARSE_ERROR, "Fatal error. Attempting to merge null block", 0);
 		exit(1);
+	}
+
+	//If b is null, we just return a
+	if(b == NULL){
+		return a;
 	}
 
 	//What if a was never even assigned?
@@ -363,6 +368,73 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 
 	//Destroy the stack once we're done
 	destroy_stack(stack);
+}
+
+
+/**
+ * A do-while statement is a simple control flow construct. As always, the direct successor path is the path that reliably
+ * leads us down and out
+ */
+static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node, basic_block_t* function_block_end){
+	//Create our entry block. This in reality will be the compound statement
+	basic_block_t* do_while_stmt_entry_block = basic_block_alloc();
+	//The true ending block
+	basic_block_t* do_while_stmt_exit_block = basic_block_alloc();
+
+	//Grab a cursor for walking the subtree
+	generic_ast_node_t* ast_cursor = do_while_stmt_node->first_child;
+
+	//If this is not a compound statement, something here is very wrong
+	if(ast_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		print_cfg_message(PARSE_ERROR, "Expected compound statement in do-while, but did not find one", do_while_stmt_node->line_number);
+		exit(0);
+	}
+
+	//We go right into the compound statement here
+	basic_block_t* do_while_compound_stmt_entry = visit_compound_statement(ast_cursor, function_block_end);
+
+	//If this is NULL, it means that we really don't have a compound statement there
+	if(do_while_compound_stmt_entry == NULL){
+		print_parse_message(PARSE_ERROR, "Do-while statement has empty clause, statement has no effect", do_while_stmt_node->line_number);
+		(*num_warnings_ref)++;
+	}
+
+	//No matter what, this will get merged into the top statement
+	do_while_stmt_entry_block = merge_blocks(do_while_stmt_entry_block, do_while_compound_stmt_entry);
+
+	//We will drill to the bottom of the compound statement
+	basic_block_t* compound_stmt_end = do_while_stmt_entry_block;
+
+	//So long as we don't see NULL or return
+	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0){
+		compound_stmt_end = compound_stmt_end->direct_successor;
+	}
+
+	//Once we get here, if it's a return statement, everything below is unreachable
+	if(compound_stmt_end->is_return_stmt == 1){
+		print_cfg_message(WARNING, "Do-while returns through all internal control paths. All following code is unreachable", do_while_stmt_node->line_number);
+		(*num_warnings_ref)++;
+		//Just return the block here
+		return do_while_stmt_entry_block;
+	}
+
+	//Otherwise, we'll need to add one more statement to the end block
+	top_level_statement_node_t* do_while_cond_stmt = create_statement(ast_cursor->next_sibling);
+
+	//Add this in to the ending block
+	add_statement(compound_stmt_end, do_while_cond_stmt);
+
+	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
+	//exit block
+	add_successor(compound_stmt_end, do_while_stmt_exit_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	//Make sure it's the direct successor
+	compound_stmt_end->direct_successor = do_while_stmt_exit_block;
+
+	//It's other successor though is the loop entry
+	add_successor(compound_stmt_end, do_while_stmt_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//Always return the entry block
+	return do_while_stmt_entry_block;
 }
 
 
@@ -801,6 +873,36 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			//Now we'll drill to the end here. This is easier than before, because the direct successor to
 			//the entry block of a while statement is always the end block
 			current_block = while_stmt_entry_block->direct_successor;
+	
+		//Handle a do-while statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
+			//Visit the statement
+			basic_block_t* do_while_stmt_entry_block = visit_do_while_statement(ast_cursor, function_block_end);
+
+			//We'll now add it in
+			if(starting_block == NULL){
+				starting_block = do_while_stmt_entry_block;
+				current_block = starting_block;
+			//We never merge do-while's, they are strictly successors
+			} else {
+				add_successor(current_block, do_while_stmt_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			}
+
+			//Now we'll need to reach the end-point of this statement
+			current_block = do_while_stmt_entry_block;
+
+			//So long as we have successors and don't see returns
+			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0){
+				current_block = current_block->direct_successor;
+			}
+
+			//If we make it here and we had a return statement, we need to get out
+			if(current_block->is_return_stmt == 1){
+				//Everything beyond this point is unreachable, no point in going on
+				break;
+			}
+
+			//Otherwise, we're all set to go to the next iteration
 		}
 
 		//Advance to the next child

@@ -8,25 +8,31 @@ func test_func() -> s_int32 {
 	let u_int32 i := 232;
 
 	while(i >= 232) do{
-	if(i == 2) then{
-		asn i := i + 2;
-		ret i;
-	} else if(i == 3) then {
-		asn i := 32;
-		//ret i;
-	} else {
-		asn i := i + 1;
-		ret i;
-	}
+		if(i == 2) then{
+			asn i := i + 2;
+			ret i;
+		} else if(i == 3) then {
+			asn i := 32;
+			//ret i;
+		} else {
+			asn i := i + 1;
+			ret i;
+		}
 	}
 
 	while(i >= 0) do{
 		i--;
-		ret i;
+		//ret i;
 	}
 
+	do {
+		i++;
+		@test_func();
+		//ret i;
+	} while (i < 232);
+
 	let s_int32 my_int := -2;
-	ret 32;
+	//ret 32;
 }
 
 
