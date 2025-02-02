@@ -47,6 +47,10 @@ static u_int16_t num_warnings = 0;
 //The current parser line number
 static u_int16_t parser_line_num = 1;
 
+//The stack that holds all of our defer statements
+heap_stack_t* defer_statements;
+
+
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
@@ -6339,8 +6343,13 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 				return stmt_node;
 			}
 
-			//Otherwise, we'll add it as a child node
-			add_child_node(compound_stmt_node, stmt_node);
+			//If it's a defer statement, we'll push this to the stack
+			if(stmt_node->CLASS == AST_NODE_CLASS_DEFER_STMT){
+				push(defer_statements, stmt_node);
+			} else {
+				//Otherwise, we'll add it as a child node
+				add_child_node(compound_stmt_node, stmt_node);
+			}
 		}
 		
 		//Whatever happened, once we get here we need to refresh the lookahead
@@ -7521,6 +7530,18 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//If we get here we know that it worked, so we'll add it in as a child
 		add_child_node(function_node, compound_stmt_node);
+
+		/**
+		 * Once we're here, we'll need to add any/all defer statements to the end of the chain as well.
+		 * These statements happen in a LIFO order. The very last defer statement is the very first
+		 * to be executed
+		 */
+		while(is_empty(defer_statements) == 0){
+			generic_ast_node_t* defer_stmt = pop(defer_statements);
+
+			//Add this in as a child
+			add_child_node(function_node, defer_stmt);
+		}
 		
 		//Finalize the variable scope for the parameter list
 		finalize_variable_scope(variable_symtab);
@@ -7677,6 +7698,8 @@ front_end_results_package_t parse(FILE* fl){
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_lex_stack();
+	//Create the defer statements stack
+	defer_statements = create_stack();
 
 	//Global entry/run point, will give us a tree with
 	//the root being here
@@ -7705,6 +7728,7 @@ front_end_results_package_t parse(FILE* fl){
 
 	//Destroy the stack, no longer needed
 	destroy_lex_stack(grouping_stack);
+	destroy_stack(defer_statements);
 
 	return results;
 }
