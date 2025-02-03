@@ -16,6 +16,8 @@ static int32_t current_block_id = 0;
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
+//Keep a stack of deferred statements for each function
+heap_stack_t* deferred_stmts;
 
 //We predeclare up here to avoid needing any rearrangements
 static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node);
@@ -1061,6 +1063,20 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			}
 
 			//But if we don't then this is the current node
+
+		//Handle a defer statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DEFER_STMT){
+			/**
+			 * Defer statements are a special case. The are supposed to be executed 
+			 * "after" the function returns. Of course, in assembly, there is no such thing.
+			 * As such, deferred statements are executed immediately after a "ret" statement
+			 * in the assembly
+			 */
+			//Add this in as a top level statement
+			top_level_statement_node_t* defer_stmt = create_statement(ast_cursor);
+
+			//We'll now add this into the stack
+			push(deferred_stmts, defer_stmt);
 		}
 
 		//Advance to the next child
@@ -1131,8 +1147,12 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 		compound_stmt_cursor->direct_successor = function_ending_block;
 	}
 
-	if(function_starting_block->direct_successor == NULL){
-		printf("ERROR NULL SUCCESSOR\n");
+	//Once we get here, we'll now add in any deferred statements to the function ending block
+	
+	//So long as they aren't empty
+	while(is_empty(deferred_stmts) == 0){
+		//Add them in one by one
+		add_statement(function_ending_block, pop(deferred_stmts));
 	}
 
 	perform_function_reachability_analysis(function_node, function_starting_block);
@@ -1272,6 +1292,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	num_errors_ref = num_errors;
 	num_warnings_ref = num_warnings;
 
+	//Create the stack here
+	deferred_stmts = create_stack();
+
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
 
@@ -1289,6 +1312,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 		print_parse_message(PARSE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
+
+	//Destroy the deferred statements stack
+	destroy_stack(deferred_stmts);
 	
 	//Give back the reference
 	return cfg;

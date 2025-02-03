@@ -8,8 +8,7 @@ func test_func() -> s_int32 {
 	let u_int32 i := 232;
 
 	while(i >= 232) do{
-		if(i == 2) then{
-			asn i := i + 2;
+		if(i == 2) then{ asn i := i + 2;
 			ret i;
 		} else if(i == 3) then {
 			asn i := 32;
@@ -19,6 +18,8 @@ func test_func() -> s_int32 {
 			ret i;
 		}
 	}
+
+	defer i++;
 
 	while(i >= 0) do{
 		i--;
@@ -66,6 +67,8 @@ func main(u_int32 argc, char** argv)->s_int32{
 		let u_int32 j_copy := i;
 	}
 
+	defer @test_func();
+	defer @test_func();
 
 
 	declare u_int32 j;
