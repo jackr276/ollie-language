@@ -381,13 +381,6 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, bas
 	//Create our exit block
 	basic_block_t* for_stmt_exit_block = basic_block_alloc();
 	
-	/**
-	 * We'll now need to walk our subtree. Since a for-statement has
-	 * many optional segments, we need to figure out how many of them
-	 * that we have here
-	 */
-	u_int8_t num_stmts = 0;
-
 	//Grab a cursor for walking the sub-tree
 	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
 
@@ -400,13 +393,108 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, bas
 		top_level_statement_node_t* first_cond = create_statement(ast_cursor->first_child);
 		//Add it in to the entry block
 		add_statement(for_stmt_entry_block, first_cond);
-
-		//The first block is good to merge
-		for_stmt_entry_block->good_to_merge = 1;
 	}
 
+	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
+	//The second and third condition in the for loop are the ones that execute continously. The third condition
+	//always executes at the end of each iteration
+	basic_block_t* condition_block = basic_block_alloc();
+
+	//The condition block is always a successor to the entry block
+	add_successor(for_stmt_entry_block, condition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//The condition block also has another direct successor, the exit block
+	add_successor(condition_block, for_stmt_exit_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	//Ensure it is the direct successor
+	condition_block->direct_successor = for_stmt_exit_block;
+
 	//Move along to the next node
+	ast_cursor = ast_cursor->next_sibling;
 	
+	//If the second one is not blank
+	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
+		//Add it's child in as a statement to the entry block
+		top_level_statement_node_t* second_cond = create_statement(ast_cursor->first_child);
+
+		//This is always the first part of the repeating block
+		add_statement(condition_block,  second_cond);
+	
+	//It is impossible for the second one to be blank
+	} else {
+		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Should not have gotten here if blank", for_stmt_node->line_number);
+		exit(0);
+	}
+
+	//Now move it along to the third condition
+	ast_cursor = ast_cursor->next_sibling;
+
+	//Allocate and set to NULL as a warning for later
+	top_level_statement_node_t* third_cond = NULL;
+
+	//If the third one is not blank
+	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
+		//Just make the statement for now, it will be added in later
+		third_cond = create_statement(ast_cursor->first_child);
+	}
+
+	//Advance to the next sibling
+	ast_cursor = ast_cursor->next_sibling;
+	
+	//If this is not a compound statement, we have a serious error
+	if(ast_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected compound statement in for loop, but did not find one.", for_stmt_node->line_number);
+		//Immediate failure here
+		exit(0);
+	}
+
+	//Otherwise, we will allow the subsidiary to handle that
+	basic_block_t* compound_stmt_start = visit_compound_statement(ast_cursor, function_block_end);
+
+	//If it's null, that's actually ok here
+	if(compound_stmt_start == NULL){
+		//We'll make our own
+		basic_block_t* repeating_block = basic_block_alloc();
+		//Add the third conditional to it
+		if(third_cond != NULL){
+			add_statement(repeating_block, third_cond);
+		}
+
+		//We'll make sure that the start points to this block
+		add_successor(condition_block, repeating_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		//And we'll add the conditional block as a successor to this
+		add_successor(repeating_block, condition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+		//And we're done
+		return for_stmt_entry_block;
+	}
+
+	//This will always be a successor to the conditional statement
+	add_successor(condition_block, compound_stmt_start, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+	//However if it isn't NULL, we'll need to find the end of this compound statement
+	basic_block_t* compound_stmt_end = compound_stmt_start;
+
+	//So long as we don't see the end or a return
+	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0){
+		compound_stmt_end = compound_stmt_end->direct_successor;
+	}
+
+	//Once we get here, if it is a return statement, that means that we always return
+	if(compound_stmt_end->is_return_stmt == 1){
+		//We should warn here
+		print_cfg_message(WARNING, "For loop internal returns through every control block, will only execute once", for_stmt_node->line_number);
+		(*num_warnings_ref)++;
+		//There's nothing to add here, we just return
+		return for_stmt_entry_block;
+	}
+
+	//Otherwise, we'll need to add the third condition into this block at the very end
+	if(third_cond != NULL){
+		add_statement(compound_stmt_end, third_cond);
+	}
+
+	//The successor of the end block is the conditional block
+	add_successor(compound_stmt_end, condition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 	//Give back the entry block
 	return for_stmt_entry_block;

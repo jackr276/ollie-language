@@ -6050,7 +6050,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; {<logical-or-expression>}? ; {<assignment-expression>}? ) do <compound-statement>
+ * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; <logical-or-expression> ; {<assignment-expression>}? ) do <compound-statement>
  */
 static generic_ast_node_t* for_statement(FILE* fl){
 	//Freeze the current line number
@@ -6196,10 +6196,10 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		}
 	//Create a blank node as a placeholder
 	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
-		//Mark as blank
-		((for_loop_condition_ast_node_t*)(for_loop_cond_node->node))->is_blank = 1;
-		add_child_node(for_stmt_node, for_loop_cond_node);
+		print_parse_message(PARSE_ERROR, "For loops must have the second condition occupied", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Once we make it here, we know that either the inside was blank and we saw a semicolon or it wasn't and we saw a valid conditional 
