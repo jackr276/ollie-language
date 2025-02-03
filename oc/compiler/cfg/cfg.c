@@ -1029,10 +1029,38 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			//If we make it here and we had a return statement, we need to get out
 			if(current_block->is_return_stmt == 1){
 				//Everything beyond this point is unreachable, no point in going on
+				print_cfg_message(WARNING, "Unreachable code detected after block that returns in all control paths", ast_cursor->next_sibling->line_number);
 				break;
 			}
 
 			//Otherwise, we're all set to go to the next iteration
+
+		//Handle a for statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
+			//First visit the statement
+			basic_block_t* for_stmt_entry_block = visit_for_statement(ast_cursor, function_block_end);
+
+			//Now we'll add it in
+			if(starting_block == NULL){
+				starting_block = for_stmt_entry_block;
+				current_block = starting_block;
+			//We ALWAYS merge for statements into the current block
+			} else {
+				current_block = merge_blocks(current_block, for_stmt_entry_block);
+			}
+			
+			//Once we're here the start is in current
+			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0){
+				current_block = current_block->direct_successor;
+			}
+
+			//This should never happen, so if it does we have a problem
+			if(current_block->is_return_stmt == 1){
+				print_parse_message(PARSE_ERROR, "It should be impossible to have a for statement that returns in all control paths", ast_cursor->line_number);
+				exit(0);
+			}
+
+			//But if we don't then this is the current node
 		}
 
 		//Advance to the next child

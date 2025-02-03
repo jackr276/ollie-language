@@ -31,8 +31,16 @@ func test_func() -> s_int32 {
 		//ret i;
 	} while (i < 232);
 
+	for(let u_int32 i := 0; i < 2323; i++) do{
+		@test_func();
+		if(i == -1) then{
+			ret -1;
+		}
+
+	}
+
 	let s_int32 my_int := -2;
-	//ret 32;
+	ret 32;
 }
 
 
