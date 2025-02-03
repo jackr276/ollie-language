@@ -324,11 +324,11 @@ void add_all_basic_types(type_symtab_t* symtab){
 	insert_type(symtab, create_type_record(type));
 
 	//s_int8 type
-	type = create_basic_type("s_int8", S_INT8);
+	type = create_basic_type("i8", S_INT8);
 	insert_type(symtab,  create_type_record(type));
 
 	//u_int8 type
-	type = create_basic_type("u_int8", U_INT8);
+	type = create_basic_type("u8", U_INT8);
 	insert_type(symtab,  create_type_record(type));
 
 	//char type
@@ -336,35 +336,35 @@ void add_all_basic_types(type_symtab_t* symtab){
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int16 type
-	type = create_basic_type("u_int16", U_INT16);
+	type = create_basic_type("u16", U_INT16);
 	insert_type(symtab,  create_type_record(type));
 		
 	//s_int16 type
-	type = create_basic_type("s_int16", S_INT16);
+	type = create_basic_type("i16", S_INT16);
 	insert_type(symtab,  create_type_record(type));
 	
 	//s_int32 type
-	type = create_basic_type("s_int32", S_INT32);
+	type = create_basic_type("i32", S_INT32);
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int32 type
-	type = create_basic_type("u_int32", U_INT32);
+	type = create_basic_type("u32", U_INT32);
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int64 type
-	type = create_basic_type("u_int64", U_INT64);
+	type = create_basic_type("u64", U_INT64);
 	insert_type(symtab,  create_type_record(type));
 	
 	//s_int64 type
-	type = create_basic_type("s_int64", S_INT64);
+	type = create_basic_type("i64", S_INT64);
 	insert_type(symtab,  create_type_record(type));
 
 	//float32 type
-	type = create_basic_type("float32", FLOAT32);
+	type = create_basic_type("f32", FLOAT32);
 	insert_type(symtab,  create_type_record(type));
 	
 	//float64 type
-	type = create_basic_type("float64", FLOAT64);
+	type = create_basic_type("f64", FLOAT64);
 	insert_type(symtab,  create_type_record(type));
 
 	//label type

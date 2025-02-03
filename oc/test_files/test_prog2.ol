@@ -1,11 +1,11 @@
-let u_int32 i := 0;
+let u32 i := 0;
 
-declare u_int32 j;
+declare u32 j;
 
 
 
-func test_func() -> s_int32 {
-	let u_int32 i := 232;
+func test_func() -> i32 {
+	let u32 i := 232;
 
 	while(i >= 232) do{
 		if(i == 2) then{ asn i := i + 2;
@@ -32,7 +32,7 @@ func test_func() -> s_int32 {
 		//ret i;
 	} while (i < 232);
 
-	for(let u_int32 i := 0; i < 2323; i++) do{
+	for(let u32 i := 0; i < 2323; i++) do{
 		@test_func();
 		if(i == -1) then{
 			ret -1;
@@ -40,19 +40,19 @@ func test_func() -> s_int32 {
 
 	}
 
-	let s_int32 my_int := -2;
+	let i32 my_int := -2;
 	ret 32;
 }
 
 
 
 
-func main(u_int32 argc, char** argv)->s_int32{
-	let u_int32 i := 0;
-	let u_int32 a := 0;
-	let u_int32 v := 0;
-	let u_int32 b := 0;
-	let u_int32 sadf := 0;
+func main(u32 argc, char** argv)->i32{
+	let u32 i := 0;
+	let u32 a := 0;
+	let u32 v := 0;
+	let u32 b := 0;
+	let u32 sadf := 0;
 
 	if(i == 0) then {
 		if(j == a) then{
@@ -61,17 +61,17 @@ func main(u_int32 argc, char** argv)->s_int32{
 			ret j;
 		}
 	} else if( i == 1) then{
-		let u_int32 i_copy := i;
+		let u32 i_copy := i;
 	} else {
 		@test_func();
-		let u_int32 j_copy := i;
+		let u32 j_copy := i;
 	}
 
 	defer @test_func();
 	defer @test_func();
 
 
-	declare u_int32 j;
+	declare u32 j;
 
 	ret j + a;
 }

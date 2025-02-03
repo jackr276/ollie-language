@@ -2,19 +2,19 @@
 * Bad parens in here
 */
 define construct my_struct{
-	u_int32* i;
+	u32* i;
 	char a;
-	s_int8 c;
+	i8 c;
 } as aliased_struct;
 
-func:static main(s_int32 argc, char** argv) -> s_int32 {
-	let constant u_int32 i := 0;
-	declare constant u_int32 j;
+func:static main(i32 argc, char** argv) -> i32 {
+	let constant u32 i := 0;
+	declare constant u32 j;
 
 	asn j := i;
 
-	let u_int32 k := 0;
-	let u_int32 l := 0;
+	let u32 k := 0;
+	let u32 l := 0;
 	declare float32[10] float_arr;
 
 	if(i == 0) then {

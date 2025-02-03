@@ -1,10 +1,9 @@
-func main(u_int32 argc, char** argv) -> s_int32 {
+func main(u32 argc, char** argv) -> i32 {
 	let char x := 'a';
 	let char y := 'c';
 
 	/* Should fail on parse */
-	let u_int64 x := 1;
-	let u_int64 x := 2;
+	let u64 x := 1;
 	
 	switch on(x){
 		case 1:

@@ -4,12 +4,12 @@
 alias char* as str;
 
 define construct con{
-	s_int8 x;
-	s_int8 y;
+	i8 x;
+	i8 y;
 	char*[32] b;
 };
 
-func main(s_int32 argc, char** argv) -> s_int32
+func main(i32 argc, char** argv) -> i32
 {
 	if(argv) then {
 		let str i := "hi";

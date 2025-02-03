@@ -4,20 +4,20 @@
 
 
 
-func main(u_int32 argc, char** argv) -> s_int32{
+func main(u32 argc, char** argv) -> i32{
 	while(argc < 5) do {
-		declare u_int32 i;
+		declare u32 i;
 		asn i := 3;
 	}
 
 	//Array of addresses
-	declare u_int32*[32] address_array;
+	declare u32*[32] address_array;
 	
 	let my_enum mine := ENUM_TYPE_1;
 
-	declare u_int32 j;
+	declare u32 j;
 
-	let s_int64 long := 234l;
+	let i64 long := 234l;
 
 	
 	for(asn j := 0; j <= 33; j++) do {
@@ -27,5 +27,5 @@ func main(u_int32 argc, char** argv) -> s_int32{
 
 	ret j;
 
-	let u_int32 my_int := 234;
+	let u32 my_int := 234;
 }

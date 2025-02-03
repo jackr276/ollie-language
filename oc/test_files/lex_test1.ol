@@ -2,18 +2,18 @@
 * Sample program
 */
 
-func never_defined(float64 example) -> u_int32;
+func never_defined(f64 example) -> u32;
 
-declare u_int8 j;
+declare u8 j;
 
-alias u_int8[100] as int_arr;
+alias u8[100] as int_arr;
 
-func test_func(float32 my_float, void* ptr) -> void{
-	let u_int32 i:= 0x01;
+func test_func(f32 my_float, void* ptr) -> void{
+	let u32 i:= 0x01;
 	//Cast ptr to an int
-	asn i := *(<u_int32*>ptr);
+	asn i := *(<u32*>ptr);
 
-	declare s_int32[200] my_arr;
+	declare i32[200] my_arr;
 
 	asn my_arr[3] := 2.23;
 
@@ -25,15 +25,15 @@ func test_func(float32 my_float, void* ptr) -> void{
 	ret;
 }
 
-func never_defined(float64 example) -> u_int32{
+func never_defined(f64 example) -> i32{
 	ret 2;
 }
 
-func:static main() -> s_int32 {
-	let u_int32 i := 1;
-	let u_int32 j := 1;
-	let u_int32* j_ptr := &j;
-	let u_int32* i_ptr := &i;
+func:static main() -> i32 {
+	let u32 i := 1;
+	let u32 j := 1;
+	let u32* j_ptr := &j;
+	let u32* i_ptr := &i;
 
 	//Example call
 	asn i := @never_defined(2.32);

@@ -77,8 +77,8 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 
 	//Direct one to one mapping
 	char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "func", "ret", "jump",
-								 "link", "static", "comptime", "external", "u_int8", "s_int8", "u_int16",
-								 "s_int16", "u_int32", "s_int32", "u_int64", "s_int64", "float32", "float64", 
+								 "link", "static", "comptime", "external", "u8", "i8", "u16",
+								 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 								  "char", "define", "enum", "on", "register", "constant",
 								  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 								  "break", "continue", "construct", "as", "alias", "asn", "sizeof", "defer"};
