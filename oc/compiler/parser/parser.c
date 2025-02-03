@@ -6149,6 +6149,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		num_errors++;
 		//Return an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	//Just add in a blank node as a placeholder
+	} else {
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		//Mark as blank
+		((for_loop_condition_ast_node_t*)(for_loop_cond_node->node))->is_blank = 1;
+		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
 	//Now we're in the middle of the for statement. We can optionally see a conditional expression here
@@ -6188,6 +6194,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 			//Return an error node
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
+	//Create a blank node as a placeholder
+	} else {
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		//Mark as blank
+		((for_loop_condition_ast_node_t*)(for_loop_cond_node->node))->is_blank = 1;
+		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
 	//Once we make it here, we know that either the inside was blank and we saw a semicolon or it wasn't and we saw a valid conditional 
@@ -6222,6 +6234,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 		//We'll refresh the lookahead for our search here
 		lookahead = get_next_token(fl, &parser_line_num);
+	//Create a blank node here as a placeholder
+	} else {
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		//Mark as blank
+		((for_loop_condition_ast_node_t*)(for_loop_cond_node->node))->is_blank = 1;
+		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
 	//Now if we make it down here no matter what it must be an R_Paren

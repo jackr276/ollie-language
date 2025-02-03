@@ -390,16 +390,26 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, bas
 
 	//Grab a cursor for walking the sub-tree
 	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
-	//Grab a duplicate cursor for a sub-walk
-	generic_ast_node_t* finding_compound_cursor = ast_cursor;
 
-	//So long as we don't see a compound statement
-	while(ast_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+	//We will always see 3 nodes here to start out with, of the type for_loop_cond_ast_node_t. These
+	//nodes contain an "is_blank" field that will alert us if this is just a placeholder. The first 2 parts of a for
 
+	//If the very first one is not blank
+	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
+		//Add it's child in as a statement to the entry block
+		top_level_statement_node_t* first_cond = create_statement(ast_cursor->first_child);
+		//Add it in to the entry block
+		add_statement(for_stmt_entry_block, first_cond);
+
+		//The first block is good to merge
+		for_stmt_entry_block->good_to_merge = 1;
 	}
+
+	//Move along to the next node
 	
 
-
+	//Give back the entry block
+	return for_stmt_entry_block;
 }
 
 

@@ -446,8 +446,8 @@ struct let_stmt_ast_node_t{
 
 //An AST for loop condition
 struct for_loop_condition_ast_node_t{
-	//Just hold status for now
-	u_int8_t status;
+	//Is blank is true if there is no actual expression
+	u_int8_t is_blank;
 };
 
 /**
