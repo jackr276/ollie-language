@@ -23,6 +23,8 @@ func test_func() -> i32 {
 
 	while(i >= 0) do{
 		i--;
+
+		break when(i < 0);
 		//ret i;
 	}
 

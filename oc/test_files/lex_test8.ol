@@ -15,7 +15,7 @@ func:static main(i32 argc, char** argv) -> i32 {
 
 	let u32 k := 0;
 	let u32 l := 0;
-	declare float32[10] float_arr;
+	declare f32[10] float_arr;
 
 	if(i == 0) then {
 		asn i := 2;
