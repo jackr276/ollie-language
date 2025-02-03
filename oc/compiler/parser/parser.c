@@ -6100,8 +6100,13 @@ static generic_ast_node_t* for_statement(FILE* fl){
 			return asn_expr;
 		}
 
+		//Create the wrapper node for CFG creation later on
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		//Add this in as a child
+		add_child_node(for_loop_cond_node, asn_expr);
+
 		//Otherwise it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, asn_expr);
+		add_child_node(for_stmt_node, for_loop_cond_node);
 
 		//We'll refresh the lookahead for the eventual next step
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -6128,8 +6133,13 @@ static generic_ast_node_t* for_statement(FILE* fl){
 			return let_stmt;
 		}
 
+		//Create the wrapper node for CFG creation later on
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		//Add this in as a child
+		add_child_node(for_loop_cond_node, let_stmt);
+
 		//Otherwise if we get here it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, let_stmt);
+		add_child_node(for_stmt_node, for_loop_cond_node);
 		
 		//Remember -- let statements handle semicolons for us, so we don't need to check
 
@@ -6160,8 +6170,13 @@ static generic_ast_node_t* for_statement(FILE* fl){
 			return expr_node;
 		}
 
+		//Create the wrapper node for CFG creation later on
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		//Add this in as a child
+		add_child_node(for_loop_cond_node, expr_node);
+
 		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, expr_node);
+		add_child_node(for_stmt_node, for_loop_cond_node);
 
 		//Now once we get here, we need to see a valid semicolon
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -6197,8 +6212,13 @@ static generic_ast_node_t* for_statement(FILE* fl){
 			return expr_node;
 		}
 
+		//Create the wrapper node for CFG creation later on
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		//Add this in as a child
+		add_child_node(for_loop_cond_node, expr_node);
+
 		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, expr_node);
+		add_child_node(for_stmt_node, for_loop_cond_node);
 
 		//We'll refresh the lookahead for our search here
 		lookahead = get_next_token(fl, &parser_line_num);

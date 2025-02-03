@@ -35,6 +35,13 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_FUNC_SPECIFIER;
 			break;
 
+		//The for-loop condition AST node
+		case AST_NODE_CLASS_FOR_LOOP_CONDITION:
+			//Just allocate the proper size and set the class
+			node->node = calloc(1, sizeof(for_loop_condition_ast_node_t));
+			node->CLASS = AST_NODE_CLASS_FOR_LOOP_CONDITION;
+			break;
+
 		//The defer statement node
 		case AST_NODE_CLASS_DEFER_STMT:
 			//Just allocate the proper size and set the class

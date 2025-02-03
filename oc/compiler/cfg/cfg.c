@@ -372,6 +372,38 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 
 
 /**
+ * A for-statement is another kind of control flow construct. As always the direct successor is the path that reliably
+ * leads us down and out
+ */
+static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, basic_block_t* function_block_end){
+	//Create our entry block
+	basic_block_t* for_stmt_entry_block = basic_block_alloc();
+	//Create our exit block
+	basic_block_t* for_stmt_exit_block = basic_block_alloc();
+	
+	/**
+	 * We'll now need to walk our subtree. Since a for-statement has
+	 * many optional segments, we need to figure out how many of them
+	 * that we have here
+	 */
+	u_int8_t num_stmts = 0;
+
+	//Grab a cursor for walking the sub-tree
+	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
+	//Grab a duplicate cursor for a sub-walk
+	generic_ast_node_t* finding_compound_cursor = ast_cursor;
+
+	//So long as we don't see a compound statement
+	while(ast_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+
+	}
+	
+
+
+}
+
+
+/**
  * A do-while statement is a simple control flow construct. As always, the direct successor path is the path that reliably
  * leads us down and out
  */

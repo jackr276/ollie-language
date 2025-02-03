@@ -107,12 +107,15 @@ typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
 //An AST node for defer statements
 typedef struct defer_stmt_ast_node_t defer_stmt_ast_node_t;
+//An AST node for for-loop conditions
+typedef struct for_loop_condition_ast_node_t for_loop_condition_ast_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PROG,
 	AST_NODE_CLASS_ALIAS_STMT,
 	AST_NODE_CLASS_DEFER_STMT,
+	AST_NODE_CLASS_FOR_LOOP_CONDITION,
 	AST_NODE_CLASS_DECL_STMT,
 	AST_NODE_CLASS_LET_STMT,
 	AST_NODE_CLASS_FUNC_DEF,
@@ -439,6 +442,12 @@ struct decl_stmt_ast_node_t{
 struct let_stmt_ast_node_t{
 	//Hold the variable that we declared
 	symtab_variable_record_t* declared_var;
+};
+
+//An AST for loop condition
+struct for_loop_condition_ast_node_t{
+	//Just hold status for now
+	u_int8_t status;
 };
 
 /**
