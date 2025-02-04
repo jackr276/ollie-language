@@ -88,11 +88,15 @@ int main(int argc, char** argv){
 		*/
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
 
+	//Grab bfore freeing
+	ast_node_class_t CLASS = results.root->CLASS;
+
 	//FOR NOW -- deallocate this stuff
 	deallocate_ast(results.root);
 	destroy_function_symtab(results.function_symtab);
 	destroy_type_symtab(results.type_symtab);
 	destroy_variable_symtab(results.variable_symtab);
+	dealloc_cfg(cfg);
 	
 	//Timer end
 	clock_t end = clock();
@@ -101,7 +105,7 @@ int main(int argc, char** argv){
 
 	final_printout:
 	//If we failed
-	if(results.root->CLASS == AST_NODE_CLASS_ERR_NODE || num_errors > 0){
+	if(CLASS == AST_NODE_CLASS_ERR_NODE || num_errors > 0){
 		char info[500];
 		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", num_errors, num_warnings, time_spent);
 		printf("\n===================== Ollie Compiler Summary ==========================\n");

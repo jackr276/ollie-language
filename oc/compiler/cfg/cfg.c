@@ -1,5 +1,7 @@
 /**
  * The implementation file for all CFG related operations
+ * TODO MERGED BLOCKS ARE THE ISSUE. When a block is merged, the statements 
+ * are stored twice, leading to this issue
 */
 
 #include "cfg.h"
@@ -18,6 +20,8 @@ u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
 //Keep a stack of deferred statements for each function
 heap_stack_t* deferred_stmts;
+//The CFG that we're working with
+cfg_t* cfg_ref;
 
 //A package of values that each visit function uses
 typedef struct {
@@ -28,7 +32,7 @@ typedef struct {
 	//For break statements
 	basic_block_t* loop_stmt_end;
 	basic_block_t* if_stmt_end_block;
-	top_level_statement_node_t* for_loop_update_clause;
+	generic_ast_node_t* for_loop_update_clause;
 } values_package_t;
 
 
@@ -77,19 +81,6 @@ static int32_t increment_and_get(){
 }
 
 
-/**
- * Create the memory necessary for a statement
- */
-static top_level_statement_node_t* create_statement(generic_ast_node_t* node){
-	//Dynamically allocated, will be freed later
-	top_level_statement_node_t* stmt = calloc(1, sizeof(top_level_statement_node_t));
-	
-	//Add the node in here
-	stmt->node = node;
-
-	return stmt;
-}
-
 
 /**
  * Allocate a basic block using calloc. NO data assignment
@@ -100,6 +91,16 @@ static basic_block_t* basic_block_alloc(){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 	//Grab the unique ID for this block
 	created->block_id = increment_and_get();
+
+	//Now allocate the linked list block for it too
+	cfg_node_holder_t* holder = calloc(1, sizeof(cfg_node_holder_t));
+
+	//Store the block in it
+	holder->block = created;
+	
+	//Append to the front of the linked list
+	holder->next = cfg_ref->head;
+	cfg_ref->head = holder;
 
 	return created;
 }
@@ -115,22 +116,34 @@ static void basic_block_dealloc(basic_block_t* block){
 		exit(1);
 	}
 
-	//We'll need to go through here and free the statement linked list
-	top_level_statement_node_t* cursor = block->leader_statement;
-	top_level_statement_node_t* temp;
+	//Otherwise its fine so
+	free(block);
+}
 
-	//So long as we see statements, we keep going
-	while(cursor != NULL){
-		temp = cursor;
-		//Move onto the next node
-		cursor = cursor->next;
 
-		//Free the temp var
+/**
+ * Memory management code that allows us to deallocate the entire CFG
+ */
+void dealloc_cfg(cfg_t* cfg){
+	//Hold a cursor
+	cfg_node_holder_t* current = cfg->head;
+	//Have a basic holder here
+	cfg_node_holder_t* temp;
+
+	//We go through the CFG head, destroying as we go
+	while(current != NULL){
+		//Store this
+		temp = current;
+		//Advance to the next
+		current = current->next;
+		//Destroy the block of our current one
+		basic_block_dealloc(temp->block);
+		//Free the overall structure too
 		free(temp);
 	}
 
-	//Otherwise its fine so
-	free(block);
+	//At the very end, be sure to destroy this too
+	free(cfg);
 }
 
 
@@ -185,7 +198,7 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
 /**
  * Add a statement to the target block, following all standard linked-list protocol
  */
-static void add_statement(basic_block_t* target, top_level_statement_node_t* statement_node){
+static void add_statement(basic_block_t* target, generic_ast_node_t* statement_node){
 	//Generic fail case
 	if(target == NULL){
 		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
@@ -201,7 +214,7 @@ static void add_statement(basic_block_t* target, top_level_statement_node_t* sta
 	}
 
 	//Otherwise, we are not dealing with the head. We'll simply tack this on to the tail
-	target->exit_statement->next = statement_node;
+	target->exit_statement->next_statement = statement_node;
 	//Update the tail reference
 	target->exit_statement = statement_node;
 }
@@ -231,7 +244,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	} else {
 		//Otherwise it's a "true merge"
 		//The leader statement in b will be connected to a's tail
-		a->exit_statement->next = b->leader_statement;
+		a->exit_statement->next_statement = b->leader_statement;
 		//Now once they're connected we'll set a's exit to be b's exit
 		a->exit_statement = b->exit_statement;
 	}
@@ -258,9 +271,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->is_exit_block = b->is_exit_block;
 	//If we're merging return statements
 	a->is_return_stmt = b->is_return_stmt;
-
-	//We will not deallocate here, we will merely free the block itself
-	free(b);
 
 	//Give back the pointer to a
 	return a;
@@ -367,9 +377,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If the very first one is not blank
 	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
 		//Add it's child in as a statement to the entry block
-		top_level_statement_node_t* first_cond = create_statement(ast_cursor->first_child);
-		//Add it in to the entry block
-		add_statement(for_stmt_entry_block, first_cond);
+		add_statement(for_stmt_entry_block, ast_cursor->first_child);
 	}
 
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
@@ -390,11 +398,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	
 	//If the second one is not blank
 	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
-		//Add it's child in as a statement to the entry block
-		top_level_statement_node_t* second_cond = create_statement(ast_cursor->first_child);
-
 		//This is always the first part of the repeating block
-		add_statement(condition_block,  second_cond);
+		add_statement(condition_block,  ast_cursor->first_child);
 	
 	//It is impossible for the second one to be blank
 	} else {
@@ -406,12 +411,12 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	ast_cursor = ast_cursor->next_sibling;
 
 	//Allocate and set to NULL as a warning for later
-	top_level_statement_node_t* third_cond = NULL;
+	generic_ast_node_t* third_cond = NULL;
 
 	//If the third one is not blank
 	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
 		//Just make the statement for now, it will be added in later
-		third_cond = create_statement(ast_cursor->first_child);
+		third_cond = ast_cursor->first_child;
 	}
 
 	//Advance to the next sibling
@@ -551,11 +556,8 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 		return do_while_stmt_entry_block;
 	}
 
-	//Otherwise, we'll need to add one more statement to the end block
-	top_level_statement_node_t* do_while_cond_stmt = create_statement(ast_cursor->next_sibling);
-
 	//Add this in to the ending block
-	add_statement(compound_stmt_end, do_while_cond_stmt);
+	add_statement(compound_stmt_end, ast_cursor->next_sibling);
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -592,10 +594,8 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	//Grab a cursor to the while statement node
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
-	//The very first child will the expression that we have
-	top_level_statement_node_t* expr_statement = create_statement(ast_cursor);	
 	//The entry block contains our expression statement
-	add_statement(while_statement_entry_block, expr_statement);
+	add_statement(while_statement_entry_block, ast_cursor);
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -684,11 +684,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	//Let's grab a cursor to walk the tree
 	generic_ast_node_t* cursor = values->initial_node->first_child;
 
-	//The very first child should be an expression, so we'll just add it in to the top
-	top_level_statement_node_t* if_expr = create_statement(cursor);
-
 	//Add it into the start block
-	add_statement(entry_block, if_expr);
+	add_statement(entry_block, cursor);
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
@@ -951,36 +948,30 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 		//If we've found an assignment expression
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASNMNT_EXPR){
-			//Create the statement
-			top_level_statement_node_t* asn_expr_stmt = create_statement(ast_cursor);
-
 			//If the starting block is null, we'll make it
 			if(starting_block == NULL){
 				starting_block = basic_block_alloc();
 				current_block = starting_block;
 				//Add the statement
-				add_statement(current_block, asn_expr_stmt);
+				add_statement(current_block, ast_cursor);
 
 			//Otherwise just add it in to current
 			} else {
-				add_statement(current_block, asn_expr_stmt);
+				add_statement(current_block, ast_cursor);
 			}
 
 		//We've found a generic statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
-			//Create the statement
-			top_level_statement_node_t* expr_stmt = create_statement(ast_cursor);
-
 			//If the starting block is null, we'll make it
 			if(starting_block == NULL){
 				starting_block = basic_block_alloc();
 				current_block = starting_block;
 				//Add the statement
-				add_statement(current_block, expr_stmt);
+				add_statement(current_block, ast_cursor);
 
 			//Otherwise just add it in to current
 			} else {
-				add_statement(current_block, expr_stmt);
+				add_statement(current_block, ast_cursor);
 			}
 
 		//We've found a let statement
@@ -1011,10 +1002,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Whatever the current block is, this is being added to it
 			//If it's a non-blank return
 			if(ast_cursor->first_child != NULL){
-				//Create the statement for the return
-				top_level_statement_node_t* ret_expr = create_statement(ast_cursor->first_child);
 				//Add it into current
-				add_statement(current_block, ret_expr);
+				add_statement(current_block, ast_cursor->first_child);
 			}
 
 			//The current block will now be marked as a return statement
@@ -1212,11 +1201,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			 * As such, deferred statements are executed immediately after a "ret" statement
 			 * in the assembly
 			 */
-			//Add this in as a top level statement
-			top_level_statement_node_t* defer_stmt = create_statement(ast_cursor);
-
 			//We'll now add this into the stack
-			push(deferred_stmts, defer_stmt);
+			push(deferred_stmts, ast_cursor);
 
 		//Handle a continue statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
@@ -1384,11 +1370,8 @@ static basic_block_t* visit_declaration_statement(values_package_t* values){
 	//Create the basic block
 	basic_block_t* decl_stmt_block = basic_block_alloc();
 
-	//Create the top level statement for this
-	top_level_statement_node_t* stmt = create_statement(values->initial_node);
-
 	//Add it into the block
-	add_statement(decl_stmt_block, stmt);
+	add_statement(decl_stmt_block, values->initial_node);
 
 	//Give the block back
 	return decl_stmt_block;
@@ -1402,11 +1385,8 @@ static basic_block_t* visit_let_statement(values_package_t* values){
 	//Create the basic block
 	basic_block_t* let_stmt_node = basic_block_alloc();
 
-	//Create the top level statement for this
-	top_level_statement_node_t* stmt = create_statement(values->initial_node);
-
 	//Add it into the block
-	add_statement(let_stmt_node, stmt);
+	add_statement(let_stmt_node, values->initial_node);
 
 	//Give the block back
 	return let_stmt_node;
@@ -1518,6 +1498,8 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
+	//Hold the cfg
+	cfg_ref = cfg;
 
 	//For dev use here
 	if(results.root->CLASS != AST_NODE_CLASS_PROG){

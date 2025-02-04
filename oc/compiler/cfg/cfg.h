@@ -17,8 +17,11 @@
 typedef struct cfg_t cfg_t;
 //Basic blocks in our CFG
 typedef struct basic_block_t basic_block_t;
-//The top level statements that themselves make up a basic block
-typedef struct top_level_statement_node_t top_level_statement_node_t;
+//A memory tracking structure for freeing
+typedef struct cfg_node_holder_t cfg_node_holder_t;
+//A memory tracking structure for freeing
+typedef struct cfg_statement_holder_t cfg_statement_holder_t;
+
 
 /**
  * We have a basic CFG structure that holds these references to making freeing
@@ -30,17 +33,33 @@ struct cfg_t{
 	basic_block_t* root;
 	//The current block of the CFG
 	basic_block_t* current;
+	//The head of the list of all created blocks
+	cfg_node_holder_t* head;
 };
 
 
 /**
- * Each basic block contains a linked list of statements. These statements are
- * one-way only, meaning that they have one way in and one way out of them
+ * We will maintain a linked list of CFG nodes that we can eventually use for
+ * freeing
  */
-struct top_level_statement_node_t{
-	top_level_statement_node_t* next;
-	generic_ast_node_t* node;
+struct cfg_node_holder_t{
+	//Hold onto the basic block
+	basic_block_t* block;
+	//Linked list property
+	cfg_node_holder_t* next;
 };
+
+/**
+ * We will maintain a linked list of statements that we can eventually use for
+ * freeing
+ */
+struct cfg_statement_holder_t{
+	//Hold onto the basic block
+	basic_block_t* block;
+	//Linked list property
+	cfg_statement_holder_t* next;
+};
+
 
 /**
  * Define: a basic block is a sequence of consecutive 
@@ -79,8 +98,8 @@ struct basic_block_t{
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
-	top_level_statement_node_t* leader_statement;
-	top_level_statement_node_t* exit_statement;
+	generic_ast_node_t* leader_statement;
+	generic_ast_node_t* exit_statement;
 };
 
 //Build the entire CFG from the AST. This function returns the CFG struct, which
