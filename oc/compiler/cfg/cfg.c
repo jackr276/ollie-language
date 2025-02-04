@@ -608,7 +608,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
  * A while statement is a very simple control flow construct. As always, the "direct successor" path is the path
  * that reliably leads us down and out
  */
-static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node, basic_block_t* function_block_end){
+static basic_block_t* visit_while_statement(values_package_t* values){
 	//Create our entry block
 	basic_block_t* while_statement_entry_block = basic_block_alloc();
 	//And create our exit block
@@ -618,7 +618,10 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node,
 	add_successor(while_statement_entry_block, while_statement_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 	//Just to be sure
 	while_statement_entry_block->direct_successor = while_statement_end_block;
-	
+
+	//Grab this for convenience
+	generic_ast_node_t* while_stmt_node = values->initial_node;
+
 	//Grab a cursor to the while statement node
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
@@ -636,8 +639,14 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node,
 		exit(0);
 	}
 
+	//Create a values package to send in
+	values_package_t compound_stmt_values;
+	compound_stmt_values.initial_node = ast_cursor;
+	compound_stmt_values.function_end_block = values->function_end_block;
+	compound_stmt_values.loop_stmt_start = while_statement_entry_block;
+
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
-	basic_block_t* compound_stmt_start = visit_compound_statement(ast_cursor, function_block_end, while_statement_entry_block);
+	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
 
 	//If it's null, that means that we were given an empty while loop here
 	if(compound_stmt_start == NULL){
@@ -686,7 +695,7 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node,
  * 	1.) Every node flows through a return, in which case nobody hits the exit block
  * 	2.) The main path flows through the end block, out of the structure
  */
-static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end, basic_block_t* end_block, basic_block_t* loop_block){
+static basic_block_t* visit_if_statement(values_package_t* values){
 	//We always have an entry block here -- the end block is made for us
 	basic_block_t* entry_block = basic_block_alloc();
 	
@@ -696,7 +705,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	u_int8_t returns_through_second_path = 0;
 
 	//Let's grab a cursor to walk the tree
-	generic_ast_node_t* cursor = if_stmt_node->first_child;
+	generic_ast_node_t* cursor = values->initial_node->first_child;
 
 	//The very first child should be an expression, so we'll just add it in to the top
 	top_level_statement_node_t* if_expr = create_statement(cursor);
@@ -713,8 +722,15 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		exit(1);
 	}
 
+	//Create and send in a values package
+	values_package_t if_compound_stmt_values;
+	if_compound_stmt_values.initial_node = cursor;
+	if_compound_stmt_values.function_end_block = values->function_end_block;
+	if_compound_stmt_values.loop_stmt_start = values->loop_stmt_start;
+	if_compound_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
+
 	//Now that we know it is, we'll invoke the compound statement rule
-	basic_block_t* if_compound_stmt_entry = visit_compound_statement(cursor, function_block_end, loop_block);
+	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
 
 	//If this is null, whole thing fails
 	if(if_compound_stmt_entry == NULL){
@@ -738,19 +754,19 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 
 		//If it doesn't return through the main path, the successor is the end node
 		if(returns_through_main_path == 0){
-			add_successor(if_compound_stmt_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(if_compound_stmt_end, values->if_stmt_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 		}
 	}
 
 	//This is the end if we have a lone "if"
 	if(cursor->next_sibling == NULL){
 		//If this is the case, the end block is a direct successor
-		add_successor(entry_block, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(entry_block, values->if_stmt_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 		//If it is the parent, then we want there to be an exit here. If it's not the parent, then
 		//we want the other area to handle it
 		//For traversal reasons, we want this as the direct successor
-		entry_block->direct_successor = end_block;
+		entry_block->direct_successor = values->if_stmt_end_block;
 
 		//We can leave now
 		return entry_block;
@@ -762,8 +778,15 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	
 	//If we have a compound statement, we'll handle it as an "else" clause
 	if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+		//Create the values package 
+		values_package_t else_values_package;
+		else_values_package.initial_node = cursor;
+		else_values_package.function_end_block = values->function_end_block;
+		else_values_package.loop_stmt_start = values->loop_stmt_start;
+		else_values_package.if_stmt_end_block = values->if_stmt_end_block;
+
 		//Visit the else statement
-		basic_block_t* else_compound_stmt_entry = visit_compound_statement(cursor, function_block_end, loop_block);
+		basic_block_t* else_compound_stmt_entry = visit_compound_statement(&else_values_package);
 
 		//If this is NULL, we'll send a warning and hop out -- no need for more processing here
 		if(else_compound_stmt_entry == NULL){
@@ -771,7 +794,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 			(*num_warnings_ref)++;
 
 			//The entry block's direct successor is the end statement
-			entry_block->direct_successor = end_block;
+			entry_block->direct_successor = values->if_stmt_end_block;
 
 			//Just get out if this happens
 			return entry_block;
@@ -794,7 +817,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 
 		//If it isn't a return statement, then it's successor is the entry block
 		if(returns_through_second_path == 0){
-			add_successor(else_compound_stmt_end, end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(else_compound_stmt_end, values->if_stmt_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 		}
 
 		/**
@@ -819,8 +842,16 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 	
 	//Otherwise we have an "else if" clause 
 	} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
+		//Create the hours package
+		values_package_t else_if_values_package;
+		else_if_values_package.initial_node = cursor;
+		else_if_values_package.if_stmt_end_block = values->if_stmt_end_block;
+		else_if_values_package.loop_stmt_start = values->loop_stmt_start;
+		else_if_values_package.for_loop_update_clause = values->for_loop_update_clause;
+		else_if_values_package.function_end_block = values->function_end_block;
+
 		//Visit the if statment, this one is not a parent
-		basic_block_t* else_if_entry = visit_if_statement(cursor, function_block_end, end_block, loop_block);
+		basic_block_t* else_if_entry = visit_if_statement(&else_if_values_package);
 
 		//Add this as a successor to the entrant
 		add_successor(entry_block, else_if_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
@@ -839,7 +870,7 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
 		returns_through_second_path = else_if_end->is_return_stmt;
 
 		//If it doesnt return through the second path, then the end better be the original end
-		if(returns_through_second_path == 0 && else_if_end != end_block){
+		if(returns_through_second_path == 0 && else_if_end != values->if_stmt_end_block){
 			printf("DOES NOT TRACK END BLOCK\n");
 		}
 
@@ -994,8 +1025,17 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IF_STMT){
 			//Create the end block here for pointer reasons
 			basic_block_t* if_end_block = basic_block_alloc();
+
+			//Create the values package
+			values_package_t if_stmt_values;
+			if_stmt_values.initial_node = ast_cursor;
+			if_stmt_values.function_end_block = values->function_end_block;
+			if_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
+			if_stmt_values.if_stmt_end_block = if_end_block;
+			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
+
 			//We'll now enter the if statement
-			basic_block_t* if_stmt_start = visit_if_statement(ast_cursor, function_block_end, if_end_block, loop_stmt);
+			basic_block_t* if_stmt_start = visit_if_statement(&if_stmt_values);
 			
 			//Once we have the if statement start, we'll add it in as a successor
 			if(starting_block == NULL){
@@ -1034,8 +1074,16 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		
 		//Handle a while statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
+			//Create the values here
+			values_package_t while_stmt_values;
+			while_stmt_values.initial_node = ast_cursor;
+			while_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
+			while_stmt_values.loop_stmt_start = NULL;
+			while_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
+			while_stmt_values.function_end_block = values->function_end_block;
+
 			//Visit the while statement
-			basic_block_t* while_stmt_entry_block = visit_while_statement(ast_cursor, function_block_end);
+			basic_block_t* while_stmt_entry_block = visit_while_statement(&while_stmt_values);
 
 			//We'll now add it in
 			if(starting_block == NULL){
@@ -1053,8 +1101,16 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 	
 		//Handle a do-while statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
+			//Create the values package
+			values_package_t do_while_values;
+			do_while_values.initial_node = ast_cursor;
+			do_while_values.function_end_block = values->function_end_block;
+			do_while_values.if_stmt_end_block = values->if_stmt_end_block;
+			do_while_values.loop_stmt_start = values->loop_stmt_start;
+			do_while_values.for_loop_update_clause = values->for_loop_update_clause;
+
 			//Visit the statement
-			basic_block_t* do_while_stmt_entry_block = visit_do_while_statement(ast_cursor, function_block_end);
+			basic_block_t* do_while_stmt_entry_block = visit_do_while_statement(&do_while_values);
 
 			//We'll now add it in
 			if(starting_block == NULL){
@@ -1085,8 +1141,16 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 		//Handle a for statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
+			//Create the values package
+			values_package_t for_stmt_values;
+			for_stmt_values.initial_node = ast_cursor;
+			for_stmt_values.function_end_block = values->function_end_block;
+			for_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
+			for_stmt_values.loop_stmt_start = values->loop_stmt_start;
+			for_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
+
 			//First visit the statement
-			basic_block_t* for_stmt_entry_block = visit_for_statement(ast_cursor, function_block_end);
+			basic_block_t* for_stmt_entry_block = visit_for_statement(&for_stmt_values);
 
 			//Now we'll add it in
 			if(starting_block == NULL){
@@ -1127,7 +1191,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		//Handle a continue statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
 			//Let's first see if we're in a loop or not
-			if(loop_stmt == NULL){
+			if(values->loop_stmt_start == NULL){
 				print_cfg_message(PARSE_ERROR, "Continue statement was not found in a loop", ast_cursor->line_number);
 				(*num_errors_ref)++;
 				return create_and_return_err();
@@ -1144,7 +1208,12 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Otherwise we are in a loop, so this means that we need to point the continue statement to
 			//the loop entry block
-			add_successor(current_block, loop_stmt, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(current_block, values->loop_stmt_start, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+			//If we have for loops
+			if(values->for_loop_update_clause != NULL){
+				add_statement(current_block, values->for_loop_update_clause);
+			}
 
 			//Further, anything after this is unreachable
 			if(ast_cursor->next_sibling != NULL){
@@ -1189,8 +1258,16 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 		func_cursor = func_cursor->next_sibling;
 	}
 
+	//Create our values package
+	values_package_t compound_stmt_values;
+	compound_stmt_values.initial_node = func_cursor;
+	compound_stmt_values.function_end_block = function_ending_block;
+	compound_stmt_values.loop_stmt_start = NULL;
+	compound_stmt_values.if_stmt_end_block = NULL;
+	compound_stmt_values.for_loop_update_clause = NULL;
+
 	//Once we get here, we know that func cursor is the compound statement that we want
-	basic_block_t* compound_stmt_block = visit_compound_statement(func_cursor, function_ending_block, NULL);
+	basic_block_t* compound_stmt_block = visit_compound_statement(&compound_stmt_values);
 
 	//If this compound statement is NULL(which is possible) we just add the starting and ending
 	//blocks as successors
