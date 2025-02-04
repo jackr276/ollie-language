@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/types.h>
 
+
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
 static int32_t current_block_id = 0;
@@ -22,7 +23,10 @@ heap_stack_t* deferred_stmts;
 typedef struct {
 	generic_ast_node_t* initial_node;
 	basic_block_t* function_end_block;
+	//For continue statements
 	basic_block_t* loop_stmt_start;
+	//For break statements
+	basic_block_t* loop_stmt_end;
 	basic_block_t* if_stmt_end_block;
 	top_level_statement_node_t* for_loop_update_clause;
 } values_package_t;
@@ -470,6 +474,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	compound_stmt_values.function_end_block = values->function_end_block;
 	//Store this as well
 	compound_stmt_values.for_loop_update_clause = third_cond;
+	//Store this as well
+	compound_stmt_values.loop_stmt_end = for_stmt_exit_block;
 
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
@@ -501,7 +507,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//So long as we don't see the end or a return
 	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0
-		  && compound_stmt_end->is_cont_stmt == 0){
+		  && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
@@ -554,6 +560,8 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	compound_stmt_values.initial_node = ast_cursor;
 	compound_stmt_values.function_end_block = values->function_end_block;
 	compound_stmt_values.loop_stmt_start = do_while_stmt_entry_block;
+	compound_stmt_values.loop_stmt_end = do_while_stmt_exit_block;
+	compound_stmt_values.for_loop_update_clause = NULL;
 
 	//We go right into the compound statement here
 	basic_block_t* do_while_compound_stmt_entry = visit_compound_statement(&compound_stmt_values);
@@ -572,7 +580,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//So long as we don't see NULL or return
 	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0
-		  && compound_stmt_end->is_cont_stmt == 0){
+		  && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
@@ -644,6 +652,8 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	compound_stmt_values.initial_node = ast_cursor;
 	compound_stmt_values.function_end_block = values->function_end_block;
 	compound_stmt_values.loop_stmt_start = while_statement_entry_block;
+	compound_stmt_values.for_loop_update_clause = NULL;
+	compound_stmt_values.loop_stmt_end = while_statement_end_block;
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
@@ -665,7 +675,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//So long as it isn't null or return
 	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0
-		   && compound_stmt_end->is_cont_stmt == 0) {
+		   && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0) {
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 	
@@ -707,6 +717,10 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	u_int8_t returns_through_second_path = 0;
 	//Mark if we have a continue statement
 	u_int8_t continues_through_second_path = 0;
+	//Mark if we have a break statement
+	u_int8_t breaks_through_main_path = 0;
+	//Mark if we break through else
+	u_int8_t breaks_through_second_path = 0;
 
 	//Let's grab a cursor to walk the tree
 	generic_ast_node_t* cursor = values->initial_node->first_child;
@@ -733,6 +747,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	if_compound_stmt_values.loop_stmt_start = values->loop_stmt_start;
 	if_compound_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
 	if_compound_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
+	if_compound_stmt_values.loop_stmt_end = values->loop_stmt_end;
 
 	//Now that we know it is, we'll invoke the compound statement rule
 	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
@@ -750,7 +765,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Once we've visited, we'll need to drill to the end of this compound statement
 		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->is_return_stmt == 0
-			 && if_compound_stmt_end->is_cont_stmt == 0){
+			 && if_compound_stmt_end->is_cont_stmt == 0 && if_compound_stmt_end->is_break_stmt == 0){
 			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
 		}
 
@@ -758,6 +773,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		returns_through_main_path = if_compound_stmt_end->is_return_stmt;
 		//Mark this too
 		continues_through_main_path = if_compound_stmt_end->is_cont_stmt;
+		//And this one
+		breaks_through_main_path = if_compound_stmt_end->is_break_stmt;
 
 		//If it doesn't return through the main path, the successor is the end node
 		if(returns_through_main_path == 0){
@@ -792,6 +809,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		else_values_package.loop_stmt_start = values->loop_stmt_start;
 		else_values_package.if_stmt_end_block = values->if_stmt_end_block;
 		else_values_package.for_loop_update_clause = values->for_loop_update_clause;
+		else_values_package.loop_stmt_end = values->loop_stmt_end;
 
 		//Visit the else statement
 		basic_block_t* else_compound_stmt_entry = visit_compound_statement(&else_values_package);
@@ -824,6 +842,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		returns_through_second_path = else_compound_stmt_end->is_return_stmt;
 		//Mark this too
 		continues_through_second_path = else_compound_stmt_end->is_cont_stmt;
+		//Mark this here as well
+		breaks_through_second_path = else_compound_stmt_end->is_break_stmt;
 
 		//If it isn't a return statement, then it's successor is the entry block
 		if(returns_through_second_path == 0){
@@ -836,15 +856,21 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 0 && continues_through_main_path == 0){
+		if(returns_through_main_path == 0 && continues_through_main_path == 0 && breaks_through_second_path == 0){
 			//The direct successor is the main path
 			entry_block->direct_successor = if_compound_stmt_entry;
 		//We favor this one if not
-		} else if(returns_through_second_path == 0 && continues_through_second_path == 0){
+		} else if(returns_through_second_path == 0 && continues_through_second_path == 0 && breaks_through_second_path == 0){
 			entry_block->direct_successor = else_compound_stmt_entry;
 		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
 			//The direct successor is the else path
 			entry_block->direct_successor = else_compound_stmt_entry;
+		} else if(continues_through_main_path == 1 && breaks_through_second_path == 1){
+			//The direct successor is the else path
+			entry_block->direct_successor = else_compound_stmt_entry;
+		} else if(breaks_through_main_path == 1 && continues_through_second_path == 1){
+			//The direct successor is the main path 
+			entry_block->direct_successor = if_compound_stmt_entry;
 		} else {
 			//If there's anything else, we default to the first path
 			entry_block->direct_successor = if_compound_stmt_entry;
@@ -862,6 +888,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		else_if_values_package.loop_stmt_start = values->loop_stmt_start;
 		else_if_values_package.for_loop_update_clause = values->for_loop_update_clause;
 		else_if_values_package.function_end_block = values->function_end_block;
+		else_if_values_package.loop_stmt_end = values->loop_stmt_end;
 
 		//Visit the if statment, this one is not a parent
 		basic_block_t* else_if_entry = visit_if_statement(&else_if_values_package);
@@ -883,6 +910,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		returns_through_second_path = else_if_end->is_return_stmt;
 		//Mark this too
 		continues_through_second_path = else_if_end->is_cont_stmt;
+		//And mark this
+		breaks_through_second_path = else_if_end->is_break_stmt;
 
 		//If it doesnt return through the second path, then the end better be the original end
 		if(returns_through_second_path == 0 && else_if_end != values->if_stmt_end_block){
@@ -895,14 +924,20 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 0 && continues_through_main_path == 0){
+		if(returns_through_main_path == 0 && continues_through_main_path == 0 && breaks_through_main_path == 0){
 			//The direct successor is the main path
 			entry_block->direct_successor = if_compound_stmt_entry;
-		} else if(continues_through_second_path == 0 && returns_through_second_path == 0){
+		} else if(continues_through_second_path == 0 && returns_through_second_path == 0 && breaks_through_second_path == 0){
 			entry_block->direct_successor = else_if_entry;
 		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
 			//The direct successor is the else path
 			entry_block->direct_successor = else_if_entry;
+		} else if(continues_through_main_path == 1 && breaks_through_second_path == 1){
+			//The direct successor is the else path
+			entry_block->direct_successor = else_if_entry;
+		} else if(breaks_through_main_path == 1 && continues_through_second_path == 1){
+			//The direct successor is the main path 
+			entry_block->direct_successor = if_compound_stmt_entry;
 		} else {
 			//If there's anything else, we default to the first path
 			entry_block->direct_successor = if_compound_stmt_entry;
@@ -1050,6 +1085,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			if_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
 			if_stmt_values.if_stmt_end_block = if_end_block;
 			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
+			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
 
 			//We'll now enter the if statement
 			basic_block_t* if_stmt_start = visit_if_statement(&if_stmt_values);
@@ -1109,6 +1145,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			while_stmt_values.initial_node = ast_cursor;
 			while_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
 			while_stmt_values.loop_stmt_start = NULL;
+			while_stmt_values.loop_stmt_end = NULL;
 			while_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
 			while_stmt_values.function_end_block = values->function_end_block;
 
@@ -1136,7 +1173,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			do_while_values.initial_node = ast_cursor;
 			do_while_values.function_end_block = values->function_end_block;
 			do_while_values.if_stmt_end_block = values->if_stmt_end_block;
-			do_while_values.loop_stmt_start = values->loop_stmt_start;
+			do_while_values.loop_stmt_start = NULL;
+			do_while_values.loop_stmt_end = NULL;
 			do_while_values.for_loop_update_clause = values->for_loop_update_clause;
 
 			//Visit the statement
@@ -1178,7 +1216,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			for_stmt_values.initial_node = ast_cursor;
 			for_stmt_values.function_end_block = values->function_end_block;
 			for_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
-			for_stmt_values.loop_stmt_start = values->loop_stmt_start;
+			for_stmt_values.loop_stmt_start = NULL;
+			for_stmt_values.loop_stmt_end = NULL;
 			for_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
 
 			//First visit the statement
@@ -1255,6 +1294,36 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//We're done here, so return the starting block
 			return starting_block;
+
+		//Hand le a break out statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_BREAK_STMT){
+			//Let's first see if we're in a loop or not
+			if(values->loop_stmt_start == NULL){
+				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop", ast_cursor->line_number);
+				(*num_errors_ref)++;
+				return create_and_return_err();
+			}
+
+			//This could happen where we have nothing here
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//Mark this for later
+			current_block->is_break_stmt = 1;
+
+			//Otherwise we need to break out of the loop
+			add_successor(current_block, values->if_stmt_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+
+			//If we see anything after this, it is unreachable so throw a warning
+			if(ast_cursor->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after continue statement", ast_cursor->next_sibling->line_number);
+				(*num_errors_ref)++;
+			}
+
+			//Give back the starting block
+			return starting_block;
 		}
 
 		//Advance to the next child
@@ -1297,6 +1366,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	compound_stmt_values.loop_stmt_start = NULL;
 	compound_stmt_values.if_stmt_end_block = NULL;
 	compound_stmt_values.for_loop_update_clause = NULL;
+	compound_stmt_values.loop_stmt_end = NULL;
 
 	//Once we get here, we know that func cursor is the compound statement that we want
 	basic_block_t* compound_stmt_block = visit_compound_statement(&compound_stmt_values);

@@ -27,15 +27,17 @@ func test_func() -> i32 {
 	do {
 		i++;
 		@test_func();
-		if(i < 3) then {
-			continue;
-		} else if (i > 3) then{
-			i++;
-			continue;
-		}
+		continue when (i > 3);
 
 		ret i;
 	} while (i < 232);
+
+
+
+
+	let u32 sample := 2232;
+
+
 
 	for(let u32 i := 0; i < 2323; i++) do{
 		@test_func();

@@ -68,6 +68,8 @@ struct basic_block_t{
 	u_int8_t is_return_stmt;
 	//Is it a continue statement?
 	u_int8_t is_cont_stmt;
+	//Is it a break statement
+	u_int8_t is_break_stmt;
 	//Was this block visited by traverser?
 	u_int8_t visited;
 	//Is this block an exit block?
