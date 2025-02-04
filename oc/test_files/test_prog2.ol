@@ -29,8 +29,9 @@ func test_func() -> i32 {
 		@test_func();
 		if(i < 3) then {
 			continue;
-		} else {
+		} else if (i > 3) then{
 			i++;
+			continue;
 		}
 
 		ret i;

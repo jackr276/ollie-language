@@ -701,8 +701,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	
 	//Mark if we have a return statement
 	u_int8_t returns_through_main_path = 0;
+	//Mark if we have a continue statement
+	u_int8_t continues_through_main_path = 0;
 	//Mark if we return through an else path
 	u_int8_t returns_through_second_path = 0;
+	//Mark if we have a continue statement
+	u_int8_t continues_through_second_path = 0;
 
 	//Let's grab a cursor to walk the tree
 	generic_ast_node_t* cursor = values->initial_node->first_child;
@@ -752,6 +756,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
 		returns_through_main_path = if_compound_stmt_end->is_return_stmt;
+		//Mark this too
+		continues_through_main_path = if_compound_stmt_end->is_cont_stmt;
 
 		//If it doesn't return through the main path, the successor is the end node
 		if(returns_through_main_path == 0){
@@ -816,6 +822,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
 		returns_through_second_path = else_compound_stmt_end->is_return_stmt;
+		//Mark this too
+		continues_through_second_path = else_compound_stmt_end->is_cont_stmt;
 
 		//If it isn't a return statement, then it's successor is the entry block
 		if(returns_through_second_path == 0){
@@ -828,9 +836,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 0){
+		if(returns_through_main_path == 0 && continues_through_main_path == 0){
 			//The direct successor is the main path
 			entry_block->direct_successor = if_compound_stmt_entry;
+		//We favor this one if not
+		} else if(returns_through_second_path == 0 && continues_through_second_path == 0){
+			entry_block->direct_successor = else_compound_stmt_entry;
 		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
 			//The direct successor is the else path
 			entry_block->direct_successor = else_compound_stmt_entry;
@@ -870,6 +881,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Once we get here, we either have an end block or a return statement
 		returns_through_second_path = else_if_end->is_return_stmt;
+		//Mark this too
+		continues_through_second_path = else_if_end->is_cont_stmt;
 
 		//If it doesnt return through the second path, then the end better be the original end
 		if(returns_through_second_path == 0 && else_if_end != values->if_stmt_end_block){
@@ -882,9 +895,11 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 0){
+		if(returns_through_main_path == 0 && continues_through_main_path == 0){
 			//The direct successor is the main path
 			entry_block->direct_successor = if_compound_stmt_entry;
+		} else if(continues_through_second_path == 0 && returns_through_second_path == 0){
+			entry_block->direct_successor = else_if_entry;
 		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
 			//The direct successor is the else path
 			entry_block->direct_successor = else_if_entry;
