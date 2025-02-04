@@ -18,15 +18,25 @@ u_int32_t* num_warnings_ref;
 //Keep a stack of deferred statements for each function
 heap_stack_t* deferred_stmts;
 
+//A package of values that each visit function uses
+typedef struct {
+	generic_ast_node_t* initial_node;
+	basic_block_t* function_end_block;
+	basic_block_t* loop_stmt_start;
+	basic_block_t* if_stmt_end_block;
+	top_level_statement_node_t* for_loop_update_clause;
+} values_package_t;
+
+
 //We predeclare up here to avoid needing any rearrangements
-static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node);
-static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end, basic_block_t* loop_stmt);
-static basic_block_t* visit_let_statement(generic_ast_node_t* let_node);
-static basic_block_t* visit_expression_statement(generic_ast_node_t* decl_node);
-static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic_block_t* function_block_end, basic_block_t* end_block, basic_block_t* loop_stmt);
-static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node, basic_block_t* function_block_end);
-static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node, basic_block_t* function_block_end);
-static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, basic_block_t* function_block_end);
+static basic_block_t* visit_declaration_statement(values_package_t* values);
+static basic_block_t* visit_compound_statement(values_package_t* values);
+static basic_block_t* visit_let_statement(values_package_t* values);
+static basic_block_t* visit_expression_statement(values_package_t* values);
+static basic_block_t* visit_if_statement(values_package_t* values);
+static basic_block_t* visit_while_statement(values_package_t* values);
+static basic_block_t* visit_do_while_statement(values_package_t* values);
+static basic_block_t* visit_for_statement(values_package_t* values);
 
 
 /**
@@ -376,12 +386,15 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
  * A for-statement is another kind of control flow construct. As always the direct successor is the path that reliably
  * leads us down and out
  */
-static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, basic_block_t* function_block_end){
+static basic_block_t* visit_for_statement(values_package_t* values){
 	//Create our entry block
 	basic_block_t* for_stmt_entry_block = basic_block_alloc();
 	//Create our exit block
 	basic_block_t* for_stmt_exit_block = basic_block_alloc();
 	
+	//Grab the reference to the for statement node
+	generic_ast_node_t* for_stmt_node = values->initial_node;
+
 	//Grab a cursor for walking the sub-tree
 	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
 
@@ -447,10 +460,20 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, bas
 		//Immediate failure here
 		exit(0);
 	}
+	
+	//Create a copy of our values here
+	values_package_t compound_stmt_values;
+	compound_stmt_values.initial_node = ast_cursor;
+	//The loop starts at the condition block
+	compound_stmt_values.loop_stmt_start = condition_block;
+	//Store the end block
+	compound_stmt_values.function_end_block = values->function_end_block;
+	//Store this as well
+	compound_stmt_values.for_loop_update_clause = third_cond;
 
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
-	basic_block_t* compound_stmt_start = visit_compound_statement(ast_cursor, function_block_end, condition_block);
+	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
 
 	//If it's null, that's actually ok here
 	if(compound_stmt_start == NULL){
@@ -508,11 +531,14 @@ static basic_block_t* visit_for_statement(generic_ast_node_t* for_stmt_node, bas
  * A do-while statement is a simple control flow construct. As always, the direct successor path is the path that reliably
  * leads us down and out
  */
-static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt_node, basic_block_t* function_block_end){
+static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//Create our entry block. This in reality will be the compound statement
 	basic_block_t* do_while_stmt_entry_block = basic_block_alloc();
 	//The true ending block
 	basic_block_t* do_while_stmt_exit_block = basic_block_alloc();
+
+	//Grab the initial node
+	generic_ast_node_t* do_while_stmt_node = values->initial_node;
 
 	//Grab a cursor for walking the subtree
 	generic_ast_node_t* ast_cursor = do_while_stmt_node->first_child;
@@ -523,8 +549,14 @@ static basic_block_t* visit_do_while_statement(generic_ast_node_t* do_while_stmt
 		exit(0);
 	}
 
+	//Create and populate all needed values
+	values_package_t compound_stmt_values;
+	compound_stmt_values.initial_node = ast_cursor;
+	compound_stmt_values.function_end_block = values->function_end_block;
+	compound_stmt_values.loop_stmt_start = do_while_stmt_entry_block;
+
 	//We go right into the compound statement here
-	basic_block_t* do_while_compound_stmt_entry = visit_compound_statement(ast_cursor, function_block_end, do_while_stmt_entry_block);
+	basic_block_t* do_while_compound_stmt_entry = visit_compound_statement(&compound_stmt_values);
 
 	//If this is NULL, it means that we really don't have a compound statement there
 	if(do_while_compound_stmt_entry == NULL){
@@ -844,11 +876,14 @@ static basic_block_t* visit_if_statement(generic_ast_node_t* if_stmt_node, basic
  *
  * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
  */
-static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt_node, basic_block_t* function_block_end, basic_block_t* loop_stmt){
+static basic_block_t* visit_compound_statement(values_package_t* values){
 	//The global starting block
 	basic_block_t* starting_block = NULL;
 	//The current block
 	basic_block_t* current_block = starting_block;
+
+	//Grab the initial node
+	generic_ast_node_t* compound_stmt_node = values->initial_node;
 
 	//Grab our very first thing here
 	generic_ast_node_t* ast_cursor = compound_stmt_node->first_child;
@@ -857,8 +892,11 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 	while(ast_cursor != NULL){
 		//We've found a declaration statement
 		if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
+			values_package_t values;
+			values.initial_node = ast_cursor;
+
 			//We'll visit the block here
-			basic_block_t* decl_block = visit_declaration_statement(ast_cursor);
+			basic_block_t* decl_block = visit_declaration_statement(&values);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
@@ -905,8 +943,11 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 
 		//We've found a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
+			values_package_t values;
+			values.initial_node = ast_cursor;
+
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(ast_cursor);
+			basic_block_t* let_block = visit_let_statement(&values);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
@@ -938,7 +979,7 @@ static basic_block_t* visit_compound_statement(generic_ast_node_t* compound_stmt
 			current_block->is_return_stmt = 1;
 
 			//The current block's direct and only successor is the function exit block
-			add_successor(current_block, function_block_end, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(current_block, values->function_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
 			//If there is anything after this statement, it is UNREACHABLE
 			if(ast_cursor->next_sibling != NULL){
@@ -1201,12 +1242,12 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 /**
  * Visit a declaration statement
  */
-static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node){
+static basic_block_t* visit_declaration_statement(values_package_t* values){
 	//Create the basic block
 	basic_block_t* decl_stmt_block = basic_block_alloc();
 
 	//Create the top level statement for this
-	top_level_statement_node_t* stmt = create_statement(decl_node);
+	top_level_statement_node_t* stmt = create_statement(values->initial_node);
 
 	//Add it into the block
 	add_statement(decl_stmt_block, stmt);
@@ -1219,12 +1260,12 @@ static basic_block_t* visit_declaration_statement(generic_ast_node_t* decl_node)
 /**
  * Visit a let statement
  */
-static basic_block_t* visit_let_statement(generic_ast_node_t* let_node){
+static basic_block_t* visit_let_statement(values_package_t* values){
 	//Create the basic block
 	basic_block_t* let_stmt_node = basic_block_alloc();
 
 	//Create the top level statement for this
-	top_level_statement_node_t* stmt = create_statement(let_node);
+	top_level_statement_node_t* stmt = create_statement(values->initial_node);
 
 	//Add it into the block
 	add_statement(let_stmt_node, stmt);
@@ -1278,8 +1319,11 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 
 		//Process a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
+			values_package_t values;
+			values.initial_node = ast_cursor;
+
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(ast_cursor);
+			basic_block_t* let_block = visit_let_statement(&values);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(start_block == NULL){
@@ -1292,8 +1336,11 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 
 		//Visit a declaration statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
+			values_package_t values;
+			values.initial_node = ast_cursor;
+
 			//We'll visit the block here
-			basic_block_t* decl_block = visit_declaration_statement(ast_cursor);
+			basic_block_t* decl_block = visit_declaration_statement(&values);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(start_block == NULL){
