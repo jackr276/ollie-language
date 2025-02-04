@@ -145,46 +145,9 @@ static basic_block_t* create_and_return_err(){
 
 
 /**
- * Add a predecessor to the target block. When we add a predecessor, the target
- * block is also implicitly made a successor of said predecessor
- */
-static void add_predecessor(basic_block_t* target, basic_block_t* predecessor, linked_direction_t directedness){
-	//Let's check this
-	if(target->num_predecessors == MAX_PREDECESSORS){
-		//Internal error for the programmer
-		printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF PREDECESSORS");
-		exit(1);
-	}
-
-	//Otherwise we're set here
-	//Add this in
-	target->predecessors[target->num_predecessors] = predecessor;
-	//Increment how many we have
-	(target->num_predecessors)++;
-
-	//If we are trying to do a bidirectional link
-	if(directedness == LINKED_DIRECTION_BIDIRECTIONAL){
-		//We also need to reverse the roles and add target as a successor to "predecessor"
-		//Let's check this
-		if(predecessor->num_successors == MAX_SUCCESSORS){
-			//Internal error for the programmer
-			printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF SUCCESSORS");
-			exit(1);
-		}
-
-		//Otherwise we're set here
-		//Add this in
-		predecessor->successors[predecessor->num_successors] = target;
-		//Increment how many we have
-		(predecessor->num_successors)++;
-	}
-}
-
-
-/**
  * Add a successor to the target block
  */
-static void add_successor(basic_block_t* target, basic_block_t* successor, linked_direction_t directedness){
+static void add_successor(basic_block_t* target, basic_block_t* successor){
 	//Let's check this
 	if(target->num_successors == MAX_SUCCESSORS){
 		//Internal error for the programmer
@@ -204,22 +167,18 @@ static void add_successor(basic_block_t* target, basic_block_t* successor, linke
 	//Increment how many we have
 	(target->num_successors)++;
 
-	//If we are trying to do a bidirectional link
-	if(directedness == LINKED_DIRECTION_BIDIRECTIONAL){
-		//Now we'll also need to add in target as a predecessor of successor
-		//Let's check this
-		if(successor->num_predecessors == MAX_PREDECESSORS){
-			//Internal error for the programmer
-			printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF PREDECESSORS");
-			exit(1);
-		}
-
-		//Otherwise we're set here
-		//Add this in
-		successor->predecessors[successor->num_predecessors] = target;
-		//Increment how many we have
-		(successor->num_predecessors)++;
+	//Let's check this
+	if(successor->num_predecessors == MAX_PREDECESSORS){
+		//Internal error for the programmer
+		printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF PREDECESSORS");
+		exit(1);
 	}
+
+	//Otherwise we're set here
+	//Add this in
+	successor->predecessors[successor->num_predecessors] = target;
+	//Increment how many we have
+	(successor->num_predecessors)++;
 }
 
 
@@ -419,10 +378,10 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	basic_block_t* condition_block = basic_block_alloc();
 
 	//The condition block is always a successor to the entry block
-	add_successor(for_stmt_entry_block, condition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(for_stmt_entry_block, condition_block);
 
 	//The condition block also has another direct successor, the exit block
-	add_successor(condition_block, for_stmt_exit_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(condition_block, for_stmt_exit_block);
 	//Ensure it is the direct successor
 	condition_block->direct_successor = for_stmt_exit_block;
 
@@ -491,16 +450,16 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		}
 
 		//We'll make sure that the start points to this block
-		add_successor(condition_block, repeating_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(condition_block, repeating_block);
 		//And we'll add the conditional block as a successor to this
-		add_successor(repeating_block, condition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(repeating_block, condition_block);
 
 		//And we're done
 		return for_stmt_entry_block;
 	}
 
 	//This will always be a successor to the conditional statement
-	add_successor(condition_block, compound_stmt_start, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(condition_block, compound_stmt_start);
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
@@ -526,7 +485,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	}
 
 	//The successor of the end block is the conditional block
-	add_successor(compound_stmt_end, condition_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(compound_stmt_end, condition_block);
 
 	//Give back the entry block
 	return for_stmt_entry_block;
@@ -600,12 +559,12 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
-	add_successor(compound_stmt_end, do_while_stmt_exit_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(compound_stmt_end, do_while_stmt_exit_block);
 	//Make sure it's the direct successor
 	compound_stmt_end->direct_successor = do_while_stmt_exit_block;
 
 	//It's other successor though is the loop entry
-	add_successor(compound_stmt_end, do_while_stmt_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(compound_stmt_end, do_while_stmt_entry_block);
 
 	//Always return the entry block
 	return do_while_stmt_entry_block;
@@ -623,7 +582,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	basic_block_t* while_statement_end_block = basic_block_alloc();
 
 	//The direct successor to the entry block is the end block
-	add_successor(while_statement_entry_block, while_statement_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(while_statement_entry_block, while_statement_end_block);
 	//Just to be sure
 	while_statement_entry_block->direct_successor = while_statement_end_block;
 
@@ -668,7 +627,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	}
 
 	//Otherwise it isn't null, so we can add it as a successor
-	add_successor(while_statement_entry_block, compound_stmt_start, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(while_statement_entry_block, compound_stmt_start);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
@@ -688,7 +647,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	}
 
 	//No matter what, the successor to this statement is the top of the loop
-	add_successor(compound_stmt_end, while_statement_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+	add_successor(compound_stmt_end, while_statement_entry_block);
 
 	//Now we're done, so
 	return while_statement_entry_block;
@@ -758,7 +717,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		(*num_warnings_ref)++;
 	} else {
 		//Add the if statement node in as a direct successor
-		add_successor(entry_block, if_compound_stmt_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(entry_block, if_compound_stmt_entry);
 
 		//Now we'll find the end of this statement
 		basic_block_t* if_compound_stmt_end = if_compound_stmt_entry;
@@ -778,14 +737,14 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//If it doesn't return through the main path, the successor is the end node
 		if(returns_through_main_path == 0){
-			add_successor(if_compound_stmt_end, values->if_stmt_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 		}
 	}
 
 	//This is the end if we have a lone "if"
 	if(cursor->next_sibling == NULL){
 		//If this is the case, the end block is a direct successor
-		add_successor(entry_block, values->if_stmt_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(entry_block, values->if_stmt_end_block);
 
 		//If it is the parent, then we want there to be an exit here. If it's not the parent, then
 		//we want the other area to handle it
@@ -827,7 +786,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		}
 
 		//Otherwise, we'll add this in as a successor
-		add_successor(entry_block, else_compound_stmt_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(entry_block, else_compound_stmt_entry);
 
 		//Now we'll find the end of this statement
 		basic_block_t* else_compound_stmt_end = else_compound_stmt_entry;
@@ -847,7 +806,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//If it isn't a return statement, then it's successor is the entry block
 		if(returns_through_second_path == 0){
-			add_successor(else_compound_stmt_end, values->if_stmt_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(else_compound_stmt_end, values->if_stmt_end_block);
 		}
 
 		/**
@@ -894,7 +853,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* else_if_entry = visit_if_statement(&else_if_values_package);
 
 		//Add this as a successor to the entrant
-		add_successor(entry_block, else_if_entry, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(entry_block, else_if_entry);
 	
 		//Once we visit this, we'll navigate to the end
 		basic_block_t* else_if_end = else_if_entry;
@@ -1062,7 +1021,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			current_block->is_return_stmt = 1;
 
 			//The current block's direct and only successor is the function exit block
-			add_successor(current_block, values->function_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(current_block, values->function_end_block);
 
 			//If there is anything after this statement, it is UNREACHABLE
 			if(ast_cursor->next_sibling != NULL){
@@ -1159,7 +1118,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We never merge while statements -- it will always be a successor
 			} else {
 				//Add as a successor
-				add_successor(current_block, while_stmt_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				add_successor(current_block, while_stmt_entry_block);
 			}
 
 			//Now we'll drill to the end here. This is easier than before, because the direct successor to
@@ -1186,7 +1145,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block = starting_block;
 			//We never merge do-while's, they are strictly successors
 			} else {
-				add_successor(current_block, do_while_stmt_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				add_successor(current_block, do_while_stmt_entry_block);
 			}
 
 			//Now we'll need to reach the end-point of this statement
@@ -1279,7 +1238,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Otherwise we are in a loop, so this means that we need to point the continue statement to
 			//the loop entry block
-			add_successor(current_block, values->loop_stmt_start, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(current_block, values->loop_stmt_start);
 
 			//If we have for loops
 			if(values->for_loop_update_clause != NULL){
@@ -1314,7 +1273,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			current_block->is_break_stmt = 1;
 
 			//Otherwise we need to break out of the loop
-			add_successor(current_block, values->if_stmt_end_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+			add_successor(current_block, values->if_stmt_end_block);
 
 			//If we see anything after this, it is unreachable so throw a warning
 			if(ast_cursor->next_sibling != NULL){
@@ -1374,7 +1333,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//If this compound statement is NULL(which is possible) we just add the starting and ending
 	//blocks as successors
 	if(compound_stmt_block == NULL){
-		add_successor(function_starting_block, function_ending_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(function_starting_block, function_ending_block);
 		
 		//We'll also throw a warning
 		sprintf(info, "Function \"%s\" was given no body", ((func_def_ast_node_t*)(function_node->node))->func_record->func_name);
@@ -1399,7 +1358,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//Once we hit the end, if this isn't an exit block, we'll make it one
 	if(compound_stmt_cursor->is_exit_block == 0){
 		//We'll add this in as the ending block
-		add_successor(compound_stmt_cursor, function_ending_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+		add_successor(compound_stmt_cursor, function_ending_block);
 		compound_stmt_cursor->direct_successor = function_ending_block;
 	}
 
@@ -1482,7 +1441,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 				current_block = merge_blocks(current_block, function_block);
 			//Otherwise, we'll add this as a successor to the current block
 			} else {
-				add_successor(current_block, function_block, LINKED_DIRECTION_UNIDIRECTIONAL);
+				add_successor(current_block, function_block);
 			}
 
 			//We now need to find where the end of the function block is to have that as our current reference

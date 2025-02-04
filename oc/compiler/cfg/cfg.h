@@ -20,15 +20,6 @@ typedef struct basic_block_t basic_block_t;
 //The top level statements that themselves make up a basic block
 typedef struct top_level_statement_node_t top_level_statement_node_t;
 
-
-/**
- * What is the directionality of our added node
- */
-typedef enum linked_direction_t {
-	LINKED_DIRECTION_BIDIRECTIONAL,
-	LINKED_DIRECTION_UNIDIRECTIONAL
-} linked_direction_t;
-
 /**
  * We have a basic CFG structure that holds these references to making freeing
  */
