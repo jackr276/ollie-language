@@ -639,11 +639,6 @@ static basic_block_t* visit_while_statement(generic_ast_node_t* while_stmt_node,
 	//No matter what, the successor to this statement is the top of the loop
 	add_successor(compound_stmt_end, while_statement_entry_block, LINKED_DIRECTION_UNIDIRECTIONAL);
 
-	//If it is not a return statement, verify that this is the direct successor
-	if(compound_stmt_end->is_return_stmt == 0){
-		compound_stmt_end->direct_successor = while_statement_entry_block;
-	}
-
 	//Now we're done, so
 	return while_statement_entry_block;
 }

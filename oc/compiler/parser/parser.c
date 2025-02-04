@@ -5359,6 +5359,8 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 
 	//Once we get here, we've already seen the continue keyword, so we can make the node
 	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_CLASS_CONTINUE_STMT);
+	//Store the line number
+	continue_stmt->line_number = parser_line_num;
 
 	//Let's see what comes after this. If it's a semicol, we get right out
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5390,6 +5392,8 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 
 	//If the lookahead is a when statement, we will on the fly rewrite this into an if-statement
 	generic_ast_node_t* if_stmt_node = ast_node_alloc(AST_NODE_CLASS_IF_STMT);
+	//Store the line number
+	if_stmt_node->line_number = parser_line_num;
 
 	//Push to the stack for grouping
 	push_token(grouping_stack, lookahead);
@@ -5440,6 +5444,8 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 	//Let's do our final assembly here
 	//Create a compound statement node
 	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
+	//Store the line number
+	compound_stmt_node->line_number = parser_line_num;
 	//Add the continue statement as a child of it
 	add_child_node(compound_stmt_node, continue_stmt);
 
@@ -5475,6 +5481,8 @@ static generic_ast_node_t* break_statement(FILE* fl){
 
 	//Once we get here, we've already seen the break keyword, so we can make the node
 	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_CLASS_BREAK_STMT);
+	//Store the line number
+	break_stmt->line_number = parser_line_num;
 
 	//Let's see what comes after this. If it's a semicol, we get right out
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5498,6 +5506,8 @@ static generic_ast_node_t* break_statement(FILE* fl){
 
 	//Create our if statement node here
 	generic_ast_node_t* if_stmt_node = ast_node_alloc(AST_NODE_CLASS_IF_STMT);
+	//Store the line number
+	if_stmt_node->line_number = parser_line_num;
 
 	//If we don't have one, it's an instant fail
 	if(lookahead.tok != L_PAREN){
@@ -5556,13 +5566,15 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	//We'll now perform final assembly here
 	//Create the compound statement
 	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
+	//Store the line number
+	compound_stmt_node->line_number = parser_line_num;
+	//Store the line number
+	if_stmt_node->line_number = parser_line_num;
 	//Add this in as a child of the if statement
 	add_child_node(if_stmt_node, compound_stmt_node);
 	//Add the break statement as a child of this
 	add_child_node(compound_stmt_node, break_stmt);
 	
-	//Store the line number
-	if_stmt_node->line_number = parser_line_num;
 	//If we make it all the way down here, it worked so we can return the root node
 	return if_stmt_node;
 }

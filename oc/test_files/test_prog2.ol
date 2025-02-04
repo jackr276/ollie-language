@@ -1,9 +1,6 @@
-//let u32 i := 0;
-
-declare u32 j;
-
 func test_func() -> i32 {
 	let u32 i := 232;
+	let u32 j := 32;
 
 	while(i >= 232) do{
 		if(i == 2) then{ 
@@ -12,8 +9,6 @@ func test_func() -> i32 {
 		} else if(i == 3) then {
 			asn i := 32;
 			//ret i;
-		} else if (i == 4) then {
-			continue;
 		} else {
 			asn i := i + 1;
 			ret i;
@@ -55,7 +50,9 @@ func main(u32 argc, char** argv)->i32{
 	let u32 a := 0;
 	let u32 v := 0;
 	let u32 b := 0;
+	let u32 j := 0;
 	let u32 sadf := 0;
+	continue;
 
 	if(i == 0) then {
 		if(j == a) then{
@@ -72,9 +69,6 @@ func main(u32 argc, char** argv)->i32{
 
 	defer @test_func();
 	defer @test_func();
-
-
-	declare u32 j;
 
 	ret j + a;
 }
