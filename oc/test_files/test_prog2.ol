@@ -30,7 +30,7 @@ func test_func() -> i32 {
 		if(i < 3) then {
 			continue;
 		} else {
-			continue;
+			i++;
 		}
 
 		ret i;
