@@ -728,6 +728,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	if_compound_stmt_values.function_end_block = values->function_end_block;
 	if_compound_stmt_values.loop_stmt_start = values->loop_stmt_start;
 	if_compound_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
+	if_compound_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
 
 	//Now that we know it is, we'll invoke the compound statement rule
 	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
@@ -784,6 +785,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		else_values_package.function_end_block = values->function_end_block;
 		else_values_package.loop_stmt_start = values->loop_stmt_start;
 		else_values_package.if_stmt_end_block = values->if_stmt_end_block;
+		else_values_package.for_loop_update_clause = values->for_loop_update_clause;
 
 		//Visit the else statement
 		basic_block_t* else_compound_stmt_entry = visit_compound_statement(&else_values_package);
@@ -1056,7 +1058,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			/*
 			 * DEVELOPER USE MESSAGE
 			 */
-			if(current_block->is_return_stmt == 0 && current_block != if_end_block){
+			if(current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0 && current_block != if_end_block){
 				printf("END BLOCK REFERENCE LOST");
 			}
 
@@ -1068,6 +1070,19 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					print_cfg_message(WARNING, "Unreachable code detected after if-else block that returns through every control path", ast_cursor->line_number);
 					(*num_warnings_ref)++;
 				}
+				//Give it back
+				return starting_block;
+			}
+
+			//If it's a continue statement, that means that this if statement continues through every path. We'll leave if this
+			//is the case
+			if(current_block->is_cont_stmt == 1){
+				//Throw a warning if this happens
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after if-else block that continues through every control path", ast_cursor->line_number);
+					(*num_warnings_ref)++;
+				}
+
 				//Give it back
 				return starting_block;
 			}
@@ -1134,7 +1149,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			if(current_block->is_return_stmt == 1){
 				//Everything beyond this point is unreachable, no point in going on
 				print_cfg_message(WARNING, "Unreachable code detected after block that returns in all control paths", ast_cursor->next_sibling->line_number);
-				break;
+				(*num_warnings_ref)++;
+				//Get out now
+				return starting_block;
 			}
 
 			//Otherwise, we're all set to go to the next iteration
@@ -1162,7 +1179,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 			
 			//Once we're here the start is in current
-			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0){
+			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
 				current_block = current_block->direct_successor;
 			}
 

@@ -19,11 +19,19 @@ func my_func(u32 args, f32 my_float) -> u32{
 	if(args == 0) then {
 		ret args;
 	} else if(args > 0) then {
-		ret 0;
+		args++;
 	} else {
 		asn my_float := 32.2;
 		ret *(<u32*>(&my_float));
 	}
+
+	for(let u32 i := 0; i < 232; i++) do{
+		i--;
+		let i32 j := 32;
+		continue when (i == 32);
+	}
+
+	ret args;
 }
 
 

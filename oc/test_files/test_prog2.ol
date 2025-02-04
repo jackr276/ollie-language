@@ -27,7 +27,13 @@ func test_func() -> i32 {
 	do {
 		i++;
 		@test_func();
-		//ret i;
+		if(i < 3) then {
+			continue;
+		} else {
+			continue;
+		}
+
+		ret i;
 	} while (i < 232);
 
 	for(let u32 i := 0; i < 2323; i++) do{
@@ -52,7 +58,6 @@ func main(u32 argc, char** argv)->i32{
 	let u32 b := 0;
 	let u32 j := 0;
 	let u32 sadf := 0;
-	continue;
 
 	if(i == 0) then {
 		if(j == a) then{
