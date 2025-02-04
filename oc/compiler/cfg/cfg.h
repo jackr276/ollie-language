@@ -66,6 +66,8 @@ struct basic_block_t{
 	u_int8_t good_to_merge;
 	//Is it a return statement
 	u_int8_t is_return_stmt;
+	//Is it a continue statement?
+	u_int8_t is_cont_stmt;
 	//Was this block visited by traverser?
 	u_int8_t visited;
 	//Is this block an exit block?

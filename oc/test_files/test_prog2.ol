@@ -1,18 +1,19 @@
-let u32 i := 0;
+//let u32 i := 0;
 
 declare u32 j;
-
-
 
 func test_func() -> i32 {
 	let u32 i := 232;
 
 	while(i >= 232) do{
-		if(i == 2) then{ asn i := i + 2;
+		if(i == 2) then{ 
+			asn i := i + 2;
 			ret i;
 		} else if(i == 3) then {
 			asn i := 32;
 			//ret i;
+		} else if (i == 4) then {
+			continue;
 		} else {
 			asn i := i + 1;
 			ret i;
