@@ -1,7 +1,5 @@
 /**
  * The implementation file for all CFG related operations
- * TODO MERGED BLOCKS ARE THE ISSUE. When a block is merged, the statements 
- * are stored twice, leading to this issue
 */
 
 #include "cfg.h"
@@ -47,6 +45,25 @@ static basic_block_t* visit_for_statement(values_package_t* values);
 
 
 /**
+ * Print a block our for reading
+*/
+static void pretty_print_block(basic_block_t* block){
+	//First print out the label of the block
+	printf("%s\n", block->block_id);
+	//Print all of the statements
+	printf("%s", block->statements);
+}
+
+
+/**
+ * Emit the SSA form for a given block
+ */
+static void emit_ssa(basic_block_t* block, generic_ast_node_t* node){
+
+}
+
+
+/**
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
 */
@@ -89,11 +106,14 @@ static basic_block_t* basic_block_alloc(){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
+	//Allocate the statements array
+	created->statements = calloc(INITIAL_STATEMENT_SIZE, sizeof(char));
+
 	//Grab the unique ID for this block
 	//The block ID number
 	char block_id[100];
 	//Create the local-value numbered block ID
-	sprintf(block_id, ".L%d", increment_and_get());
+	sprintf(block_id, ".L%d:", increment_and_get());
 	
 	//Copy the block ID in
 	strcpy(created->block_id, block_id);
@@ -121,6 +141,11 @@ static void basic_block_dealloc(basic_block_t* block){
 		printf("ERROR: Attempt to deallocate a null block");
 		exit(1);
 	}
+
+	pretty_print_block(block);
+
+	//Free the statements
+	free(block->statements);
 
 	//Otherwise its fine so
 	free(block);
@@ -159,7 +184,7 @@ void dealloc_cfg(cfg_t* cfg){
 static basic_block_t* create_and_return_err(){
 	basic_block_t* err_block = basic_block_alloc();
 	char block_id[10];
-	sprintf(block_id, "%d", -1);
+	sprintf(block_id, "%d:", -1);
 	//Copy the error in
 	strcpy(err_block->block_id, block_id);
 
@@ -1308,9 +1333,13 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//Grab the function name out
 	char* func_name = ((func_def_ast_node_t*)(function_node->node))->func_record->func_name;
+	char func_label[100];
+
+	//Print this in with the colon needed 
+	sprintf(func_label, "%s:", func_name);
 
 	//For the function's block, his ID will be the function name
-	strcpy(function_starting_block->block_id, func_name);
+	strcpy(function_starting_block->block_id, func_label);
 
 	//We don't care about anything until we reach the compound statement
 	generic_ast_node_t* func_cursor = function_node->first_child;
@@ -1538,3 +1567,4 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Give back the reference
 	return cfg;
 }
+

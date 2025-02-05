@@ -107,6 +107,8 @@ struct symtab_function_record_t{
 struct symtab_variable_record_t{
 	//Variable name
 	char var_name[100];
+	//The current generation of the variable - FOR SSA in CFG
+	u_int16_t current_generation;
 	//The hash of it
 	u_int16_t hash;
 	//The lexical level of it

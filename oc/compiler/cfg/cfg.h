@@ -10,8 +10,9 @@
 #include "../stack/heapstack.h"
 
 //These may or may not change
-#define MAX_SUCCESSORS 10
-#define MAX_PREDECESSORS 10
+#define MAX_SUCCESSORS 40
+#define MAX_PREDECESSORS 40
+#define INITIAL_STATEMENT_SIZE 2000
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
@@ -95,6 +96,8 @@ struct basic_block_t{
 	//Hold onto the number of both that we have
 	u_int8_t num_predecessors;
 	u_int8_t num_successors;
+	//Basic block statements. Will be dynamically allocated and auto-resizing
+	char* statements;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
