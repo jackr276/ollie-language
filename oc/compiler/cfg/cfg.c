@@ -18,6 +18,8 @@ u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
 //Keep a stack of deferred statements for each function
 heap_stack_t* deferred_stmts;
+//Keep a variable symtab of temporary variables
+variable_symtab_t* temp_vars;
 //The CFG that we're working with
 cfg_t* cfg_ref;
 
@@ -42,6 +44,30 @@ static basic_block_t* visit_if_statement(values_package_t* values);
 static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
+
+
+/**
+ * Simply prints a parse message in a nice formatted way. For the CFG, there
+ * are no parser line numbers
+*/
+static void print_cfg_message(parse_message_type_t message_type, char* info, u_int16_t line_number){
+	//Build and populate the message
+	parse_message_t parse_message;
+	parse_message.message = message_type;
+	parse_message.info = info;
+
+	//Fatal if error
+	if(message_type == PARSE_ERROR){
+		parse_message.fatal = 1;
+	}
+
+	//Now print it
+	//Mapped by index to the enum values
+	char* type[] = {"WARNING", "ERROR", "INFO"};
+
+	//Print this out on a single line
+	fprintf(stderr, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[parse_message.message], parse_message.info);
+}
 
 
 /**
@@ -84,23 +110,29 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 
 
 
-static void emit_unary_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
+/**
+ * Emit the SSA for a unary expression
+ * Unary expressions come in the following forms:
+ * 	
+ */
+static void emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
 
 }
+
 
 
 /**
  * Emit the ssa needed for a binary expression
  */
-static void emit_binary_op_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
+static void emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
 
 }
 
 
 /**
- * Emit the SSA for a specific expression node inside of a block
+ * Emit abstract machine code for an expression
  */
-static void emit_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* expr_node){
+static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
@@ -110,75 +142,33 @@ static void emit_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* expr_n
 		/**
 		 * A declarative statements emits no SSA
 		 */
+
 	//Convert our let statement into SSA
 	} else if(expr_node->CLASS == AST_NODE_CLASS_LET_STMT){
-		//Grab the first child
-		cursor = expr_node->first_child;
-		//The very first child is the type specifier, so we'll ignore it
-		cursor = cursor->next_sibling;
-		
 		//Let's grab the associated variable record here
 		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
 
-		//The SSA ident
-		char ssa_ident[105];
+		//The var ident
+		char var_ident[105];
 
 		//We'll now append the usage number onto the ident
-		sprintf(ssa_ident, "\t%s%d <- ", var->var_name, var->current_generation);
+		sprintf(var_ident, "\t%s <- ", var->var_name);
 
 		//Add this into the record
-		strcat(basic_block->statements, ssa_ident);
+		strcat(basic_block->statements, var_ident);
+
 		//TODO EXPRESSION HANDLING
+		emit_binary_op_expr_code(basic_block, expr_node->first_child);
+		
 		//Add in a newline
 		strcat(basic_block->statements, "\n");
 
-	//An assingment statement
-	} else if(expr_node->CLASS == AST_NODE_CLASS_EXPR_STMT){
-		//Drill down the tree
-		cursor = expr_node->first_child;
+	//An assignment statement
+	} else if(expr_node->CLASS == AST_NODE_CLASS_ASNMNT_EXPR) {
+		
+	} else {
 
-		//We may see an assignment expression
-		if(cursor->CLASS == AST_NODE_CLASS_ASNMNT_EXPR){
-			//The first child is a unary expression
-			cursor = cursor->first_child;
-			
-			if(cursor->CLASS != AST_NODE_CLASS_UNARY_EXPR){
-			}
-
-			//If this node's child is a postfix expression
-			cursor = cursor->first_child;
-
-			//If it's a primary expression
-			if(cursor->CLASS == AST_NODE_CLASS_POSTFIX_EXPR){
-				//Now we should see a primary expr
-				cursor = cursor->first_child;
-			}
-		}
 	}
-}
-
-
-/**
- * Simply prints a parse message in a nice formatted way. For the CFG, there
- * are no parser line numbers
-*/
-static void print_cfg_message(parse_message_type_t message_type, char* info, u_int16_t line_number){
-	//Build and populate the message
-	parse_message_t parse_message;
-	parse_message.message = message_type;
-	parse_message.info = info;
-
-	//Fatal if error
-	if(message_type == PARSE_ERROR){
-		parse_message.fatal = 1;
-	}
-
-	//Now print it
-	//Mapped by index to the enum values
-	char* type[] = {"WARNING", "ERROR", "INFO"};
-
-	//Print this out on a single line
-	fprintf(stderr, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[parse_message.message], parse_message.info);
 }
 
 
@@ -228,7 +218,8 @@ static basic_block_t* basic_block_alloc(){
 
 
 /**
- * Print out the whole program in order
+ * Print out the whole program in order. This is done using an
+ * iterative DFS
  */
 static void emit_blocks(cfg_t* cfg){
 	//We'll need a stack for our DFS
@@ -404,6 +395,9 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	if(b == NULL){
 		return a;
 	}
+
+	//Block b's stuff will be concatenated onto a's
+	strcat(a->statements, b->statements);
 
 	//What if a was never even assigned?
 	if(a->exit_statement == NULL){
@@ -1114,38 +1108,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block = merge_blocks(current_block, decl_block); 
 			}
 
-		//If we've found an assignment expression
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
-			//If the starting block is null, we'll make it
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
-				current_block = starting_block;
-				//Add the statement
-				//Emit the SSA
-				add_statement(current_block, ast_cursor);
-
-			//Otherwise just add it in to current
-			} else {
-				add_statement(current_block, ast_cursor);
-			}
-
-			//Emit the SSA
-			emit_expr_ssa(current_block, ast_cursor);
-
-		//We've found a generic statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
-			//If the starting block is null, we'll make it
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
-				current_block = starting_block;
-				//Add the statement
-				add_statement(current_block, ast_cursor);
-
-			//Otherwise just add it in to current
-			} else {
-				add_statement(current_block, ast_cursor);
-			}
-
 		//We've found a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
 			values_package_t values;
@@ -1441,6 +1403,20 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Give back the starting block
 			return starting_block;
+
+		//This means that we have some kind of expression statement
+		} else {
+			//This could happen where we have nothing here
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+			
+			//No matter what, we add the expression in as a statement
+			add_statement(current_block, ast_cursor);
+
+			//Also emit the simplified machine code
+			emit_expr_code(current_block, ast_cursor);
 		}
 
 		//Advance to the next child
@@ -1507,9 +1483,10 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//We don't care about anything until we reach the compound statement
 	generic_ast_node_t* func_cursor = function_node->first_child;
 
-	//Let's get to the compound statement
-	while(func_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		func_cursor = func_cursor->next_sibling;
+	//Developer error here
+	if(func_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
+		print_parse_message(PARSE_ERROR, "Expected compound statement as only child to function declaration", func_cursor->line_number);
+		exit(0);
 	}
 
 	//Create our values package
@@ -1593,7 +1570,7 @@ static basic_block_t* visit_let_statement(values_package_t* values){
 	//Create the basic block
 	basic_block_t* let_stmt_node = basic_block_alloc();
 
-	emit_expr_ssa(let_stmt_node, values->initial_node);
+	emit_expr_code(let_stmt_node, values->initial_node);
 
 	//Add it into the block
 	add_statement(let_stmt_node, values->initial_node);
@@ -1705,6 +1682,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Create the stack here
 	deferred_stmts = create_stack();
+	
+	//Create the temp vars symtab
+	temp_vars = initialize_variable_symtab();
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
@@ -1728,9 +1708,12 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Destroy the deferred statements stack
 	destroy_stack(deferred_stmts);
+	
+	//Destroy the temp variable symtab
+	destroy_variable_symtab(temp_vars);
 
 	//FOR PRINTING
-	//emit_blocks(cfg);
+	emit_blocks(cfg);
 	
 	//Give back the reference
 	return cfg;

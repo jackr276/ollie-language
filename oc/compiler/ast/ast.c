@@ -123,13 +123,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_BINARY_EXPR;
 			break;
 
-		//Cast expression node
-		case AST_NODE_CLASS_CAST_EXPR:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(cast_expr_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_CAST_EXPR;
-			break;
-
 		//Function call node
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			//Just allocate the proper size and set the class
@@ -198,13 +191,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			//Just allocate the proper size and set the class
 			node->node = calloc(1, sizeof(enum_member_ast_node_t));
 			node->CLASS = AST_NODE_CLASS_ENUM_MEMBER;
-			break;
-
-		//Expression statement AST node
-		case AST_NODE_CLASS_EXPR_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(expression_stmt_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_EXPR_STMT;
 			break;
 
 		//Case stmt node

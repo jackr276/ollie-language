@@ -45,8 +45,6 @@ typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node
 typedef struct asnmnt_expr_ast_node_t asnmnt_expr_ast_node_t;
 //The binary expression node
 typedef struct binary_expr_ast_node_t binary_expr_ast_node_t;
-//The cast expression node
-typedef struct cast_expr_ast_node_t cast_expr_ast_node_t;
 //The postfix expression node
 typedef struct postfix_expr_ast_node_t postfix_expr_ast_node_t;
 //The unary expression node
@@ -69,8 +67,6 @@ typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
 typedef struct enum_member_ast_node_t enum_member_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
-//An AST node for expression statements
-typedef struct expression_stmt_ast_node_t expression_stmt_ast_node_t;
 //An AST node for the case blocks in switches
 typedef struct case_stmt_ast_node_t case_stmt_ast_node_t;
 //An AST node for the default blocks in switches
@@ -127,7 +123,6 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_TYPE_NAME,
 	AST_NODE_CLASS_ASNMNT_EXPR,
 	AST_NODE_CLASS_BINARY_EXPR,
-	AST_NODE_CLASS_CAST_EXPR,
 	AST_NODE_CLASS_POSTFIX_EXPR,
 	AST_NODE_CLASS_UNARY_EXPR,
 	AST_NODE_CLASS_UNARY_OPERATOR,
@@ -138,7 +133,6 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CONSTRUCT_MEMBER,
 	AST_NODE_CLASS_ENUM_MEMBER_LIST,
 	AST_NODE_CLASS_ENUM_MEMBER,
-	AST_NODE_CLASS_EXPR_STMT,
 	AST_NODE_CLASS_CASE_STMT,
 	AST_NODE_CLASS_DEFAULT_STMT,
 	AST_NODE_CLASS_LABEL_STMT,
@@ -278,12 +272,6 @@ struct binary_expr_ast_node_t{
 	Token binary_operator;
 };
 
-//The cast expression node is reached if we actually make a cast
-struct cast_expr_ast_node_t{
-	//What type does it have?
-	generic_type_t* casted_type;
-};
-
 //The function node call
 struct function_call_ast_node_t{
 };
@@ -335,10 +323,6 @@ struct enum_member_list_ast_node_t{
 struct enum_member_ast_node_t{
 	//Hold the associate symtable record
 	symtab_variable_record_t* member_var;
-};
-
-//An expression statement node
-struct expression_stmt_ast_node_t{
 };
 
 //A case statement node

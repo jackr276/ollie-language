@@ -1670,23 +1670,14 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Now if we make it here, we know that type_spec is actually valid
-	//We'll now allocate a cast expression node
-	generic_ast_node_t* cast_node = ast_node_alloc(AST_NODE_CLASS_CAST_EXPR);
-	
-	//This node will have a first child as the actual type node
-	add_child_node(cast_node, type_spec);
+	//These types are now inferenced
+	right_hand_unary->inferred_type = type_spec->inferred_type;
 
-	//Store the type information for faster retrieval later
-	cast_node->inferred_type = return_type;
-
-	//We'll now add the unary expression as the right node
-	add_child_node(cast_node, right_hand_unary);
-	//Store the line number
-	cast_node->line_number = parser_line_num;
+	//Once we get here, we no longer need the type specifier
+	deallocate_ast(type_spec);
 
 	//Finally, we're all set to go here, so we can return the root reference
-	return cast_node;
+	return right_hand_unary;
 }
 
 
@@ -4892,16 +4883,13 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 	//The lookahead token
 	Lexer_item lookahead;
 
-	//No matter what, we will always have an expression statement node here 
-	generic_ast_node_t* expr_stmt_node = ast_node_alloc(AST_NODE_CLASS_EXPR_STMT);
-
 	//Let's see if we have a semicolon. If we do, we'll just jump right out
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Empty expression, we're done here
 	if(lookahead.tok == SEMICOLON){
 		//Blank statement, simply leave
-		return expr_stmt_node;
+		return NULL;
 	}
 
 	//Otherwise, put it back and call expression
@@ -4916,11 +4904,6 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 		return expr_node;
 	}
 
-	//Otherwise this actually did work, so we'll add it to the parent
-	add_child_node(expr_stmt_node, expr_node);
-
-	//TODO ADD TYPE INFERENCE
-
 	//Now to close out we must see a semicolon
 	//Let's see if we have a semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4933,10 +4916,8 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Store the line number
-	expr_stmt_node->line_number = parser_line_num;
 	//Otherwise we're all set
-	return expr_stmt_node;
+	return expr_node;
 }
 
 
@@ -6411,6 +6392,11 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 			//We now need to see a valid statement
 			generic_ast_node_t* stmt_node = statement(fl);
 
+			//If it's null(which is possible) we just move along
+			if(stmt_node == NULL){
+				goto loop_end;
+			}
+
 			//If it's invalid we'll pass right through, no error printing
 			if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 				//Send it right back
@@ -6425,7 +6411,8 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 				add_child_node(compound_stmt_node, stmt_node);
 			}
 		}
-		
+
+	loop_end:
 		//Whatever happened, once we get here we need to refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num);
 	}
@@ -7345,9 +7332,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 	}
 
-	//Once we make it here we know that the ident was good, so we can add it in as a child
-	add_child_node(function_node, ident_node);
-
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -7403,7 +7387,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
 	//now parse the param_list and store records to it	
 	//Let's first add the param list in as a child
-	add_child_node(function_node, param_list_node);
 	
 	//Let's now iterate over the parameter list and add the parameter records into the function 
 	//record for ease of access later
@@ -7540,8 +7523,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Store the return type
 	function_record->return_type = type;
 
-	//Once we have the type, the node is useless
+	//Once we have the type, most nodes that we have here are useless
 	deallocate_ast(return_type_node);
+	deallocate_ast(ident_node);
+	deallocate_ast(param_list_node);
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition
