@@ -55,6 +55,46 @@ static void pretty_print_block(basic_block_t* block){
 }
 
 
+
+/**
+ * if(x0 == 0){
+ * 	asn x1 := 2;
+ * } else {
+ * 	asn x2 := 3;
+ * }
+ * 
+ * x3 <- phi(x1, x2)
+ *
+ * This means that x3 is x1 if it comes from the first branch and x2 if it comes
+ * from the second branch
+ *
+ * To insert phi functions, we take the following approach:
+ * 	For each variable
+ * 		Find all basic blocks that define this variable
+ * 		For each of these basic blocks
+ * 			Find its dominance frontiers
+ * 			Insert phi for each of the dominance frontiers
+ *
+ */
+static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_t* var_symtab){
+
+}
+
+
+
+static void emit_unary_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
+
+}
+
+
+/**
+ * Emit the ssa needed for a binary expression
+ */
+static void emit_binary_op_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
+
+}
+
+
 /**
  * Emit the SSA for a specific expression node inside of a block
  */
@@ -65,7 +105,9 @@ static void emit_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* expr_n
 
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
-
+		/**
+		 * A declarative statements emits no SSA
+		 */
 	//Convert our let statement into SSA
 	} else if(expr_node->CLASS == AST_NODE_CLASS_LET_STMT){
 		//Grab the first child
@@ -1419,12 +1461,24 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//We very clearly mark this as an ending block
 	function_ending_block->is_exit_block = 1;
 
+	//Grab the function record
+	symtab_function_record_t* func_record = ((func_def_ast_node_t*)(function_node->node))->func_record;
+
 	//Grab the function name out
-	char* func_name = ((func_def_ast_node_t*)(function_node->node))->func_record->func_name;
-	char func_label[100];
+	char* func_name = func_record->func_name;
+	char func_label[600];
 
 	//Print this in with the colon needed 
-	sprintf(func_label, "%s:", func_name);
+	sprintf(func_label, "%s(:", func_name);
+
+	//Now print out all of the parameters
+	for(u_int8_t i = 0; i < func_record->number_of_params; i++){
+		//Grab the parameter name -- we strip out all type info here
+		char* func_param_name = func_record->func_params[i].associate_var->var_name;
+		
+		//Print this with it's usage number(should be zero) into the declaration
+
+	}
 
 	//For the function's block, his ID will be the function name
 	strcpy(function_starting_block->block_id, func_label);
