@@ -40,7 +40,6 @@ typedef struct {
 static basic_block_t* visit_declaration_statement(values_package_t* values);
 static basic_block_t* visit_compound_statement(values_package_t* values);
 static basic_block_t* visit_let_statement(values_package_t* values);
-static basic_block_t* visit_expression_statement(values_package_t* values);
 static basic_block_t* visit_if_statement(values_package_t* values);
 static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
@@ -89,8 +88,15 @@ static int32_t increment_and_get(){
 static basic_block_t* basic_block_alloc(){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
 	//Grab the unique ID for this block
-	created->block_id = increment_and_get();
+	//The block ID number
+	char block_id[100];
+	//Create the local-value numbered block ID
+	sprintf(block_id, ".L%d", increment_and_get());
+	
+	//Copy the block ID in
+	strcpy(created->block_id, block_id);
 
 	//Now allocate the linked list block for it too
 	cfg_node_holder_t* holder = calloc(1, sizeof(cfg_node_holder_t));
@@ -152,7 +158,11 @@ void dealloc_cfg(cfg_t* cfg){
  */
 static basic_block_t* create_and_return_err(){
 	basic_block_t* err_block = basic_block_alloc();
-	err_block->block_id = -1;
+	char block_id[10];
+	sprintf(block_id, "%d", -1);
+	//Copy the error in
+	strcpy(err_block->block_id, block_id);
+
 	return err_block;
 }
 
@@ -1296,6 +1306,12 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//We very clearly mark this as an ending block
 	function_ending_block->is_exit_block = 1;
 
+	//Grab the function name out
+	char* func_name = ((func_def_ast_node_t*)(function_node->node))->func_record->func_name;
+
+	//For the function's block, his ID will be the function name
+	strcpy(function_starting_block->block_id, func_name);
+
 	//We don't care about anything until we reach the compound statement
 	generic_ast_node_t* func_cursor = function_node->first_child;
 
@@ -1511,7 +1527,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	cfg->root = visit_prog_node(results.root);
 
 	//If we get a -1 block ID, this means that the whole thing failed
-	if(cfg->root->block_id == -1){
+	if(strcmp(cfg->root->block_id, "-1") == 0){
 		print_parse_message(PARSE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}

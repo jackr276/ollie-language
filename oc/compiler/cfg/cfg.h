@@ -70,8 +70,8 @@ struct cfg_statement_holder_t{
  * by the "leader" and "exit" references for quick access
 */
 struct basic_block_t{
-	//The block ID: atomically increasing unsigned integer
-	int32_t block_id;
+	//The block ID: Using local value numbering. These act as assembly labels
+	char block_id[100];
 	//Is this block ok to merge?
 	u_int8_t good_to_merge;
 	//Is it a return statement
