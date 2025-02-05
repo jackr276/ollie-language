@@ -56,9 +56,93 @@ static void pretty_print_block(basic_block_t* block){
 
 
 /**
- * Emit the SSA form for a given block
+ * Emit the SSA for a specific expression node inside of a block
  */
-static void emit_ssa(basic_block_t* block, generic_ast_node_t* node){
+static void emit_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* expr_node){
+	//A cursor for tree traversal
+	generic_ast_node_t* cursor;
+	symtab_variable_record_t* assigned_var;
+
+	//If we have a declare statement,
+	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
+
+	//Convert our let statement into SSA
+	} else if(expr_node->CLASS == AST_NODE_CLASS_LET_STMT){
+		//Grab the first child
+		cursor = expr_node->first_child;
+		//The very first child is the type specifier, so we'll ignore it
+		cursor = cursor->next_sibling;
+		
+		//Let's grab the associated variable record here
+		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
+
+		//The SSA ident
+		char ssa_ident[105];
+
+		//We'll now append the usage number onto the ident
+		sprintf(ssa_ident, "%s%d <- ", var->var_name, var->current_generation);
+
+		//Add this into the record
+		strcat(basic_block->statements, ssa_ident);
+		//TODO EXPRESSION HANDLING
+		//Add in a newline
+		strcat(basic_block->statements, "\n");
+
+	//An assingment statement
+	} else if(expr_node->CLASS == AST_NODE_CLASS_EXPR_STMT){
+		//Drill down the tree
+		cursor = expr_node->first_child;
+
+		//We may see an assignment expression
+		if(cursor->CLASS == AST_NODE_CLASS_ASNMNT_EXPR){
+			//The first child is a unary expression
+			cursor = cursor->first_child;
+			
+			if(cursor->CLASS != AST_NODE_CLASS_UNARY_EXPR){
+			}
+
+			//If this node's child is a postfix expression
+			cursor = cursor->first_child;
+
+			//If it's a primary expression
+			if(cursor->CLASS == AST_NODE_CLASS_POSTFIX_EXPR){
+				printf("HERE\n");
+				//Now we should see a primary expr
+				cursor = cursor->first_child;
+
+				if(cursor->CLASS == AST_NODE_CLASS_PRIMARY_EXPR){
+					//If should have a var then
+					assigned_var = ((primary_expr_ast_node_t*)(cursor->node))->var;
+
+					//Now that we have this var, we know what we're assigning to
+					char ssa_ident[105];
+	
+					//We'll now append the usage number onto the ident
+					sprintf(ssa_ident, "%s%d <- ", assigned_var->var_name, assigned_var->current_generation + 1);
+					//Add this into the record
+					strcat(basic_block->statements, ssa_ident);
+					strcat(basic_block->statements, "\n");
+
+					(assigned_var->current_generation)++;
+				}
+			} else if(cursor->CLASS == AST_NODE_CLASS_PRIMARY_EXPR){
+				//If should have a var then
+				assigned_var = ((primary_expr_ast_node_t*)(cursor->node))->var;
+
+				//Now that we have this var, we know what we're assigning to
+				char ssa_ident[105];
+	
+				//We'll now append the usage number onto the ident
+				sprintf(ssa_ident, "%s%d <- ", assigned_var->var_name, assigned_var->current_generation + 1);
+				//Add this into the record
+				strcat(basic_block->statements, ssa_ident);
+				strcat(basic_block->statements, "\n");
+
+				(assigned_var->current_generation)++;
+
+			} 
+		}
+	}
 
 }
 
@@ -982,18 +1066,22 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 
 		//If we've found an assignment expression
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASNMNT_EXPR){
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
 			//If the starting block is null, we'll make it
 			if(starting_block == NULL){
 				starting_block = basic_block_alloc();
 				current_block = starting_block;
 				//Add the statement
+				//Emit the SSA
 				add_statement(current_block, ast_cursor);
 
 			//Otherwise just add it in to current
 			} else {
 				add_statement(current_block, ast_cursor);
 			}
+
+			//Emit the SSA
+			emit_expr_ssa(current_block, ast_cursor);
 
 		//We've found a generic statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_EXPR_STMT){
@@ -1429,6 +1517,8 @@ static basic_block_t* visit_declaration_statement(values_package_t* values){
 static basic_block_t* visit_let_statement(values_package_t* values){
 	//Create the basic block
 	basic_block_t* let_stmt_node = basic_block_alloc();
+
+	emit_expr_ssa(let_stmt_node, values->initial_node);
 
 	//Add it into the block
 	add_statement(let_stmt_node, values->initial_node);

@@ -101,6 +101,13 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 		lex_item.tok = IDENT;
 	}
 	
+	//Fail out if too long
+	if(strlen(lex_item.lexeme) >= MAX_IDENT_LENGTH){
+		printf("[LINE %d | LEXER ERROR]: Identifiers may be at most 100 characters long\n", line_number);
+		lex_item.tok = ERROR;
+		return lex_item;
+	}
+
 	//If we get here, we know that it's an ident
 	strcpy(lex_item.lexeme, lexeme);
 	lex_item.char_count = token_char_count;

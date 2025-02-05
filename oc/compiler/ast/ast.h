@@ -223,7 +223,7 @@ struct param_list_ast_node_t{
 //Holds information about a variable identifier that's been seen
 struct identifier_ast_node_t{
 	//Holds the lexeme of the identifer: max size 500 bytes(may change)
-	char identifier[MAX_TOKEN_LENGTH];
+	char identifier[MAX_IDENT_LENGTH];
 };
 
 //Holds information about a constant
@@ -281,6 +281,7 @@ struct binary_expr_ast_node_t{
 
 //This node will hold data about any primary expression
 struct primary_expr_ast_node_t{
+	symtab_variable_record_t* var;
 };
 
 //The cast expression node is reached if we actually make a cast

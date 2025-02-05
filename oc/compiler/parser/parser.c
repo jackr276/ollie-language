@@ -577,6 +577,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 		//Store the inferred type
 		primary_expr_node->inferred_type = found->type;
+		//Store the variable for later
+		((primary_expr_ast_node_t*)(primary_expr_node->node))->var = found;
 
 	//We can also see a constant
 	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
