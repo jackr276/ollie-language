@@ -51,8 +51,6 @@ typedef struct cast_expr_ast_node_t cast_expr_ast_node_t;
 typedef struct postfix_expr_ast_node_t postfix_expr_ast_node_t;
 //The unary expression node
 typedef struct unary_expr_ast_node_t unary_expr_ast_node_t;
-//The primary expression node
-typedef struct primary_expr_ast_node_t primary_expr_ast_node_t;
 //The unary operator node
 typedef struct unary_operator_ast_node_t unary_operator_ast_node_t;
 //The function call node
@@ -131,7 +129,6 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_BINARY_EXPR,
 	AST_NODE_CLASS_CAST_EXPR,
 	AST_NODE_CLASS_POSTFIX_EXPR,
-	AST_NODE_CLASS_PRIMARY_EXPR,
 	AST_NODE_CLASS_UNARY_EXPR,
 	AST_NODE_CLASS_UNARY_OPERATOR,
 	AST_NODE_CLASS_CONSTRUCT_ACCESSOR,
@@ -184,6 +181,8 @@ struct generic_ast_node_t{
 	u_int16_t line_number;
 	//This is where we hold the actual node
 	void* node;
+	//What variable do we have?
+	symtab_variable_record_t* variable;
 };
 
 
@@ -277,11 +276,6 @@ struct asnmnt_expr_ast_node_t{
 struct binary_expr_ast_node_t{
 	//What operator is it
 	Token binary_operator;
-};
-
-//This node will hold data about any primary expression
-struct primary_expr_ast_node_t{
-	symtab_variable_record_t* var;
 };
 
 //The cast expression node is reached if we actually make a cast

@@ -150,44 +150,11 @@ static void emit_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* expr_n
 
 			//If it's a primary expression
 			if(cursor->CLASS == AST_NODE_CLASS_POSTFIX_EXPR){
-				printf("HERE\n");
 				//Now we should see a primary expr
 				cursor = cursor->first_child;
-
-				if(cursor->CLASS == AST_NODE_CLASS_PRIMARY_EXPR){
-					//If should have a var then
-					assigned_var = ((primary_expr_ast_node_t*)(cursor->node))->var;
-
-					//Now that we have this var, we know what we're assigning to
-					char ssa_ident[105];
-	
-					//We'll now append the usage number onto the ident
-					sprintf(ssa_ident, "\t%s%d <- ", assigned_var->var_name, assigned_var->current_generation + 1);
-					//Add this into the record
-					strcat(basic_block->statements, ssa_ident);
-					strcat(basic_block->statements, "\n");
-
-					(assigned_var->current_generation)++;
-				}
-			} else if(cursor->CLASS == AST_NODE_CLASS_PRIMARY_EXPR){
-				//If should have a var then
-				assigned_var = ((primary_expr_ast_node_t*)(cursor->node))->var;
-
-				//Now that we have this var, we know what we're assigning to
-				char ssa_ident[105];
-	
-				//We'll now append the usage number onto the ident
-				sprintf(ssa_ident, "\t%s%d <- ", assigned_var->var_name, assigned_var->current_generation + 1);
-				//Add this into the record
-				strcat(basic_block->statements, ssa_ident);
-				strcat(basic_block->statements, "\n");
-
-				(assigned_var->current_generation)++;
-
-			} 
+			}
 		}
 	}
-
 }
 
 
@@ -1763,7 +1730,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	destroy_stack(deferred_stmts);
 
 	//FOR PRINTING
-	emit_blocks(cfg);
+	//emit_blocks(cfg);
 	
 	//Give back the reference
 	return cfg;

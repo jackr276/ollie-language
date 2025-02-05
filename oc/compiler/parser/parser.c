@@ -527,11 +527,6 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
 
-	//We first create the primary expression node
-	generic_ast_node_t* primary_expr_node = ast_node_alloc(AST_NODE_CLASS_PRIMARY_EXPR);
-	//Add the line number
-	primary_expr_node->line_number = current_line;
-	
 	//Grab the next token, we'll multiplex on this
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -572,13 +567,13 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//Let's add the ident in as a child of the overall node
-		add_child_node(primary_expr_node, ident);
-
 		//Store the inferred type
-		primary_expr_node->inferred_type = found->type;
-		//Store the variable for later
-		((primary_expr_ast_node_t*)(primary_expr_node->node))->var = found;
+		ident->inferred_type = found->type;
+		//Store the variable that's associated
+		ident->variable = found;
+
+		//Give back the ident node
+		return ident;
 
 	//We can also see a constant
 	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
@@ -594,11 +589,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			return constant_node;
 		}
 
-		//Otherwise we'll add this as a child node of the top level one
-		add_child_node(primary_expr_node, constant_node);
-
-		//Add the type information in
-		primary_expr_node->inferred_type = constant_node->inferred_type;
+		//Give back the constant node
+		return constant_node;
 
 	//This is the case where we are putting the expression
 	//In parens
@@ -634,12 +626,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//If we make it all the way down here, we can add this in as a child
-		add_child_node(primary_expr_node, expr);
-
-		//We'll also grab the inferred type info here
-		primary_expr_node->inferred_type = expr->inferred_type;
-
+		//Return the expression node
+		return expr;
 	
 	//Otherwise, if we see an @ symbol, we know it's a function call
 	} else if(lookahead.tok == AT){
@@ -651,11 +639,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			return func_call;
 		}
 
-		//Add this as a child of the overall node
-		add_child_node(primary_expr_node, func_call);
-
-		//We'll store the inferred type info here
-		primary_expr_node->inferred_type = func_call->inferred_type;
+		//Return the function call node
+		return func_call;
 
 	//Generic fail case
 	} else {
@@ -665,9 +650,6 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//Create and return an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
-
-	//Give the primary expression node back
-	return primary_expr_node;
 }
 
 
@@ -1040,12 +1022,12 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 
 	//No matter what, we have to first see a valid primary expression
-	generic_ast_node_t* primary_expr = primary_expression(fl);
+	generic_ast_node_t* result = primary_expression(fl);
 
 	//If we fail, then we're bailing out here
-	if(primary_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(result->CLASS == AST_NODE_CLASS_ERR_NODE){
 		//Just return, no need for any errors here
-		return primary_expr;
+		return result;
 	}
 
 	//Peek at the next token
@@ -1057,12 +1039,12 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		//Put the token back
 		push_back_token(fl, lookahead);
 		//Just return what primary expr gave us
-		return primary_expr;
+		return result;
 	}
 	
 	//If we make it down to here, we know that we're trying to access a variable. As such, 
 	//we need to make sure that we don't see a constant here
-	if(primary_expr->first_child->CLASS == AST_NODE_CLASS_CONSTANT){
+	if(result->CLASS == AST_NODE_CLASS_CONSTANT){
 		print_parse_message(PARSE_ERROR, "Constants are not assignable", current_line);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -1077,10 +1059,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	postfix_expr_node->line_number = current_line;
 
 	//This node will always have the primary expression as its first child
-	add_child_node(postfix_expr_node, primary_expr);
+	add_child_node(postfix_expr_node, result);
 
 	//Let's grab whatever type that we currently have
-	generic_type_t* current_type = primary_expr->inferred_type;
+	generic_type_t* current_type = result->inferred_type;
 	//Do any kind of dealiasing that we need to do
 	current_type = dealias_type(current_type);
 
@@ -3539,10 +3521,12 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	//Store the variable record here
 	((construct_member_ast_node_t*)(member_node->node))->member_var = member_record;
 
-	//The very first child will be the type specifier
-	add_child_node(member_node, type_spec);
 	//The second child will be the ident node
 	add_child_node(member_node, ident);
+
+	//Destory the type spec node when here
+	deallocate_ast(type_spec);
+
 	//Store the line number
 	member_node->line_number = parser_line_num;
 
@@ -4742,9 +4726,6 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 		return type_spec_node;
 	}
 
-	//Now that we know that it worked, we can add it in as a child
-	add_child_node(parameter_decl_node, type_spec_node);
-
 	//Following the valid type specifier declaration, we are required to to see a valid variable. This
 	//takes the form of an ident
 	generic_ast_node_t* ident = identifier(fl);
@@ -4802,9 +4783,6 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 		//Return a fresh error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
-	
-	//Once we get here we know that the ident is valid, so we can add it in as a child
-	add_child_node(parameter_decl_node, ident); 
 
 	//Once we get here, we have actually seen an entire valid parameter 
 	//declaration. It is now incumbent on us to store it in the variable 
@@ -4828,6 +4806,10 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	((param_decl_ast_node_t*)(parameter_decl_node->node))->param_record = param_record;
 	//Store the line number
 	parameter_decl_node->line_number = parser_line_num;
+	//Destroy the type specifier node
+	deallocate_ast(type_spec_node);
+	//Destroy the ident node
+	deallocate_ast(ident);
 
 	//Finally, we'll send this node back
 	return parameter_decl_node;
@@ -6657,9 +6639,6 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//We'll now add it in as a child node
-	add_child_node(decl_node, type_spec_node);
-
 	//The last thing before we perform checks is for us to see a valid identifier
 	generic_ast_node_t* ident_node = identifier(fl);
 
@@ -6669,9 +6648,6 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		//It's already an error, just give it back
 		return ident_node;
 	}
-
-	//Now we'll add it as a child
-	add_child_node(decl_node, ident_node);
 
 	//The last thing that we are required to see before final assembly is a semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -6762,6 +6738,10 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	//Store the line number
 	decl_node->line_number = current_line;
 
+	//We no longer need the ident or type specifier nodes
+	deallocate_ast(ident_node);
+	deallocate_ast(type_spec_node);
+
 	//All went well so we can return this
 	return decl_node;
 }
@@ -6833,9 +6813,6 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//We'll now add it in as a child node
-	add_child_node(let_stmt_node, type_spec_node);
-
 	//The last thing before we perform checks is for us to see a valid identifier
 	generic_ast_node_t* ident_node = identifier(fl);
 
@@ -6845,9 +6822,6 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		//It's already an error, just give it back
 		return ident_node;
 	}
-
-	//Now we'll add it as a child
-	add_child_node(let_stmt_node, ident_node);
 
 	//Let's get a pointer to the name for convenience
 	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
@@ -6982,6 +6956,10 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	((let_stmt_ast_node_t*)(let_stmt_node->node))->declared_var = declared_var;
 	//Store the line number
 	let_stmt_node->line_number = current_line;
+
+	//Once we get here, the ident nodes and type specifiers are useless
+	deallocate_ast(type_spec_node);
+	deallocate_ast(ident_node);
 
 	//Give back the let statement node here
 	return let_stmt_node;
@@ -7562,8 +7540,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Store the return type
 	function_record->return_type = type;
 
-	//We can also add the return type node in as a child
-	add_child_node(function_node, return_type_node);
+	//Once we have the type, the node is useless
+	deallocate_ast(return_type_node);
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition
