@@ -52,6 +52,8 @@ static void pretty_print_block(basic_block_t* block){
 	printf("%s\n", block->block_id);
 	//Print all of the statements
 	printf("%s", block->statements);
+	//Some spacing
+	printf("\n\n");
 }
 
 
@@ -122,7 +124,7 @@ static void emit_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* expr_n
 		char ssa_ident[105];
 
 		//We'll now append the usage number onto the ident
-		sprintf(ssa_ident, "%s%d <- ", var->var_name, var->current_generation);
+		sprintf(ssa_ident, "\t%s%d <- ", var->var_name, var->current_generation);
 
 		//Add this into the record
 		strcat(basic_block->statements, ssa_ident);
@@ -160,7 +162,7 @@ static void emit_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* expr_n
 					char ssa_ident[105];
 	
 					//We'll now append the usage number onto the ident
-					sprintf(ssa_ident, "%s%d <- ", assigned_var->var_name, assigned_var->current_generation + 1);
+					sprintf(ssa_ident, "\t%s%d <- ", assigned_var->var_name, assigned_var->current_generation + 1);
 					//Add this into the record
 					strcat(basic_block->statements, ssa_ident);
 					strcat(basic_block->statements, "\n");
@@ -175,7 +177,7 @@ static void emit_expr_ssa(basic_block_t* basic_block, generic_ast_node_t* expr_n
 				char ssa_ident[105];
 	
 				//We'll now append the usage number onto the ident
-				sprintf(ssa_ident, "%s%d <- ", assigned_var->var_name, assigned_var->current_generation + 1);
+				sprintf(ssa_ident, "\t%s%d <- ", assigned_var->var_name, assigned_var->current_generation + 1);
 				//Add this into the record
 				strcat(basic_block->statements, ssa_ident);
 				strcat(basic_block->statements, "\n");
@@ -259,6 +261,46 @@ static basic_block_t* basic_block_alloc(){
 
 
 /**
+ * Print out the whole program in order
+ */
+static void emit_blocks(cfg_t* cfg){
+	//We'll need a stack for our DFS
+	heap_stack_t* stack = create_stack();
+
+	//The idea here is very simple. If we can walk the function tree and every control path leads 
+	//to a return statement, we return null from every control path
+	
+	//We'll need a cursor to walk the tree
+	basic_block_t* block_cursor;
+
+	//Push the source node
+	push(stack, cfg->root);
+
+	//So long as the stack is not empty
+	while(is_empty(stack) == 0){
+		//Grab the current one off of the stack
+		block_cursor = pop(stack);
+
+		//If this wasn't visited
+		if(block_cursor->visited != 2){
+			//Mark this one as seen
+			block_cursor->visited = 2;
+
+			pretty_print_block(block_cursor);
+		}
+
+		//We'll now add in all of the childen
+		for(u_int8_t i = 0; i < block_cursor->num_successors; i++){
+			//If we haven't seen it yet, add it to the list
+			if(block_cursor->successors[i]->visited != 2){
+				push(stack, block_cursor->successors[i]);
+			}
+		}
+	}
+}
+
+
+/**
  * Deallocate a basic block
 */
 static void basic_block_dealloc(basic_block_t* block){
@@ -267,8 +309,6 @@ static void basic_block_dealloc(basic_block_t* block){
 		printf("ERROR: Attempt to deallocate a null block");
 		exit(1);
 	}
-
-	pretty_print_block(block);
 
 	//Free the statements
 	free(block->statements);
@@ -1466,19 +1506,33 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//Grab the function name out
 	char* func_name = func_record->func_name;
-	char func_label[600];
+	char func_label[800];
 
 	//Print this in with the colon needed 
-	sprintf(func_label, "%s(:", func_name);
+	sprintf(func_label, "%s(", func_name);
 
 	//Now print out all of the parameters
 	for(u_int8_t i = 0; i < func_record->number_of_params; i++){
 		//Grab the parameter name -- we strip out all type info here
 		char* func_param_name = func_record->func_params[i].associate_var->var_name;
+		u_int16_t usage_counter = func_record->func_params[i].associate_var->current_generation;
 		
 		//Print this with it's usage number(should be zero) into the declaration
+		char var_name[105];
+		//Get the name written out
+		sprintf(var_name, "%s%d", func_param_name, usage_counter);
+		
+		//Store this in the overall label
+		strcat(func_label, var_name);
 
+		//If it isn't the last one, print a comma
+		if(i != func_record->number_of_params - 1){
+			strcat(func_label, ", ");
+		}
 	}
+
+	//Add in the closing paren and colon
+	strcat(func_label, "):");
 
 	//For the function's block, his ID will be the function name
 	strcpy(function_starting_block->block_id, func_label);
@@ -1707,6 +1761,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Destroy the deferred statements stack
 	destroy_stack(deferred_stmts);
+
+	//FOR PRINTING
+	emit_blocks(cfg);
 	
 	//Give back the reference
 	return cfg;
