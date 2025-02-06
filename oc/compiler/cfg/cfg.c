@@ -49,6 +49,15 @@ static basic_block_t* visit_for_statement(values_package_t* values);
 
 
 /**
+ * A helper function for our atomically increasing temp id
+ */
+static int32_t increment_and_get_temp_id(){
+	current_temp_id++;
+	return current_temp_id;
+}
+
+
+/**
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
 */
@@ -119,14 +128,14 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 static char* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
 	//For printing
 	char const_info[500];
-	//For the overall print
-
+	//For the overall printout
+	char statement[1000];
 
 	//The temp variable
 	char* temp = calloc(50, sizeof(char));
 
 	//Give this a temp variable
-	sprintf(temp, "_t%d", current_temp_id);
+	sprintf(temp, "_t%d", increment_and_get_temp_id());
 
 	//There are several different kinds of constant, but we don't care. We'll just
 	//add whatever the constant value is in for now
@@ -143,7 +152,6 @@ static char* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* 
 	} else if(const_node->constant_type == FLOAT_CONST){
 		sprintf(const_info, "%f", const_node->float_val);
 	} else {
-		//TODO ADD these in
 		print_cfg_message(PARSE_ERROR, "Strings not currently supported", constant_node->line_number);
 		exit(0);
 	}
@@ -151,15 +159,37 @@ static char* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* 
 	/**
 	 * We always at this stage assign this constant's value to a temp variable
 	 */
-	
+	sprintf(statement, "%s <- %s\n", temp, const_info);
+
+	//Add this into the block
+	strcat(basic_block->statements, statement);
+
+	//Give back the temp variable that we just made
+	return temp;
 }
+
 
 /**
  * Emit the identifier machine code
  */
-static void emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node){
-	//Just copy the identifier in
-	strcat(basic_block->statements, ((identifier_ast_node_t*)(ident_node->node))->identifier);
+static char* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node){
+	//The overall printout
+	char statement[1000];
+
+	//We will store the ident in a temporary variable
+	char* temp = calloc(50, sizeof(char));
+
+	//Give this a temp variable
+	sprintf(temp, "_t%d", increment_and_get_temp_id());
+
+	//Now we'll actually create the statement
+	sprintf(statement, "%s <- %s\n", temp, ((identifier_ast_node_t*)(ident_node->node))->identifier);	
+
+	//Add this into the block
+	strcat(basic_block->statements, statement);
+
+	//Give the temp var back
+	return temp;
 }
 
 
@@ -174,8 +204,7 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
 		//Let the helper deal with it
-		emit_constant_code(basic_block, unary_expr_parent);
-		return NULL;
+		return emit_constant_code(basic_block, unary_expr_parent);
 	}
 
 	//If it isn't a constant, then this node should have children
@@ -187,15 +216,17 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
-		emit_ident_expr_code(basic_block, first_child);
-		return;
+		 return emit_ident_expr_code(basic_block, first_child);
 	//If it's a constant, emit this and leave
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
-		emit_constant_code(basic_block, first_child);
+		return emit_constant_code(basic_block, first_child);
 	//Handle a function call
 	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
 
 	}
+
+	//FOR NOW
+	return " ";
 }
 
 
@@ -220,9 +251,8 @@ static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_no
 	//Is the cursor a unary expression? If so just emit that. This is our base case 
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
-		emit_unary_expr_code(basic_block, logical_or_expr);
-		//Get out, no need to go further
-		return;
+		//Return the temporary character from here
+		return emit_unary_expr_code(basic_block, logical_or_expr);
 	}
 
 	//Otherwise we actually have a binary operation of some kind
@@ -243,7 +273,9 @@ static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_no
 
 
 /**
- * Emit abstract machine code for an expression
+ * Emit abstract machine code for an expression. This is a top level statement.
+ * These statements almost always involve some kind of assignment "<-" and generate temporary
+ * variables
  */
 static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node){
 	//A cursor for tree traversal
@@ -262,26 +294,21 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
 
 		//The var ident
-		char var_ident[105];
-
-		//We'll now append the usage number onto the ident
-		sprintf(var_ident, "\t%s <- ", var->var_name);
-
-		//Add this into the record
-		strcat(basic_block->statements, var_ident);
+		char assnment[1000];
 
 		//Now emit the binary operation expression code
-		emit_binary_op_expr_code(basic_block, expr_node->first_child);
-		
-		//Add in a newline
-		strcat(basic_block->statements, "\n");
+		char* temp = emit_binary_op_expr_code(basic_block, expr_node->first_child);
 
+		//Add this overall assignment satetment in
+		sprintf(assnment, "%s <- %s\n", var->var_name, temp);
+
+		//Add this into the record
+		strcat(basic_block->statements, assnment);
+	
 	//An assignment statement
 	} else if(expr_node->CLASS == AST_NODE_CLASS_ASNMNT_EXPR) {
 		//In our tree, an assignment statement decays into a unary expression
 		//on the left and a binary op expr on the right
-		//Add the tab in first
-		strcat(basic_block->statements, "\t");
 		
 		//This should always be a unary expression
 		cursor = expr_node->first_child;
@@ -293,10 +320,7 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 		}
 	
 		//Let's first emit the unary expression
-		emit_unary_expr_code(basic_block, cursor);
-
-		//Now print out the assignment operator
-		strcat(basic_block->statements, " <- ");
+		char* temp_var = emit_unary_expr_code(basic_block, cursor);
 
 		//Now we emit the binary op code on the right side
 		emit_binary_op_expr_code(basic_block, cursor->next_sibling);
@@ -322,17 +346,6 @@ static int32_t increment_and_get(){
 	current_block_id++;
 	return current_block_id;
 }
-
-
-/**
- * A helper function for our atomically increasing temp id
- */
-static int32_t increment_and_get_temp_id(){
-	current_temp_id++;
-	return current_temp_id;
-}
-
-
 
 /**
  * Allocate a basic block using calloc. NO data assignment
