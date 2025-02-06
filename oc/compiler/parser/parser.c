@@ -2619,9 +2619,8 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num);
 	
-	//As long as we have a relational operators(== or !=) 
-	if(lookahead.tok == G_THAN || lookahead.tok == G_THAN_OR_EQ
-	  || lookahead.tok == L_THAN || lookahead.tok == L_THAN_OR_EQ){
+	//If we have relational operators here
+	if(lookahead.tok == G_THAN || lookahead.tok == L_THAN){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
@@ -2687,6 +2686,100 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
+
+	//The compiler does not understand greater than or equal to inherently. Instead,
+	//it will break them apart to as a >= b -> (a > b) || (a == b)
+ 	} else if(lookahead.tok == G_THAN_OR_EQ || lookahead.tok == L_THAN_OR_EQ){
+		//Now we have no choice but to see a valid shift again
+		right_child = shift_expression(fl);
+
+		//If it's an error, just fail out, no point in going further
+		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//If this is an error we can just propogate it up
+			return right_child;
+		}
+
+		//Hold the reference to the prior root
+		temp_holder = sub_tree_root;
+
+		/**
+		 * We now must do type-legality checking. Inclusive or works
+		 * except for constructs, arrays and enums
+		 */
+		generic_type_t* temp_holder_type = temp_holder->inferred_type;
+		generic_type_t* right_child_type = right_child->inferred_type;
+		
+		//We do not allow bitwise or to be done on arrays, enums or constructs
+		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
+		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
+			print_parse_message(PARSE_ERROR, "Relational operators do not work with arrays, enums or constructs", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Additionally, we cannot use logical or with floats or voids
+		//Check the first node
+		if(temp_holder_type->type_class == TYPE_CLASS_BASIC){
+			//We do not allow the use of void types here
+			if(temp_holder_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//Check the second node
+		if(right_child_type->type_class == TYPE_CLASS_BASIC){
+			//We do not allow the use of void types here
+			if(right_child_type->basic_type->basic_type == VOID){
+				sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//Once we get down here, we know that the type checking worked, so we can move on to final assembly
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		//This will be an or expression
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = OR;
+
+		//Now also create the relational node and the equals node
+		generic_ast_node_t* left_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+
+		//Assign the appropriate one here
+		if(lookahead.tok == G_THAN_OR_EQ){
+			((binary_expr_ast_node_t*)(left_tree_root->node))->binary_operator = G_THAN;
+		} else {
+			((binary_expr_ast_node_t*)(left_tree_root->node))->binary_operator = L_THAN;
+		}
+
+		//The left tree root always has the temp holder and right child as children
+		add_child_node(left_tree_root, temp_holder);
+		add_child_node(left_tree_root, right_child);
+
+		//This is the first child always of the overall root
+		add_child_node(sub_tree_root, left_tree_root);
+
+		//Now we'll create the equals node
+		generic_ast_node_t* right_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+
+		//This will be an ==
+		((binary_expr_ast_node_t*)(right_tree_root->node))->binary_operator = D_EQUALS;
+
+		//This has the same children as before
+		add_child_node(right_tree_root, temp_holder);
+		add_child_node(right_tree_root, right_child);
+
+		//This is always the second child of the or root
+		add_child_node(sub_tree_root, right_tree_root);
+
+		//The inferred type is what it is
+		sub_tree_root->inferred_type = rel_expr_ret_type;
 
 	} else {
 		//Otherwise just push the token back
