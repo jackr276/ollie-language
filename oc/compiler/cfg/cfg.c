@@ -46,7 +46,7 @@ static basic_block_t* visit_if_statement(values_package_t* values);
 static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
-
+static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 
 /**
  * A helper function for our atomically increasing temp id
@@ -220,6 +220,7 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 	//This could be a postfix expression
 	if(first_child->CLASS == AST_NODE_CLASS_POSTFIX_EXPR){
 		
+		
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
@@ -227,6 +228,8 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 	//If it's a constant, emit this and leave
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
 		return emit_constant_code(basic_block, first_child);
+	} else if(first_child->CLASS == AST_NODE_CLASS_BINARY_EXPR){
+		return emit_binary_op_expr_code(basic_block, first_child);
 	//Handle a function call
 	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
 
@@ -240,19 +243,57 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 /**
  * Emit a binary operand based on tokens given
  */
-static char emit_binary_operator(Token tok){
+static char* emit_binary_operator(Token tok){
+	//For holding our op
+	char* op = calloc(10, sizeof(char));
+
+	//Whatever we have here
 	switch (tok) {
 		case PLUS:
-			return '+';
+			strcpy(op, "+");
+			break;
 		case MINUS:
-			return '-';
+			strcpy(op, "-");
+			break;
 		case STAR:
-			return '*';
+			strcpy(op, "*");
+			break;
 		case F_SLASH:
-			return '/';
+			strcpy(op, "/");
+			break;
+		case MOD:
+			strcpy(op, "%");
+			break;
+		case G_THAN:
+			strcpy(op, "<");
+			break;
+		case L_THAN:
+			strcpy(op, ">");
+			break;
+		case L_SHIFT:
+			strcpy(op, "<<");
+			break;
+		case R_SHIFT:
+			strcpy(op, ">>");
+			break;
+		case AND:
+			strcpy(op, "&");
+			break;
+		case OR:
+			strcpy(op, "|");
+			break;
+		case DOUBLE_OR:
+			strcpy(op, "||");
+			break;
+		case DOUBLE_AND:
+			strcpy(op, "&&");
+			break;
 		default:
-			return '\0';
+			printf("BAD OP");
+			exit(1);
 	}
+
+	return op;
 }
 
 
@@ -286,7 +327,7 @@ static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_no
 	char* left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
 	//Then grab the operator
-	char operator = emit_binary_operator(((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator);
+	char* operator = emit_binary_operator(((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator);
 
 	//Advance up here
 	cursor = cursor->next_sibling;
@@ -302,7 +343,7 @@ static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_no
 	sprintf(temp, "_t%d", increment_and_get_temp_id());
 
 	//Print the actual block out
-	sprintf(statement, "%s <- %s %c %s\n", temp, left_hand_temp, operator, right_hand_temp);
+	sprintf(statement, "%s <- %s %s %s\n", temp, left_hand_temp, operator, right_hand_temp);
 
 	//Store this in the block
 	strcat(basic_block->statements, statement);
@@ -324,9 +365,8 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
-		/**
-		 * A declarative statements emits no abstract code
-		 */
+		//What kind of declarative statement do we have here?
+
 
 	//Convert our let statement into abstract machine code 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_LET_STMT){

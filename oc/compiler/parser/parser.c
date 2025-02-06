@@ -2556,8 +2556,6 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		if(right_child_type == S_INT8 || right_child_type == S_INT16 || right_child_type == S_INT32 
 		   || right_child_type == S_INT64){
 			print_parse_message(WARNING, "Negative shift amounts will be treated as unsigned. Highly advised against using", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
@@ -2844,8 +2842,6 @@ static generic_ast_node_t* and_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//Holds the ret type
-	generic_type_t* b_and_ret_type = lookup_type(type_symtab, "i64")->type;
 
 	//No matter what, we do need to first see a valid equality expression
 	generic_ast_node_t* sub_tree_root = equality_expression(fl);
@@ -2929,7 +2925,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		add_child_node(sub_tree_root, right_child);
 
 		//Make sure we mark the root node's return type after it's been anded
-		sub_tree_root->inferred_type = b_and_ret_type;
+		sub_tree_root->inferred_type = temp_holder_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -2966,8 +2962,6 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The type that we have for this, always a signed int
-	generic_type_t* e_or_ret_type = lookup_type(type_symtab, "i64")->type;
 
 	//No matter what, we do need to first see a valid and expression
 	generic_ast_node_t* sub_tree_root = and_expression(fl);
@@ -3052,7 +3046,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 		add_child_node(sub_tree_root, right_child);
 
 		//Ensure that we denote what type this subtree is now
-		sub_tree_root->inferred_type = e_or_ret_type;
+		sub_tree_root->inferred_type = temp_holder_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking

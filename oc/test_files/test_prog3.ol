@@ -10,7 +10,7 @@ func:static main(char** argv) -> i32{
 	asn c := 23;
 	asn d := 22;
 
-	asn a := a*b + c/d;
+	asn a := (a+b) & (b << 2) * (c+d);
 
 	ret a;
 }
