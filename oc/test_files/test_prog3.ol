@@ -1,14 +1,16 @@
 
 func:static main(char** argv) -> i32{
-	let i32 a := 23;
-	let i32 i := 23;
-	let i32 h := 23;
-	let i32 g := 23;
-	let i32 f := 23;
-	let i32 e := 23;
-	asn a := a + 232;
-	asn a := 32 + 2;
+	declare u32 a;
+	declare u32 b;
+	declare u32 c;
+	declare u32 d;
+
+	asn a := 32;
+	asn b := 27;
+	asn c := 23;
+	asn d := 22;
+
+	asn a := a*b + c/d;
 
 	ret a;
-	
 }

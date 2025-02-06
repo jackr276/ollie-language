@@ -172,10 +172,16 @@ static char* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* 
 /**
  * Emit the identifier machine code
  */
-static char* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node){
+static char* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t use_temp){
+	//If we don't want to use a temp variable
+	if(use_temp == 0){
+		return ((identifier_ast_node_t*)(ident_node->node))->identifier;
+	}
+
 	//The overall printout
 	char statement[1000];
 
+	
 	//We will store the ident in a temporary variable
 	char* temp = calloc(50, sizeof(char));
 
@@ -187,6 +193,7 @@ static char* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t
 
 	//Add this into the block
 	strcat(basic_block->statements, statement);
+	
 
 	//Give the temp var back
 	return temp;
@@ -199,7 +206,7 @@ static char* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
+static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t use_temp){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
@@ -216,7 +223,7 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
-		 return emit_ident_expr_code(basic_block, first_child);
+		 return emit_ident_expr_code(basic_block, first_child, use_temp);
 	//If it's a constant, emit this and leave
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
 		return emit_constant_code(basic_block, first_child);
@@ -233,9 +240,22 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 /**
  * Emit a binary operand based on tokens given
  */
-static void emit_binary_operand(basic_block_t* basic_block, Token tok){
-
+static char emit_binary_operator(Token tok){
+	switch (tok) {
+		case PLUS:
+			return '+';
+		case MINUS:
+			return '-';
+		case STAR:
+			return '*';
+		case F_SLASH:
+			return '/';
+		default:
+			return '\0';
+	}
 }
+
+
 
 
 /**
@@ -248,11 +268,14 @@ static void emit_binary_operand(basic_block_t* basic_block, Token tok){
  *
  */
 static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
+	//The actual statement
+	char statement[1000];
+
 	//Is the cursor a unary expression? If so just emit that. This is our base case 
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Return the temporary character from here
-		return emit_unary_expr_code(basic_block, logical_or_expr);
+		return emit_unary_expr_code(basic_block, logical_or_expr, 1);
 	}
 
 	//Otherwise we actually have a binary operation of some kind
@@ -260,15 +283,32 @@ static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_no
 	generic_ast_node_t* cursor = logical_or_expr->first_child;
 	
 	//Emit the binary expression on the left first
-	emit_binary_op_expr_code(basic_block, cursor);
+	char* left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
+
+	//Then grab the operator
+	char operator = emit_binary_operator(((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator);
 
 	//Advance up here
 	cursor = cursor->next_sibling;
 
-	//Then emit the operand
-	
-	
-	
+	//Then grab the right hand temp
+	char* right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
+
+	//Finally we'll create the grand overture
+	//We will store the ident in a temporary variable
+	char* temp = calloc(50, sizeof(char));
+
+	//Give this a temp variable
+	sprintf(temp, "_t%d", increment_and_get_temp_id());
+
+	//Print the actual block out
+	sprintf(statement, "%s <- %s %c %s\n", temp, left_hand_temp, operator, right_hand_temp);
+
+	//Store this in the block
+	strcat(basic_block->statements, statement);
+
+	//Return the temp variable
+	return temp;
 }
 
 
@@ -319,15 +359,19 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 			exit(0);
 		}
 	
-		//Let's first emit the unary expression
-		char* temp_var = emit_unary_expr_code(basic_block, cursor);
+		//Emit the special left hand unary expression code DO NOT USE A TEMP
+		char* lhs = emit_unary_expr_code(basic_block, cursor, 0);
 
 		//Now we emit the binary op code on the right side
-		emit_binary_op_expr_code(basic_block, cursor->next_sibling);
+		char* rhs = emit_binary_op_expr_code(basic_block, cursor->next_sibling);
 
-		//At the very end, add in our newling
-		strcat(basic_block->statements, "\n");
-		
+		//Assign these two to eachother
+		char assnment[1000];
+
+		//These two are assigned to eachother
+		sprintf(assnment, "%s <- %s\n", lhs, rhs);
+
+		strcat(basic_block->statements, assnment);
 		
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
