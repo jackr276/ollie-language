@@ -111,18 +111,59 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 
 
 /**
- * Emit the SSA for a unary expression
+ * Emit the abstract machine code for a constant
+ */
+static void emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+	//For printing
+	char const_info[500];
+
+	//There are several different kinds of constant, but we don't care. We'll just
+	//add whatever the constant value is in for now
+	//Grab this for convenience
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//We'll print out whatever kind we have here
+	if(const_node->constant_type == LONG_CONST){
+		sprintf(const_info, "%0lx", const_node->long_val);
+	} else if (const_node->constant_type == INT_CONST){
+		sprintf(const_info, "%0x", const_node->int_val);
+	} else if (const_node->constant_type == CHAR_CONST){
+		sprintf(const_info, "%0x", const_node->char_val);
+	} else if(const_node->constant_type == FLOAT_CONST){
+		sprintf(const_info, "%f", const_node->float_val);
+	} else {
+		//TODO ADD these in
+		print_cfg_message(PARSE_ERROR, "Strings not currently supported", constant_node->line_number);
+		exit(0);
+	}
+	
+	//Finally we emit this into the block
+	strcat(basic_block->statements, const_info);
+}
+
+
+/**
+ * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
+ * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
 static void emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
+	//The last two instances return a constant node. If that's the case, we'll just emit a constant
+	//node here
+	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
+		//Let the helper deal with it
+		emit_constant_code(basic_block, unary_expr_parent);
+		return;
+	}
+
 
 }
 
 
 
 /**
- * Emit the ssa needed for a binary expression
+ * Emit the abstract machine code needed for a binary expression
  */
 static void emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
 
@@ -164,6 +205,25 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 
 	//An assignment statement
 	} else if(expr_node->CLASS == AST_NODE_CLASS_ASNMNT_EXPR) {
+		//In our tree, an assignment statement decays into a unary expression
+		//on the left and a binary op expr on the right
+		//Add the tab in first
+		strcat(basic_block->statements, "\t");
+		
+		//This should always be a unary expression
+		cursor = expr_node->first_child;
+
+		//If it is not one, we fail out
+		if(cursor->CLASS != AST_NODE_CLASS_UNARY_EXPR){
+			print_parse_message(PARSE_ERROR, "Expected unary expression as first child to assignment expression", cursor->line_number);
+			exit(0);
+		}
+	
+		//Let's first emit the unary expression
+		emit_unary_expr_code(basic_block, cursor);
+
+
+		
 		
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
