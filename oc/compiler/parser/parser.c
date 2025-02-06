@@ -1810,6 +1810,8 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root

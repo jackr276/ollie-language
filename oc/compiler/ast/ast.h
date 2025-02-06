@@ -272,6 +272,8 @@ struct asnmnt_expr_ast_node_t{
 struct binary_expr_ast_node_t{
 	//What operator is it
 	Token binary_operator;
+	//Store the actual operator
+	char op[20];
 };
 
 //The function node call

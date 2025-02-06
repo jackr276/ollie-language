@@ -13,6 +13,8 @@
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
 static int32_t current_block_id = 0;
+//The atomically increasing temp name id
+static int32_t current_temp_id = 0;
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
@@ -111,11 +113,20 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 
 
 /**
- * Emit the abstract machine code for a constant
+ * Emit the abstract machine code for a constant. This returns that constant
+ * that it created
  */
-static void emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+static char* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
 	//For printing
 	char const_info[500];
+	//For the overall print
+
+
+	//The temp variable
+	char* temp = calloc(50, sizeof(char));
+
+	//Give this a temp variable
+	sprintf(temp, "_t%d", current_temp_id);
 
 	//There are several different kinds of constant, but we don't care. We'll just
 	//add whatever the constant value is in for now
@@ -137,8 +148,10 @@ static void emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* c
 		exit(0);
 	}
 	
-	//Finally we emit this into the block
-	strcat(basic_block->statements, const_info);
+	/**
+	 * We always at this stage assign this constant's value to a temp variable
+	 */
+	
 }
 
 /**
@@ -156,13 +169,13 @@ static void emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t*
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static void emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
+static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
 		//Let the helper deal with it
 		emit_constant_code(basic_block, unary_expr_parent);
-		return;
+		return NULL;
 	}
 
 	//If it isn't a constant, then this node should have children
@@ -186,21 +199,46 @@ static void emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t*
 }
 
 
+/**
+ * Emit a binary operand based on tokens given
+ */
+static void emit_binary_operand(basic_block_t* basic_block, Token tok){
+
+}
+
 
 /**
  * Emit the abstract machine code needed for a binary expression. The lowest possible
  * thing that we could have here is a unary expression. If we have that, we just emit the
  * unary expression
+ *
+ * We need to convert these into straight line binary expression code(two operands, one operator) each.
+ * For each binary expression, we compute
+ *
  */
-static void emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
-	//Is the cursor a unary expression? If so just emit that
+static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
+	//Is the cursor a unary expression? If so just emit that. This is our base case 
+	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		emit_unary_expr_code(basic_block, logical_or_expr);
+		//Get out, no need to go further
+		return;
 	}
 
+	//Otherwise we actually have a binary operation of some kind
 	//Grab a cursor
 	generic_ast_node_t* cursor = logical_or_expr->first_child;
+	
+	//Emit the binary expression on the left first
+	emit_binary_op_expr_code(basic_block, cursor);
 
+	//Advance up here
+	cursor = cursor->next_sibling;
+
+	//Then emit the operand
+	
+	
+	
 }
 
 
@@ -283,6 +321,15 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 static int32_t increment_and_get(){
 	current_block_id++;
 	return current_block_id;
+}
+
+
+/**
+ * A helper function for our atomically increasing temp id
+ */
+static int32_t increment_and_get_temp_id(){
+	current_temp_id++;
+	return current_temp_id;
 }
 
 
