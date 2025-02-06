@@ -140,10 +140,10 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
 		/**
-		 * A declarative statements emits no SSA
+		 * A declarative statements emits no abstract code
 		 */
 
-	//Convert our let statement into SSA
+	//Convert our let statement into abstract machine code 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_LET_STMT){
 		//Let's grab the associated variable record here
 		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
@@ -157,7 +157,6 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 		//Add this into the record
 		strcat(basic_block->statements, var_ident);
 
-		//TODO EXPRESSION HANDLING
 		emit_binary_op_expr_code(basic_block, expr_node->first_child);
 		
 		//Add in a newline
@@ -166,6 +165,9 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 	//An assignment statement
 	} else if(expr_node->CLASS == AST_NODE_CLASS_ASNMNT_EXPR) {
 		
+	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
+		//Emit the binary expression node
+		emit_binary_op_expr_code(basic_block, expr_node);
 	} else {
 
 	}
@@ -1718,4 +1720,3 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Give back the reference
 	return cfg;
 }
-

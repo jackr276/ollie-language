@@ -173,6 +173,8 @@ struct generic_ast_node_t{
 	ast_node_class_t CLASS;
 	//What line number is this from
 	u_int16_t line_number;
+	//Is this assignable?
+	u_int8_t is_assignable;
 	//This is where we hold the actual node
 	void* node;
 	//What variable do we have?

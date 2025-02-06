@@ -115,6 +115,8 @@ static generic_ast_node_t* identifier(FILE* fl){
 
 	//Create the identifier node
 	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER); //Add the identifier into the node itself
+	//Idents are assignable
+	ident_node->is_assignable = 1;
 	//Copy the string we got into it
 	strcpy(((identifier_ast_node_t*)(ident_node->node))->identifier, lookahead.lexeme);
 	//Default identifier type is s_int32
@@ -571,6 +573,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		ident->inferred_type = found->type;
 		//Store the variable that's associated
 		ident->variable = found;
+		//Idents are assignable
+		ident->is_assignable = 1;
 
 		//Give back the ident node
 		return ident;
@@ -704,6 +708,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return left_hand_unary;
 	}
 	
+	//If it isn't assignable, we also fail
+	if(left_hand_unary->is_assignable == 0){
+		print_parse_message(PARSE_ERROR, "Expression is not assignable", left_hand_unary->line_number);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
@@ -803,6 +814,8 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR);
+	//Is assignable
+	const_access_node->is_assignable = 1;
 	//Add the line number
 	const_access_node->line_number = current_line;
 
@@ -1136,6 +1149,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		push_back_token(fl, lookahead);
 		//Assign the type
 		postfix_expr_node->inferred_type = return_type;
+		//Not assignable
+		postfix_expr_node->is_assignable = 1;
 		//And we'll give back what we had constructed so far
 		return postfix_expr_node;
 	}
@@ -1168,6 +1183,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	
 	//Add the inferred type in
 	postfix_expr_node->inferred_type = return_type;
+
+	//Add the assignability in
+	postfix_expr_node->is_assignable = 0;
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;
@@ -1208,6 +1226,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
+	//Is this assignable
+	u_int8_t is_assignable = 0;
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -1217,6 +1237,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//valid types at compile-time, we will be able to return an INT-CONST node with the
 	//size here
 	if(lookahead.tok == TYPESIZE){
+		//Not assignable
+		is_assignable = 0;
 		//We must then see left parenthesis
 		lookahead = get_next_token(fl, &parser_line_num);
 
@@ -1285,6 +1307,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		return const_node;
 
 	} else if(lookahead.tok == SIZEOF){
+		//Not assignable
+		is_assignable = 0;
 		//We must then see left parenthesis
 		lookahead = get_next_token(fl, &parser_line_num);
 
@@ -1405,6 +1429,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 				return_type = cast_expr->inferred_type->array_type->member_type;
 			}
 
+			//This is assignable
+			is_assignable = 1;
+
 		//Let's now check the & case
 		} else if (lookahead.tok == AND){
 			//Let's double check that we aren't taking the address of nothing
@@ -1419,7 +1446,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//We'll check to see if this type is already in existence
 			symtab_type_record_t* type_record = lookup_type(type_symtab, pointer->type_name);
-
+			
 			//It didn't exist, so we'll add it
 			if(type_record == NULL){
 				insert_type(type_symtab, create_type_record(pointer));
@@ -1429,6 +1456,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			} else {
 				return_type = type_record->type;
 			}
+
+			//This is not assignable
+			is_assignable = 0;
 
 		//Logical not(!) works on all basic types(minus void) and pointers
 		} else if(lookahead.tok == L_NOT){
@@ -1450,6 +1480,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//Otherwise it is fine. Logical not returns 0 or 1, so it's return type will be of u_int8
 			return_type = lookup_type(type_symtab, "u8")->type;
+			
+			//This is not assignable
+			is_assignable = 0;
 		
 		//Bitwise not works on integers only
 		} else if(lookahead.tok == B_NOT){
@@ -1473,6 +1506,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			//Otherwise if we make it down here, the return type will be whatever type we put in
 			return_type = cast_expr->inferred_type;
 
+			//This is not assignable
+			is_assignable = 0;
+
 		//Positive and negative sign works on integers and floats, but nothing else
 		} else if(lookahead.tok == MINUS || lookahead.tok == PLUS){
 			//If it's not a basic type, we fail immediately
@@ -1493,6 +1529,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//If we get all the way down here, the return type is what we had to begin with
 			return_type = cast_expr->inferred_type;
+
+			//This is not assignable
+			is_assignable = 0;
 
 		//preincrement and predecrement work on everything besides complex types
 		} else if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUSMINUS){
@@ -1515,6 +1554,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			//Otherwise it worked just fine here. The return type is the same type that we had initially
 			return_type = cast_expr->inferred_type;
 
+			//This is not assignable
+			is_assignable = 0;
 		}
 
 		//One we get here, we have both nodes that we need
@@ -1530,6 +1571,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		unary_node->inferred_type = return_type;
 		//Store the line number
 		unary_node->line_number = parser_line_num;
+
+		//Is it assignable
+		unary_node->is_assignable = is_assignable;
 
 		//Finally we're all done, so we can just give this back
 		return unary_node;
@@ -1557,6 +1601,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Store the line number
 		unary_expr_node->line_number = parser_line_num;
 
+		unary_expr_node->is_assignable = postfix_expr_node->is_assignable;
 		//Postfix already has type inference built in
 		return unary_expr_node;
 	}
