@@ -91,6 +91,23 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 
 
 /**
+ * Perform a deep copy of a state
+ */
+static generic_ast_node_t* deep_copy_state(generic_ast_node_t* node){
+	generic_ast_node_t* copy = ast_node_alloc(node->CLASS);
+
+	//Copy the parent structure
+	memcpy(copy, node, sizeof(ast_node_class_t));
+
+	//Now that we have a deep copy, copy other things like the initial classes
+	memcpy(copy->node, node->node, sizeof(*(node->node)));
+
+	//Give the copy back
+	return copy;
+}
+
+
+/**
  * We will always return a pointer to the node holding the identifier. Due to the times when
  * this will be called, we can not do any symbol table validation here. 
  *
@@ -2772,8 +2789,8 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		((binary_expr_ast_node_t*)(right_tree_root->node))->binary_operator = D_EQUALS;
 
 		//This has the same children as before
-		add_child_node(right_tree_root, temp_holder);
-		add_child_node(right_tree_root, right_child);
+		add_child_node(right_tree_root, deep_copy_state(temp_holder));
+		add_child_node(right_tree_root, deep_copy_state(right_child));
 
 		//This is always the second child of the or root
 		add_child_node(sub_tree_root, right_tree_root);

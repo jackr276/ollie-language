@@ -20,7 +20,7 @@ func main(i32 argc, char** argv) -> i32 {
 
 	do {
 		argc++;
-	} while(argc < 15);
+	} while(argc <= 15);
 	
 	@example(my_arr);
 
