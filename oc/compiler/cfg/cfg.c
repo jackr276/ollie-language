@@ -124,11 +124,11 @@ static void emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* c
 
 	//We'll print out whatever kind we have here
 	if(const_node->constant_type == LONG_CONST){
-		sprintf(const_info, "%0lx", const_node->long_val);
+		sprintf(const_info, "0x%0lx", const_node->long_val);
 	} else if (const_node->constant_type == INT_CONST){
-		sprintf(const_info, "%0x", const_node->int_val);
+		sprintf(const_info, "0x%x", const_node->int_val);
 	} else if (const_node->constant_type == CHAR_CONST){
-		sprintf(const_info, "%0x", const_node->char_val);
+		sprintf(const_info, "0x%0x", const_node->char_val);
 	} else if(const_node->constant_type == FLOAT_CONST){
 		sprintf(const_info, "%f", const_node->float_val);
 	} else {
@@ -139,6 +139,14 @@ static void emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* c
 	
 	//Finally we emit this into the block
 	strcat(basic_block->statements, const_info);
+}
+
+/**
+ * Emit the identifier machine code
+ */
+static void emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node){
+	//Just copy the identifier in
+	strcat(basic_block->statements, ((identifier_ast_node_t*)(ident_node->node))->identifier);
 }
 
 
@@ -157,15 +165,41 @@ static void emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t*
 		return;
 	}
 
+	//If it isn't a constant, then this node should have children
+	generic_ast_node_t* first_child = unary_expr_parent->first_child;
 
+	//This could be a postfix expression
+	if(first_child->CLASS == AST_NODE_CLASS_POSTFIX_EXPR){
+		
+	//OR it could be a primary expression, which has a whole host of options
+	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
+		//If it's an identifier, emit this and leave
+		emit_ident_expr_code(basic_block, first_child);
+		return;
+	//If it's a constant, emit this and leave
+	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
+		emit_constant_code(basic_block, first_child);
+	//Handle a function call
+	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
+
+	}
 }
 
 
 
 /**
- * Emit the abstract machine code needed for a binary expression
+ * Emit the abstract machine code needed for a binary expression. The lowest possible
+ * thing that we could have here is a unary expression. If we have that, we just emit the
+ * unary expression
  */
 static void emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
+	//Is the cursor a unary expression? If so just emit that
+	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
+		emit_unary_expr_code(basic_block, logical_or_expr);
+	}
+
+	//Grab a cursor
+	generic_ast_node_t* cursor = logical_or_expr->first_child;
 
 }
 
@@ -198,6 +232,7 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 		//Add this into the record
 		strcat(basic_block->statements, var_ident);
 
+		//Now emit the binary operation expression code
 		emit_binary_op_expr_code(basic_block, expr_node->first_child);
 		
 		//Add in a newline
@@ -222,7 +257,14 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 		//Let's first emit the unary expression
 		emit_unary_expr_code(basic_block, cursor);
 
+		//Now print out the assignment operator
+		strcat(basic_block->statements, " <- ");
 
+		//Now we emit the binary op code on the right side
+		emit_binary_op_expr_code(basic_block, cursor->next_sibling);
+
+		//At the very end, add in our newling
+		strcat(basic_block->statements, "\n");
 		
 		
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){

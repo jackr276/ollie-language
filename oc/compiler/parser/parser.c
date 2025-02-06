@@ -1303,8 +1303,13 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Constants are ALWAYS of type s_int32
 		const_node->inferred_type = lookup_type(type_symtab, "i32")->type;
 
+		//Create the unary expression node
+		generic_ast_node_t* unary_expr = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+		//Add the constant as a child
+		add_child_node(unary_expr, const_node);
+
 		//Finally we'll return this constant node
-		return const_node;
+		return unary_expr;
 
 	} else if(lookahead.tok == SIZEOF){
 		//Not assignable
@@ -1377,8 +1382,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//The second child is always the expression that we need to do
 		add_child_node(unary_node, expr_node);
 
+		//TODO NEEDS TO BE FIXED
 		//Finally we'll return this constant node
-		return const_node;
+		return unary_node;
 
 	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
 	//the exact same way
