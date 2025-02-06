@@ -12,5 +12,9 @@ func:static main(char** argv) -> i32{
 
 	asn a := (a+b) & (b << 2) * (c+d);
 
+	if(a >= 3) then{
+		a++;
+	}
+
 	ret a;
 }

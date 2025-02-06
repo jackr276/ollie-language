@@ -27,6 +27,7 @@ cfg_t* cfg_ref;
 
 //A package of values that each visit function uses
 typedef struct {
+	//The initial node
 	generic_ast_node_t* initial_node;
 	basic_block_t* function_end_block;
 	//For continue statements
@@ -194,7 +195,6 @@ static char* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t
 	//Add this into the block
 	strcat(basic_block->statements, statement);
 	
-
 	//Give the temp var back
 	return temp;
 }
@@ -288,6 +288,12 @@ static char* emit_binary_operator(Token tok){
 		case DOUBLE_AND:
 			strcpy(op, "&&");
 			break;
+		case D_EQUALS:
+			strcpy(op, "==");
+			break;
+		case NOT_EQUALS:
+			strcpy(op, "!=");
+			break;
 		default:
 			printf("BAD OP");
 			exit(1);
@@ -326,30 +332,78 @@ static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_no
 	//Emit the binary expression on the left first
 	char* left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
-	//Then grab the operator
-	char* operator = emit_binary_operator(((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator);
-
 	//Advance up here
 	cursor = cursor->next_sibling;
 
 	//Then grab the right hand temp
 	char* right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
-	//Finally we'll create the grand overture
-	//We will store the ident in a temporary variable
-	char* temp = calloc(50, sizeof(char));
 
-	//Give this a temp variable
-	sprintf(temp, "_t%d", increment_and_get_temp_id());
+	//Let's see what binary operator that we have
+	Token binary_operator = ((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator;
 
-	//Print the actual block out
-	sprintf(statement, "%s <- %s %s %s\n", temp, left_hand_temp, operator, right_hand_temp);
+	//If this binary operator is >= or <=, some extra work will be needed
+	if(binary_operator == G_THAN_OR_EQ || binary_operator == L_THAN_OR_EQ){
+		//For our construction
+		char expr1[1000];
+		char expr2[1000];
+		char expr3[1000];
 
-	//Store this in the block
-	strcat(basic_block->statements, statement);
+		//We'll now have three operators
+		char* op1 = binary_operator == G_THAN_OR_EQ ? ">" : "<";
+		//Second operator is ==
+		char* op2 = "==";
+		//The main connector is a logical or
+		char* connector = "||";
 
-	//Return the temp variable
-	return temp;
+		//We will store the ident in a temporary variable
+		char* temp1 = calloc(50, sizeof(char));
+		char* temp3 = calloc(50, sizeof(char));
+		char* temp2 = calloc(50, sizeof(char));
+
+		//Give this a temp variable
+		sprintf(temp1, "_t%d", increment_and_get_temp_id());
+		//Create the first expression
+		sprintf(expr1, "%s <- %s %s %s\n", temp1, left_hand_temp, op1, right_hand_temp);
+		//Add it in 
+		strcat(basic_block->statements, expr1);
+
+		//Give this a temp variable
+		sprintf(temp2, "_t%d", increment_and_get_temp_id());
+		//Create the second expression
+		sprintf(expr2, "%s <- %s %s %s\n", temp2, left_hand_temp, op2, right_hand_temp);
+		//Add it in 
+		strcat(basic_block->statements, expr2);
+
+		//Give this a temp variable
+		sprintf(temp3, "_t%d", increment_and_get_temp_id());
+		//Create the final expression
+		sprintf(expr3, "%s <- %s %s %s\n", temp3, temp1, connector, temp2);
+		//Add it in 
+		strcat(basic_block->statements, expr3);
+
+		//Final variable is expr3
+		return temp3;
+
+	} else {
+		//Then grab the operator
+		char* operator = emit_binary_operator(binary_operator);
+
+		//We will store the ident in a temporary variable
+		char* temp = calloc(50, sizeof(char));
+
+		//Give this a temp variable
+		sprintf(temp, "_t%d", increment_and_get_temp_id());
+
+		//Print the actual block out
+		sprintf(statement, "%s <- %s %s %s\n", temp, left_hand_temp, operator, right_hand_temp);
+
+		//Store this in the block
+		strcat(basic_block->statements, statement);
+
+		//Return the temp variable
+		return temp;
+	}
 }
 
 
@@ -1096,6 +1150,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 	//Add it into the start block
 	add_statement(entry_block, cursor);
+	emit_expr_code(entry_block, cursor);
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;

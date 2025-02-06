@@ -9,7 +9,7 @@ func:static main(u32 arg_count, str_arr arg_vector) -> i32{
 	declare str my_str;
 	declare u32 c;
 
-	if(arg_count == 0) then {
+	if(arg_count != 0) then {
 		asn arg_count := -1;
 		//asn arg_vector := "hello";
 
