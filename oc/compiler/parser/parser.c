@@ -366,8 +366,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 	//It is also now safe enough for us to allocate the function node
 	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL);
 
-	//The function IDENT will be the first child of this node
-	add_child_node(function_call_node, ident);
+	//Store the function record in the node
+	((function_call_ast_node_t*)(function_call_node->node))->func_record = function_record;
 
 	//We'll also add in that the current function has called this one
 	call_function(current_function->call_graph_node, function_record->call_graph_node);
@@ -505,6 +505,9 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 	//Add the line number in
 	function_call_node->line_number = current_line;
+
+	//Destroy the ident node, we no longer need it
+	deallocate_ast(ident);
 
 	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;

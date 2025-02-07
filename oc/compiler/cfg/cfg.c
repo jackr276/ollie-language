@@ -201,6 +201,71 @@ static char* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t
 
 
 /**
+ * Emit a function call node
+ */
+static char* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
+	//For printing
+	char assn_stmt[1500];
+	//For our printing
+	char statement[1500];
+
+	//Grab a reference to the function node for convenience
+	symtab_function_record_t* func_record = ((function_call_ast_node_t*)(function_call_node->node))->func_record;
+
+	//Grab the function name out first
+	char* func_name = func_record->func_name;
+
+	//Add this into the statement
+	strcat(statement, func_name);
+	//Add in the opening paren
+	strcat(statement, "(");
+	
+	//We will store the result in a temporary variable
+	char* temp = calloc(50, sizeof(char));
+
+	//Give this a temp variable
+	sprintf(temp, "_t%d", increment_and_get_temp_id());
+
+	//We will need to walk our function call here param by param
+	generic_ast_node_t* cursor = function_call_node->first_child;
+
+	//Record the number of parameters that we've seen so far
+	u_int8_t num_params = 0;
+
+	//So long as this isn't null, we have more parameters to use
+	while(cursor != NULL){
+		//Whatever we have here, add emit it
+		char* temp = emit_binary_op_expr_code(basic_block, cursor);
+
+		//The temp now goes in as our function call
+		strcat(statement, temp);
+
+		//Print out where appropriate
+		if(num_params != func_record->number_of_params - 1){
+			strcat(statement, ", ");
+		}
+
+		num_params++;
+
+		//Advance the cursor
+		cursor = cursor->next_sibling;
+	}
+	
+	//Add in the closing statement
+	strcat(statement, ")");
+
+	//Add this into the block
+	sprintf(assn_stmt, "%s <- %s\n", temp, statement);
+
+	//Add this into the overall block
+	strcat(basic_block->statements, assn_stmt);
+
+	//Give back the temp item
+	return temp;
+}
+
+
+/**
  * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
@@ -232,7 +297,7 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 		return emit_binary_op_expr_code(basic_block, first_child);
 	//Handle a function call
 	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
-
+		return emit_function_call_code(basic_block, first_child);
 	}
 
 	//FOR NOW

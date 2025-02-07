@@ -56,7 +56,7 @@ func main(i32 argc, char** argv) -> i32{
 	let u32 idx := 0;
 
 	while(idx < 15) do{
-		@test_func(2);
+		let u32 bab := @my_func(idx, 32.2);
 		idx++;
 	}
 	

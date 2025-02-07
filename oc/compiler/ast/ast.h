@@ -276,6 +276,8 @@ struct binary_expr_ast_node_t{
 
 //The function node call
 struct function_call_ast_node_t{
+	//Store the function record
+	symtab_function_record_t* func_record;
 };
 
 //The unary expression node
