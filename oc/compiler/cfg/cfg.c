@@ -45,7 +45,8 @@ static basic_block_t* visit_if_statement(values_package_t* values);
 static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
-static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
+//Return a three address code variable
+static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 
 
 /**
@@ -78,8 +79,19 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
 static void pretty_print_block(basic_block_t* block){
 	//First print out the label of the block
 	printf("%s\n", block->block_id);
-	//Print all of the statements
-	printf("%s", block->statements);
+
+	//Now grab a cursor and print out every statement that we 
+	//have
+	three_addr_code_stmt* cursor = block->leader_statement;
+
+	//So long as it isn't null
+	while(cursor != NULL){
+		//Hand off to printing method
+		print_three_addr_code_stmt(cursor);
+		//Move along to the next one
+		cursor = cursor->next_statement;
+	}
+
 	//Some spacing
 	printf("\n\n");
 }
@@ -565,8 +577,9 @@ static void basic_block_dealloc(basic_block_t* block){
 		exit(1);
 	}
 
-	//Free the statements
-	free(block->statements);
+	//Grab a statement cursor here
+	//TODO
+	
 
 	//Otherwise its fine so
 	free(block);
@@ -654,7 +667,7 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
 /**
  * Add a statement to the target block, following all standard linked-list protocol
  */
-static void add_statement(basic_block_t* target, generic_ast_node_t* statement_node){
+static void add_statement(basic_block_t* target, three_addr_code_stmt* statement_node){
 	//Generic fail case
 	if(target == NULL){
 		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);

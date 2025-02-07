@@ -18,6 +18,9 @@
 typedef struct three_addr_code_stmt three_addr_code_stmt;
 //A struct that holds our three address variables
 typedef struct three_addr_var three_addr_var;
+//A struct that holds our three address constants
+typedef struct three_addr_const three_addr_const;
+
 
 /**
  * What kind of three address code statement do we have?
@@ -38,13 +41,26 @@ struct three_addr_var{
 	symtab_variable_record_t* linked_var;
 	//Is this a temp variable?
 	u_int8_t is_temporary;
+	//Is this a constant?
+	u_int8_t is_constant;
 	//Store the type info for faster access
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 };
 
 
+/**
+ * A three address constant always holds the value of the constant
+ */
+struct three_addr_const{
+	//TODO const struct
+
+};
+
+
 struct three_addr_code_stmt{
+	//For linked list properties -- the next statement
+	three_addr_code_stmt* next_statement;
 	//A three address code always has 2 operands and an assignee
 	three_addr_var* op1;
 	three_addr_var* op2;
@@ -65,6 +81,11 @@ three_addr_var* emit_temp_var(generic_type_t* type);
  * Create and return a three address var from an existing variable
 */
 three_addr_var* emit_var(symtab_variable_record_t* var);
+
+/**
+ * Create and return a constant three address var
+ */
+three_addr_var* emit_constant(symtab_variable_record_t* constant);
 
 /**
  * Emit a statement using three vars and a binary operator

@@ -97,13 +97,11 @@ struct basic_block_t{
 	//Hold onto the number of both that we have
 	u_int8_t num_predecessors;
 	u_int8_t num_successors;
-	//Basic block statements. Will be dynamically allocated and auto-resizing
-	char* statements;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
-	generic_ast_node_t* leader_statement;
-	generic_ast_node_t* exit_statement;
+	three_addr_code_stmt* leader_statement;
+	three_addr_code_stmt* exit_statement;
 };
 
 //Build the entire CFG from the AST. This function returns the CFG struct, which

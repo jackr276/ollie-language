@@ -138,6 +138,26 @@ void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
 
 
 /**
+ * Emit a binary operator three address code statement. Once we're here, we expect that the caller has created and 
+ * supplied the appropriate variables
+ */
+three_addr_code_stmt* emit_bin_op_three_addr_code(three_addr_var* assignee, three_addr_var* op1, Token op, three_addr_var* op2){
+	//First allocate it
+	three_addr_code_stmt* stmt = calloc(1, sizeof(three_addr_code_stmt));
+
+	//Let's now populate it with the appropriate values
+	stmt->CLASS = THREE_ADDR_CODE_BIN_OP_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op = op;
+	stmt->op2 = op2;
+
+	//Give back the newly allocated statement
+	return stmt;
+}
+
+
+/**
  * Deallocate the variable portion of a three address code
 */
 void deallocate_three_addr_var(three_addr_var* var){
