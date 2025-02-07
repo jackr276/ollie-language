@@ -8,6 +8,7 @@
 #include "../ast/ast.h"
 #include "../parser/parser.h"
 #include "../stack/heapstack.h"
+#include "../three_addr_code/three_address_code.h"
 
 //These may or may not change
 #define MAX_SUCCESSORS 40

@@ -5,6 +5,8 @@
 */
 
 #include "three_address_code.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
@@ -84,7 +86,50 @@ static char* emit_binary_operator(Token tok){
  * Dynamically allocate and create a temp var
 */
 three_addr_var* emit_temp_var(generic_type_t* type){
-	//Let's first craete the temporary variable
+	//Let's first create the temporary variable
+	three_addr_var* var = calloc(1, sizeof(three_addr_var)); 
+
+	//Mark this as temporary
+	var->is_temporary = 1;
+	//Store the type info
+	var->type = type;
+
+	//We'll now create our temporary variable name
+	sprintf(var->var_name, "_t%d", increment_and_get_temp_id());
+
+	//Finally we'll bail out
+	return var;
+}
+
+
+/**
+ * Dynamically allocate and create a non-temp var
+*/
+three_addr_var* emit_var(symtab_variable_record_t* var){
+	//Let's first create the non-temp variable
+	three_addr_var* emitted_var = calloc(1, sizeof(three_addr_var));
+
+	//This is not temporary
+	emitted_var->is_temporary = 0;
+	//Store the type info
+	emitted_var->type = var->type;
+	//And store the symtab record
+	emitted_var->linked_var = var;
+
+	//Finally we'll get the name printed
+	sprintf(emitted_var->var_name, "%s", var->var_name);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
+ * Pretty print a three address code statement
+*/
+void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
 
 }
+
+
 

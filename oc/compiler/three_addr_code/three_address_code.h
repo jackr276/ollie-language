@@ -42,6 +42,8 @@ struct three_addr_code_stmt{
 	three_addr_var* op1;
 	three_addr_var* op2;
 	three_addr_var* assignee;
+	//The actual operator, stored as a token for size requirements
+	Token op;
 	//TODO may add more
 };
 
@@ -62,5 +64,18 @@ three_addr_var* emit_var(symtab_variable_record_t* var);
 */
 three_addr_code_stmt* emit_bin_op_three_addr_code(three_addr_var* assignee, three_addr_var* op1, Token op, three_addr_var* op2); 
 
+/**
+ * Pretty print a three address code statement
+*/
+void print_three_addr_code_stmt(three_addr_code_stmt* stmt);
+
+/**
+ * Destroy a three address variable
+*/
+void deallocate_three_addr_var(three_addr_var* var);
+
+/**
+ * Destroy an entire 
+*/
 
 #endif
