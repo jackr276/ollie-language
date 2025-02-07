@@ -5,3 +5,86 @@
 */
 
 #include "three_address_code.h"
+
+//The atomically increasing temp name id
+static int32_t current_temp_id = 0;
+
+/**
+ * A helper function for our atomically increasing temp id
+ */
+static int32_t increment_and_get_temp_id(){
+	current_temp_id++;
+	return current_temp_id;
+}
+
+
+/**
+ * Emit a binary operator based on the operands given. This is an exclusive helper function
+ */
+static char* emit_binary_operator(Token tok){
+	//For holding our op
+	char* op = calloc(10, sizeof(char));
+
+	//Whatever we have here
+	switch (tok) {
+		case PLUS:
+			strcpy(op, "+");
+			break;
+		case MINUS:
+			strcpy(op, "-");
+			break;
+		case STAR:
+			strcpy(op, "*");
+			break;
+		case F_SLASH:
+			strcpy(op, "/");
+			break;
+		case MOD:
+			strcpy(op, "%");
+			break;
+		case G_THAN:
+			strcpy(op, "<");
+			break;
+		case L_THAN:
+			strcpy(op, ">");
+			break;
+		case L_SHIFT:
+			strcpy(op, "<<");
+			break;
+		case R_SHIFT:
+			strcpy(op, ">>");
+			break;
+		case AND:
+			strcpy(op, "&");
+			break;
+		case OR:
+			strcpy(op, "|");
+			break;
+		case DOUBLE_OR:
+			strcpy(op, "||");
+			break;
+		case DOUBLE_AND:
+			strcpy(op, "&&");
+			break;
+		case D_EQUALS:
+			strcpy(op, "==");
+			break;
+		case NOT_EQUALS:
+			strcpy(op, "!=");
+			break;
+		default:
+			printf("BAD OP");
+			exit(1);
+	}
+
+	return op;
+}
+
+/**
+ * Dynamically allocate and create a temp var
+*/
+three_addr_var* emit_temp_var(generic_type_t* type){
+	//Let's first craete the temporary variable
+
+}
+

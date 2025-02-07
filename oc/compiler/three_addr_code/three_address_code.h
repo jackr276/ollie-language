@@ -11,6 +11,7 @@
 
 //For symtab linking
 #include "../symtab/symtab.h"
+#include "../lexer/lexer.h"
 #include <sys/types.h>
 
 //A struct that holds all knowledge of three address codes
@@ -45,8 +46,21 @@ struct three_addr_code_stmt{
 };
 
 
-three_addr_code_stmt* 
+/**
+ * Create and return a temporary variable
+*/
+three_addr_var* emit_temp_var(generic_type_t* type);
 
+/**
+ * Create and return a three address var from an existing variable
+*/
+three_addr_var* emit_var(symtab_variable_record_t* var);
+
+/**
+ * Emit a statement using three vars and a binary operator
+ * ALL statements are of the form: assignee <- op1 operator op2
+*/
+three_addr_code_stmt* emit_bin_op_three_addr_code(three_addr_var* assignee, three_addr_var* op1, Token op, three_addr_var* op2); 
 
 
 #endif

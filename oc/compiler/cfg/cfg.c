@@ -13,8 +13,6 @@
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
 static int32_t current_block_id = 0;
-//The atomically increasing temp name id
-static int32_t current_temp_id = 0;
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
@@ -48,14 +46,6 @@ static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
 static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
-
-/**
- * A helper function for our atomically increasing temp id
- */
-static int32_t increment_and_get_temp_id(){
-	current_temp_id++;
-	return current_temp_id;
-}
 
 
 /**
@@ -305,67 +295,7 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 }
 
 
-/**
- * Emit a binary operand based on tokens given
- */
-static char* emit_binary_operator(Token tok){
-	//For holding our op
-	char* op = calloc(10, sizeof(char));
 
-	//Whatever we have here
-	switch (tok) {
-		case PLUS:
-			strcpy(op, "+");
-			break;
-		case MINUS:
-			strcpy(op, "-");
-			break;
-		case STAR:
-			strcpy(op, "*");
-			break;
-		case F_SLASH:
-			strcpy(op, "/");
-			break;
-		case MOD:
-			strcpy(op, "%");
-			break;
-		case G_THAN:
-			strcpy(op, "<");
-			break;
-		case L_THAN:
-			strcpy(op, ">");
-			break;
-		case L_SHIFT:
-			strcpy(op, "<<");
-			break;
-		case R_SHIFT:
-			strcpy(op, ">>");
-			break;
-		case AND:
-			strcpy(op, "&");
-			break;
-		case OR:
-			strcpy(op, "|");
-			break;
-		case DOUBLE_OR:
-			strcpy(op, "||");
-			break;
-		case DOUBLE_AND:
-			strcpy(op, "&&");
-			break;
-		case D_EQUALS:
-			strcpy(op, "==");
-			break;
-		case NOT_EQUALS:
-			strcpy(op, "!=");
-			break;
-		default:
-			printf("BAD OP");
-			exit(1);
-	}
-
-	return op;
-}
 
 
 
