@@ -21,68 +21,6 @@ static int32_t increment_and_get_temp_id(){
 
 
 /**
- * Emit a binary operator based on the operands given. This is an exclusive helper function
- */
-static char* emit_binary_operator(Token tok){
-	//For holding our op
-	char* op = calloc(10, sizeof(char));
-
-	//Whatever we have here
-	switch (tok) {
-		case PLUS:
-			strcpy(op, "+");
-			break;
-		case MINUS:
-			strcpy(op, "-");
-			break;
-		case STAR:
-			strcpy(op, "*");
-			break;
-		case F_SLASH:
-			strcpy(op, "/");
-			break;
-		case MOD:
-			strcpy(op, "%");
-			break;
-		case G_THAN:
-			strcpy(op, "<");
-			break;
-		case L_THAN:
-			strcpy(op, ">");
-			break;
-		case L_SHIFT:
-			strcpy(op, "<<");
-			break;
-		case R_SHIFT:
-			strcpy(op, ">>");
-			break;
-		case AND:
-			strcpy(op, "&");
-			break;
-		case OR:
-			strcpy(op, "|");
-			break;
-		case DOUBLE_OR:
-			strcpy(op, "||");
-			break;
-		case DOUBLE_AND:
-			strcpy(op, "&&");
-			break;
-		case D_EQUALS:
-			strcpy(op, "==");
-			break;
-		case NOT_EQUALS:
-			strcpy(op, "!=");
-			break;
-		default:
-			printf("BAD OP");
-			exit(1);
-	}
-
-	return op;
-}
-
-/**
  * Dynamically allocate and create a temp var
 */
 three_addr_var* emit_temp_var(generic_type_t* type){
@@ -125,11 +63,105 @@ three_addr_var* emit_var(symtab_variable_record_t* var){
 
 
 /**
+ * Dynamically allocate and create a binary operation statement
+ */
+
+
+/**
  * Pretty print a three address code statement
 */
 void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
+	//If it's a binary operator statement(most common), we'll
+	//print the whole thing
+	if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+		//What is our op?
+		char* op;
+
+		//Whatever we have here
+		switch (stmt->op) {
+			case PLUS:
+				op = "+";
+				break;
+			case MINUS:
+				op = "-";
+				break;
+			case STAR:
+				op = "*";
+				break;
+			case F_SLASH:
+				op = "/";
+				break;
+			case MOD:
+				op = "%";
+				break;
+			case G_THAN:
+				op = ">";
+				break;
+			case L_THAN:
+				op = "<";
+				break;
+			case L_SHIFT:
+				op = "<<";
+				break;
+			case R_SHIFT:
+				op = ">>";
+				break;
+			case AND:
+				op = "&";
+				break;
+			case OR:
+				op = "|";
+				break;
+			case DOUBLE_OR:
+				op = "||";
+				break;
+			case DOUBLE_AND:
+				op = "&&";
+				break;
+			case D_EQUALS:
+				op = "==";
+				break;
+			case NOT_EQUALS:
+				op = "!=";
+				break;
+			default:
+				printf("BAD OP");
+				exit(1);
+		}
+
+		//Once we have our op in string form, we can print the whole thing out
+		printf("%s <- %s %s %s", stmt->assignee->var_name, stmt->op1->var_name, op, stmt->op2->var_name);
+	}
+	//TODO ADD MORE
 
 }
 
 
+/**
+ * Deallocate the variable portion of a three address code
+*/
+void deallocate_three_addr_var(three_addr_var* var){
+	//Null check as appropriate
+	if(var != NULL){
+		free(var);
+	}
+}
 
+
+/**
+ * Deallocate the entire three address code statement
+*/
+void deallocate_three_addr_stmt(three_addr_code_stmt* stmt){
+	//If the statement is null we bail out
+	if(stmt == NULL){
+		return;
+	}
+	
+	//Otherwise we'll deallocate all variables here
+	deallocate_three_addr_var(stmt->assignee);
+	deallocate_three_addr_var(stmt->op1);
+	deallocate_three_addr_var(stmt->op2);
+
+	//Finally free the overall structure
+	free(stmt);
+}

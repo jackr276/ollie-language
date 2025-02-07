@@ -20,6 +20,13 @@ typedef struct three_addr_code_stmt three_addr_code_stmt;
 typedef struct three_addr_var three_addr_var;
 
 /**
+ * What kind of three address code statement do we have?
+ */
+typedef enum{
+	THREE_ADDR_CODE_BIN_OP_STMT,
+} three_addr_code_stmt_class;
+
+/**
  * A three address var may be a temp variable or it may be
  * linked to a non-temp variable. It keeps a generation counter
  * for eventual SSA and type information
@@ -42,6 +49,7 @@ struct three_addr_code_stmt{
 	three_addr_var* op1;
 	three_addr_var* op2;
 	three_addr_var* assignee;
+	three_addr_code_stmt_class CLASS;
 	//The actual operator, stored as a token for size requirements
 	Token op;
 	//TODO may add more
@@ -75,7 +83,8 @@ void print_three_addr_code_stmt(three_addr_code_stmt* stmt);
 void deallocate_three_addr_var(three_addr_var* var);
 
 /**
- * Destroy an entire 
+ * Destroy an entire three address code statement
 */
+void deallocate_three_addr_stmt(three_addr_code_stmt* stmt);
 
 #endif
