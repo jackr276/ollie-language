@@ -3,7 +3,6 @@
 */
 
 #include "cfg.h"
-#include <filesystem>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,98 +164,24 @@ static three_addr_var* emit_constant_code(basic_block_t* basic_block, generic_as
 
 
 /**
- * Emit the identifier machine code
+ * Emit the identifier machine code. This function is to be used in the instance where we want
+ * to move an identifier to some temporary location
  */
-static char* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t use_temp){
-	//If we don't want to use a temp variable
-	if(use_temp == 0){
-		return ((identifier_ast_node_t*)(ident_node->node))->identifier;
-	}
+static three_addr_var* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node){
+	//Let's first create the assignment statement	
+	three_addr_code_stmt* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
 
-	//The overall printout
-	char statement[1000];
-
-	
-	//We will store the ident in a temporary variable
-	char* temp = calloc(50, sizeof(char));
-
-	//Give this a temp variable
-	sprintf(temp, "_t%d", increment_and_get_temp_id());
-
-	//Now we'll actually create the statement
-	sprintf(statement, "%s <- %s\n", temp, ((identifier_ast_node_t*)(ident_node->node))->identifier);	
-
-	//Add this into the block
-	strcat(basic_block->statements, statement);
-	
-	//Give the temp var back
-	return temp;
+	//Just give back the temp var here
+	return temp_assnment->assignee;
 }
 
 
 /**
  * Emit a function call node
- */
+ 
 static char* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
-	//For printing
-	char assn_stmt[1500];
-	//For our printing
-	char statement[1500];
-
-	//Grab a reference to the function node for convenience
-	symtab_function_record_t* func_record = ((function_call_ast_node_t*)(function_call_node->node))->func_record;
-
-	//Grab the function name out first
-	char* func_name = func_record->func_name;
-
-	//Add this into the statement
-	strcat(statement, func_name);
-	//Add in the opening paren
-	strcat(statement, "(");
-	
-	//We will store the result in a temporary variable
-	char* temp = calloc(50, sizeof(char));
-
-	//Give this a temp variable
-	sprintf(temp, "_t%d", increment_and_get_temp_id());
-
-	//We will need to walk our function call here param by param
-	generic_ast_node_t* cursor = function_call_node->first_child;
-
-	//Record the number of parameters that we've seen so far
-	u_int8_t num_params = 0;
-
-	//So long as this isn't null, we have more parameters to use
-	while(cursor != NULL){
-		//Whatever we have here, add emit it
-		char* temp = emit_binary_op_expr_code(basic_block, cursor);
-
-		//The temp now goes in as our function call
-		strcat(statement, temp);
-
-		//Print out where appropriate
-		if(num_params != func_record->number_of_params - 1){
-			strcat(statement, ", ");
-		}
-
-		num_params++;
-
-		//Advance the cursor
-		cursor = cursor->next_sibling;
-	}
-	
-	//Add in the closing statement
-	strcat(statement, ")");
-
-	//Add this into the block
-	sprintf(assn_stmt, "%s <- %s\n", temp, statement);
-
-	//Add this into the overall block
-	strcat(basic_block->statements, assn_stmt);
-
-	//Give back the temp item
-	return temp;
 }
+*/
 
 
 /**
@@ -265,7 +190,7 @@ static char* emit_function_call_code(basic_block_t* basic_block, generic_ast_nod
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t use_temp){
+static three_addr_var* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
@@ -283,7 +208,7 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
-		 return emit_ident_expr_code(basic_block, first_child, use_temp);
+		 return emit_ident_expr_code(basic_block, first_child);
 	//If it's a constant, emit this and leave
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
 		return emit_constant_code(basic_block, first_child);
@@ -291,17 +216,13 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
 		return emit_binary_op_expr_code(basic_block, first_child);
 	//Handle a function call
 	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
-		return emit_function_call_code(basic_block, first_child);
+		//TODO to fix
+		//return emit_function_call_code(basic_block, first_child);
 	}
 
 	//FOR NOW
-	return " ";
+	return NULL;
 }
-
-
-
-
-
 
 
 /**
@@ -321,7 +242,7 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Return the temporary character from here
-		return emit_unary_expr_code(basic_block, logical_or_expr, 1);
+		return emit_unary_expr_code(basic_block, logical_or_expr);
 	}
 
 	//Otherwise we actually have a binary operation of some kind
@@ -342,46 +263,34 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
 
 	//If this binary operator is >= or <=, some extra work will be needed
 	if(binary_operator == G_THAN_OR_EQ || binary_operator == L_THAN_OR_EQ){
-		//For our construction
-		char expr1[1000];
-		char expr2[1000];
-		char expr3[1000];
+		//We'll need to create two expressions here. One of them will
+		//be for the relational operator, and the other will be for the equality operator
+		Token first_op;
+		Token second_op = D_EQUALS;
+		
+		//Decide what our first op will be
+		if(binary_operator == G_THAN_OR_EQ){
+			first_op = G_THAN;
+		} else {
+			first_op = L_THAN;
+		}
 
-		//We'll now have three operators
-		char* op1 = binary_operator == G_THAN_OR_EQ ? ">" : "<";
-		//Second operator is ==
-		char* op2 = "==";
-		//The main connector is a logical or
-		char* connector = "||";
+		//Emit the first statement, this will be our > or < operator
+		three_addr_code_stmt* first_smt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, first_op, right_hand_temp);
+		//Emit the second statement, this will always be our == operator
+		three_addr_code_stmt* second_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, second_op, right_hand_temp);
+		//Add both of these staements in
+		add_statement(basic_block, first_smt);
+		add_statement(basic_block, second_stmt);
 
-		//We will store the ident in a temporary variable
-		char* temp1 = calloc(50, sizeof(char));
-		char* temp3 = calloc(50, sizeof(char));
-		char* temp2 = calloc(50, sizeof(char));
+		//Now we'll create the third and final statement
+		three_addr_code_stmt* connection = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), first_smt->assignee, DOUBLE_OR, second_stmt->assignee);
 
-		//Give this a temp variable
-		sprintf(temp1, "_t%d", increment_and_get_temp_id());
-		//Create the first expression
-		sprintf(expr1, "%s <- %s %s %s\n", temp1, left_hand_temp, op1, right_hand_temp);
-		//Add it in 
-		strcat(basic_block->statements, expr1);
-
-		//Give this a temp variable
-		sprintf(temp2, "_t%d", increment_and_get_temp_id());
-		//Create the second expression
-		sprintf(expr2, "%s <- %s %s %s\n", temp2, left_hand_temp, op2, right_hand_temp);
-		//Add it in 
-		strcat(basic_block->statements, expr2);
-
-		//Give this a temp variable
-		sprintf(temp3, "_t%d", increment_and_get_temp_id());
-		//Create the final expression
-		sprintf(expr3, "%s <- %s %s %s\n", temp3, temp1, connector, temp2);
-		//Add it in 
-		strcat(basic_block->statements, expr3);
-
-		//Final variable is expr3
-		return temp3;
+		//This statement will also be added in
+		add_statement(basic_block, connection);
+		
+		//Finally we give back the final one and we are done
+		return connection->assignee;
 
 	//We have a regular case here
 	} else {
