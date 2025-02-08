@@ -72,8 +72,12 @@ struct cfg_statement_holder_t{
  * by the "leader" and "exit" references for quick access
 */
 struct basic_block_t{
-	//The block ID: Using local value numbering. These act as assembly labels
-	char block_id[100];
+	//An integer ID
+	int32_t block_id;
+	//Is this a function entry block?
+	u_int8_t is_func_entry;
+	//The function record -- we need to store this for printing
+	symtab_function_record_t* func_record;
 	//Is this block ok to merge?
 	u_int8_t good_to_merge;
 	//Is it a return statement

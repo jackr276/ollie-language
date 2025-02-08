@@ -125,7 +125,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
 		}
 
 		//Once we have our op in string form, we can print the whole thing out
-		printf("%s <- %s %s %s", stmt->assignee->var_name, stmt->op1->var_name, op, stmt->op2->var_name);
+		printf("%s <- %s %s %s\n", stmt->assignee->var_name, stmt->op1->var_name, op, stmt->op2->var_name);
 	}
 	//TODO ADD MORE
 

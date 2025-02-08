@@ -77,8 +77,12 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * Print a block our for reading
 */
 static void pretty_print_block(basic_block_t* block){
-	//First print out the label of the block
-	printf("%s\n", block->block_id);
+	//Print the block's ID or the function name
+	if(block->is_func_entry == 1){
+		printf("%s:\n", block->func_record->func_name);
+	} else {
+		printf(".L%d:\n", block->block_id);
+	}
 
 	//Now grab a cursor and print out every statement that we 
 	//have
@@ -380,14 +384,8 @@ static basic_block_t* basic_block_alloc(){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
-	//Grab the unique ID for this block
-	//The block ID number
-	char block_id[100];
-	//Create the local-value numbered block ID
-	sprintf(block_id, ".L%d:", increment_and_get());
-	
-	//Copy the block ID in
-	strcpy(created->block_id, block_id);
+	//Put the block ID in
+	created->block_id = increment_and_get();
 
 	//Now allocate the linked list block for it too
 	cfg_node_holder_t* holder = calloc(1, sizeof(cfg_node_holder_t));
@@ -493,11 +491,10 @@ void dealloc_cfg(cfg_t* cfg){
  * Helper for returning error blocks. Error blocks always have an ID of -1
  */
 static basic_block_t* create_and_return_err(){
+	//Create the error
 	basic_block_t* err_block = basic_block_alloc();
-	char block_id[10];
-	sprintf(block_id, "%d:", -1);
-	//Copy the error in
-	strcpy(err_block->block_id, block_id);
+	//Set the ID to -1
+	err_block->block_id = -1;
 
 	return err_block;
 }
@@ -698,7 +695,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If the very first one is not blank
 	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
 		//Add it's child in as a statement to the entry block
-		add_statement(for_stmt_entry_block, ast_cursor->first_child);
+		emit_expr_code(for_stmt_entry_block, ast_cursor->first_child);
 	}
 
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
@@ -720,7 +717,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If the second one is not blank
 	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
 		//This is always the first part of the repeating block
-		add_statement(condition_block,  ast_cursor->first_child);
+		emit_expr_code(condition_block, ast_cursor->first_child);
 	
 	//It is impossible for the second one to be blank
 	} else {
@@ -772,7 +769,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		basic_block_t* repeating_block = basic_block_alloc();
 		//Add the third conditional to it
 		if(third_cond != NULL){
-			add_statement(repeating_block, third_cond);
+			emit_expr_code(repeating_block, third_cond);
 		}
 
 		//We'll make sure that the start points to this block
@@ -807,7 +804,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//Otherwise, we'll need to add the third condition into this block at the very end
 	if(third_cond != NULL){
-		add_statement(compound_stmt_end, third_cond);
+		emit_expr_code(compound_stmt_end, third_cond);
 	}
 
 	//The successor of the end block is the conditional block
@@ -878,7 +875,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	}
 
 	//Add this in to the ending block
-	add_statement(compound_stmt_end, ast_cursor->next_sibling);
+	emit_expr_code(compound_stmt_end, ast_cursor->next_sibling);
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -916,7 +913,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
 	//The entry block contains our expression statement
-	add_statement(while_statement_entry_block, ast_cursor);
+	emit_expr_code(while_statement_entry_block, ast_cursor);
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -1006,7 +1003,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	generic_ast_node_t* cursor = values->initial_node->first_child;
 
 	//Add it into the start block
-	add_statement(entry_block, cursor);
 	emit_expr_code(entry_block, cursor);
 
 	//No we'll move one step beyond, the next node must be a compound statement
@@ -1297,7 +1293,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//If it's a non-blank return
 			if(ast_cursor->first_child != NULL){
 				//Add it into current
-				add_statement(current_block, ast_cursor->first_child);
+				emit_expr_code(current_block, ast_cursor->first_child);
 			}
 
 			//The current block will now be marked as a return statement
@@ -1522,7 +1518,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//If we have for loops
 			if(values->for_loop_update_clause != NULL){
-				add_statement(current_block, values->for_loop_update_clause);
+				emit_expr_code(current_block, values->for_loop_update_clause);
 			}
 
 			//Further, anything after this is unreachable
@@ -1572,9 +1568,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block = starting_block;
 			}
 			
-			//No matter what, we add the expression in as a statement
-			add_statement(current_block, ast_cursor);
-
 			//Also emit the simplified machine code
 			emit_expr_code(current_block, ast_cursor);
 		}
@@ -1599,6 +1592,8 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	char info[1000];
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc();
+	//Mark that this is a starting block
+	function_starting_block->is_func_entry = 1;
 	//The ending block
 	basic_block_t* function_ending_block = basic_block_alloc();
 	//We very clearly mark this as an ending block
@@ -1606,39 +1601,8 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//Grab the function record
 	symtab_function_record_t* func_record = ((func_def_ast_node_t*)(function_node->node))->func_record;
-
-	//Grab the function name out
-	char* func_name = func_record->func_name;
-	char func_label[800];
-
-	//Print this in with the colon needed 
-	sprintf(func_label, "%s(", func_name);
-
-	//Now print out all of the parameters
-	for(u_int8_t i = 0; i < func_record->number_of_params; i++){
-		//Grab the parameter name -- we strip out all type info here
-		char* func_param_name = func_record->func_params[i].associate_var->var_name;
-		u_int16_t usage_counter = func_record->func_params[i].associate_var->current_generation;
-		
-		//Print this with it's usage number(should be zero) into the declaration
-		char var_name[105];
-		//Get the name written out
-		sprintf(var_name, "%s%d", func_param_name, usage_counter);
-		
-		//Store this in the overall label
-		strcat(func_label, var_name);
-
-		//If it isn't the last one, print a comma
-		if(i != func_record->number_of_params - 1){
-			strcat(func_label, ", ");
-		}
-	}
-
-	//Add in the closing paren and colon
-	strcat(func_label, "):");
-
-	//For the function's block, his ID will be the function name
-	strcpy(function_starting_block->block_id, func_label);
+	//Store this in the entry block
+	function_starting_block->func_record = func_record;
 
 	//We don't care about anything until we reach the compound statement
 	generic_ast_node_t* func_cursor = function_node->first_child;
@@ -1715,8 +1679,8 @@ static basic_block_t* visit_declaration_statement(values_package_t* values){
 	//Create the basic block
 	basic_block_t* decl_stmt_block = basic_block_alloc();
 
-	//Add it into the block
-	add_statement(decl_stmt_block, values->initial_node);
+	//Emit the expression code
+	emit_expr_code(decl_stmt_block, values->initial_node);
 
 	//Give the block back
 	return decl_stmt_block;
@@ -1731,9 +1695,6 @@ static basic_block_t* visit_let_statement(values_package_t* values){
 	basic_block_t* let_stmt_node = basic_block_alloc();
 
 	emit_expr_code(let_stmt_node, values->initial_node);
-
-	//Add it into the block
-	add_statement(let_stmt_node, values->initial_node);
 
 	//Give the block back
 	return let_stmt_node;
@@ -1861,7 +1822,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	cfg->root = visit_prog_node(results.root);
 
 	//If we get a -1 block ID, this means that the whole thing failed
-	if(strcmp(cfg->root->block_id, "-1") == 0){
+	if(cfg->root->block_id == -1){
 		print_parse_message(PARSE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
