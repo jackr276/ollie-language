@@ -63,11 +63,6 @@ three_addr_var* emit_var(symtab_variable_record_t* var){
 
 
 /**
- * Dynamically allocate and create a binary operation statement
- */
-
-
-/**
  * Pretty print a three address code statement
 */
 void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
@@ -138,6 +133,48 @@ void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
 
 
 /**
+ * Create and return a constant three address var
+ */
+three_addr_const* emit_constant(generic_ast_node_t* const_node){
+	//First we'll dynamically allocate the constant
+	three_addr_const* const_var = calloc(1, sizeof(three_addr_const));
+
+	//Grab a reference to the const node for convenience
+	constant_ast_node_t* const_node_raw = (constant_ast_node_t*)(const_node->node);
+
+	//Now we'll assign the appropriate values
+	const_var->const_type = const_node_raw->constant_type; 
+	const_var->type = const_node->inferred_type;
+
+	//Now based on what type we have we'll make assignments
+	switch(const_var->const_type){
+		case CHAR_CONST:
+			const_var->char_const = const_node_raw->char_val;
+			break;
+		case INT_CONST:
+			const_var->int_const = const_node_raw->int_val;
+			break;
+		case FLOAT_CONST:
+			const_var->float_const = const_node_raw->float_val;
+			break;
+		case STR_CONST:
+			strcpy(const_var->str_const, const_node_raw->string_val);
+			break;
+		case LONG_CONST:
+			const_var->long_const = const_node_raw->long_val;
+			break;
+		//Some very weird error here
+		default:
+			fprintf(stderr, "Unrecognizable constant type found in constant\n");
+			exit(0);
+	}
+	
+	//Once all that is done, we can leave
+	return const_var;
+}
+
+
+/**
  * Emit a binary operator three address code statement. Once we're here, we expect that the caller has created and 
  * supplied the appropriate variables
  */
@@ -153,6 +190,24 @@ three_addr_code_stmt* emit_bin_op_three_addr_code(three_addr_var* assignee, thre
 	stmt->op2 = op2;
 
 	//Give back the newly allocated statement
+	return stmt;
+}
+
+
+/**
+ * Emit an assignment three address code statement. Once we're here, we expect that the caller has created and supplied the
+ * appropriate variables
+ */
+three_addr_code_stmt* emit_assn_stmt_three_addr_code(three_addr_var* assignee, three_addr_var* op1){
+	//First allocate it
+	three_addr_code_stmt* stmt = calloc(1, sizeof(three_addr_code_stmt));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	
+	//And that's it, we'll just leave our now
 	return stmt;
 }
 

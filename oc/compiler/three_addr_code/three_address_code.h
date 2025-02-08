@@ -12,6 +12,7 @@
 //For symtab linking
 #include "../symtab/symtab.h"
 #include "../lexer/lexer.h"
+#include "../ast/ast.h"
 #include <sys/types.h>
 
 //A struct that holds all knowledge of three address codes
@@ -27,6 +28,8 @@ typedef struct three_addr_const three_addr_const;
  */
 typedef enum{
 	THREE_ADDR_CODE_BIN_OP_STMT,
+	//Regular two address assignment
+	THREE_ADDR_CODE_ASSN_STMT,
 } three_addr_code_stmt_class;
 
 /**
@@ -53,8 +56,16 @@ struct three_addr_var{
  * A three address constant always holds the value of the constant
  */
 struct three_addr_const{
-	//TODO const struct
-
+	//We hold the type info
+	generic_type_t* type;
+	//What kind of constant is it
+	Token const_type;
+	//And we hold everything relevant about the constant
+	long long_const;
+	char str_const[500];
+	char char_const;
+	float float_const;
+	int int_const;
 };
 
 
@@ -85,13 +96,18 @@ three_addr_var* emit_var(symtab_variable_record_t* var);
 /**
  * Create and return a constant three address var
  */
-three_addr_var* emit_constant(symtab_variable_record_t* constant);
+three_addr_const* emit_constant(generic_ast_node_t* const_node);
 
 /**
  * Emit a statement using three vars and a binary operator
  * ALL statements are of the form: assignee <- op1 operator op2
 */
 three_addr_code_stmt* emit_bin_op_three_addr_code(three_addr_var* assignee, three_addr_var* op1, Token op, three_addr_var* op2); 
+
+/**
+ * Emit a statement that only uses two vars of the form var1 <- var2
+ */
+three_addr_code_stmt* emit_assn_stmt_three_addr_code(three_addr_var* assignee, three_addr_var* op1);
 
 /**
  * Pretty print a three address code statement
