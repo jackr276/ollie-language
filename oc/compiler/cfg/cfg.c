@@ -3,6 +3,7 @@
 */
 
 #include "cfg.h"
+#include <filesystem>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -97,6 +98,31 @@ static void pretty_print_block(basic_block_t* block){
 }
 
 
+/**
+ * Add a statement to the target block, following all standard linked-list protocol
+ */
+static void add_statement(basic_block_t* target, three_addr_code_stmt* statement_node){
+	//Generic fail case
+	if(target == NULL){
+		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
+		exit(1);
+	}
+
+	//Special case--we're adding the head
+	if(target->leader_statement == NULL || target->exit_statement == NULL){
+		//Assign this to be the head and the tail
+		target->leader_statement = statement_node;
+		target->exit_statement = statement_node;
+		return;
+	}
+
+	//Otherwise, we are not dealing with the head. We'll simply tack this on to the tail
+	target->exit_statement->next_statement = statement_node;
+	//Update the tail reference
+	target->exit_statement = statement_node;
+}
+
+
 
 /**
  * if(x0 == 0){
@@ -123,52 +149,18 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 }
 
 
-
 /**
- * Emit the abstract machine code for a constant. This returns that constant
- * that it created
+ * Emit the abstract machine code for a constant to variable assignment. 
  */
-static char* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
-	//For printing
-	char const_info[500];
-	//For the overall printout
-	char statement[1000];
-
-	//The temp variable
-	char* temp = calloc(50, sizeof(char));
-
-	//Give this a temp variable
-	sprintf(temp, "_t%d", increment_and_get_temp_id());
-
-	//There are several different kinds of constant, but we don't care. We'll just
-	//add whatever the constant value is in for now
-	//Grab this for convenience
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
-	//We'll print out whatever kind we have here
-	if(const_node->constant_type == LONG_CONST){
-		sprintf(const_info, "0x%0lx", const_node->long_val);
-	} else if (const_node->constant_type == INT_CONST){
-		sprintf(const_info, "0x%x", const_node->int_val);
-	} else if (const_node->constant_type == CHAR_CONST){
-		sprintf(const_info, "0x%0x", const_node->char_val);
-	} else if(const_node->constant_type == FLOAT_CONST){
-		sprintf(const_info, "%f", const_node->float_val);
-	} else {
-		print_cfg_message(PARSE_ERROR, "Strings not currently supported", constant_node->line_number);
-		exit(0);
-	}
+static three_addr_var* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+	//We'll use the constant var feature here
+	three_addr_code_stmt* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
 	
-	/**
-	 * We always at this stage assign this constant's value to a temp variable
-	 */
-	sprintf(statement, "%s <- %s\n", temp, const_info);
+	//Add this into the basic block
+	add_statement(basic_block, const_var);
 
-	//Add this into the block
-	strcat(basic_block->statements, statement);
-
-	//Give back the temp variable that we just made
-	return temp;
+	//Now give back the assignee variable
+	return const_var->assignee;
 }
 
 
@@ -321,7 +313,7 @@ static char* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t
  * For each binary expression, we compute
  *
  */
-static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
+static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
 	//The actual statement
 	char statement[1000];
 
@@ -337,14 +329,13 @@ static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_no
 	generic_ast_node_t* cursor = logical_or_expr->first_child;
 	
 	//Emit the binary expression on the left first
-	char* left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
+	three_addr_var* left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
 	//Advance up here
 	cursor = cursor->next_sibling;
 
 	//Then grab the right hand temp
-	char* right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
-
+	three_addr_var* right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
 	//Let's see what binary operator that we have
 	Token binary_operator = ((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator;
@@ -392,24 +383,13 @@ static char* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_no
 		//Final variable is expr3
 		return temp3;
 
+	//We have a regular case here
 	} else {
-		//Then grab the operator
-		char* operator = emit_binary_operator(binary_operator);
-
-		//We will store the ident in a temporary variable
-		char* temp = calloc(50, sizeof(char));
-
-		//Give this a temp variable
-		sprintf(temp, "_t%d", increment_and_get_temp_id());
-
-		//Print the actual block out
-		sprintf(statement, "%s <- %s %s %s\n", temp, left_hand_temp, operator, right_hand_temp);
-
-		//Store this in the block
-		strcat(basic_block->statements, statement);
-
-		//Return the temp variable
-		return temp;
+		//Emit the binary operator expression using our helper
+		three_addr_code_stmt* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, binary_operator, right_hand_temp);
+	
+		//Return the temp variable that we assigned to
+		return bin_op_stmt->assignee;
 	}
 }
 
@@ -427,6 +407,7 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
 		//What kind of declarative statement do we have here?
+		//TODO
 
 
 	//Convert our let statement into abstract machine code 
@@ -434,17 +415,17 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 		//Let's grab the associated variable record here
 		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
 
-		//The var ident
-		char assnment[1000];
+		//Create the variable associated with this
+	 	three_addr_var* left_hand_var = emit_var(var);
 
-		//Now emit the binary operation expression code
-		char* temp = emit_binary_op_expr_code(basic_block, expr_node->first_child);
+		//Now emit whatever binary expression code that we have
+		three_addr_var* right_hand_var = emit_binary_op_expr_code(basic_block, expr_node->first_child);
 
-		//Add this overall assignment satetment in
-		sprintf(assnment, "%s <- %s\n", var->var_name, temp);
+		//The actual statement is the assignment of right to left
+		three_addr_code_stmt* assn_stmt = emit_assn_stmt_three_addr_code(left_hand_var, right_hand_var);
 
-		//Add this into the record
-		strcat(basic_block->statements, assnment);
+		//Finally we'll add this into the overall block
+		add_statement(basic_block, assn_stmt);
 	
 	//An assignment statement
 	} else if(expr_node->CLASS == AST_NODE_CLASS_ASNMNT_EXPR) {
@@ -459,21 +440,11 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 			print_parse_message(PARSE_ERROR, "Expected unary expression as first child to assignment expression", cursor->line_number);
 			exit(0);
 		}
-	
-		//Emit the special left hand unary expression code DO NOT USE A TEMP
-		char* lhs = emit_unary_expr_code(basic_block, cursor, 0);
 
-		//Now we emit the binary op code on the right side
-		char* rhs = emit_binary_op_expr_code(basic_block, cursor->next_sibling);
+		//TODO	
 
-		//Assign these two to eachother
-		char assnment[1000];
 
-		//These two are assigned to eachother
-		sprintf(assnment, "%s <- %s\n", lhs, rhs);
 
-		strcat(basic_block->statements, assnment);
-		
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
 		emit_binary_op_expr_code(basic_block, expr_node);
@@ -499,9 +470,6 @@ static int32_t increment_and_get(){
 static basic_block_t* basic_block_alloc(){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Allocate the statements array
-	created->statements = calloc(INITIAL_STATEMENT_SIZE, sizeof(char));
 
 	//Grab the unique ID for this block
 	//The block ID number
@@ -665,31 +633,6 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
 
 
 /**
- * Add a statement to the target block, following all standard linked-list protocol
- */
-static void add_statement(basic_block_t* target, three_addr_code_stmt* statement_node){
-	//Generic fail case
-	if(target == NULL){
-		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
-		exit(1);
-	}
-
-	//Special case--we're adding the head
-	if(target->leader_statement == NULL || target->exit_statement == NULL){
-		//Assign this to be the head and the tail
-		target->leader_statement = statement_node;
-		target->exit_statement = statement_node;
-		return;
-	}
-
-	//Otherwise, we are not dealing with the head. We'll simply tack this on to the tail
-	target->exit_statement->next_statement = statement_node;
-	//Update the tail reference
-	target->exit_statement = statement_node;
-}
-
-
-/**
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
  *
  * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
@@ -705,9 +648,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	if(b == NULL){
 		return a;
 	}
-
-	//Block b's stuff will be concatenated onto a's
-	strcat(a->statements, b->statements);
 
 	//What if a was never even assigned?
 	if(a->exit_statement == NULL){
