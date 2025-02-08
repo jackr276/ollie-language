@@ -126,9 +126,31 @@ void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
 
 		//Once we have our op in string form, we can print the whole thing out
 		printf("%s <- %s %s %s\n", stmt->assignee->var_name, stmt->op1->var_name, op, stmt->op2->var_name);
-	}
-	//TODO ADD MORE
+	
+	//If we have a regular const assignment
+	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+		//We'll print out the left and right ones here
+		printf("%s <- %s\n", stmt->assignee->var_name, stmt->op1->var_name);
+	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//First print out the assignee
+		printf("%s <- ", stmt->assignee->var_name);
 
+		//Grab our const for convenience
+		three_addr_const* constant = stmt->op1_const;
+
+		//We'll now interpret what we have here
+		if(constant->const_type == INT_CONST){
+			printf("0x%x\n", constant->int_const);
+		} else if(constant->const_type == LONG_CONST){
+			printf("0x%lx\n", constant->long_const);
+		} else if(constant->const_type == FLOAT_CONST){
+			printf("%f\n", constant->float_const);
+		} else if(constant->const_type == CHAR_CONST){
+			printf("'%c'\n", constant->char_const);
+		} else {
+			printf("\"%s\"\n", constant->str_const);
+		}
+	}
 }
 
 

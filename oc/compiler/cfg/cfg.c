@@ -171,12 +171,20 @@ static three_addr_var* emit_constant_code(basic_block_t* basic_block, generic_as
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
-static three_addr_var* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node){
-	//Let's first create the assignment statement	
-	three_addr_code_stmt* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
+static three_addr_var* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t use_temp){
+	//Just give back the name
+	if(use_temp == 0){
+		return emit_var(ident_node->variable);
+	} else {
+		//Let's first create the assignment statement	
+		three_addr_code_stmt* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
 
-	//Just give back the temp var here
-	return temp_assnment->assignee;
+		//Add the statement in
+		add_statement(basic_block, temp_assnment);
+
+		//Just give back the temp var here
+		return temp_assnment->assignee;
+	}
 }
 
 
@@ -194,7 +202,7 @@ static char* emit_function_call_code(basic_block_t* basic_block, generic_ast_nod
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static three_addr_var* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent){
+static three_addr_var* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t use_temp){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
@@ -212,7 +220,7 @@ static three_addr_var* emit_unary_expr_code(basic_block_t* basic_block, generic_
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
-		 return emit_ident_expr_code(basic_block, first_child);
+		 return emit_ident_expr_code(basic_block, first_child, use_temp);
 	//If it's a constant, emit this and leave
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
 		return emit_constant_code(basic_block, first_child);
@@ -246,7 +254,7 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Return the temporary character from here
-		return emit_unary_expr_code(basic_block, logical_or_expr);
+		return emit_unary_expr_code(basic_block, logical_or_expr, 1);
 	}
 
 	//Otherwise we actually have a binary operation of some kind
@@ -300,6 +308,9 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
 	} else {
 		//Emit the binary operator expression using our helper
 		three_addr_code_stmt* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, binary_operator, right_hand_temp);
+
+		//Add this statement to the block
+		add_statement(basic_block, bin_op_stmt);
 	
 		//Return the temp variable that we assigned to
 		return bin_op_stmt->assignee;
@@ -354,9 +365,20 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 			exit(0);
 		}
 
-		//TODO	
+		//Emit the left hand unary expression
+		three_addr_var* left_hand_var = emit_unary_expr_code(basic_block, cursor, 0);
 
+		//Advance the cursor up
+		cursor = cursor->next_sibling;
 
+		//Now emit the right hand expression
+		three_addr_var* right_hand_var = emit_binary_op_expr_code(basic_block, cursor);
+
+		//Finally we'll construct the whole thing
+		three_addr_code_stmt* stmt = emit_assn_stmt_three_addr_code(left_hand_var, right_hand_var);
+		
+		//Now add this statement in here
+		add_statement(basic_block, stmt);
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
