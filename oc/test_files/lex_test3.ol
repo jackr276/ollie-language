@@ -5,7 +5,7 @@
 alias char** as str_arr;
 alias char* as str;
 
-func:static main(u32 arg_count, str_arr arg_vector) -> i32{
+fn:static main(u32 arg_count, str_arr arg_vector) -> i32{
 	declare str my_str;
 	declare u32 c;
 

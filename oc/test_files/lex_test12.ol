@@ -13,11 +13,11 @@ define enum type_enum{
 	TYPE_CHAR
 } as my_enum_type;
 
-func my_func(char** argv) -> void{
+fn my_func(char** argv) -> void{
 	let char* a := argv;
 }
 
-func:static main(char** argv, i8 argc) -> i32{
+fn:static main(char** argv, i8 argc) -> i32{
 	let my_enum_type a := TYPE_NORMAL;
 	let u32 a := 32;
 	let u8 b := 9 * 7 + 3 * a;

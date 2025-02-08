@@ -1,5 +1,15 @@
 
-func:static main(char** argv) -> i32{
+
+
+fn my_fn() -> void{
+	let u32 i := 32;
+
+}
+
+
+
+
+fn:static main(char** argv) -> i32{
 	declare u32 a;
 	declare u32 b;
 	declare u32 c;

@@ -3,7 +3,7 @@
 * Has an unmatched paren
 */
 
-func main() -> i32 {
+fn main() -> i32 {
 	let u16 i := 0;
 	let u16 j := 0;
 	

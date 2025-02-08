@@ -2,12 +2,12 @@
 * This one should not work
 */
 
-func:static example(i32* my_arr, u8 max) -> void{
+fn:static example(i32* my_arr, u8 max) -> void{
 	asn *(my_arr) := 2+3 + 6-1;
 	ret;
 }
 
-func main(i32 argc, char** argv) -> i32 {
+fn main(i32 argc, char** argv) -> i32 {
 	declare i32[500] my_arr;
 	asn my_arr[0] := 3;
 

@@ -9,7 +9,7 @@ define construct con{
 	char*[32] b;
 };
 
-func main(i32 argc, char** argv) -> i32
+fn main(i32 argc, char** argv) -> i32
 {
 	if(argv) then {
 		let str i := "hi";

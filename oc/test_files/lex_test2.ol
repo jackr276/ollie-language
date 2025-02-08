@@ -1,4 +1,4 @@
-func:static main() -> i32 {
+fn:static main() -> i32 {
 	let u32 i := 0;
 	//Useless, just testing
 	defer i++;

@@ -1,4 +1,4 @@
-func test_func() -> i32 {
+fn test_func() -> i32 {
 	let u32 i := 232;
 	let u32 j := 32;
 
@@ -54,7 +54,7 @@ func test_func() -> i32 {
 
 
 
-func main(u32 argc, char** argv)->i32{
+fn main(u32 argc, char** argv)->i32{
 	let u32 i := 0;
 	let u32 a := 0;
 	let u32 v := 0;

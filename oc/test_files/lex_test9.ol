@@ -1,10 +1,4 @@
-
-
-
-
-
-
-func main(u32 argc, char** argv) -> i32{
+fn main(u32 argc, char** argv) -> i32{
 	while(argc < 5) do {
 		declare u32 i;
 		asn i := 3;

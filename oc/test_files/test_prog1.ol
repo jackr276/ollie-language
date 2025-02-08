@@ -6,7 +6,7 @@ define construct my_struct {
 } as my_struct;
 
 
-func my_func(u32 args, f32 my_float) -> u32{
+fn my_func(u32 args, f32 my_float) -> u32{
 	if(args == 2) then{
 		ret 3;
 	} else {
@@ -35,12 +35,12 @@ func my_func(u32 args, f32 my_float) -> u32{
 }
 
 
-func test_func(u32 i) -> void{
+fn test_func(u32 i) -> void{
 	asn i := 32;
 }
 
 
-func main(i32 argc, char** argv) -> i32{
+fn main(i32 argc, char** argv) -> i32{
 	//Allocate a struct
 	declare my_struct my_structure;
 

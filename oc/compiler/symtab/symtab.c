@@ -565,9 +565,9 @@ void print_type_record(symtab_type_record_t* record){
 void print_function_name(symtab_function_record_t* record){
 	//If it's static we'll add the keyword in
 	if(record->storage_class == STORAGE_CLASS_STATIC){
-		printf("\t---> %d | func:static %s(", record->line_number, record->func_name);
+		printf("\t---> %d | fn:static %s(", record->line_number, record->func_name);
 	} else {
-		printf("\t---> %d | func %s(", record->line_number, record->func_name);
+		printf("\t---> %d | fn %s(", record->line_number, record->func_name);
 	}
 
 	//Print out the params
