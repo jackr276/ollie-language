@@ -30,6 +30,8 @@ typedef enum{
 	THREE_ADDR_CODE_BIN_OP_STMT,
 	//Regular two address assignment
 	THREE_ADDR_CODE_ASSN_STMT,
+	//Assigning a constant to a variable
+	THREE_ADDR_CODE_ASSN_CONST_STMT,
 } three_addr_code_stmt_class;
 
 /**
@@ -74,6 +76,8 @@ struct three_addr_code_stmt{
 	three_addr_code_stmt* next_statement;
 	//A three address code always has 2 operands and an assignee
 	three_addr_var* op1;
+	//For convenience: op1 can also be a const sometimes
+	three_addr_const* op1_const;
 	three_addr_var* op2;
 	three_addr_var* assignee;
 	three_addr_code_stmt_class CLASS;
@@ -108,6 +112,11 @@ three_addr_code_stmt* emit_bin_op_three_addr_code(three_addr_var* assignee, thre
  * Emit a statement that only uses two vars of the form var1 <- var2
  */
 three_addr_code_stmt* emit_assn_stmt_three_addr_code(three_addr_var* assignee, three_addr_var* op1);
+
+/**
+ * Emit a statement that is assigning a const to a var i.e. var1 <- const
+ */
+three_addr_code_stmt* emit_assn_const_stmt_three_addr_code(three_addr_var* assignee, three_addr_const* constant);
 
 /**
  * Pretty print a three address code statement

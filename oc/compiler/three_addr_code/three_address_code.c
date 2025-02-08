@@ -213,12 +213,38 @@ three_addr_code_stmt* emit_assn_stmt_three_addr_code(three_addr_var* assignee, t
 
 
 /**
+ * Emit an assignment "three" address code statement
+ */
+three_addr_code_stmt* emit_assn_const_stmt_three_addr_code(three_addr_var* assignee, three_addr_const* constant){
+	//First allocate it
+	three_addr_code_stmt* stmt = calloc(1, sizeof(three_addr_code_stmt));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+	stmt->assignee = assignee;
+	stmt->op1_const = constant;
+
+	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+/**
  * Deallocate the variable portion of a three address code
 */
 void deallocate_three_addr_var(three_addr_var* var){
 	//Null check as appropriate
 	if(var != NULL){
 		free(var);
+	}
+}
+
+/**
+ * Dellocate the constant portion of a three address code
+ */
+void deallocate_three_addr_const(three_addr_const* constant){
+	//Null check as appropriate
+	if(constant != NULL){
+		free(constant);
 	}
 }
 
@@ -235,6 +261,7 @@ void deallocate_three_addr_stmt(three_addr_code_stmt* stmt){
 	//Otherwise we'll deallocate all variables here
 	deallocate_three_addr_var(stmt->assignee);
 	deallocate_three_addr_var(stmt->op1);
+	deallocate_three_addr_const(stmt->op1_const);
 	deallocate_three_addr_var(stmt->op2);
 
 	//Finally free the overall structure
