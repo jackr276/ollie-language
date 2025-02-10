@@ -174,6 +174,30 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 
 
 /**
+ * Emit the abstract machine code for a defer statement. There is nothing
+ * inherently special about a defer statement, so this rule behaves like any other
+ *
+ * Defer statements take place AFTER any return computation has happened but BEFORE
+ * the actual ret stmt
+ */
+static void emit_defer_stmt(basic_block_t* basic_block, generic_ast_node_t* def_stmt){
+	//If this is null, then we have no effect
+	if(def_stmt->first_child == NULL){
+		//Throw a warning and leave
+		print_cfg_message(WARNING, "Defer statement has no effect", def_stmt->line_number);
+		(*num_warnings_ref)++;
+		return;
+	}
+
+	//Emit a binary op expression node -- whatever the defer statement wanted us to execute
+	three_addr_var* def_expr_var = emit_binary_op_expr_code(basic_block, def_stmt->first_child);
+
+	//TODO FIX ME
+
+}
+
+
+/**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
