@@ -200,6 +200,17 @@ static generic_ast_node_t* constant(FILE* fl){
 			constant_node->inferred_type = lookup_type(type_symtab, "i32")->type;
 			break;
 
+		case HEX_CONST:
+			((constant_ast_node_t*)(constant_node->node))->constant_type = HEX_CONST;
+			//Store the int value we were given
+			int32_t hex_val = strtol(lookahead.lexeme, NULL, 16);
+
+			((constant_ast_node_t*)(constant_node->node))->int_val = hex_val;
+
+			//By default, int constants are of type s_int32
+			constant_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+			break;
+
 		case LONG_CONST:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = LONG_CONST;
 			//Store the int value we were given
@@ -584,7 +595,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 	//We can also see a constant
 	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
-			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST){
+			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == HEX_CONST){
 		//Again put the token back
 		push_back_token(fl, lookahead);
 

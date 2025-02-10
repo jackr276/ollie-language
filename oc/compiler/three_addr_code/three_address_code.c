@@ -125,6 +125,12 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 			case NOT_EQUALS:
 				op = "!=";
 				break;
+			case G_THAN_OR_EQ:
+				op = ">=";
+				break;
+			case L_THAN_OR_EQ:
+				op = "<=";
+				break;
 			default:
 				printf("BAD OP");
 				exit(1);
@@ -145,7 +151,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		three_addr_const_t* constant = stmt->op1_const;
 
 		//We'll now interpret what we have here
-		if(constant->const_type == INT_CONST){
+		if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST){
 			printf("0x%x\n", constant->int_const);
 		} else if(constant->const_type == LONG_CONST){
 			printf("0x%lx\n", constant->long_const);
@@ -174,28 +180,34 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		//Use asm keyword here, getting close to machine code
 		switch(stmt->jump_type){
 			case JUMP_TYPE_JE:
-				printf("je ");
+				printf("je");
 				break;
 			case JUMP_TYPE_JNE:
-				printf("jne ");
+				printf("jne");
 				break;
 			case JUMP_TYPE_JG:
-				printf("jg ");
+				printf("jg");
 				break;
 			case JUMP_TYPE_JL:
-				printf("jl ");
+				printf("jl");
 				break;
 			case JUMP_TYPE_JNZ:
-				printf("jnz ");
+				printf("jnz");
 				break;
 			case JUMP_TYPE_JZ:
-				printf("jz ");
+				printf("jz");
 				break;
 			case JUMP_TYPE_JMP:
-				printf("jmp ");
+				printf("jmp");
+				break;
+			case JUMP_TYPE_JGE:
+				printf("jge");
+				break;
+			case JUMP_TYPE_JLE:
+				printf("jle");
 				break;
 			default:
-				printf("jmp ");
+				printf("jmp");
 				break;
 		}
 
@@ -235,6 +247,9 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 			break;
 		case LONG_CONST:
 			const_var->long_const = const_node_raw->long_val;
+			break;
+		case HEX_CONST:
+			const_var->int_const = const_node_raw->int_val;
 			break;
 		//Some very weird error here
 		default:

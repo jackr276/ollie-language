@@ -631,6 +631,11 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 				if(ch >= '0' && ch <= '9'){
 					*lexeme_cursor = ch;
 					lexeme_cursor++;
+				//If we see hex and we're in hex, it's also fine
+				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == 1) 
+						|| ((ch >= 'A' && ch <= 'F') && seen_hex == 1)){
+						*lexeme_cursor = ch;
+						lexeme_cursor++;
 				} else if(ch == 'x' || ch == 'X'){
 					//Have we seen the hex code?
 					//Fail case here
@@ -677,7 +682,12 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					current_state = IN_START;
 
 					//Populate and return
-					lex_item.tok = INT_CONST;
+					if(seen_hex == 1){
+						lex_item.tok = HEX_CONST;
+					} else {
+						lex_item.tok = INT_CONST;
+					}
+
 					strcpy(lex_item.lexeme, lexeme);
 					lex_item.line_num = line_num;
 					lex_item.char_count = token_char_count;

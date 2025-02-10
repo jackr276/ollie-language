@@ -20,6 +20,8 @@ u_int32_t* num_warnings_ref;
 heap_stack_t* deferred_stmts;
 //Keep a variable symtab of temporary variables
 variable_symtab_t* temp_vars;
+//The last used token
+Token last_seen_op = BLANK;
 //The CFG that we're working with
 cfg_t* cfg_ref;
 
@@ -47,6 +49,59 @@ static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
 //Return a three address code variable
 static three_addr_var_t* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
+
+
+//An enum for jump types
+typedef enum{
+	JUMP_CATEGORY_INVERSE,
+	JUMP_CATEGORY_NORMAL,
+} jump_category_t;
+
+
+/**
+ * Select the appropriate jump type to use. We can either use
+ * inverse jumps or direct jumps
+ */
+static jump_type_t select_appropriate_jump_stmt(Token operator, jump_category_t jump_type){
+	//Let's see what we have here
+	switch(operator){
+		case G_THAN:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JLE;
+			} else {
+				return JUMP_TYPE_JG;
+			}
+		case L_THAN:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JGE;
+			} else {
+				return JUMP_TYPE_JL;
+			}
+		case L_THAN_OR_EQ:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JG;
+			} else {
+				return JUMP_TYPE_JLE;
+			}
+		case G_THAN_OR_EQ:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JL;
+			} else {
+				return JUMP_TYPE_JGE;
+			}
+
+		//If we get here, it was some kind of
+		//non relational operator. In this case,
+		//we default to 0 = false non zero = true
+		default:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JZ;
+			} else {
+				return JUMP_TYPE_JNZ;
+			}
+	}
+
+}
 
 
 /**
@@ -334,49 +389,17 @@ static three_addr_var_t* emit_binary_op_expr_code(basic_block_t* basic_block, ge
 
 	//Let's see what binary operator that we have
 	Token binary_operator = ((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator;
+	//Store this for later use
+	last_seen_op = binary_operator;
 
-	//If this binary operator is >= or <=, some extra work will be needed
-	if(binary_operator == G_THAN_OR_EQ || binary_operator == L_THAN_OR_EQ){
-		//We'll need to create two expressions here. One of them will
-		//be for the relational operator, and the other will be for the equality operator
-		Token first_op;
-		Token second_op = D_EQUALS;
-		
-		//Decide what our first op will be
-		if(binary_operator == G_THAN_OR_EQ){
-			first_op = G_THAN;
-		} else {
-			first_op = L_THAN;
-		}
+	//Emit the binary operator expression using our helper
+	three_addr_code_stmt_t* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, binary_operator, right_hand_temp);
 
-		//Emit the first statement, this will be our > or < operator
-		three_addr_code_stmt_t* first_smt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, first_op, right_hand_temp);
-		//Emit the second statement, this will always be our == operator
-		three_addr_code_stmt_t* second_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, second_op, right_hand_temp);
-		//Add both of these staements in
-		add_statement(basic_block, first_smt);
-		add_statement(basic_block, second_stmt);
+	//Add this statement to the block
+	add_statement(basic_block, bin_op_stmt);
 
-		//Now we'll create the third and final statement
-		three_addr_code_stmt_t* connection = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), first_smt->assignee, DOUBLE_OR, second_stmt->assignee);
-
-		//This statement will also be added in
-		add_statement(basic_block, connection);
-		
-		//Finally we give back the final one and we are done
-		return connection->assignee;
-
-	//We have a regular case here
-	} else {
-		//Emit the binary operator expression using our helper
-		three_addr_code_stmt_t* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, binary_operator, right_hand_temp);
-
-		//Add this statement to the block
-		add_statement(basic_block, bin_op_stmt);
-	
-		//Return the temp variable that we assigned to
-		return bin_op_stmt->assignee;
-	}
+	//Return the temp variable that we assigned to
+	return bin_op_stmt->assignee;
 }
 
 
@@ -1117,12 +1140,16 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	u_int8_t breaks_through_main_path = 0;
 	//Mark if we break through else
 	u_int8_t breaks_through_second_path = 0;
+	//Freeze the conditional operator
+	Token conditional_operator = BLANK;
 
 	//Let's grab a cursor to walk the tree
 	generic_ast_node_t* cursor = values->initial_node->first_child;
 
 	//Add it into the start block
 	emit_expr_code(entry_block, cursor);
+	//Freeze this for later on
+	conditional_operator = last_seen_op;
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
@@ -1183,9 +1210,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//If this is the case, the end block is a direct successor
 		add_successor(entry_block, values->if_stmt_end_block);
 		/**
-		 * The "if" path is always our direct path, we only need to jump to the else
+		 * The "if" path is always our direct path, we only need to jump to the else, so we jump
+		 * in an inverse fashion
 		 */
-		emit_jmp_stmt(entry_block, values->if_stmt_end_block, JUMP_TYPE_JNE);
+		//Let's determine the appropriate jump statement
+		jump_type_t jump_type = select_appropriate_jump_stmt(conditional_operator, JUMP_CATEGORY_INVERSE);
+		emit_jmp_stmt(entry_block, values->if_stmt_end_block, jump_type);
 
 		//If it is the parent, then we want there to be an exit here. If it's not the parent, then
 		//we want the other area to handle it
@@ -1228,8 +1258,10 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Otherwise, we'll add this in as a successor
 		add_successor(entry_block, else_compound_stmt_entry);
+		//Let's determine the appropriate jump statement
+		jump_type_t jump_type = select_appropriate_jump_stmt(conditional_operator, JUMP_CATEGORY_INVERSE);
 		//Add in our "jump to else" clause
-		emit_jmp_stmt(entry_block, else_compound_stmt_entry, JUMP_TYPE_JNE);
+		emit_jmp_stmt(entry_block, else_compound_stmt_entry, jump_type);
 
 		//Add in a jump statement to get to here
 
@@ -1301,8 +1333,10 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Add this as a successor to the entrant
 		add_successor(entry_block, else_if_entry);
+		//Let's determine the appropriate jump statement
+		jump_type_t jump_type = select_appropriate_jump_stmt(conditional_operator, JUMP_CATEGORY_INVERSE);
 		//Emit our jump to else if here
-		emit_jmp_stmt(entry_block, else_if_entry, JUMP_TYPE_JNE);
+		emit_jmp_stmt(entry_block, else_if_entry, jump_type);
 	
 		//Once we visit this, we'll navigate to the end
 		basic_block_t* else_if_end = else_if_entry;

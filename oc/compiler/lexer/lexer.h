@@ -78,6 +78,7 @@ typedef enum {
 	FLOAT_CONST,
 	STR_CONST,
 	CHAR_CONST,
+	HEX_CONST,
 	L_PAREN,
 	R_PAREN,
 	L_CURLY,
