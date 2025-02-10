@@ -76,6 +76,8 @@ struct basic_block_t{
 	int32_t block_id;
 	//Is this a function entry block?
 	u_int8_t is_func_entry;
+	//Does this block ever contain an assignment?
+	u_int8_t contains_assignment;
 	//The function record -- we need to store this for printing
 	symtab_function_record_t* func_record;
 	//Is this block ok to merge?

@@ -115,9 +115,11 @@ struct three_addr_code_stmt_t{
 three_addr_var_t* emit_temp_var(generic_type_t* type);
 
 /**
- * Create and return a three address var from an existing variable
+ * Create and return a three address var from an existing variable. If 
+ * we are assigning to a variable, that will create a new generation of variable.
+ * As such, we will pass 1 in as a flag here
 */
-three_addr_var_t* emit_var(symtab_variable_record_t* var);
+three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment);
 
 /**
  * Create and return a constant three address var

@@ -232,10 +232,11 @@ static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_
 static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t use_temp){
 	//Just give back the name
 	if(use_temp == 0){
-		return emit_var(ident_node->variable);
+		//No new generation here
+		return emit_var(ident_node->variable, !use_temp);
 	} else {
 		//Let's first create the assignment statement	
-		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
+		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable, 0));
 
 		//Add the statement in
 		add_statement(basic_block, temp_assnment);
@@ -260,7 +261,7 @@ static char* emit_function_call_code(basic_block_t* basic_block, generic_ast_nod
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t use_temp){
+static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t lhs){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
@@ -275,10 +276,13 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 	if(first_child->CLASS == AST_NODE_CLASS_POSTFIX_EXPR){
 		
 		
+	//If we have some kind of unary operator here
+	} else if(first_child->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
+
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
-		 return emit_ident_expr_code(basic_block, first_child, use_temp);
+		 return emit_ident_expr_code(basic_block, first_child, lhs);
 	//If it's a constant, emit this and leave
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
 		return emit_constant_code(basic_block, first_child);
@@ -398,7 +402,7 @@ static three_addr_var_t* emit_expr_code(basic_block_t* basic_block, generic_ast_
 		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
 
 		//Create the variable associated with this
-	 	three_addr_var_t* left_hand_var = emit_var(var);
+	 	three_addr_var_t* left_hand_var = emit_var(var, 1);
 
 		//Now emit whatever binary expression code that we have
 		three_addr_var_t* right_hand_var = emit_binary_op_expr_code(basic_block, expr_node->first_child);

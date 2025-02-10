@@ -7,6 +7,7 @@
 #include "three_address_code.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
@@ -43,7 +44,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 /**
  * Dynamically allocate and create a non-temp var
 */
-three_addr_var_t* emit_var(symtab_variable_record_t* var){
+three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
@@ -53,9 +54,14 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	emitted_var->type = var->type;
 	//And store the symtab record
 	emitted_var->linked_var = var;
+	
+	//We'll increment the current generation
+	if(assignment == 1){
+		(var->current_generation)++;
+	}
 
 	//Finally we'll get the name printed
-	sprintf(emitted_var->var_name, "%s", var->var_name);
+	sprintf(emitted_var->var_name, "%s%d", var->var_name, var->current_generation);
 
 	//And we're all done
 	return emitted_var;
