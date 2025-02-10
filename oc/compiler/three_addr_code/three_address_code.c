@@ -185,6 +185,9 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 			case JUMP_TYPE_JZ:
 				printf("jz ");
 				break;
+			case JUMP_TYPE_JMP:
+				printf("jmp ");
+				break;
 			default:
 				printf("jmp ");
 				break;

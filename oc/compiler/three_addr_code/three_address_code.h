@@ -32,9 +32,9 @@ typedef enum{
 	JUMP_TYPE_JZ,
 	JUMP_TYPE_JL,
 	JUMP_TYPE_JG,
+	JUMP_TYPE_JMP,
 	//TODO may add more
 } jump_type_t;
-
 
 
 /**

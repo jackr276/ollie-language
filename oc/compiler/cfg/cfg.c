@@ -77,6 +77,11 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * Print a block our for reading
 */
 static void pretty_print_block(basic_block_t* block){
+	//If this is empty, don't print anything
+	if(block->leader_statement == NULL){
+		return;
+	}
+
 	//Print the block's ID or the function name
 	if(block->is_func_entry == 1){
 		printf("%s:\n", block->func_record->func_name);
@@ -518,7 +523,7 @@ static void emit_blocks_dfs(cfg_t* cfg){
 		}
 
 		//We'll now add in all of the childen
-		for(u_int8_t i = 0; i < block_cursor->num_successors; i++){
+		for(int8_t i = block_cursor->num_successors-1; i > -1; i--){
 			//If we haven't seen it yet, add it to the list
 			if(block_cursor->successors[i]->visited != 2){
 				push(stack, block_cursor->successors[i]);
@@ -1086,6 +1091,13 @@ static basic_block_t* visit_while_statement(values_package_t* values){
  * The sub-structure that this tree creates has only two options:
  * 	1.) Every node flows through a return, in which case nobody hits the exit block
  * 	2.) The main path flows through the end block, out of the structure
+ *
+ * 
+ * =========== JUMP INSTRUCTION SELECTION =========================
+ *
+ * This implementation will make use of a "jump-to-else" scheme. This means
+ * that the "if" part of the statement is always directly underneath the entry block. These else,
+ * if such a statement exists, needs to be jumped to to get to it
  */
 static basic_block_t* visit_if_statement(values_package_t* values){
 	//We always have an entry block here -- the end block is made for us
@@ -1159,16 +1171,19 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		if(returns_through_main_path == 0){
 			add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 		}
+
+		//The successor to the if-stmt end path is the if statement end block
+		emit_jmp_stmt(if_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
 	}
 
 	//This is the end if we have a lone "if"
 	if(cursor->next_sibling == NULL){
 		//If this is the case, the end block is a direct successor
 		add_successor(entry_block, values->if_stmt_end_block);
-		//Add in our jump instruction here
+		/**
+		 * The "if" path is always our direct path, we only need to jump to the else
+		 */
 		emit_jmp_stmt(entry_block, values->if_stmt_end_block, JUMP_TYPE_JNE);
-		//Add in the other one here
-		emit_jmp_stmt(entry_block, if_compound_stmt_entry, JUMP_TYPE_JE);
 
 		//If it is the parent, then we want there to be an exit here. If it's not the parent, then
 		//we want the other area to handle it
@@ -1211,6 +1226,10 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Otherwise, we'll add this in as a successor
 		add_successor(entry_block, else_compound_stmt_entry);
+		//Add in our "jump to else" clause
+		emit_jmp_stmt(entry_block, else_compound_stmt_entry, JUMP_TYPE_JNE);
+
+		//Add in a jump statement to get to here
 
 		//Now we'll find the end of this statement
 		basic_block_t* else_compound_stmt_end = else_compound_stmt_entry;
@@ -1231,6 +1250,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//If it isn't a return statement, then it's successor is the entry block
 		if(returns_through_second_path == 0){
 			add_successor(else_compound_stmt_end, values->if_stmt_end_block);
+			//Add in our jump to end here
+			emit_jmp_stmt(else_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
 		}
 
 		/**
@@ -1278,6 +1299,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Add this as a successor to the entrant
 		add_successor(entry_block, else_if_entry);
+		//Emit our jump to else if here
+		emit_jmp_stmt(entry_block, else_if_entry, JUMP_TYPE_JNE);
 	
 		//Once we visit this, we'll navigate to the end
 		basic_block_t* else_if_end = else_if_entry;
@@ -1828,10 +1851,6 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//If the start block is null, this becomes the start block
 			if(start_block == NULL){
 				start_block = function_block;
-			//We could have a case where the current block is entirely empty. If this happens,
-			//we'll merge the two blocks
-			} else if(current_block->leader_statement == NULL) {
-				current_block = merge_blocks(current_block, function_block);
 			//Otherwise, we'll add this as a successor to the current block
 			} else {
 				add_successor(current_block, function_block);

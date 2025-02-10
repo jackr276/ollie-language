@@ -1,10 +1,6 @@
 fn my_fn() -> void{
 	let u32 i := 32;
-
 }
-
-
-
 
 fn:static main(char** argv) -> i32{
 	declare u32 a;
@@ -19,7 +15,11 @@ fn:static main(char** argv) -> i32{
 
 	asn a := (a+b) & (b << 2) * (c+d);
 
-	if(a >= 3) then{
+	if(a >= 2) then{
+		asn a := a + 3;
+	} else if (a == 2) then{
+		asn a := a + 2;
+	} else {
 		asn a := a + 1;
 	}
 
