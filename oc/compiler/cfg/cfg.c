@@ -491,7 +491,7 @@ static basic_block_t* basic_block_alloc(){
  * Print out the whole program in order. This is done using an
  * iterative DFS
  */
-static void emit_blocks(cfg_t* cfg){
+static void emit_blocks_dfs(cfg_t* cfg){
 	//We'll need a stack for our DFS
 	heap_stack_t* stack = create_stack();
 
@@ -529,6 +529,15 @@ static void emit_blocks(cfg_t* cfg){
 
 
 /**
+ * Print out the whole program in BFS order
+ */
+static void emit_blocks_bfs(cfg_t* cfg){
+
+}
+
+
+
+/**
  * Deallocate a basic block
 */
 static void basic_block_dealloc(basic_block_t* block){
@@ -539,7 +548,17 @@ static void basic_block_dealloc(basic_block_t* block){
 	}
 
 	//Grab a statement cursor here
-	//TODO
+	three_addr_code_stmt_t* cursor = block->leader_statement;
+	//We'll need a temp block too
+	three_addr_code_stmt_t* temp = cursor;
+
+	//So long as the cursor is not NULL
+	while(cursor != NULL){
+		temp = cursor;
+		cursor = cursor->next_statement;
+		//Destroy temp
+		//deallocate_three_addr_stmt(temp);
+	}
 	
 
 	//Otherwise its fine so
@@ -1920,7 +1939,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	destroy_variable_symtab(temp_vars);
 
 	//FOR PRINTING
-	emit_blocks(cfg);
+	emit_blocks_dfs(cfg);
 	
 	//Give back the reference
 	return cfg;

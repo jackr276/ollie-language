@@ -14,13 +14,13 @@ fn main(i32 argc, char** argv) -> i32 {
 	let u32 argc := 14;
 	//let u32 example := 2;
 
-	while(argc >= 0) do {
+	while(argc > 0) do {
 		argc--;
 	}
 
 	do {
 		argc++;
-	} while(argc <= 15);
+	} while(argc < 15);
 	
 	@example(my_arr);
 
