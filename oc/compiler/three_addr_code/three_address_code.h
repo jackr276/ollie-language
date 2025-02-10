@@ -32,6 +32,8 @@ typedef enum{
 	THREE_ADDR_CODE_ASSN_STMT,
 	//Assigning a constant to a variable
 	THREE_ADDR_CODE_ASSN_CONST_STMT,
+	//A return statement
+	THREE_ADDR_CODE_RET_STMT,
 } three_addr_code_stmt_class;
 
 /**
@@ -117,6 +119,12 @@ three_addr_code_stmt* emit_assn_stmt_three_addr_code(three_addr_var* assignee, t
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
 three_addr_code_stmt* emit_assn_const_stmt_three_addr_code(three_addr_var* assignee, three_addr_const* constant);
+
+/**
+ * Emit a return statement. The return statement can optionally have a node that we're returning.
+ * Returnee may or may not be null
+ */
+three_addr_code_stmt* emit_ret_stmt_three_addr_code(three_addr_var* returnee);
 
 /**
  * Pretty print a three address code statement

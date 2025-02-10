@@ -153,6 +153,27 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 
 
 /**
+ * Emit the abstract machine code for a return statement
+ */
+static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_node){
+	//For holding our temporary return variable
+	three_addr_var* ret_expr_var = NULL;
+
+	//If the ret node's first child is not null, we'll let the expression rule
+	//handle it
+	if(ret_node->first_child != NULL){
+		ret_expr_var = emit_binary_op_expr_code(basic_block, ret_node->first_child);
+	}
+
+	//We'll use the ret stmt feature here
+	three_addr_code_stmt* ret_stmt = emit_ret_stmt_three_addr_code(ret_expr_var);
+
+	//Once it's been emitted, we'll add it in as a statement
+	add_statement(basic_block, ret_stmt);
+}
+
+
+/**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
@@ -323,7 +344,7 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node){
+static three_addr_var* emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
@@ -379,13 +400,19 @@ static void emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_
 		
 		//Now add this statement in here
 		add_statement(basic_block, stmt);
+		
+		//Return what we had
+		return stmt->assignee;
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
-		emit_binary_op_expr_code(basic_block, expr_node);
+		return emit_binary_op_expr_code(basic_block, expr_node);
 	} else {
+		return NULL;
 
 	}
+
+	return NULL;
 }
 
 
@@ -1311,12 +1338,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block = starting_block;
 			}
 
-			//Whatever the current block is, this is being added to it
-			//If it's a non-blank return
-			if(ast_cursor->first_child != NULL){
-				//Add it into current
-				emit_expr_code(current_block, ast_cursor->first_child);
-			}
+			//Emit the return statement, let the sub rule handle
+			emit_ret_stmt(current_block, ast_cursor);
 
 			//The current block will now be marked as a return statement
 			current_block->is_return_stmt = 1;

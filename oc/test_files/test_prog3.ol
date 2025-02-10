@@ -1,6 +1,3 @@
-
-
-
 fn my_fn() -> void{
 	let u32 i := 32;
 

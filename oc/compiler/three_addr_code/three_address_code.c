@@ -150,6 +150,18 @@ void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
 		} else {
 			printf("\"%s\"\n", constant->str_const);
 		}
+	//Print out a return statement
+	} else if(stmt->CLASS == THREE_ADDR_CODE_RET_STMT){
+		//Use asm keyword here, getting close to machine code
+		printf("ret");
+
+		//If it has a returned variable
+		if(stmt->op1 != NULL){
+			printf(" %s", stmt->op1->var_name);
+		}
+		
+		//No matter what, print a newline
+		printf("\n");
 	}
 }
 
@@ -193,6 +205,23 @@ three_addr_const* emit_constant(generic_ast_node_t* const_node){
 	
 	//Once all that is done, we can leave
 	return const_var;
+}
+
+
+/**
+ * Emit a return statement. The returnee variable may or may not be null
+ */
+three_addr_code_stmt* emit_ret_stmt_three_addr_code(three_addr_var* returnee){
+	//First allocate it
+	three_addr_code_stmt* stmt = calloc(1, sizeof(three_addr_code_stmt));
+
+	//Let's now populate it appropriately
+	stmt->CLASS = THREE_ADDR_CODE_RET_STMT;
+	//Set op1 to be the returnee
+	stmt->op1 = returnee;
+
+	//And that's all, so we'll hop out
+	return stmt;
 }
 
 
