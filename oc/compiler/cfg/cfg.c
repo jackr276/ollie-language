@@ -207,11 +207,6 @@ static void emit_defer_stmt(basic_block_t* basic_block, generic_ast_node_t* def_
 		return;
 	}
 
-	//Emit a binary op expression node -- whatever the defer statement wanted us to execute
-	three_addr_var_t* def_expr_var = emit_binary_op_expr_code(basic_block, def_stmt->first_child);
-
-	//TODO FIX ME
-
 }
 
 
@@ -806,9 +801,9 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//The condition block is always a successor to the entry block
 	add_successor(for_stmt_entry_block, condition_block);
-
 	//The condition block also has another direct successor, the exit block
 	add_successor(condition_block, for_stmt_exit_block);
+
 	//Ensure it is the direct successor
 	condition_block->direct_successor = for_stmt_exit_block;
 
@@ -819,7 +814,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
 		//This is always the first part of the repeating block
 		emit_expr_code(condition_block, ast_cursor->first_child);
-	
+
 	//It is impossible for the second one to be blank
 	} else {
 		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Should not have gotten here if blank", for_stmt_node->line_number);
@@ -884,6 +879,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//This will always be a successor to the conditional statement
 	add_successor(condition_block, compound_stmt_start);
+	//Make the condition block jump to the compound stmt start
+	emit_jmp_stmt(condition_block, compound_stmt_start, JUMP_TYPE_JNE);
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
@@ -910,6 +907,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//The successor of the end block is the conditional block
 	add_successor(compound_stmt_end, condition_block);
+	//Now add our jump in here, we jump back up to the condition block
+	emit_jmp_stmt(compound_stmt_end, condition_block, JUMP_TYPE_JMP);
 
 	//Give back the entry block
 	return for_stmt_entry_block;
@@ -1018,9 +1017,6 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	//The entry block contains our expression statement
 	emit_expr_code(while_statement_entry_block, ast_cursor);
 
-	//This while statement will jump to the end if it is bad
-	emit_jmp_stmt(while_statement_entry_block, while_statement_end_block, JUMP_TYPE_JNE);
-
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
 
@@ -1049,6 +1045,9 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		//We'll just return now
 		return while_statement_entry_block;
 	}
+
+	//This while statement will jump to the end if it is bad
+	emit_jmp_stmt(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JE);
 
 	//Otherwise it isn't null, so we can add it as a successor
 	add_successor(while_statement_entry_block, compound_stmt_start);
@@ -1790,6 +1789,14 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	while(is_empty(deferred_stmts) == 0){
 		//Add them in one by one
 		add_statement(function_ending_block, pop(deferred_stmts));
+	}
+
+	//If the function was a null return type, add an inherit ret at the end
+	if(strcmp(func_record->return_type->type_name, "void") == 0){
+		three_addr_code_stmt_t* ret_smt = emit_ret_stmt_three_addr_code(NULL);
+
+		//Add this into the function block
+		add_statement(function_ending_block, ret_smt);
 	}
 
 	perform_function_reachability_analysis(function_node, function_starting_block);

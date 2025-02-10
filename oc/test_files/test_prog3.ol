@@ -15,7 +15,7 @@ fn:static main(char** argv) -> i32{
 
 	asn a := (a+b) & (b << 2) * (c+d);
 
-/*
+
 	if(a >= 2) then{
 		asn a := a + 3;
 	} else if (a == 2) then{
@@ -23,10 +23,11 @@ fn:static main(char** argv) -> i32{
 	} else {
 		asn a := a + 1;
 	}
-*/
+
 
 	//do{
-	while(d >= 32) do{
+	//while(d >= 32) do{
+	for(let u32 i := 0; i < 323; i++) do{
 		declare u32 a;
 		declare u32 b;
 		declare u32 c;
