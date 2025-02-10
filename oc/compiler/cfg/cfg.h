@@ -104,8 +104,8 @@ struct basic_block_t{
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
-	three_addr_code_stmt* leader_statement;
-	three_addr_code_stmt* exit_statement;
+	three_addr_code_stmt_t* leader_statement;
+	three_addr_code_stmt_t* exit_statement;
 };
 
 //Build the entire CFG from the AST. This function returns the CFG struct, which

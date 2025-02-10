@@ -46,7 +46,7 @@ static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
 //Return a three address code variable
-static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
+static three_addr_var_t* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 
 
 /**
@@ -86,7 +86,7 @@ static void pretty_print_block(basic_block_t* block){
 
 	//Now grab a cursor and print out every statement that we 
 	//have
-	three_addr_code_stmt* cursor = block->leader_statement;
+	three_addr_code_stmt_t* cursor = block->leader_statement;
 
 	//So long as it isn't null
 	while(cursor != NULL){
@@ -104,7 +104,7 @@ static void pretty_print_block(basic_block_t* block){
 /**
  * Add a statement to the target block, following all standard linked-list protocol
  */
-static void add_statement(basic_block_t* target, three_addr_code_stmt* statement_node){
+static void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node){
 	//Generic fail case
 	if(target == NULL){
 		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
@@ -157,7 +157,7 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
  */
 static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_node){
 	//For holding our temporary return variable
-	three_addr_var* ret_expr_var = NULL;
+	three_addr_var_t* ret_expr_var = NULL;
 
 	//If the ret node's first child is not null, we'll let the expression rule
 	//handle it
@@ -166,7 +166,7 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 	}
 
 	//We'll use the ret stmt feature here
-	three_addr_code_stmt* ret_stmt = emit_ret_stmt_three_addr_code(ret_expr_var);
+	three_addr_code_stmt_t* ret_stmt = emit_ret_stmt_three_addr_code(ret_expr_var);
 
 	//Once it's been emitted, we'll add it in as a statement
 	add_statement(basic_block, ret_stmt);
@@ -190,7 +190,7 @@ static void emit_defer_stmt(basic_block_t* basic_block, generic_ast_node_t* def_
 	}
 
 	//Emit a binary op expression node -- whatever the defer statement wanted us to execute
-	three_addr_var* def_expr_var = emit_binary_op_expr_code(basic_block, def_stmt->first_child);
+	three_addr_var_t* def_expr_var = emit_binary_op_expr_code(basic_block, def_stmt->first_child);
 
 	//TODO FIX ME
 
@@ -200,9 +200,9 @@ static void emit_defer_stmt(basic_block_t* basic_block, generic_ast_node_t* def_
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
-static three_addr_var* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
+static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
 	//We'll use the constant var feature here
-	three_addr_code_stmt* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
+	three_addr_code_stmt_t* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
 	
 	//Add this into the basic block
 	add_statement(basic_block, const_var);
@@ -216,13 +216,13 @@ static three_addr_var* emit_constant_code(basic_block_t* basic_block, generic_as
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
-static three_addr_var* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t use_temp){
+static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t use_temp){
 	//Just give back the name
 	if(use_temp == 0){
 		return emit_var(ident_node->variable);
 	} else {
 		//Let's first create the assignment statement	
-		three_addr_code_stmt* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
+		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
 
 		//Add the statement in
 		add_statement(basic_block, temp_assnment);
@@ -247,7 +247,7 @@ static char* emit_function_call_code(basic_block_t* basic_block, generic_ast_nod
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static three_addr_var* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t use_temp){
+static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t use_temp){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
@@ -291,7 +291,7 @@ static three_addr_var* emit_unary_expr_code(basic_block_t* basic_block, generic_
  * For each binary expression, we compute
  *
  */
-static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
+static three_addr_var_t* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
 	//The actual statement
 	char statement[1000];
 
@@ -307,13 +307,13 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
 	generic_ast_node_t* cursor = logical_or_expr->first_child;
 	
 	//Emit the binary expression on the left first
-	three_addr_var* left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
+	three_addr_var_t* left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
 	//Advance up here
 	cursor = cursor->next_sibling;
 
 	//Then grab the right hand temp
-	three_addr_var* right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
+	three_addr_var_t* right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
 	//Let's see what binary operator that we have
 	Token binary_operator = ((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator;
@@ -333,15 +333,15 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
 		}
 
 		//Emit the first statement, this will be our > or < operator
-		three_addr_code_stmt* first_smt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, first_op, right_hand_temp);
+		three_addr_code_stmt_t* first_smt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, first_op, right_hand_temp);
 		//Emit the second statement, this will always be our == operator
-		three_addr_code_stmt* second_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, second_op, right_hand_temp);
+		three_addr_code_stmt_t* second_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, second_op, right_hand_temp);
 		//Add both of these staements in
 		add_statement(basic_block, first_smt);
 		add_statement(basic_block, second_stmt);
 
 		//Now we'll create the third and final statement
-		three_addr_code_stmt* connection = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), first_smt->assignee, DOUBLE_OR, second_stmt->assignee);
+		three_addr_code_stmt_t* connection = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), first_smt->assignee, DOUBLE_OR, second_stmt->assignee);
 
 		//This statement will also be added in
 		add_statement(basic_block, connection);
@@ -352,7 +352,7 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
 	//We have a regular case here
 	} else {
 		//Emit the binary operator expression using our helper
-		three_addr_code_stmt* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, binary_operator, right_hand_temp);
+		three_addr_code_stmt_t* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, binary_operator, right_hand_temp);
 
 		//Add this statement to the block
 		add_statement(basic_block, bin_op_stmt);
@@ -368,7 +368,7 @@ static three_addr_var* emit_binary_op_expr_code(basic_block_t* basic_block, gene
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static three_addr_var* emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node){
+static three_addr_var_t* emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
@@ -385,13 +385,13 @@ static three_addr_var* emit_expr_code(basic_block_t* basic_block, generic_ast_no
 		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
 
 		//Create the variable associated with this
-	 	three_addr_var* left_hand_var = emit_var(var);
+	 	three_addr_var_t* left_hand_var = emit_var(var);
 
 		//Now emit whatever binary expression code that we have
-		three_addr_var* right_hand_var = emit_binary_op_expr_code(basic_block, expr_node->first_child);
+		three_addr_var_t* right_hand_var = emit_binary_op_expr_code(basic_block, expr_node->first_child);
 
 		//The actual statement is the assignment of right to left
-		three_addr_code_stmt* assn_stmt = emit_assn_stmt_three_addr_code(left_hand_var, right_hand_var);
+		three_addr_code_stmt_t* assn_stmt = emit_assn_stmt_three_addr_code(left_hand_var, right_hand_var);
 
 		//Finally we'll add this into the overall block
 		add_statement(basic_block, assn_stmt);
@@ -411,16 +411,16 @@ static three_addr_var* emit_expr_code(basic_block_t* basic_block, generic_ast_no
 		}
 
 		//Emit the left hand unary expression
-		three_addr_var* left_hand_var = emit_unary_expr_code(basic_block, cursor, 0);
+		three_addr_var_t* left_hand_var = emit_unary_expr_code(basic_block, cursor, 0);
 
 		//Advance the cursor up
 		cursor = cursor->next_sibling;
 
 		//Now emit the right hand expression
-		three_addr_var* right_hand_var = emit_binary_op_expr_code(basic_block, cursor);
+		three_addr_var_t* right_hand_var = emit_binary_op_expr_code(basic_block, cursor);
 
 		//Finally we'll construct the whole thing
-		three_addr_code_stmt* stmt = emit_assn_stmt_three_addr_code(left_hand_var, right_hand_var);
+		three_addr_code_stmt_t* stmt = emit_assn_stmt_three_addr_code(left_hand_var, right_hand_var);
 		
 		//Now add this statement in here
 		add_statement(basic_block, stmt);

@@ -23,9 +23,9 @@ static int32_t increment_and_get_temp_id(){
 /**
  * Dynamically allocate and create a temp var
 */
-three_addr_var* emit_temp_var(generic_type_t* type){
+three_addr_var_t* emit_temp_var(generic_type_t* type){
 	//Let's first create the temporary variable
-	three_addr_var* var = calloc(1, sizeof(three_addr_var)); 
+	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
 
 	//Mark this as temporary
 	var->is_temporary = 1;
@@ -43,9 +43,9 @@ three_addr_var* emit_temp_var(generic_type_t* type){
 /**
  * Dynamically allocate and create a non-temp var
 */
-three_addr_var* emit_var(symtab_variable_record_t* var){
+three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//Let's first create the non-temp variable
-	three_addr_var* emitted_var = calloc(1, sizeof(three_addr_var));
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
 	//This is not temporary
 	emitted_var->is_temporary = 0;
@@ -65,7 +65,7 @@ three_addr_var* emit_var(symtab_variable_record_t* var){
 /**
  * Pretty print a three address code statement
 */
-void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
+void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//If it's a binary operator statement(most common), we'll
 	//print the whole thing
 	if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
@@ -136,7 +136,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
 		printf("%s <- ", stmt->assignee->var_name);
 
 		//Grab our const for convenience
-		three_addr_const* constant = stmt->op1_const;
+		three_addr_const_t* constant = stmt->op1_const;
 
 		//We'll now interpret what we have here
 		if(constant->const_type == INT_CONST){
@@ -169,9 +169,9 @@ void print_three_addr_code_stmt(three_addr_code_stmt* stmt){
 /**
  * Create and return a constant three address var
  */
-three_addr_const* emit_constant(generic_ast_node_t* const_node){
+three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	//First we'll dynamically allocate the constant
-	three_addr_const* const_var = calloc(1, sizeof(three_addr_const));
+	three_addr_const_t* const_var = calloc(1, sizeof(three_addr_const_t));
 
 	//Grab a reference to the const node for convenience
 	constant_ast_node_t* const_node_raw = (constant_ast_node_t*)(const_node->node);
@@ -211,9 +211,9 @@ three_addr_const* emit_constant(generic_ast_node_t* const_node){
 /**
  * Emit a return statement. The returnee variable may or may not be null
  */
-three_addr_code_stmt* emit_ret_stmt_three_addr_code(three_addr_var* returnee){
+three_addr_code_stmt_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee){
 	//First allocate it
-	three_addr_code_stmt* stmt = calloc(1, sizeof(three_addr_code_stmt));
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
 	//Let's now populate it appropriately
 	stmt->CLASS = THREE_ADDR_CODE_RET_STMT;
@@ -229,9 +229,9 @@ three_addr_code_stmt* emit_ret_stmt_three_addr_code(three_addr_var* returnee){
  * Emit a binary operator three address code statement. Once we're here, we expect that the caller has created and 
  * supplied the appropriate variables
  */
-three_addr_code_stmt* emit_bin_op_three_addr_code(three_addr_var* assignee, three_addr_var* op1, Token op, three_addr_var* op2){
+three_addr_code_stmt_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2){
 	//First allocate it
-	three_addr_code_stmt* stmt = calloc(1, sizeof(three_addr_code_stmt));
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
 	//Let's now populate it with the appropriate values
 	stmt->CLASS = THREE_ADDR_CODE_BIN_OP_STMT;
@@ -249,9 +249,9 @@ three_addr_code_stmt* emit_bin_op_three_addr_code(three_addr_var* assignee, thre
  * Emit an assignment three address code statement. Once we're here, we expect that the caller has created and supplied the
  * appropriate variables
  */
-three_addr_code_stmt* emit_assn_stmt_three_addr_code(three_addr_var* assignee, three_addr_var* op1){
+three_addr_code_stmt_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1){
 	//First allocate it
-	three_addr_code_stmt* stmt = calloc(1, sizeof(three_addr_code_stmt));
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_ASSN_STMT;
@@ -266,9 +266,9 @@ three_addr_code_stmt* emit_assn_stmt_three_addr_code(three_addr_var* assignee, t
 /**
  * Emit an assignment "three" address code statement
  */
-three_addr_code_stmt* emit_assn_const_stmt_three_addr_code(three_addr_var* assignee, three_addr_const* constant){
+three_addr_code_stmt_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_const_t* constant){
 	//First allocate it
-	three_addr_code_stmt* stmt = calloc(1, sizeof(three_addr_code_stmt));
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -279,10 +279,27 @@ three_addr_code_stmt* emit_assn_const_stmt_three_addr_code(three_addr_var* assig
 	return stmt;
 }
 
+
+/**
+ * Emit a jump statement where we jump to the block with the ID provided
+ */
+three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id){
+	//First allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
+	stmt->jumping_to_id = jumping_to_id;
+
+	//Give the statement back
+	return stmt;
+}
+
+
 /**
  * Deallocate the variable portion of a three address code
 */
-void deallocate_three_addr_var(three_addr_var* var){
+void deallocate_three_addr_var(three_addr_var_t* var){
 	//Null check as appropriate
 	if(var != NULL){
 		free(var);
@@ -292,7 +309,7 @@ void deallocate_three_addr_var(three_addr_var* var){
 /**
  * Dellocate the constant portion of a three address code
  */
-void deallocate_three_addr_const(three_addr_const* constant){
+void deallocate_three_addr_const(three_addr_const_t* constant){
 	//Null check as appropriate
 	if(constant != NULL){
 		free(constant);
@@ -303,7 +320,7 @@ void deallocate_three_addr_const(three_addr_const* constant){
 /**
  * Deallocate the entire three address code statement
 */
-void deallocate_three_addr_stmt(three_addr_code_stmt* stmt){
+void deallocate_three_addr_stmt(three_addr_code_stmt_t* stmt){
 	//If the statement is null we bail out
 	if(stmt == NULL){
 		return;
