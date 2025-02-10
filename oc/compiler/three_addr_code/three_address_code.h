@@ -28,6 +28,8 @@ typedef struct three_addr_const_t three_addr_const_t;
 typedef enum{
 	JUMP_TYPE_JNE,
 	JUMP_TYPE_JE,
+	JUMP_TYPE_JNZ,
+	JUMP_TYPE_JZ,
 	JUMP_TYPE_JL,
 	JUMP_TYPE_JG,
 	//TODO may add more
@@ -101,6 +103,8 @@ struct three_addr_code_stmt_t{
 	Token op;
 	//If we have a jump statement, where we're jumping to
 	int32_t jumping_to_id;
+	//If it's a jump statement, what's the type?
+	jump_type_t jump_type;
 	//TODO may add more
 };
 
@@ -145,7 +149,7 @@ three_addr_code_stmt_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
-three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id);
+three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id, jump_type_t jump_type);
 
 /**
  * Pretty print a three address code statement

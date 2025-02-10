@@ -174,6 +174,19 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 
 
 /**
+ * Emit a jump statement jumping to the destination block, using the jump type that we
+ * provide
+ */
+static void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type){
+	//Use the helper function to emit the statement
+	three_addr_code_stmt_t* stmt = emit_jmp_stmt_three_addr_code(dest_block->block_id, type);
+
+	//Add this into the first block
+	add_statement(basic_block, stmt);
+}
+
+
+/**
  * Emit the abstract machine code for a defer statement. There is nothing
  * inherently special about a defer statement, so this rule behaves like any other
  *
@@ -1133,6 +1146,10 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	if(cursor->next_sibling == NULL){
 		//If this is the case, the end block is a direct successor
 		add_successor(entry_block, values->if_stmt_end_block);
+		//Add in our jump instruction here
+		emit_jmp_stmt(entry_block, values->if_stmt_end_block, JUMP_TYPE_JNE);
+		//Add in the other one here
+		emit_jmp_stmt(entry_block, if_compound_stmt_entry, JUMP_TYPE_JE);
 
 		//If it is the parent, then we want there to be an exit here. If it's not the parent, then
 		//we want the other area to handle it
