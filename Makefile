@@ -11,6 +11,7 @@ CALL_GRAPH_PATH = ./oc/compiler/call_graph
 AST_PATH = ./oc/compiler/ast
 CFG_PATH = ./oc/compiler/cfg
 THREE_ADDRESS_CODE_PATH = ./oc/compiler/three_addr_code
+QUEUE_PATH = ./oc/compiler/queue
 TEST_FILE_DIR = ./oc/test_files/
 OUT = ./oc/out
 PROGS = lexer_test symtab_test parser_test oc
@@ -37,6 +38,12 @@ heapstack.o: $(STACK_PATH)/heapstack.c
 
 heapstackd.o: $(STACK_PATH)/heapstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/heapstack.c -o $(OUT)/heapstackd.o
+
+heap_queue.o: $(QUEUE_PATH)/heap_queue.c
+	$(CC) $(CFLAGS) $(QUEUE_PATH)/heap_queue.c -o $(OUT)/heap_queue.o
+
+heap_queued.o: $(QUEUE_PATH)/heap_queue.c
+	$(CC) $(CFLAGS) -g $(QUEUE_PATH)/heap_queue.c -o $(OUT)/heap_queued.o
 
 lexstack.o: $(STACK_PATH)/lexstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/lexstack.c -o $(OUT)/lexstack.o
@@ -116,11 +123,11 @@ three_address_code.o: $(THREE_ADDRESS_CODE_PATH)/three_address_code.c
 three_address_coded.o: $(THREE_ADDRESS_CODE_PATH)/three_address_code.c
 	$(CC) $(CFLAGS) -g -o $(OUT)/three_address_coded.o $(THREE_ADDRESS_CODE_PATH)/three_address_code.c
 
-oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o
-	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o
+oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o
+	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o
 
-oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o call_graphd.o lexstackd.o three_address_coded.o
-	$(CC) -o $(OUT)/ocd $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/lexstackd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o $(OUT)/three_address_coded.o
+oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o call_graphd.o lexstackd.o three_address_coded.o heap_queued.o
+	$(CC) -o $(OUT)/ocd $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/lexstackd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o $(OUT)/three_address_coded.o $(OUT)/heap_queued.o
 
 stest: symtab_test
 	$(OUT)/symtab_test
