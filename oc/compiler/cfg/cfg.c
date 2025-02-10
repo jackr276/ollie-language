@@ -534,15 +534,6 @@ static void emit_blocks_dfs(cfg_t* cfg){
 
 
 /**
- * Print out the whole program in BFS order
- */
-static void emit_blocks_bfs(cfg_t* cfg){
-
-}
-
-
-
-/**
  * Deallocate a basic block
 */
 static void basic_block_dealloc(basic_block_t* block){
@@ -995,6 +986,8 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//It's other successor though is the loop entry
 	add_successor(compound_stmt_end, do_while_stmt_entry_block);
+	//We'll need a jump statement here to the entrance block
+	emit_jmp_stmt(compound_stmt_end, do_while_stmt_entry_block, JUMP_TYPE_JNE);
 
 	//Always return the entry block
 	return do_while_stmt_entry_block;
@@ -1024,6 +1017,9 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//The entry block contains our expression statement
 	emit_expr_code(while_statement_entry_block, ast_cursor);
+
+	//This while statement will jump to the end if it is bad
+	emit_jmp_stmt(while_statement_entry_block, while_statement_end_block, JUMP_TYPE_JNE);
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -1076,6 +1072,9 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//No matter what, the successor to this statement is the top of the loop
 	add_successor(compound_stmt_end, while_statement_entry_block);
+
+	//The compound statement end will jump right back up to the entry bloc
+	emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP);
 
 	//Now we're done, so
 	return while_statement_entry_block;

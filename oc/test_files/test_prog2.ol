@@ -1,6 +1,6 @@
 fn test_func() -> i32 {
 	let u32 i := 232;
-	let u32 j := 32;
+	 let u32 j := 32;
 
 	while(i >= 232) do{
 		if(i == 2) then{ 
@@ -21,7 +21,7 @@ fn test_func() -> i32 {
 		i--;
 
 		break when(i < 0);
-		//ret i;
+		ret i;
 	}
 
 	do {
@@ -32,14 +32,8 @@ fn test_func() -> i32 {
 		ret i;
 	} while (i < 232);
 
-
-
-
 	let u32 sample := 2232;
-
-
-
-	for(let u32 i := 0; i < 2323; i++) do{
+	for(let u32 i := 0; i < 2323; i++) do {
 		@test_func();
 		if(i == -1) then{
 			ret -1;
@@ -50,9 +44,6 @@ fn test_func() -> i32 {
 	let i32 my_int := -2;
 	ret 32;
 }
-
-
-
 
 fn main(u32 argc, char** argv)->i32{
 	let u32 i := 0;
