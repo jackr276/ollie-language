@@ -666,11 +666,10 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
 		exit(1);
 	}
 
-	//If it's the very first successor, we'll also mark it as the "direct successor" for convenience
+	//If there are no successors here, add it in as the direct one
 	if(target->num_successors == 0){
 		target->direct_successor = successor;
 	}
-	//We'll of course still add it in in the bottom
 
 	//Otherwise we're set here
 	//Add this in
@@ -1755,18 +1754,39 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block = starting_block;
 			}
 
-			//Mark this for later
-			current_block->is_break_stmt = 1;
+			//There are two options here: We could have a conditional break
+			//or a normal break. If there is no child node, we have a normal break
+			if(ast_cursor->first_child == NULL){
+				//Mark this for later
+				current_block->is_break_stmt = 1;
+				//Otherwise we need to break out of the loop
+				add_successor(current_block, values->loop_stmt_end);
+				//We will jump to it -- this is always an uncoditional jump
+				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
 
-			//Otherwise we need to break out of the loop
-			add_successor(current_block, values->loop_stmt_end);
-			//We will jump to it -- this is always an uncoditional jump
-			emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+				//If we see anything after this, it is unreachable so throw a warning
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after break statement", ast_cursor->next_sibling->line_number);
+					(*num_errors_ref)++;
+				}
 
-			//If we see anything after this, it is unreachable so throw a warning
-			if(ast_cursor->next_sibling != NULL){
-				print_cfg_message(WARNING, "Unreachable code detected after break statement", ast_cursor->next_sibling->line_number);
-				(*num_errors_ref)++;
+			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
+			} else {
+				//This block can jump right out of the loop
+				add_successor(current_block, values->loop_stmt_end);
+				//TODO THIS MAY BE BAD Don't add it in as direct successor
+				current_block->direct_successor = NULL;
+				
+				//However, this block is not an ending break statement, so we will not mark it
+
+				//First let's emit the conditional code
+				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child);
+
+				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+
+				//Emit our conditional jump now
+				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
 			}
 
 			//Give back the starting block
