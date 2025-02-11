@@ -847,11 +847,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//The condition block is always a successor to the entry block
 	add_successor(for_stmt_entry_block, condition_block);
-	//The condition block also has another direct successor, the exit block
-	add_successor(condition_block, for_stmt_exit_block);
 
-	//Ensure it is the direct successor
-	condition_block->direct_successor = for_stmt_exit_block;
 
 	//Move along to the next node
 	ast_cursor = ast_cursor->next_sibling;
@@ -928,6 +924,11 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//This will always be a successor to the conditional statement
 	add_successor(condition_block, compound_stmt_start);
+	//The condition block also has another direct successor, the exit block
+	add_successor(condition_block, for_stmt_exit_block);
+	//Ensure it is the direct successor
+	condition_block->direct_successor = for_stmt_exit_block;
+
 	//We'll need to use a jump to end strategy here
 
 	//Make the condition block jump to the compound stmt start
