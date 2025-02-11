@@ -94,6 +94,19 @@ static jump_type_t select_appropriate_jump_stmt(Token operator, jump_category_t 
 			} else {
 				return JUMP_TYPE_JGE;
 			}
+		case D_EQUALS:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JNE;
+			} else {
+				return JUMP_TYPE_JE;
+			}
+		case NOT_EQUALS:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JE;
+			} else {
+				return JUMP_TYPE_JE;
+			}
+
 
 		//If we get here, it was some kind of
 		//non relational operator. In this case,
@@ -847,7 +860,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//The condition block is always a successor to the entry block
 	add_successor(for_stmt_entry_block, condition_block);
-
 
 	//Move along to the next node
 	ast_cursor = ast_cursor->next_sibling;
@@ -1716,6 +1728,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				emit_expr_code(current_block, values->for_loop_update_clause);
 			}
 
+			//We always jump to the start of the loop statement unconditionally
+			emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP);
+
 			//Further, anything after this is unreachable
 			if(ast_cursor->next_sibling != NULL){
 				print_cfg_message(WARNING, "Unreachable code detected after continue statement", ast_cursor->next_sibling->line_number);
@@ -1744,11 +1759,13 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			current_block->is_break_stmt = 1;
 
 			//Otherwise we need to break out of the loop
-			add_successor(current_block, values->if_stmt_end_block);
+			add_successor(current_block, values->loop_stmt_end);
+			//We will jump to it -- this is always an uncoditional jump
+			emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
 
 			//If we see anything after this, it is unreachable so throw a warning
 			if(ast_cursor->next_sibling != NULL){
-				print_cfg_message(WARNING, "Unreachable code detected after continue statement", ast_cursor->next_sibling->line_number);
+				print_cfg_message(WARNING, "Unreachable code detected after break statement", ast_cursor->next_sibling->line_number);
 				(*num_errors_ref)++;
 			}
 
