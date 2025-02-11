@@ -1003,6 +1003,8 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//Add this in to the ending block
 	emit_expr_code(compound_stmt_end, ast_cursor->next_sibling);
+	//Save the operator here
+	Token expr_operator = last_seen_op;
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -1012,8 +1014,11 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//It's other successor though is the loop entry
 	add_successor(compound_stmt_end, do_while_stmt_entry_block);
+	//Discern the jump type here--This is a direct jump
+	jump_type_t jump_type = select_appropriate_jump_stmt(expr_operator, JUMP_CATEGORY_NORMAL);
+		
 	//We'll need a jump statement here to the entrance block
-	emit_jmp_stmt(compound_stmt_end, do_while_stmt_entry_block, JUMP_TYPE_JNE);
+	emit_jmp_stmt(compound_stmt_end, do_while_stmt_entry_block, jump_type);
 
 	//Always return the entry block
 	return do_while_stmt_entry_block;
@@ -1029,12 +1034,6 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	basic_block_t* while_statement_entry_block = basic_block_alloc();
 	//And create our exit block
 	basic_block_t* while_statement_end_block = basic_block_alloc();
-
-	//The direct successor to the entry block is the end block
-	add_successor(while_statement_entry_block, while_statement_end_block);
-	//Just to be sure
-	while_statement_entry_block->direct_successor = while_statement_end_block;
-
 	//Grab this for convenience
 	generic_ast_node_t* while_stmt_node = values->initial_node;
 
@@ -1043,6 +1042,8 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//The entry block contains our expression statement
 	emit_expr_code(while_statement_entry_block, ast_cursor);
+	//Freeze whatever the operator was
+	Token op = last_seen_op;
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -1073,11 +1074,18 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		return while_statement_entry_block;
 	}
 
-	//This while statement will jump to the end if it is bad
-	emit_jmp_stmt(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JE);
+	//We'll now determine what kind of jump statement that we have here. We want to jump to the exit if
+	//we're bad, so we'll do an inverse jump
+	jump_type_t jump_type = select_appropriate_jump_stmt(op, JUMP_CATEGORY_INVERSE);
+	//"Jump over" the body if it's bad
+	emit_jmp_stmt(while_statement_entry_block, while_statement_end_block, jump_type);
 
 	//Otherwise it isn't null, so we can add it as a successor
 	add_successor(while_statement_entry_block, compound_stmt_start);
+	//The direct successor to the entry block is the end block
+	add_successor(while_statement_entry_block, while_statement_end_block);
+	//Just to be sure
+	while_statement_entry_block->direct_successor = while_statement_end_block;
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
@@ -1099,7 +1107,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	//No matter what, the successor to this statement is the top of the loop
 	add_successor(compound_stmt_end, while_statement_entry_block);
 
-	//The compound statement end will jump right back up to the entry bloc
+	//The compound statement end will jump right back up to the entry block
 	emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP);
 
 	//Now we're done, so
