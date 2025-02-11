@@ -851,11 +851,16 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//Move along to the next node
 	ast_cursor = ast_cursor->next_sibling;
+
+	//The condition block values package
+	expr_ret_package_t condition_block_vals;
+	//By default, make this blank
+	condition_block_vals.operator = BLANK;
 	
 	//If the second one is not blank
 	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
 		//This is always the first part of the repeating block
-		emit_expr_code(condition_block, ast_cursor->first_child);
+		condition_block_vals = emit_expr_code(condition_block, ast_cursor->first_child);
 
 	//It is impossible for the second one to be blank
 	} else {
@@ -929,10 +934,11 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//Ensure it is the direct successor
 	condition_block->direct_successor = for_stmt_exit_block;
 
-	//We'll need to use a jump to end strategy here
+	//We'll use our inverse jumping("jump out") strategy here
+	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE);
 
 	//Make the condition block jump to the compound stmt start
-	emit_jmp_stmt(condition_block, compound_stmt_start, JUMP_TYPE_JNE);
+	emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type);
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
