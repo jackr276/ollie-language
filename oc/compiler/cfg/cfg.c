@@ -20,8 +20,6 @@ u_int32_t* num_warnings_ref;
 heap_stack_t* deferred_stmts;
 //Keep a variable symtab of temporary variables
 variable_symtab_t* temp_vars;
-//The last used token
-Token last_seen_op = BLANK;
 //The CFG that we're working with
 cfg_t* cfg_ref;
 
@@ -39,6 +37,13 @@ typedef struct {
 } values_package_t;
 
 
+//Define a package return struct that is used by the binary op expression code
+typedef struct{
+	three_addr_var_t* assignee;
+	Token operator;
+} expr_ret_package_t;
+
+
 //We predeclare up here to avoid needing any rearrangements
 static basic_block_t* visit_declaration_statement(values_package_t* values);
 static basic_block_t* visit_compound_statement(values_package_t* values);
@@ -48,7 +53,7 @@ static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
 //Return a three address code variable
-static three_addr_var_t* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
+static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 
 
 //An enum for jump types
@@ -217,16 +222,16 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
  */
 static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_node){
 	//For holding our temporary return variable
-	three_addr_var_t* ret_expr_var = NULL;
+	expr_ret_package_t package;
 
 	//If the ret node's first child is not null, we'll let the expression rule
 	//handle it
 	if(ret_node->first_child != NULL){
-		ret_expr_var = emit_binary_op_expr_code(basic_block, ret_node->first_child);
+		package = emit_binary_op_expr_code(basic_block, ret_node->first_child);
 	}
 
 	//We'll use the ret stmt feature here
-	three_addr_code_stmt_t* ret_stmt = emit_ret_stmt_three_addr_code(ret_expr_var);
+	three_addr_code_stmt_t* ret_stmt = emit_ret_stmt_three_addr_code(package.assignee);
 
 	//Once it's been emitted, we'll add it in as a statement
 	add_statement(basic_block, ret_stmt);
@@ -342,7 +347,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
 		return emit_constant_code(basic_block, first_child);
 	} else if(first_child->CLASS == AST_NODE_CLASS_BINARY_EXPR){
-		return emit_binary_op_expr_code(basic_block, first_child);
+		return emit_binary_op_expr_code(basic_block, first_child).assignee;
 	//Handle a function call
 	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
 		//TODO to fix
@@ -363,15 +368,18 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  * For each binary expression, we compute
  *
  */
-static three_addr_var_t* emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
-	//The actual statement
-	char statement[1000];
+static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
+	//The return package here
+	expr_ret_package_t package;
+	//Operator is blank by default
+	package.operator = BLANK;
 
 	//Is the cursor a unary expression? If so just emit that. This is our base case 
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Return the temporary character from here
-		return emit_unary_expr_code(basic_block, logical_or_expr, 1);
+		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, 1);
+		return package;
 	}
 
 	//Otherwise we actually have a binary operation of some kind
@@ -379,27 +387,30 @@ static three_addr_var_t* emit_binary_op_expr_code(basic_block_t* basic_block, ge
 	generic_ast_node_t* cursor = logical_or_expr->first_child;
 	
 	//Emit the binary expression on the left first
-	three_addr_var_t* left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
+	expr_ret_package_t left_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
 	//Advance up here
 	cursor = cursor->next_sibling;
 
 	//Then grab the right hand temp
-	three_addr_var_t* right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
+	expr_ret_package_t right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
 	//Let's see what binary operator that we have
 	Token binary_operator = ((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator;
-	//Store this for later use
-	last_seen_op = binary_operator;
+	//Store this binary operator
+	package.operator = binary_operator;
 
 	//Emit the binary operator expression using our helper
-	three_addr_code_stmt_t* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp, binary_operator, right_hand_temp);
+	three_addr_code_stmt_t* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp.assignee, binary_operator, right_hand_temp.assignee);
 
 	//Add this statement to the block
 	add_statement(basic_block, bin_op_stmt);
 
+	//Store the temporary var as the assignee
+	package.assignee = bin_op_stmt->assignee;
+	
 	//Return the temp variable that we assigned to
-	return bin_op_stmt->assignee;
+	return package;
 }
 
 
@@ -408,10 +419,14 @@ static three_addr_var_t* emit_binary_op_expr_code(basic_block_t* basic_block, ge
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static three_addr_var_t* emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node){
+static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
+	//The return package
+	expr_ret_package_t ret_package;
+	//By default, last seen op is blank
+	ret_package.operator = BLANK;
 
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
@@ -428,10 +443,10 @@ static three_addr_var_t* emit_expr_code(basic_block_t* basic_block, generic_ast_
 	 	three_addr_var_t* left_hand_var = emit_var(var, 1);
 
 		//Now emit whatever binary expression code that we have
-		three_addr_var_t* right_hand_var = emit_binary_op_expr_code(basic_block, expr_node->first_child);
+		expr_ret_package_t package = emit_binary_op_expr_code(basic_block, expr_node->first_child);
 
 		//The actual statement is the assignment of right to left
-		three_addr_code_stmt_t* assn_stmt = emit_assn_stmt_three_addr_code(left_hand_var, right_hand_var);
+		three_addr_code_stmt_t* assn_stmt = emit_assn_stmt_three_addr_code(left_hand_var, package.assignee);
 
 		//Finally we'll add this into the overall block
 		add_statement(basic_block, assn_stmt);
@@ -457,26 +472,30 @@ static three_addr_var_t* emit_expr_code(basic_block_t* basic_block, generic_ast_
 		cursor = cursor->next_sibling;
 
 		//Now emit the right hand expression
-		three_addr_var_t* right_hand_var = emit_binary_op_expr_code(basic_block, cursor);
+		expr_ret_package_t package = emit_binary_op_expr_code(basic_block, cursor);
 
 		//Finally we'll construct the whole thing
-		three_addr_code_stmt_t* stmt = emit_assn_stmt_three_addr_code(left_hand_var, right_hand_var);
+		three_addr_code_stmt_t* stmt = emit_assn_stmt_three_addr_code(left_hand_var, package.assignee);
 		
 		//Now add this statement in here
 		add_statement(basic_block, stmt);
+
+		//Now pack the return value here
+		ret_package.operator = BLANK;
+		ret_package.assignee = left_hand_var;
 		
 		//Return what we had
-		return stmt->assignee;
+		return ret_package;
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
 		return emit_binary_op_expr_code(basic_block, expr_node);
 	} else {
-		return NULL;
+		return ret_package;
 
 	}
 
-	return NULL;
+	return ret_package;
 }
 
 
@@ -886,13 +905,16 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//because that is what repeats on continue
 	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
 
+	//For our eventual token
+	expr_ret_package_t expression_package;
+
 	//If it's null, that's actually ok here
 	if(compound_stmt_start == NULL){
 		//We'll make our own
 		basic_block_t* repeating_block = basic_block_alloc();
 		//Add the third conditional to it
 		if(third_cond != NULL){
-			emit_expr_code(repeating_block, third_cond);
+			expression_package = emit_expr_code(repeating_block, third_cond);
 		}
 
 		//We'll make sure that the start points to this block
@@ -906,6 +928,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//This will always be a successor to the conditional statement
 	add_successor(condition_block, compound_stmt_start);
+	//We'll need to use a jump to end strategy here
+
 	//Make the condition block jump to the compound stmt start
 	emit_jmp_stmt(condition_block, compound_stmt_start, JUMP_TYPE_JNE);
 
@@ -1002,9 +1026,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	}
 
 	//Add this in to the ending block
-	emit_expr_code(compound_stmt_end, ast_cursor->next_sibling);
-	//Save the operator here
-	Token expr_operator = last_seen_op;
+	expr_ret_package_t package = emit_expr_code(compound_stmt_end, ast_cursor->next_sibling);
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -1015,7 +1037,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//It's other successor though is the loop entry
 	add_successor(compound_stmt_end, do_while_stmt_entry_block);
 	//Discern the jump type here--This is a direct jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(expr_operator, JUMP_CATEGORY_NORMAL);
+	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 		
 	//We'll need a jump statement here to the entrance block
 	emit_jmp_stmt(compound_stmt_end, do_while_stmt_entry_block, jump_type);
@@ -1041,9 +1063,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
 	//The entry block contains our expression statement
-	emit_expr_code(while_statement_entry_block, ast_cursor);
-	//Freeze whatever the operator was
-	Token op = last_seen_op;
+	expr_ret_package_t package = emit_expr_code(while_statement_entry_block, ast_cursor);
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -1076,7 +1096,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//We'll now determine what kind of jump statement that we have here. We want to jump to the exit if
 	//we're bad, so we'll do an inverse jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(op, JUMP_CATEGORY_INVERSE);
+	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 	//"Jump over" the body if it's bad
 	emit_jmp_stmt(while_statement_entry_block, while_statement_end_block, jump_type);
 
@@ -1148,16 +1168,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	u_int8_t breaks_through_main_path = 0;
 	//Mark if we break through else
 	u_int8_t breaks_through_second_path = 0;
-	//Freeze the conditional operator
-	Token conditional_operator = BLANK;
 
 	//Let's grab a cursor to walk the tree
 	generic_ast_node_t* cursor = values->initial_node->first_child;
 
 	//Add it into the start block
-	emit_expr_code(entry_block, cursor);
-	//Freeze this for later on
-	conditional_operator = last_seen_op;
+	expr_ret_package_t package = emit_expr_code(entry_block, cursor);
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
@@ -1222,7 +1238,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		 * in an inverse fashion
 		 */
 		//Let's determine the appropriate jump statement
-		jump_type_t jump_type = select_appropriate_jump_stmt(conditional_operator, JUMP_CATEGORY_INVERSE);
+		jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 		emit_jmp_stmt(entry_block, values->if_stmt_end_block, jump_type);
 
 		//If it is the parent, then we want there to be an exit here. If it's not the parent, then
@@ -1267,7 +1283,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//Otherwise, we'll add this in as a successor
 		add_successor(entry_block, else_compound_stmt_entry);
 		//Let's determine the appropriate jump statement
-		jump_type_t jump_type = select_appropriate_jump_stmt(conditional_operator, JUMP_CATEGORY_INVERSE);
+		jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 		//Add in our "jump to else" clause
 		emit_jmp_stmt(entry_block, else_compound_stmt_entry, jump_type);
 
@@ -1342,7 +1358,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//Add this as a successor to the entrant
 		add_successor(entry_block, else_if_entry);
 		//Let's determine the appropriate jump statement
-		jump_type_t jump_type = select_appropriate_jump_stmt(conditional_operator, JUMP_CATEGORY_INVERSE);
+		jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 		//Emit our jump to else if here
 		emit_jmp_stmt(entry_block, else_if_entry, jump_type);
 	

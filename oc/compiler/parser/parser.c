@@ -1866,12 +1866,6 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 				num_errors++;
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 			}
-
-			//Otherwise if we make it down here, we actually know that the modulo operation worked. Modulo always returns an unsigned
-			//64 bit int. We'll set this and leave
-			return_type = lookup_type(type_symtab, "u64")->type;
-
-			goto multiplicative_loop_end;
 		}
 
 		//Once we get here, we know that the type class is a basic type class for both
