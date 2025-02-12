@@ -25,6 +25,7 @@ typedef enum {
 	DEFER,
 	IF,
 	THEN,
+	REPLACE,
 	ELSE,
 	DO,
 	WHILE,

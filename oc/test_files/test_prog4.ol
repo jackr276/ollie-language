@@ -1,3 +1,6 @@
+//Link to test prog 4
+#link "test_prog4.ol"
+
 fn my_func(u32 i, u32 j) -> i32{
 	i := i + 1;
 	ret i;

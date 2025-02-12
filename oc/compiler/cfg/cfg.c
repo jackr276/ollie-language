@@ -449,6 +449,20 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 			//Bitwise not -- this does need to be assigned from
 			return emit_bitwise_not_expr_code(basic_block, assignee, use_temp);
 
+		/**
+		 * Uses strategy of:
+		 * 	test rdx, rdx
+		 * 	sete rdx
+		 *
+		 * for implementation
+		 */
+		} else if(unary_operator->unary_operator == L_NOT){
+
+		/**
+		 * Uses strategy of: negl rdx
+		 */
+		} else if(unary_operator->unary_operator == MINUS){
+
 		}
 
 		//FOR NOW ONLY

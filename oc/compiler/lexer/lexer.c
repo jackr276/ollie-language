@@ -77,15 +77,15 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 						STATIC, COMPTIME, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
 						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM, ON,
 						REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-						CONSTRUCT, AS, ALIAS, SIZEOF, DEFER};
+						CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, REPLACE};
 
 	//Direct one to one mapping
 	char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "fn", "ret", "jump",
-								 "link", "static", "comptime", "external", "u8", "i8", "u16",
+								 "#link", "static", "comptime", "external", "u8", "i8", "u16",
 								 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 								  "char", "define", "enum", "on", "register", "constant",
 								  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
-								  "break", "continue", "construct", "as", "alias", "sizeof", "defer"};
+								  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "#replace"};
 
 	//Let's see if we have a keyword here
 	for(u_int8_t i = 0; i < 46; i++){
@@ -434,12 +434,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						lex_item.char_count = token_char_count;
 						return lex_item;
 
-					case '#':
-						lex_item.tok = POUND;
-						lex_item.line_num = line_num;
-						lex_item.char_count = token_char_count;
-						return lex_item;
-
 					case '@':
 						lex_item.tok = AT;
 						lex_item.line_num = line_num;
@@ -591,7 +585,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 						break;
 
 					default:
-						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$'){
+						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#'){
 							//Erase this now
 							memset(lexeme, 0, MAX_TOKEN_LENGTH);
 							//Reset the cursor
