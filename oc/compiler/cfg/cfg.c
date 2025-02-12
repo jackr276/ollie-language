@@ -3,6 +3,7 @@
 */
 
 #include "cfg.h"
+#include <cstdarg>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +34,7 @@ typedef struct {
 	//For break statements
 	basic_block_t* loop_stmt_end;
 	basic_block_t* if_stmt_end_block;
-	generic_ast_node_t* for_loop_update_clause;
+	basic_block_t* for_loop_update_block;
 } values_package_t;
 
 
@@ -882,14 +883,20 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//Now move it along to the third condition
 	ast_cursor = ast_cursor->next_sibling;
 
-	//Allocate and set to NULL as a warning for later
-	generic_ast_node_t* third_cond = NULL;
+	//Create the update block
+	basic_block_t* for_stmt_update_block = basic_block_alloc();
 
 	//If the third one is not blank
 	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
-		//Just make the statement for now, it will be added in later
-		third_cond = ast_cursor->first_child;
+		//Emit the update expression
+		emit_expr_code(for_stmt_update_block, ast_cursor->first_child);
 	}
+
+	//This node will always jump right back to the start
+	add_successor(for_stmt_update_block, condition_block);
+	//Unconditional jump to condition block
+	emit_jmp_stmt(for_stmt_update_block, condition_block, JUMP_TYPE_JMP);
+
 
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
@@ -908,8 +915,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	compound_stmt_values.loop_stmt_start = condition_block;
 	//Store the end block
 	compound_stmt_values.function_end_block = values->function_end_block;
-	//Store this as well
-	compound_stmt_values.for_loop_update_clause = third_cond;
+	//Store the update block here -- may or may not be NULL
+	compound_stmt_values.for_loop_update_block = for_stmt_update_block;
 	//Store this as well
 	compound_stmt_values.loop_stmt_end = for_stmt_exit_block;
 
@@ -922,17 +929,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//If it's null, that's actually ok here
 	if(compound_stmt_start == NULL){
-		//We'll make our own
-		basic_block_t* repeating_block = basic_block_alloc();
-		//Add the third conditional to it
-		if(third_cond != NULL){
-			expression_package = emit_expr_code(repeating_block, third_cond);
-		}
-
 		//We'll make sure that the start points to this block
-		add_successor(condition_block, repeating_block);
-		//And we'll add the conditional block as a successor to this
-		add_successor(repeating_block, condition_block);
+		add_successor(condition_block, for_stmt_update_block);
 
 		//And we're done
 		return for_stmt_entry_block;
@@ -969,15 +967,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		return for_stmt_entry_block;
 	}
 
-	//Otherwise, we'll need to add the third condition into this block at the very end
-	if(third_cond != NULL){
-		emit_expr_code(compound_stmt_end, third_cond);
-	}
-
-	//The successor of the end block is the conditional block
-	add_successor(compound_stmt_end, condition_block);
-	//Now add our jump in here, we jump back up to the condition block
-	emit_jmp_stmt(compound_stmt_end, condition_block, JUMP_TYPE_JMP);
+	//The successor to the end block is the update block
+	add_successor(compound_stmt_end, for_stmt_update_block);
 
 	//Give back the entry block
 	return for_stmt_entry_block;
@@ -1012,7 +1003,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	compound_stmt_values.function_end_block = values->function_end_block;
 	compound_stmt_values.loop_stmt_start = do_while_stmt_entry_block;
 	compound_stmt_values.loop_stmt_end = do_while_stmt_exit_block;
-	compound_stmt_values.for_loop_update_clause = NULL;
+	compound_stmt_values.for_loop_update_block = NULL;
 
 	//We go right into the compound statement here
 	basic_block_t* do_while_compound_stmt_entry = visit_compound_statement(&compound_stmt_values);
@@ -1097,7 +1088,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	compound_stmt_values.initial_node = ast_cursor;
 	compound_stmt_values.function_end_block = values->function_end_block;
 	compound_stmt_values.loop_stmt_start = while_statement_entry_block;
-	compound_stmt_values.for_loop_update_clause = NULL;
+	compound_stmt_values.for_loop_update_block = NULL;
 	compound_stmt_values.loop_stmt_end = while_statement_end_block;
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
@@ -1208,7 +1199,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	if_compound_stmt_values.function_end_block = values->function_end_block;
 	if_compound_stmt_values.loop_stmt_start = values->loop_stmt_start;
 	if_compound_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
-	if_compound_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
+	if_compound_stmt_values.for_loop_update_block = values->for_loop_update_block;
 	if_compound_stmt_values.loop_stmt_end = values->loop_stmt_end;
 
 	//Now that we know it is, we'll invoke the compound statement rule
@@ -1282,7 +1273,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		else_values_package.function_end_block = values->function_end_block;
 		else_values_package.loop_stmt_start = values->loop_stmt_start;
 		else_values_package.if_stmt_end_block = values->if_stmt_end_block;
-		else_values_package.for_loop_update_clause = values->for_loop_update_clause;
+		else_values_package.for_loop_update_block = values->for_loop_update_block;
 		else_values_package.loop_stmt_end = values->loop_stmt_end;
 
 		//Visit the else statement
@@ -1370,7 +1361,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		else_if_values_package.initial_node = cursor;
 		else_if_values_package.if_stmt_end_block = values->if_stmt_end_block;
 		else_if_values_package.loop_stmt_start = values->loop_stmt_start;
-		else_if_values_package.for_loop_update_clause = values->for_loop_update_clause;
+		else_if_values_package.for_loop_update_block = values->for_loop_update_block;
 		else_if_values_package.function_end_block = values->function_end_block;
 		else_if_values_package.loop_stmt_end = values->loop_stmt_end;
 
@@ -1530,7 +1521,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			values_package_t if_stmt_values;
 			if_stmt_values.initial_node = ast_cursor;
 			if_stmt_values.function_end_block = values->function_end_block;
-			if_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
+			if_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			if_stmt_values.if_stmt_end_block = if_end_block;
 			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
 			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
@@ -1591,7 +1582,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Create the values here
 			values_package_t while_stmt_values;
 			while_stmt_values.initial_node = ast_cursor;
-			while_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
+			while_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			while_stmt_values.loop_stmt_start = NULL;
 			while_stmt_values.loop_stmt_end = NULL;
 			while_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
@@ -1623,7 +1614,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			do_while_values.if_stmt_end_block = values->if_stmt_end_block;
 			do_while_values.loop_stmt_start = NULL;
 			do_while_values.loop_stmt_end = NULL;
-			do_while_values.for_loop_update_clause = values->for_loop_update_clause;
+			do_while_values.for_loop_update_block = values->for_loop_update_block;
 
 			//Visit the statement
 			basic_block_t* do_while_stmt_entry_block = visit_do_while_statement(&do_while_values);
@@ -1663,7 +1654,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			values_package_t for_stmt_values;
 			for_stmt_values.initial_node = ast_cursor;
 			for_stmt_values.function_end_block = values->function_end_block;
-			for_stmt_values.for_loop_update_clause = values->for_loop_update_clause;
+			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			for_stmt_values.loop_stmt_start = NULL;
 			for_stmt_values.loop_stmt_end = NULL;
 			for_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
@@ -1725,17 +1716,22 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Mark this for later
 				current_block->is_cont_stmt = 1;
 
-				//Otherwise we are in a loop, so this means that we need to point the continue statement to
-				//the loop entry block
-				add_successor(current_block, values->loop_stmt_start);
+				//Let's see what kind of loop we're in
+				//NON for loop
+				if(values->for_loop_update_block == NULL){
+					//Otherwise we are in a loop, so this means that we need to point the continue statement to
+					//the loop entry block
+					add_successor(current_block, values->loop_stmt_start);
+					//We always jump to the start of the loop statement unconditionally
+					emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP);
 
-				//If we have for loops
-				if(values->for_loop_update_clause != NULL){
-					emit_expr_code(current_block, values->for_loop_update_clause);
+				//We are in a for loop
+				} else {
+					//Otherwise we are in a for loop, so we just need to point to the for loop update block
+					add_successor(current_block, values->for_loop_update_block);
+					//Emit a direct unconditional jump statement to it
+					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP);
 				}
-
-				//We always jump to the start of the loop statement unconditionally
-				emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP);
 
 				//Further, anything after this is unreachable
 				if(ast_cursor->next_sibling != NULL){
@@ -1743,12 +1739,30 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					(*num_warnings_ref)++;
 				}
 
-				//We're done here, so return the starting block
+				//We're done here, so return the starting block. There is no 
+				//point in going on
 				return starting_block;
+
 			//Otherwise, we have a conditional continue here
-
 			} else {
+				//Two divergent paths here -- whether or not we have a for loop
 
+				/*
+				//This block can jump right out of the loop
+				basic_block_t* successor = current_block->direct_successor;
+				add_successor(current_block, values->loop_stmt_end);
+				//Restore
+				current_block->direct_successor = successor;
+
+				//First let's emit the conditional code
+				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child);
+
+				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+
+				//Emit our conditional jump now
+				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
+				*/
 			}
 
 
