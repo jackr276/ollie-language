@@ -103,6 +103,8 @@ struct basic_block_t{
 	//Hold onto the number of both that we have
 	u_int8_t num_predecessors;
 	u_int8_t num_successors;
+	//We need to keep track of all active variables in this block
+	three_addr_var_t* active_vars_head;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements

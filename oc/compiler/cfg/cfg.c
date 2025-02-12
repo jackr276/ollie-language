@@ -3,6 +3,7 @@
 */
 
 #include "cfg.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -174,7 +175,7 @@ static void pretty_print_block(basic_block_t* block){
 	}
 
 	//Some spacing
-	printf("\n\n");
+	printf("\n");
 }
 
 
@@ -320,6 +321,21 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 
 
 /**
+ * Emit increment three adress code
+ */
+static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee){
+
+}
+
+
+/**
+ * Emit decrement three address code
+ */
+static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee){
+
+}
+
+/**
  * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
@@ -339,9 +355,24 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 	//This could be a postfix expression
 	if(first_child->CLASS == AST_NODE_CLASS_POSTFIX_EXPR){
 		
-		
 	//If we have some kind of unary operator here
 	} else if(first_child->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
+		//Grab this internal reference for ease
+		unary_operator_ast_node_t* unary_operator = first_child->node;
+
+		//No matter what here, the next sibling will also be some kind of unary expression.
+		//We'll need to handle that first before going forward
+		three_addr_var_t* assignee = emit_unary_expr_code(basic_block, unary_expr_parent, lhs);
+
+		//What kind of unary operator do we have?
+		//Handle plus plus case
+		if(unary_operator->unary_operator == PLUSPLUS){
+			//We really just have an "inc" instruction here
+			emit_inc_code();
+		} else if(unary_operator->unary_operator == MINUSMINUS){
+			//We really just have a decrement statement here
+			emit_dec_code();
+		}
 
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){

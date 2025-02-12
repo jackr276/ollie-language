@@ -238,7 +238,43 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 
 		//Now at the very end, close the whole thing out
 		printf(")\n");
+
+	//If we have a binary operator with a constant
+	} else if (stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+
 	}
+}
+
+
+/**
+ * Emit a decrement instruction
+ */
+three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decrementee){
+	//First allocate it
+	three_addr_code_stmt_t* dec_stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Now we populate
+	dec_stmt->CLASS = THREE_ADDR_CODE_DEC_STMT;
+	dec_stmt->assignee = decrementee;
+
+	//And give it back
+	return dec_stmt;
+}
+
+
+/**
+ * Emit a decrement instruction
+ */
+three_addr_code_stmt_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incrementee){
+	//First allocate it
+	three_addr_code_stmt_t* inc_stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Now we populate
+	inc_stmt->CLASS = THREE_ADDR_CODE_INC_STMT;
+	inc_stmt->assignee = incrementee;
+
+	//And give it back
+	return inc_stmt;
 }
 
 
@@ -325,6 +361,25 @@ three_addr_code_stmt_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, 
 
 
 /**
+ * Emit a binary operation with a constant three address code statement
+ */
+three_addr_code_stmt_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2){
+	//First allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's now populate it with the appropriate values
+	stmt->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op = op;
+	stmt->op1_const = op2;
+
+	//Give back the newly allocated statement
+	return stmt;
+}
+
+
+/**
  * Emit an assignment three address code statement. Once we're here, we expect that the caller has created and supplied the
  * appropriate variables
  */
@@ -375,6 +430,7 @@ three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id, jum
 	return stmt;
 }
 
+
 /**
  * Emit a function call statement where we're calling the function record provided
  */
@@ -391,6 +447,23 @@ three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t*
 	//Just give back the result
 	return stmt;
 }
+
+
+/**
+ * Emit an int constant direct 
+ */
+three_addr_const_t* emit_int_constant_direct(int int_const){
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Store the class
+	constant->const_type = INT_CONST;
+	//Store the int value
+	constant->int_const = int_const;
+
+	//Return out
+	return constant;
+}
+
 
 /**
  * Deallocate the variable portion of a three address code

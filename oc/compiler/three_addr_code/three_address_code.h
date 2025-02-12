@@ -43,7 +43,14 @@ typedef enum{
  * What kind of three address code statement do we have?
  */
 typedef enum{
+	//Binary op with all vars
 	THREE_ADDR_CODE_BIN_OP_STMT,
+	//An increment statement
+	THREE_ADDR_CODE_INC_STMT,
+	//A decrement statement
+	THREE_ADDR_CODE_DEC_STMT,
+	//Binary op with const
+	THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT,
 	//Regular two address assignment
 	THREE_ADDR_CODE_ASSN_STMT,
 	//Assigning a constant to a variable
@@ -73,6 +80,8 @@ struct three_addr_var_t{
 	//Store the type info for faster access
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
+	//Linked list functionality
+	three_addr_var_t* next;
 };
 
 
@@ -139,10 +148,20 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment);
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 
 /**
+ * Emit an int constant in a very direct way
+ */
+three_addr_const_t* emit_int_constant_direct(int int_const);
+
+/**
  * Emit a statement using three vars and a binary operator
  * ALL statements are of the form: assignee <- op1 operator op2
 */
 three_addr_code_stmt_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2); 
+
+/**
+ * Emit a statement using two vars and a constant
+ */
+three_addr_code_stmt_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2); 
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2
@@ -159,6 +178,16 @@ three_addr_code_stmt_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* a
  * Returnee may or may not be null
  */
 three_addr_code_stmt_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee);
+
+/**
+ * Emit an increment instruction
+ */
+three_addr_code_stmt_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incrementee);
+
+/**
+ * Emit a decrement instruction
+ */
+three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decrementee);
 
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump
