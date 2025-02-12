@@ -324,7 +324,14 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
  * Emit increment three adress code
  */
 static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee){
+	//Create the code
+	three_addr_code_stmt_t* inc_code = emit_inc_stmt_three_addr_code(incrementee);
 
+	//Add it into the block
+	add_statement(basic_block, inc_code);
+
+	//Return the incrementee
+	return incrementee;
 }
 
 
@@ -332,8 +339,16 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
  * Emit decrement three address code
  */
 static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee){
+	//Create the code
+	three_addr_code_stmt_t* dec_code = emit_inc_stmt_three_addr_code(decrementee);
 
+	//Add it into the block
+	add_statement(basic_block, dec_code);
+
+	//Return the incrementee
+	return decrementee;
 }
+
 
 /**
  * Emit the abstract machine code for a unary expression
@@ -362,17 +377,20 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 
 		//No matter what here, the next sibling will also be some kind of unary expression.
 		//We'll need to handle that first before going forward
-		three_addr_var_t* assignee = emit_unary_expr_code(basic_block, unary_expr_parent, lhs);
+		three_addr_var_t* assignee = emit_unary_expr_code(basic_block, first_child->next_sibling, lhs);
 
 		//What kind of unary operator do we have?
 		//Handle plus plus case
 		if(unary_operator->unary_operator == PLUSPLUS){
 			//We really just have an "inc" instruction here
-			emit_inc_code();
+			return emit_inc_code(basic_block, assignee);
 		} else if(unary_operator->unary_operator == MINUSMINUS){
 			//We really just have a decrement statement here
-			emit_dec_code();
+			return emit_dec_code(basic_block, assignee);
 		}
+
+		//FOR NOW ONLY
+		return assignee;
 
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
@@ -531,7 +549,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		return ret_package;
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Let this rule handle it
-		ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, 1);
+		ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, 0);
 		return ret_package;
 	} else {
 		return ret_package;

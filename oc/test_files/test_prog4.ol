@@ -44,6 +44,7 @@ fn main(u32 argc, char** argv)->i32{
 	@my_func(i, j);
 
 	let f32 j_copy := 32.0;
+	++j_copy;
 
 	ret j + a;
 }

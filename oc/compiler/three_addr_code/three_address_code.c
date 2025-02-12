@@ -241,7 +241,11 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 
 	//If we have a binary operator with a constant
 	} else if (stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-
+		//TODO MAY OR MAY NOT NEED
+	} else if (stmt->CLASS == THREE_ADDR_CODE_INC_STMT){
+		printf("inc %s\n", stmt->assignee->var_name);
+	} else if (stmt->CLASS == THREE_ADDR_CODE_DEC_STMT){
+		printf("dec %s\n", stmt->assignee->var_name);
 	}
 }
 
