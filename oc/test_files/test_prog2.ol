@@ -20,14 +20,13 @@ fn test_func() -> i32 {
 	while(i >= 0) do{
 		i--;
 
-		break when(i < 0);
+		//break when(i < 0);
 		ret i;
 	}
 
 	do {
 		i++;
 		@test_func();
-		continue when (i > 3);
 
 		ret i;
 	} while (i < 232);

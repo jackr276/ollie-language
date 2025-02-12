@@ -5365,12 +5365,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
  *
  * EXAMPLE CONTINUE WHEN USAGE
  *
- * -> continue when (i < 2);
- *  is the same as saying
- * -> if(i < 2){
- *  	continue;
- *    }
- *
+ * -> continue when (i < 2); -> This will have an expression as it's one and only child 
  */
 static generic_ast_node_t* continue_statement(FILE* fl){
 	//Lookahead token
@@ -5409,11 +5404,6 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//If the lookahead is a when statement, we will on the fly rewrite this into an if-statement
-	generic_ast_node_t* if_stmt_node = ast_node_alloc(AST_NODE_CLASS_IF_STMT);
-	//Store the line number
-	if_stmt_node->line_number = parser_line_num;
-
 	//Push to the stack for grouping
 	push_token(grouping_stack, lookahead);
 
@@ -5428,8 +5418,8 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 		return expr_node;
 	}
 
-	//If we get here we know that it worked, so we can add it as a child
-	add_child_node(if_stmt_node, expr_node);
+	//If this worked, we add it under the continue node
+	add_child_node(continue_stmt, expr_node);
 
 	//We need to now see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5460,21 +5450,8 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Let's do our final assembly here
-	//Create a compound statement node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
-	//Store the line number
-	compound_stmt_node->line_number = parser_line_num;
-	//Add the continue statement as a child of it
-	add_child_node(compound_stmt_node, continue_stmt);
-
-	//Finally add this compound statement node as a child of the if_stmt
-	add_child_node(if_stmt_node, compound_stmt_node);
-	
-	if_stmt_node->line_number = parser_line_num;
-
 	//If we make it all the way down here, it worked so we can return the root node
-	return if_stmt_node;
+	return continue_stmt;
 }
 
 
@@ -5488,11 +5465,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
  * BNF Rule: <break-statement> ::=  break {when(<conditional-expression>)}?; 
  *
  * EXAMPLE BREAK WHEN USAGE:
- * -> break when (i < 2);
- *  is the same as saying
- * -> if(i < 2){
- *  	break;
- *    }
+ * -> break when (i < 2); -> This will have an expression right under its statement
  */
 static generic_ast_node_t* break_statement(FILE* fl){
 	//Lookahead token
@@ -5523,11 +5496,6 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	//We now need to see an lparen
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//Create our if statement node here
-	generic_ast_node_t* if_stmt_node = ast_node_alloc(AST_NODE_CLASS_IF_STMT);
-	//Store the line number
-	if_stmt_node->line_number = parser_line_num;
-
 	//If we don't have one, it's an instant fail
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Parenthesis expected after break when keywords", parser_line_num);
@@ -5551,7 +5519,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	}
 
 	//This is the first child of the if statement node
-	add_child_node(if_stmt_node, expr_node);
+	add_child_node(break_stmt, expr_node);
 
 	//We need to now see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -5582,20 +5550,8 @@ static generic_ast_node_t* break_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//We'll now perform final assembly here
-	//Create the compound statement
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
-	//Store the line number
-	compound_stmt_node->line_number = parser_line_num;
-	//Store the line number
-	if_stmt_node->line_number = parser_line_num;
-	//Add this in as a child of the if statement
-	add_child_node(if_stmt_node, compound_stmt_node);
-	//Add the break statement as a child of this
-	add_child_node(compound_stmt_node, break_stmt);
-	
 	//If we make it all the way down here, it worked so we can return the root node
-	return if_stmt_node;
+	return break_stmt;
 }
 
 
