@@ -1260,7 +1260,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
  *
  * BNF Rule: <unary-operator> ::= & 
  * 								| * 
- * 								| + 
  * 								| - 
  * 								| ~ 
  * 								| ! 
@@ -1434,7 +1433,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
 	//the exact same way
-	} else if(lookahead.tok == PLUS || lookahead.tok == PLUSPLUS || lookahead.tok == MINUS || lookahead.tok == MINUSMINUS
+	} else if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUS || lookahead.tok == MINUSMINUS
 		     || lookahead.tok == STAR || lookahead.tok == AND || lookahead.tok == B_NOT || lookahead.tok == L_NOT){
 
 		//We'll first create the unary operateor node for ourselves here
@@ -1562,10 +1561,10 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			is_assignable = 0;
 
 		//Positive and negative sign works on integers and floats, but nothing else
-		} else if(lookahead.tok == MINUS || lookahead.tok == PLUS){
+		} else if(lookahead.tok == MINUS){
 			//If it's not a basic type, we fail immediately
 			if(cast_expr->inferred_type->type_class != TYPE_CLASS_BASIC){
-				sprintf(info, "Type %s is an invalid operand for plus or minus operand", cast_expr->inferred_type->type_name);
+				sprintf(info, "Type %s is an invalid operand for minus operand", cast_expr->inferred_type->type_name);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -1573,7 +1572,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//Otherwise if we make it down here, it still may not be good. We can not use bitwise not on floats or void
 			if(cast_expr->inferred_type->basic_type->basic_type == VOID){
-				sprintf(info, "Type %s is an invalid operand for plus or minus operand", cast_expr->inferred_type->type_name);
+				sprintf(info, "Type %s is an invalid operand for minus operand", cast_expr->inferred_type->type_name);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);

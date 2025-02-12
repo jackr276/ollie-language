@@ -261,6 +261,8 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		printf("inc %s\n", stmt->assignee->var_name);
 	} else if (stmt->CLASS == THREE_ADDR_CODE_DEC_STMT){
 		printf("dec %s\n", stmt->assignee->var_name);
+	} else if (stmt->CLASS == THREE_ADDR_CODE_BITWISE_NOT_STMT){
+		printf("%s <- not %s\n", stmt->assignee->var_name, stmt->op1->var_name);
 	}
 }
 
@@ -483,6 +485,24 @@ three_addr_const_t* emit_int_constant_direct(int int_const){
 	return constant;
 }
 
+
+/**
+ * Emit a not instruction 
+ */
+three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var){
+	//First allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's make it a not stmt
+	stmt->CLASS = THREE_ADDR_CODE_BITWISE_NOT_STMT;
+	//The only var here is the assignee
+	stmt->assignee = var;
+	//For the potential of temp variables
+	stmt->op1 = var;
+
+	//Give the statement back
+	return stmt;
+}
 
 /**
  * Deallocate the variable portion of a three address code

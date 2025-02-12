@@ -381,6 +381,31 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 
 
 /**
+ * Emit a bitwise not statement 
+ */
+static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, temp_selection_t use_temp){
+	//First we'll create it here
+	three_addr_code_stmt_t* not_stmt = emit_not_stmt_three_addr_code(var);
+
+	//Now if we need to use a temp, we'll make one here
+	if(use_temp == USE_TEMP_VAR){
+		//Emit a temp var
+		three_addr_var_t* temp = emit_temp_var(var->type);
+
+		//The assignee is the temp
+		not_stmt->assignee = temp;
+	}
+	//Otherwise nothing else needed here
+
+	//Add this into the block
+	add_statement(basic_block, not_stmt);
+
+	//Give back the assignee
+	return not_stmt->assignee;
+}
+
+
+/**
  * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
@@ -418,8 +443,12 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 			//We really just have a decrement statement here
 			return emit_dec_code(basic_block, assignee);
 		} else if (unary_operator->unary_operator == STAR){
-			printf("HERE\n");
+			//Memory address
 			return emit_mem_code(basic_block, assignee);
+		} else if (unary_operator->unary_operator == B_NOT){
+			//Bitwise not -- this does need to be assigned from
+			return emit_bitwise_not_expr_code(basic_block, assignee, use_temp);
+
 		}
 
 		//FOR NOW ONLY

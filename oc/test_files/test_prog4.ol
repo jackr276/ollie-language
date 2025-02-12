@@ -15,7 +15,7 @@ fn main(u32 argc, char** argv)->i32{
 	declare char* abcd;
 	let char ex := 'c';
 
-	**argv := ex;
+	**argv := ~ex;
 	
 	/*
 	while(a <= 32) do {
@@ -53,4 +53,3 @@ fn main(u32 argc, char** argv)->i32{
 
 	ret j + a;
 }
-
