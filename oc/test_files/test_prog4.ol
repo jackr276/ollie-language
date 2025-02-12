@@ -1,3 +1,9 @@
+fn my_func(u32 i, u32 j) -> i32{
+	asn i := i + 1;
+	ret i;
+}
+
+
 fn main(u32 argc, char** argv)->i32{
 	let i32 i := 0;
 	let i32 a := 0;
@@ -35,6 +41,7 @@ fn main(u32 argc, char** argv)->i32{
 		let u32 masdfasdf := 232;
 	}
 
+	@my_func(i, j);
 
 	let f32 j_copy := 32.0;
 

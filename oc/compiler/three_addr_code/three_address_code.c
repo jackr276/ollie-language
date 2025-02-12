@@ -34,7 +34,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	var->type = type;
 
 	//We'll now create our temporary variable name
-	sprintf(var->var_name, "_t%d", increment_and_get_temp_id());
+	sprintf(var->var_name, "t%d", increment_and_get_temp_id());
 
 	//Finally we'll bail out
 	return var;
@@ -216,7 +216,28 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 
 	//If we have a function call go here
 	} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
+		//First we'll print out the assignment, if one exists
+		if(stmt->assignee != NULL){
+			printf("%s <- ", stmt->assignee->var_name);
+		}
 
+		//No matter what, we'll need to see the "call" keyword, followed
+		//by the function name
+		printf("call %s(", stmt->func_record->func_name);
+
+		//Now we can go through and print out all of our parameters here
+		for(u_int8_t i = 0; i < stmt->func_record->number_of_params; i++){
+			//Print this out here
+			printf("%s", stmt->params[i]->var_name);
+
+			//If we need to, print out a comma
+			if(i != stmt->func_record->number_of_params - 1){
+				printf(", ");
+			}
+		}
+
+		//Now at the very end, close the whole thing out
+		printf(")\n");
 	}
 }
 

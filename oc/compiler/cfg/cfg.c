@@ -3,7 +3,6 @@
 */
 
 #include "cfg.h"
-#include <execution>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,7 +53,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
 //Return a three address code variable
 static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
-
+static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
 
 //An enum for jump types
 typedef enum{
@@ -355,8 +354,8 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		return emit_binary_op_expr_code(basic_block, first_child).assignee;
 	//Handle a function call
 	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
-		//TODO to fix
-		//return emit_function_call_code(basic_block, first_child);
+		printf("HERE\n");
+		return emit_function_call_code(basic_block, first_child);
 	}
 
 	//FOR NOW
@@ -495,6 +494,14 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
 		return emit_binary_op_expr_code(basic_block, expr_node);
+	} else if(expr_node->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
+		//Emit the function call statement
+		ret_package.assignee = emit_function_call_code(basic_block, expr_node);
+		return ret_package;
+	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
+		//Let this rule handle it
+		ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, 1);
+		return ret_package;
 	} else {
 		return ret_package;
 
@@ -537,6 +544,7 @@ static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, gen
 		
 		//The temporary variable that we get will be our parameter
 		func_call_stmt->params[current_func_param_idx] = package.assignee;
+		current_func_param_idx++;
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
