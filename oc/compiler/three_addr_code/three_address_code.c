@@ -213,6 +213,10 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 
 		//Then print out the block label
 		printf(" .L%d\n", stmt->jumping_to_id);
+
+	//If we have a function call go here
+	} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
+
 	}
 }
 
@@ -350,6 +354,22 @@ three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id, jum
 	return stmt;
 }
 
+/**
+ * Emit a function call statement where we're calling the function record provided
+ */
+three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to){
+	//First allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_FUNC_CALL;
+	stmt->func_record = func_record;
+	stmt->assignee = assigned_to;
+
+	//We do NOT add parameters here, instead we had them in the CFG function
+	//Just give back the result
+	return stmt;
+}
 
 /**
  * Deallocate the variable portion of a three address code

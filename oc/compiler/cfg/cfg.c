@@ -3,6 +3,7 @@
 */
 
 #include "cfg.h"
+#include <execution>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -320,14 +321,6 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 
 
 /**
- * Emit a function call node
- 
-static char* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
-}
-*/
-
-
-/**
  * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
@@ -508,6 +501,53 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	}
 
 	return ret_package;
+}
+
+
+/**
+ * Emit a function call node. In this iteration of a function call, we will still be parameterized, so the actual 
+ * node will record what needs to be passed into the function
+ */
+static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
+	//Grab this out first
+	symtab_function_record_t* func_record = ((function_call_ast_node_t*)(function_call_node->node))->func_record;
+
+	//May be NULL or not based on what we have as the return type
+	three_addr_var_t* assignee = NULL;
+
+	//If the function does not return void, we will be assigning it to a temporary variable
+	if(strcmp(func_record->return_type->type_name, "void") != 0){
+		//This means that we have a temp variable here
+		assignee = emit_temp_var(func_record->return_type);
+	}
+
+	//Once we get here we can create the function statement
+	three_addr_code_stmt_t* func_call_stmt = emit_func_call_three_addr_code(func_record, assignee);
+
+	//Let's grab a param cursor for ourselves
+	generic_ast_node_t* param_cursor = function_call_node->first_child;
+
+	//The current param of the index
+	u_int8_t current_func_param_idx = 0;
+
+	//So long as this isn't NULL
+	while(param_cursor != NULL){
+		//Emit whatever we have here into the basic block
+		expr_ret_package_t package = emit_expr_code(basic_block, param_cursor);
+		
+		//The temporary variable that we get will be our parameter
+		func_call_stmt->params[current_func_param_idx] = package.assignee;
+
+		//And move up
+		param_cursor = param_cursor->next_sibling;
+	}
+
+	//Once we make it here, we should have all of the params stored in temp vars
+	//We can now add the function call statement in
+	add_statement(basic_block, func_call_stmt);
+
+	//Give back what we assigned to
+	return assignee;
 }
 
 

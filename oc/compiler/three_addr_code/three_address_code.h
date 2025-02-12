@@ -51,7 +51,9 @@ typedef enum{
 	//A return statement
 	THREE_ADDR_CODE_RET_STMT,
 	//A jump statement -- used for control flow
-	THREE_ADDR_CODE_JUMP_STMT
+	THREE_ADDR_CODE_JUMP_STMT,
+	//A function call node
+	THREE_ADDR_CODE_FUNC_CALL,
 } three_addr_code_stmt_class_t;
 
 /**
@@ -91,6 +93,10 @@ struct three_addr_const_t{
 };
 
 
+/**
+ * A generic struct that encapsulates most of our three address code
+ * statements
+ */
 struct three_addr_code_stmt_t{
 	//For linked list properties -- the next statement
 	three_addr_code_stmt_t* next_statement;
@@ -107,6 +113,10 @@ struct three_addr_code_stmt_t{
 	int32_t jumping_to_id;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
+	//The function called
+	symtab_function_record_t* func_record;
+	//The list of temp variable parameters at most 6
+	three_addr_var_t* params[6];
 	//TODO may add more
 };
 
@@ -154,6 +164,11 @@ three_addr_code_stmt_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
 three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id, jump_type_t jump_type);
+
+/**
+ * Emit a function call statement. Once emitted, no paramters will have been added in
+ */
+three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
 
 /**
  * Pretty print a three address code statement
