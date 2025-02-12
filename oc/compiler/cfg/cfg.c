@@ -3,8 +3,6 @@
 */
 
 #include "cfg.h"
-#include <cstdarg>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -969,6 +967,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//The successor to the end block is the update block
 	add_successor(compound_stmt_end, for_stmt_update_block);
+	//We also need an uncoditional jump right to the update block
+	emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP);
 
 	//Give back the entry block
 	return for_stmt_entry_block;
@@ -1745,26 +1745,35 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Otherwise, we have a conditional continue here
 			} else {
+				//Emit the expression code into the current statement
+				expr_ret_package_t package = emit_expr_code(current_block, ast_cursor->first_child);
+				//Decide the appropriate jump statement -- direct path here
+				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+
 				//Two divergent paths here -- whether or not we have a for loop
+				//Not a for loop
+				if(values->for_loop_update_block == NULL){
+					//Otherwise we are in a loop, so this means that we need to point the continue statement to
+					//the loop entry block
+					basic_block_t* successor = current_block->direct_successor;
+					//Add the successor in
+					add_successor(current_block, values->loop_stmt_start);
+					//Restore the direct successor
+					current_block->direct_successor = successor;
+					//We always jump to the start of the loop statement unconditionally
+					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type);
 
-				/*
-				//This block can jump right out of the loop
-				basic_block_t* successor = current_block->direct_successor;
-				add_successor(current_block, values->loop_stmt_end);
-				//Restore
-				current_block->direct_successor = successor;
-
-				//First let's emit the conditional code
-				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child);
-
-				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
-
-				//Emit our conditional jump now
-				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
-				*/
+				//We are in a for loop
+				} else {
+					//Otherwise we are in a for loop, so we just need to point to the for loop update block
+					basic_block_t* successor = current_block->direct_successor;
+					add_successor(current_block, values->for_loop_update_block);
+					//Restore the direct successor
+					current_block->direct_successor = successor;
+					//Emit a direct unconditional jump statement to it
+					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type);
+				}
 			}
-
 
 		//Hand le a break out statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_BREAK_STMT){
@@ -1880,7 +1889,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	compound_stmt_values.function_end_block = function_ending_block;
 	compound_stmt_values.loop_stmt_start = NULL;
 	compound_stmt_values.if_stmt_end_block = NULL;
-	compound_stmt_values.for_loop_update_clause = NULL;
+	compound_stmt_values.for_loop_update_block = NULL;
 	compound_stmt_values.loop_stmt_end = NULL;
 
 	//Once we get here, we know that func cursor is the compound statement that we want
