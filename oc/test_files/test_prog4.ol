@@ -31,6 +31,7 @@ fn main(u32 argc, char** argv)->i32{
 	for(let u32 i := 3; i < 232; asn i := i + 1) do{
 		asn a := a + 1;
 		break when(a == 32);
+		let u32 masdfasdf := 232;
 	}
 
 
