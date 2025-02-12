@@ -11,6 +11,11 @@ fn main(u32 argc, char** argv)->i32{
 	let i32 b := 0;
 	let i32 j := 0;
 	let i32 sadf := 0;
+
+	declare char* abcd;
+	let char ex := 'c';
+
+	**argv := ex;
 	
 	/*
 	while(a <= 32) do {

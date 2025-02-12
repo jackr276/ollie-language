@@ -7,6 +7,7 @@
 #include "three_address_code.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 //The atomically increasing temp name id
@@ -64,6 +65,20 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment){
 	sprintf(emitted_var->var_name, "%s%d", var->var_name, var->current_generation);
 
 	//And we're all done
+	return emitted_var;
+}
+
+
+/**
+ * Emit a copy of this far
+ */
+three_addr_var_t* emit_var_copy(three_addr_var_t* var){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Copy the memory
+	memcpy(emitted_var, var, sizeof(three_addr_var_t));
+	
 	return emitted_var;
 }
 

@@ -49,6 +49,8 @@ typedef enum{
 	THREE_ADDR_CODE_INC_STMT,
 	//A decrement statement
 	THREE_ADDR_CODE_DEC_STMT,
+	//An indirection statement
+	THREE_ADDR_CODE_DEREF_STMT,
 	//Binary op with const
 	THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT,
 	//Regular two address assignment
@@ -77,6 +79,8 @@ struct three_addr_var_t{
 	u_int8_t is_temporary;
 	//Is this a constant?
 	u_int8_t is_constant;
+	//What is the indirection level
+	u_int8_t indirection_level;
 	//Store the type info for faster access
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
@@ -141,6 +145,11 @@ three_addr_var_t* emit_temp_var(generic_type_t* type);
  * As such, we will pass 1 in as a flag here
 */
 three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment);
+
+/**
+ * Emit a variable copied from another variable
+ */
+three_addr_var_t* emit_var_copy(three_addr_var_t* var);
 
 /**
  * Create and return a constant three address var

@@ -22,7 +22,7 @@ fn my_func(u32 args, f32 my_float) -> u32{
 		args++;
 	} else {
 		my_float := 32.2;
-		ret *(<u32*>(&my_float));
+		//ret *(<u32*>(&my_float));
 	}
 
 	for(let u32 i := 0; i < 232; i++) do{

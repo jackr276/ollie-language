@@ -3,7 +3,7 @@
 */
 
 fn:static example(i32* my_arr, u8 max) -> void{
-	*(my_arr) := 2+3 + 6-1;
+	*my_arr := 2+3 + 6-1;
 	ret;
 }
 

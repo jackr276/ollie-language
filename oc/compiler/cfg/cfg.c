@@ -62,6 +62,11 @@ typedef enum{
 	JUMP_CATEGORY_NORMAL,
 } jump_category_t;
 
+//An enum for temp variable selection
+typedef enum{
+	USE_TEMP_VAR,
+	PRESERVE_ORIG_VAR,
+} temp_selection_t;
 
 /**
  * Select the appropriate jump type to use. We can either use
@@ -302,9 +307,9 @@ static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
-static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t use_temp){
+static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, temp_selection_t use_temp){
 	//Just give back the name
-	if(use_temp == 0){
+	if(use_temp == PRESERVE_ORIG_VAR){
 		//No new generation here
 		return emit_var(ident_node->variable, !use_temp);
 	} else {
@@ -349,6 +354,31 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 	return decrementee;
 }
 
+/**
+ * Emit memory indirection three address code
+ */
+static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_var_t* assignee){
+	//No actual code here, we are just accessing this guy's memory
+	//Create a new variable with an indirection level
+	three_addr_var_t* indirect_var = emit_var_copy(assignee);
+
+	//Increment the indirection
+	indirect_var->indirection_level = assignee->indirection_level++;
+	//Temp or not same deal
+	indirect_var->is_temporary = assignee->is_temporary;
+	
+	//We'll wrap with parens
+	char indirect_var_name[115];
+
+	sprintf(indirect_var_name, "(%s)", indirect_var->var_name);
+
+	//Now we'll overwrite the old name
+	strcpy(indirect_var->var_name, indirect_var_name);
+
+	//And get out
+	return indirect_var;
+}
+
 
 /**
  * Emit the abstract machine code for a unary expression
@@ -356,7 +386,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t lhs){
+static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, temp_selection_t use_temp){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
@@ -377,7 +407,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 
 		//No matter what here, the next sibling will also be some kind of unary expression.
 		//We'll need to handle that first before going forward
-		three_addr_var_t* assignee = emit_unary_expr_code(basic_block, first_child->next_sibling, lhs);
+		three_addr_var_t* assignee = emit_unary_expr_code(basic_block, first_child->next_sibling, use_temp);
 
 		//What kind of unary operator do we have?
 		//Handle plus plus case
@@ -387,6 +417,9 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		} else if(unary_operator->unary_operator == MINUSMINUS){
 			//We really just have a decrement statement here
 			return emit_dec_code(basic_block, assignee);
+		} else if (unary_operator->unary_operator == STAR){
+			printf("HERE\n");
+			return emit_mem_code(basic_block, assignee);
 		}
 
 		//FOR NOW ONLY
@@ -395,7 +428,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
-		 return emit_ident_expr_code(basic_block, first_child, lhs);
+		 return emit_ident_expr_code(basic_block, first_child, use_temp);
 	//If it's a constant, emit this and leave
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
 		return emit_constant_code(basic_block, first_child);
@@ -403,7 +436,6 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		return emit_binary_op_expr_code(basic_block, first_child).assignee;
 	//Handle a function call
 	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
-		printf("HERE\n");
 		return emit_function_call_code(basic_block, first_child);
 	}
 
@@ -431,7 +463,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Return the temporary character from here
-		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, 1);
+		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, USE_TEMP_VAR);
 		return package;
 	}
 
@@ -519,7 +551,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		}
 
 		//Emit the left hand unary expression
-		three_addr_var_t* left_hand_var = emit_unary_expr_code(basic_block, cursor, 0);
+		three_addr_var_t* left_hand_var = emit_unary_expr_code(basic_block, cursor, PRESERVE_ORIG_VAR);
 
 		//Advance the cursor up
 		cursor = cursor->next_sibling;
@@ -549,7 +581,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		return ret_package;
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Let this rule handle it
-		ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, 0);
+		ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, PRESERVE_ORIG_VAR);
 		return ret_package;
 	} else {
 		return ret_package;
