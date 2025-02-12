@@ -8,20 +8,20 @@ fn:static main(char** argv) -> i32{
 	declare u32 c;
 	declare u32 d;
 
-	asn a := 32;
-	asn b := 27;
-	asn c := 23;
-	asn d := 22;
+	a := 32;
+	b := 27;
+	c := 23;
+	d := 22;
 
-	asn a := (a+b) & (b << 2) * (c+d);
+	a := (a+b) & (b << 2) * (c+d);
 
 
 	if(a >= 2) then{
-		asn a := a + 3;
+		a := a + 3;
 	} else if (a == 2) then{
-		asn a := a + 2;
+		a := a + 2;
 	} else {
-		asn a := a + 1;
+		a := a + 1;
 	}
 
 
@@ -32,9 +32,9 @@ fn:static main(char** argv) -> i32{
 		declare u32 b;
 		declare u32 c;
 
-		asn a := 32;
-		asn b := 27;
-		asn c := 23;
+		a := 32;
+		b := 27;
+		c := 23;
 
 	};// while(d >= 32);
 

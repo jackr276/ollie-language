@@ -1,7 +1,7 @@
 fn main(u32 argc, char** argv) -> i32{
 	while(argc < 5) do {
 		declare u32 i;
-		asn i := 3;
+		i := 3;
 	}
 
 	//Array of addresses
@@ -14,8 +14,8 @@ fn main(u32 argc, char** argv) -> i32{
 	let i64 long := 234l;
 
 	
-	for(asn j := 0; j <= 33; j++) do {
-		asn j := j - 3;
+	for(j := 0; j <= 33; j++) do {
+		j := j - 3;
 	}
 
 

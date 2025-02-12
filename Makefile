@@ -99,11 +99,11 @@ parser_test: parser.o lexer.o parser_test.o symtab.o lexstack.o heapstack.o type
 parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o lexstack.o heapstackd.o type_systemd.o astd.o call_graphd.o
 	$(CC) -g -o $(OUT)/debug $(OUT)/parser_testd.o $(OUT)/parserd.o $(OUT)/lexstackd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/call_graphd.o
 
-symtab_test: symtab.o symtab_test.o lexer.o type_system.o
-	$(CC) -o $(OUT)/symtab_test $(OUT)/lexer.o $(OUT)/symtab_test.o $(OUT)/symtab.o $(OUT)/type_system.o
+symtab_test: symtab.o symtab_test.o lexer.o type_system.o lexstack.o
+	$(CC) -o $(OUT)/symtab_test $(OUT)/lexer.o $(OUT)/symtab_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o
 
-symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o
-	$(CC) -o $(OUT)/symtab_testd $(OUT)/lexerd.o $(OUT)/symtab_testd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o
+symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o lexstackd.o
+	$(CC) -o $(OUT)/symtab_testd $(OUT)/lexerd.o $(OUT)/symtab_testd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/lexstackd.o
 
 call_graph.o : $(CALL_GRAPH_PATH)/call_graph.c
 	$(CC) $(CFLAGS) $(CALL_GRAPH_PATH)/call_graph.c -o $(OUT)/call_graph.o

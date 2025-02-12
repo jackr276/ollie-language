@@ -21,7 +21,7 @@ fn my_func(u32 args, f32 my_float) -> u32{
 	} else if(args > 0) then {
 		args++;
 	} else {
-		asn my_float := 32.2;
+		my_float := 32.2;
 		ret *(<u32*>(&my_float));
 	}
 
@@ -36,7 +36,7 @@ fn my_func(u32 args, f32 my_float) -> u32{
 
 
 fn test_func(u32 i) -> void{
-	asn i := 32;
+	i := 32;
 }
 
 
@@ -44,9 +44,9 @@ fn main(i32 argc, char** argv) -> i32{
 	//Allocate a struct
 	declare my_struct my_structure;
 
-	asn my_structure:a := 2;
-	asn my_structure:b := 3;
-	asn my_structure:c := 32.2;
+	my_structure:a := 2;
+	my_structure:b := 3;
+	 my_structure:c := 32.2;
 
 	let i64 j := 2342l;
 
@@ -60,7 +60,7 @@ fn main(i32 argc, char** argv) -> i32{
 		idx++;
 	}
 	
-	asn idx := 23;
+	idx := 23;
 
 	do{
 		idx--;
@@ -68,13 +68,13 @@ fn main(i32 argc, char** argv) -> i32{
 
 		if(idx == 12) then {
 			ret idx;
-			asn idx := 23;
+			idx := 23;
 		}
 
 	} while (idx > 0);
 
 	//Example for loop
-	for(let u32 i := 0; i <= 234; asn i := i + 2) do{
+	for(let u32 i := 0; i <= 234; i := i + 2) do{
 		@test_func(i);
 	}
 

@@ -10,8 +10,8 @@ fn:static main(u32 arg_count, str_arr arg_vector) -> i32{
 	declare u32 c;
 
 	if(arg_count != 0) then {
-		asn arg_count := -1;
-		//asn arg_vector := "hello";
+		arg_count := -1;
+		//arg_vector := "hello";
 
 	} else if(arg_count >= -1) then {
 		let f32 a := .23;
@@ -20,7 +20,7 @@ fn:static main(u32 arg_count, str_arr arg_vector) -> i32{
 
 
 	} else {
-		asn arg_count := -2;
+		arg_count := -2;
 	}
 
 	ret c >> 3;

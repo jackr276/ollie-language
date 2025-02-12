@@ -1,5 +1,5 @@
 fn my_func(u32 i, u32 j) -> i32{
-	asn i := i + 1;
+	i := i + 1;
 	ret i;
 }
 
@@ -15,13 +15,13 @@ fn main(u32 argc, char** argv)->i32{
 	/*
 	while(a <= 32) do {
 		if(i <= 0) then {
-			asn a:= a + 1;
+			a := a + 1;
 		} else if( i == 1) then{
-			asn a := 23232;
+			a := 23232;
 			if(a == 3232) then{
-				asn a := a + 1;
+				a := a + 1;
 			} else {
-				asn a := a + 2;
+				a := a + 2;
 			}
 		} else {
 			asn a := 0x23a;
@@ -30,12 +30,12 @@ fn main(u32 argc, char** argv)->i32{
 		//Just some junk
 		let i32 sadfa := 232;
 
-		asn a := a + 323;
+		a := a + 323;
 	}
 	*/
 
-	for(let u32 i := 3; i < 232; asn i := i + 1) do{
-		asn a := a + 1;
+	for(let u32 i := 3; i < 232; i := i + 1) do{
+		a := a + 1;
 		continue when (a == 32);
 		//break when(a == 32);
 		let u32 masdfasdf := 232;

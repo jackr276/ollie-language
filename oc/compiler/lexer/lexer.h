@@ -20,7 +20,6 @@ typedef enum {
 	START, /* start token */
 	LET,
 	DECLARE,
-	ASN,
 	ALIAS,
 	WHEN,
 	DEFER,

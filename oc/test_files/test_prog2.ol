@@ -4,13 +4,13 @@ fn test_func() -> i32 {
 
 	while(i >= 232) do{
 		if(i == 2) then{ 
-			asn i := i + 2;
+			i := i + 2;
 			ret i;
 		} else if(i == 3) then {
-			asn i := 32;
+			i := 32;
 			//ret i;
 		} else {
-			asn i := i + 1;
+			i := i + 1;
 			ret i;
 		}
 	}
@@ -54,7 +54,7 @@ fn main(u32 argc, char** argv)->i32{
 
 	if(i == 0) then {
 		if(j == a) then{
-			asn a := 3;	
+			a := 3;	
 		} else if (j > a) then {
 			ret j;
 		}

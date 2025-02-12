@@ -691,16 +691,47 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
 
+	//Did we find the assignment op?
+	u_int8_t found_asn_op = 0;
+
+	//Probably way too much, just to be safe
+	Lexer_item items[200];
+	//How many we have
+	u_int16_t idx = 0;
+
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we don't see an assign keyword, we know that 
-	//we're just passing through to a conditional expression
-	if(lookahead.tok != ASN){
-		//Put the token back
-		push_back_token(lookahead);
+	//So long as we don't see a semicolon(end) or an assignment op
+	while(lookahead.tok != COLONEQ && lookahead.tok != SEMICOLON){
+		//Put this onto the items we've seen
+		items[idx] = lookahead;
+		idx++;
 
-		//Simply let the conditional expression rule handle it
+		//Otherwise refresh
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//Once we get here, lookahead is either a coloneq or a semicol
+	if(lookahead.tok == SEMICOLON){
+		found_asn_op = 0;
+	} else {
+		//Otherwise we did find it
+		found_asn_op = 1;
+	}
+
+	//First push back lookahead
+	push_back_token(lookahead);
+
+	//Once we get here, we either found the assignment op or we didn't. First though, let's
+	//put everything back where we found it
+	for(int16_t i = idx - 1; i >= 0; i--){
+		//Push these all back
+		push_back_token(items[i]);
+	}
+
+	//If we didn't find an assignment operator, we just return the logical or expression
+	if(found_asn_op == 0){
 		return logical_or_expression(fl);
 	}
 
@@ -6112,43 +6143,8 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	//Now we have the option of seeing an assignment expression, a let statement, or nothing
 	lookahead = get_next_token(fl, &parser_line_num);
 
-	//If we see an asn keyword
-	if(lookahead.tok == ASN){
-		//The assignment expression needs this keyword, so we'll put it back
-		push_back_token(lookahead);
-		
-		//Let the assignment expression handle this
-		generic_ast_node_t* asn_expr = assignment_expression(fl);
-
-		//If it fails, we fail too
-		if(asn_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid assignment expression given to for loop", current_line);
-			num_errors++;
-			//It's already an error, so just give it back
-			return asn_expr;
-		}
-
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, asn_expr);
-
-		//Otherwise it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, for_loop_cond_node);
-
-		//We'll refresh the lookahead for the eventual next step
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//The assignment expression won't check semicols for us, so we'll do it here
-		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected in for statement declaration", parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
 	//We could also see the let keyword for a let_stmt
-	} else if(lookahead.tok == LET){
+	if(lookahead.tok == LET){
 		//On the contrary, the let statement rule assumes that let has already been consumed, so we won't
 		//put it back here, we'll just call the rule
 		generic_ast_node_t* let_stmt = let_statement(fl);
@@ -6173,10 +6169,47 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 	//Otherwise it had to be a semicolon, so if it isn't we fail
 	} else if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected in for statement declaration", current_line);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//If it isn't a semicolon, then we must have some kind of assignment op here
+		//Push the token back
+		push_back_token(lookahead);
+
+		//Let the assignment expression handle this
+		generic_ast_node_t* asn_expr = assignment_expression(fl);
+
+		//If it fails, we fail too
+		if(asn_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid assignment expression given to for loop", current_line);
+			num_errors++;
+			//It's already an error, so just give it back
+			return asn_expr;
+		}
+
+		//This actually must be an assignment expression, so if it isn't we fail 
+		if(asn_expr->CLASS != AST_NODE_CLASS_ASNMNT_EXPR){
+			print_parse_message(PARSE_ERROR, "Invalid assignment expression given to for loop", current_line);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Create the wrapper node for CFG creation later on
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		//Add this in as a child
+		add_child_node(for_loop_cond_node, asn_expr);
+
+		//Otherwise it worked, so we'll add it in as a child
+		add_child_node(for_stmt_node, for_loop_cond_node);
+
+		//We'll refresh the lookahead for the eventual next step
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//The assignment expression won't check semicols for us, so we'll do it here
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Semicolon expected in for statement declaration", parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 	//Just add in a blank node as a placeholder
 	} else {
 		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
