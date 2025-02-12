@@ -21,8 +21,8 @@ all: $(PROGS)
 ltest: lexer_test
 	cat ./oc/test_files/test_files.txt | xargs ./oc/out/lexer_test
 
-lexer_test: lexer.o lexer_test.o
-	$(CC) -o $(OUT)/lexer_test $(OUT)/lexer_test.o $(OUT)/lexer.o
+lexer_test: lexer.o lexer_test.o lexstack.o
+	$(CC) -o $(OUT)/lexer_test $(OUT)/lexer_test.o $(OUT)/lexer.o $(OUT)/lexstack.o
 
 lexer_test.o: $(LEX_PATH)/lexer_test.c
 	$(CC) $(CFLAGS) $(LEX_PATH)/lexer_test.c -o $(OUT)/lexer_test.o

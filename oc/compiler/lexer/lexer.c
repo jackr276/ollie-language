@@ -18,6 +18,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include "../stack/lexstack.h"
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -37,6 +38,9 @@ u_int16_t line_num = 0;
 
 //The number of characters in the current token
 int16_t token_char_count = 0;
+
+//Our lexer stack
+lex_stack_t* pushed_back_tokens = NULL;
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -135,6 +139,18 @@ static void put_back_char(FILE* fl){
  * Constantly iterate through the file and grab the next token that we have
 */
 Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
+	//If this is NULL, we need to make it
+	if(pushed_back_tokens == NULL){
+		pushed_back_tokens = create_lex_stack();
+	}
+
+	//IF we have pushed back tokens, we need to return them first
+	if(lex_stack_is_empty(pushed_back_tokens) == 0){
+		//Just pop this and leave
+		return pop_token(pushed_back_tokens);
+	}
+
+
 	//We'll eventually return this
 	Lexer_item lex_item;
 	//Have we seen hexadecimal?
@@ -779,6 +795,8 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 	//Return this token
 	if(ch == EOF){
 		lex_item.tok = DONE;
+		//Destroy the stack
+		destroy_lex_stack(pushed_back_tokens);
 	}
 
 	return lex_item;
@@ -788,10 +806,9 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 /**
  * Push a token back by moving the seek head back appropriately
  */
-void push_back_token(FILE* fl, Lexer_item l){
-	int16_t back = -1 * l.char_count;
-	//Push our stream back appropriately
-	fseek(fl, back, SEEK_CUR);
+void push_back_token(Lexer_item l){
+	//All that we need to do here is push the token onto the stack
+	push_token(pushed_back_tokens, l);
 }
 
 

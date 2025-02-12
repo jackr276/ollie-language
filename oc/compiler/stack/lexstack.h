@@ -46,6 +46,11 @@ lex_stack_t* create_lex_stack();
 void push_token(lex_stack_t* stack, Lexer_item l);
 
 /**
+ * Is the stack empty or not
+ */
+u_int8_t lex_stack_is_empty(lex_stack_t* lex_stack);
+
+/**
  * Remove the top value of the stack
  */
 Lexer_item pop_token(lex_stack_t* stack);

@@ -50,6 +50,15 @@ void push_token(lex_stack_t* stack, Lexer_item l){
 
 
 /**
+ * Is the lex stack empty? 0 = no, 1 = yes
+ */
+u_int8_t lex_stack_is_empty(lex_stack_t* lex_stack){
+	//If top is null, it's empty(1)
+	return lex_stack->top == NULL;
+}
+
+
+/**
  * Pop the head off of the stack and return the data
  */
 Lexer_item pop_token(lex_stack_t* stack){

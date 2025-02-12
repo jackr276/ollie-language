@@ -133,7 +133,7 @@ struct Lexer_item{
 Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num);
 
 //Push a token back
-void push_back_token(FILE* fl, Lexer_item l);
+void push_back_token(Lexer_item l);
 
 //Print a token out
 void print_token(Lexer_item* l);

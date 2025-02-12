@@ -6,7 +6,6 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-#include "../stack/lexstack.h"
 #include "../stack/heapstack.h"
 #include "../symtab/symtab.h"
 #include "../lexer/lexer.h"

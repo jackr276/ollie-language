@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "../stack/lexstack.h"
 
 //The function is reentrant
 //Variable and function symbol tables
@@ -552,7 +553,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	//We will check that it was initialized here
 	if(lookahead.tok == IDENT){
 		//Put it back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//We will let the identifier rule actually grab the ident. In this case
 		//the identifier will be a variable of some sort, that we'll need to check
@@ -597,7 +598,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
 			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == HEX_CONST){
 		//Again put the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Call the constant rule to grab the constant node
 		generic_ast_node_t* constant_node = constant(fl);
@@ -697,7 +698,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//we're just passing through to a conditional expression
 	if(lookahead.tok != ASN){
 		//Put the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Simply let the conditional expression rule handle it
 		return logical_or_expression(fl);
@@ -1064,7 +1065,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	if(lookahead.tok != L_BRACKET && lookahead.tok != COLON && lookahead.tok != ARROW_EQ
 	   && lookahead.tok != PLUSPLUS && lookahead.tok != MINUSMINUS){
 		//Put the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		//Just return what primary expr gave us
 		return result;
 	}
@@ -1099,7 +1100,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		//We have an array accessor
 		if(lookahead.tok == L_BRACKET){
 			//Put the token back
-			push_back_token(fl, lookahead);
+			push_back_token(lookahead);
 
 			//Before we go on, let's see what we have as the current type here
 			if(current_type->type_class != TYPE_CLASS_ARRAY){
@@ -1132,7 +1133,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		//Otherwise we have a construct accessor
 		} else {
 			//Put it back for the rule to deal with
-			push_back_token(fl, lookahead);
+			push_back_token(lookahead);
 
 			//Let's have the rule do it. (This will update current_type for us)
 			generic_ast_node_t* constr_acc = construct_accessor(fl, &current_type);
@@ -1160,7 +1161,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	//It could however be postinc/postdec. Let's first see if it isn't
 	if(lookahead.tok != PLUSPLUS && lookahead.tok != MINUSMINUS){
 		//Put the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		//Assign the type
 		postfix_expr_node->inferred_type = return_type;
 		//Not assignable
@@ -1601,7 +1602,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//If we get here we will just put the token back and pass the responsibility on to the
 	//postifix expression rule
 	} else {
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		//We'll still make a top level tree here to avoid ambiguity
 		generic_ast_node_t* unary_expr_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
 
@@ -1647,7 +1648,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	
 	//If it's not the <, put the token back and just return the unary expression
 	if(lookahead.tok != L_THAN){
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Let this handle it
 		return unary_expression(fl);
@@ -2078,7 +2079,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 
 	//If we get here, it means that we did not see the token we need, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -2453,7 +2454,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 
 	//If we get here, it means that we did not see the token we need, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -2573,7 +2574,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 
 	} else {
 		//Otherwise just push the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//Once we make it here, the subtree root is either just the shift expression or it is the
@@ -2697,7 +2698,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		add_child_node(sub_tree_root, right_child);
 	} else {
 		//Otherwise just push the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//Once we make it here, the subtree root is either just the shift expression or it is the
@@ -2820,7 +2821,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -2941,7 +2942,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -3062,7 +3063,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -3183,7 +3184,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -3305,7 +3306,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 	
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -3432,7 +3433,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 
 	//If we get here, it means that we did not see the "DOUBLE OR" token, so we are done. We'll put
 	//the token back and add this in as a subtree of the parent
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -3466,7 +3467,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 		is_constant = 1;
 	} else {
 		//Otherwise, we'll just put it back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//Now we are required to see a valid type specifier
@@ -3599,7 +3600,7 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 	//We can see as many construct members as we please here, all delimited by semicols
 	do{
 		//Put what we saw back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//We must first see a valid construct member
 		generic_ast_node_t* member_node = construct_member(fl);
@@ -3639,7 +3640,7 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 	}
 
 	//If we get here we know that it's right, but we'll still allow the other rule to handle it
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	//Store the parser line number
 	member_list->line_number = parser_line_num;
 
@@ -4024,7 +4025,7 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
 	
 	//Otherwise if we end up here all went well. We'll let the caller do the final checking with the R_CURLY so 
 	//we'll give it back
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 
 	//We'll now give back the list node itself
 	return enum_list_node;
@@ -4529,7 +4530,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 	//If this is the case then we have to see some user defined name, which is an ident
 	} else {
 		//Put the token back for the ident rule
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//We will let the identifier rule handle it
 		generic_ast_node_t* type_ident = identifier(fl);
@@ -4630,7 +4631,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 	//As long as we are seeing address specifiers
 	while(lookahead.tok == STAR || lookahead.tok == L_BRACKET){
 		//Put the token back
-		push_back_token(fl, lookahead);
+		push_back_token( lookahead);
 		//We'll now let the other rule handle it
 		generic_ast_node_t* address_specifier = type_address_specifier(fl);
 
@@ -4717,7 +4718,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 	}
 
 	//Once we get here we stopped seeing the type specifiers, so we'll give the token back
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 
 	//The type specifier node has already been fully created, so we just need to add the type reference
 	//and return it
@@ -4757,7 +4758,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 		is_constant = 1;
 	} else {
 		//Put it back and move on
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		is_constant = 0;
 	}
 
@@ -4884,11 +4885,11 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 	//If it's an R_PAREN, we'll just leave
 	if(lookahead.tok == R_PAREN){
 		//Return the list node
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		return param_list_node;
 	} else {
 		//Put it back for the search
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//We'll keep going as long as we see more commas
@@ -4916,7 +4917,7 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 
 	//Once we make it here, we know that we don't have another comma. We'll put it back
 	//for the caller to handle
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 
 	//Store the line number
 	param_list_node->line_number = parser_line_num;
@@ -4947,7 +4948,7 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 	}
 
 	//Otherwise, put it back and call expression
-	push_back_token(fl, lookahead);
+	push_back_token(lookahead);
 	
 	//Now we know that it's not empty, so we have to see a valid expression
 	generic_ast_node_t* expr_node = assignment_expression(fl);
@@ -5053,7 +5054,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT);
 
 		//Put it back for label ident
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Let's see if we can find one
 		generic_ast_node_t* label_ident = label_identifier(fl);
@@ -5235,7 +5236,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	//No else statement, so we'll just put it back and get out
 	if(lookahead.tok != ELSE){
 		//Push this back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		//Return the root node
 		return if_stmt;
 	}
@@ -5261,7 +5262,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	//Otherwise, we have a compound statement here
 	} else {
 		//Put the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Now we need to see a valid compound statement
 		generic_ast_node_t* else_compound_stmt = compound_statement(fl);
@@ -5603,7 +5604,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 		//Put it back if no
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
@@ -6114,7 +6115,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	//If we see an asn keyword
 	if(lookahead.tok == ASN){
 		//The assignment expression needs this keyword, so we'll put it back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		
 		//Let the assignment expression handle this
 		generic_ast_node_t* asn_expr = assignment_expression(fl);
@@ -6190,7 +6191,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	//If it's not a semicolon, we need to see a valid conditional expression
 	if(lookahead.tok != SEMICOLON){
 		//Push whatever it is back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Let this rule handle it
 		generic_ast_node_t* expr_node = logical_or_expression(fl);
@@ -6237,7 +6238,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	//If it isn't an R_PAREN
 	if(lookahead.tok != R_PAREN){
 		//Put it back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//We now must see a valid conditional
 		//Let this rule handle it
@@ -6363,7 +6364,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 		//All these keywords indicate a declaraion
 		if(lookahead.tok == DECLARE || lookahead.tok == LET){
 			//We'll let the actual rule handle it, so push the token back
-			push_back_token(fl, lookahead);
+			push_back_token(lookahead);
 
 			//We now need to see a valid version
 			generic_ast_node_t* declaration_node = declaration(fl);
@@ -6381,7 +6382,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 		//directives, and as such produce no nodes
 		} else if(lookahead.tok == DEFINE || lookahead.tok == ALIAS){
 			//Put the token back
-			push_back_token(fl, lookahead);
+			push_back_token(lookahead);
 
 			//Let's see if it worked
 			u_int8_t status = definition(fl);
@@ -6397,7 +6398,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 		//Otherwise, we need to see a statement of some kind
 		} else {
 			//Put whatever we saw back
-			push_back_token(fl, lookahead);
+			push_back_token(lookahead);
 			
 			//We now need to see a valid statement
 			generic_ast_node_t* stmt_node = statement(fl);
@@ -6509,7 +6510,7 @@ static generic_ast_node_t* statement(FILE* fl){
 	//If we see a label ident, we know we're seeing a labeled statement
 	if(lookahead.tok == LABEL_IDENT || lookahead.tok == CASE || lookahead.tok == DEFAULT){
 		//This rule relies on these tokens, so we'll push them back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	
 		//Just return whatever the rule gives us
 		return labeled_statement(fl);
@@ -6517,7 +6518,7 @@ static generic_ast_node_t* statement(FILE* fl){
 	//If we see an L_CURLY, we are seeing a compound statement
 	} else if(lookahead.tok == L_CURLY){
 		//The rule relies on it, so put it back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Return whatever the rule gives us
 		return compound_statement(fl);
@@ -6556,13 +6557,13 @@ static generic_ast_node_t* statement(FILE* fl){
 	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
 			|| lookahead.tok == RET){
 		//The branch rule needs these, so we'll put them back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		//return whatever this gives us
 		return branch_statement(fl);
 	} else {
 		//Otherwise, this is some kind of expression statement. We'll put the token back and
 		//return that
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		return expression_statement(fl);
 	}
 }
@@ -6601,7 +6602,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		is_constant = 1;
 	} else {
 		//Otherwise just put it back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//Grab the next token -- we could potentially see a storage class specifier
@@ -6614,7 +6615,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		storage_class = STORAGE_CLASS_STATIC;
 	} else {
 		//Put it back and move on
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//If it was null, it just won't be the child, which is no big deal
@@ -6775,7 +6776,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		is_constant = 1;
 	} else {
 		//Otherwise just put it back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//Grab the next token -- we could potentially see a storage class specifier
@@ -6788,7 +6789,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		storage_class = STORAGE_CLASS_STATIC;
 	} else {
 		//Put it back and move on
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 	}
 
 	//If it was null, it just won't be the child, which is no big deal
@@ -7229,7 +7230,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Otherwise it's just the normal storage class
 	} else {
 		//Otherwise put the token back in the stream
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		//Normal storage class
 		storage_class = STORAGE_CLASS_NORMAL;
 	}
@@ -7576,7 +7577,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return NULL;
 
 	} else {
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 		//Call compound statement
 
 		//We are finally required to see a valid compound statement
@@ -7648,7 +7649,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 	//We'll let the definition rule handle this
 	} else if(lookahead.tok == DEFINE || lookahead.tok == ALIAS){
 		//Put whatever we saw back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Call definition
 		u_int8_t status = definition(fl);
@@ -7664,7 +7665,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 	//Otherwise it must be a declaration
 	} else {
 		//Put the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//We'll simply return whatever the product of the declaration function is
 		return declaration(fl);
@@ -7700,7 +7701,7 @@ static generic_ast_node_t* program(FILE* fl){
 	//As long as we aren't done
 	while((lookahead = get_next_token(fl, &parser_line_num)).tok != DONE){
 		//Put the token back
-		push_back_token(fl, lookahead);
+		push_back_token(lookahead);
 
 		//Call declaration partition
 		generic_ast_node_t* current = declaration_partition(fl);
