@@ -22,6 +22,7 @@ typedef enum {
 	DECLARE,
 	ALIAS,
 	WHEN,
+	MUT,
 	DEFER,
 	IF,
 	THEN,

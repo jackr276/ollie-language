@@ -610,6 +610,11 @@ void print_variable_name(symtab_variable_record_t* record){
 		//Declare or let
 		record->declare_or_let == 0 ? printf("declare ") : printf("let ");
 
+		//If it's mutable print that
+		if(record->is_mutable == 1){
+			printf(" mut ");
+		}
+
 		//The type name
 		printf("%s ", record->type->type_name);
 

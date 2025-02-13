@@ -766,8 +766,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
 	//this assignment is illegal
-	if(current_var->initialized == 1 && current_var->is_constant == 1){
-		sprintf(info, "Attempting to change the value of constant variable \"%s\". First defined here:", current_var->var_name);
+	if(current_var->initialized == 1 && current_var->is_mutable == 0){
+		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(current_var);
 		num_errors++;
@@ -3478,27 +3478,13 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  *
  * As a reminder, type specifier will give us an error if the type is not defined
  *
- * BNF Rule: <construct-member> ::= {constant}? <type-specifier> <identifier>
+ * BNF Rule: <construct-member> ::= <type-specifier> <identifier>
  */
 static generic_ast_node_t* construct_member(FILE* fl){
 	//The error printing string
 	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
-	//Is it a constant variable?
-	u_int8_t is_constant = 0;
-
-	//Let's first see if it's a constant
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If it is constant
-	if(lookahead.tok == CONSTANT){
-		//Then it's constant
-		is_constant = 1;
-	} else {
-		//Otherwise, we'll just put it back
-		push_back_token(lookahead);
-	}
 
 	//Now we are required to see a valid type specifier
 	generic_ast_node_t* type_spec = type_specifier(fl);
@@ -3586,8 +3572,8 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	member_record->line_number = parser_line_num;
 	//Store what the type is
 	member_record->type = type_spec->inferred_type;
-	//Store the constant status
-	member_record->is_constant = is_constant;
+	//These are always mutable
+	member_record->is_mutable = 1;
 	
 	//We can now add this into the symbol table
 	insert_variable(variable_symtab, member_record);
@@ -4767,13 +4753,13 @@ static generic_ast_node_t* type_specifier(FILE* fl){
  * top lexical scope for the function itself. Like all rules, it returns a reference to the
  * root of the subtree that it creates
  *
- * BNF Rule: <parameter-declaration> ::= {constant}? <type-specifier> <identifier>
+ * BNF Rule: <parameter-declaration> ::= {mut}? <type-specifier> <identifier>
  */
 static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//For any needed error printing
 	char info[2000];
-	//Is it constant? No by default
-	u_int8_t is_constant = 0;
+	//Is it mutable?
+	u_int8_t is_mut = 0;
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -4784,12 +4770,11 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//Is this parameter constant? If so we'll just set a flag for later
-	if(lookahead.tok == CONSTANT){
-		is_constant = 1;
+	if(lookahead.tok == MUT){
+		is_mut = 1;
 	} else {
 		//Put it back and move on
 		push_back_token(lookahead);
-		is_constant = 0;
 	}
 
 	//We are now required to see a valid type specifier node
@@ -4870,8 +4855,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	param_record->is_function_paramater = 1;
 	//We assume that it was initialized
 	param_record->initialized = 1;
-	//Record if it's constant
-	param_record->is_constant = is_constant;
+	//If it is mutable
+	param_record->is_mutable = is_mut;
 	//Store the type as well, very important
 	param_record->type = type_spec_node->inferred_type;
 
@@ -6609,7 +6594,7 @@ static generic_ast_node_t* statement(FILE* fl){
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {constant}? {register | static}? <type-specifier> <identifier>;
+ * BNF Rule: <declare-statement> ::= declare {register | static}? {mut}? <type-specifier> <identifier>;
  */
 static generic_ast_node_t* declare_statement(FILE* fl){
 	//For error printing
@@ -6618,39 +6603,35 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
-	//Is it constant or not?
-	u_int8_t is_constant = 0;
+	//Is it mutable?
+	u_int8_t is_mutable = 0;
 	//The storage class, normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
 	//Let's first declare the root node
 	generic_ast_node_t* decl_node = ast_node_alloc(AST_NODE_CLASS_DECL_STMT);
 
-	//We can first optionally see the constant node
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see it, we'll just set the flag
-	if(lookahead.tok == CONSTANT){
-		is_constant = 1;
-	} else {
-		//Otherwise just put it back
-		push_back_token(lookahead);
-	}
-
-	//Grab the next token -- we could potentially see a storage class specifier
+	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we see a specifier here, we'll record it
 	if(lookahead.tok == REGISTER){
 		storage_class = STORAGE_CLASS_REGISTER;
+		//Refresh token
+		lookahead = get_next_token(fl, &parser_line_num);
 	} else if(lookahead.tok == STATIC){
 		storage_class = STORAGE_CLASS_STATIC;
-	} else {
-		//Put it back and move on
-		push_back_token(lookahead);
+		//Refresh token
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
-	//If it was null, it just won't be the child, which is no big deal
+	//Let's now check to see if it's mutable or not
+	if(lookahead.tok == MUT){
+		is_mutable = 1;
+	} else {
+		//Push the token back
+		push_back_token(lookahead);
+	}
 	
 	//Now we are required to see a valid type specifier
 	generic_ast_node_t* type_spec_node = type_specifier(fl);
@@ -6750,7 +6731,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	//Initialize the record
 	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
 	//Store its constant status
-	declared_var->is_constant = is_constant;
+	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type = dealias_type(type_spec_node->inferred_type);
 	//It was not initialized
@@ -6783,7 +6764,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {constant}? {register | static}? <type-specifier> <identifier> := <conditional-expression>;
+ * BNF Rule: <let-statement> ::= let {register | static}? {mut}? <type-specifier> <identifier> := <conditional-expression>;
  */
 static generic_ast_node_t* let_statement(FILE* fl){
 	//For error printing
@@ -6792,24 +6773,13 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
-	//Is it constant or not?
-	u_int8_t is_constant = 0;
+	//Is it mutable?
+	u_int8_t is_mutable = 0;
 	//The storage class, normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_CLASS_LET_STMT);
-
-	//We can first optionally see the constant node
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we see it, we'll just set the flag
-	if(lookahead.tok == CONSTANT){
-		is_constant = 1;
-	} else {
-		//Otherwise just put it back
-		push_back_token(lookahead);
-	}
 
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -6817,15 +6787,22 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	//If we see a specifier here, we'll record it
 	if(lookahead.tok == REGISTER){
 		storage_class = STORAGE_CLASS_REGISTER;
+		//Refresh token
+		lookahead = get_next_token(fl, &parser_line_num);
 	} else if(lookahead.tok == STATIC){
 		storage_class = STORAGE_CLASS_STATIC;
+		//Refresh token
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//Let's now check and see if this is mutable
+	if(lookahead.tok == MUT){
+		is_mutable = 1;
 	} else {
-		//Put it back and move on
+		//Otherwise push this back
 		push_back_token(lookahead);
 	}
 
-	//If it was null, it just won't be the child, which is no big deal
-	
 	//Now we are required to see a valid type specifier
 	generic_ast_node_t* type_spec_node = type_specifier(fl);
 
@@ -6968,8 +6945,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	//now create the variable record for this function
 	//Initialize the record
 	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
-	//Store its constant status
-	declared_var->is_constant = is_constant;
+	//Store it's mutability status
+	declared_var->is_mutable = is_mutable;
 	//Store the type
 	declared_var->type = type_spec_node->inferred_type;
 	//It was initialized

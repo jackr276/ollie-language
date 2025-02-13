@@ -6,7 +6,7 @@ define construct my_struct {
 } as my_struct;
 
 
-fn my_func(u32 args, f32 my_float) -> u32{
+fn my_func(mut u32 args, mut f32 my_float) -> u32{
 	if(args == 2) then{
 		ret 3;
 	} else {

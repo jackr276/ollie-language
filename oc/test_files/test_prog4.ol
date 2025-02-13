@@ -1,15 +1,14 @@
 //Link to test prog 4
-#link "test_prog4.ol"
 
-fn my_func(u32 i, u32 j) -> i32{
+fn my_func(mut u32 i, mut u32 j) -> i32{
 	i := i + 1;
 	ret i;
 }
 
 
-fn main(u32 argc, char** argv)->i32{
-	let i32 i := 0;
-	let i32 a := 0;
+fn main(mut u32 argc, mut char** argv)->i32{
+	let mut i32 i := 0;
+	let mut i32 a := 0;
 	let i32 v := 0;
 	let i32 b := 0;
 	let i32 j := 0;
@@ -42,7 +41,7 @@ fn main(u32 argc, char** argv)->i32{
 	}
 	*/
 
-	for(let u32 i := 3; i < 232; i := i + 1) do{
+	for(let mut u32 i := 3; i < 232; i := i + 1) do{
 		a := a + 1;
 		continue when (a == 32);
 		//break when(a == 32);

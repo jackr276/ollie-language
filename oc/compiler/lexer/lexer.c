@@ -77,7 +77,7 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 						STATIC, COMPTIME, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
 						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM, ON,
 						REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-						CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, REPLACE};
+						CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, REPLACE, MUT};
 
 	//Direct one to one mapping
 	char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "True", "False", "fn", "ret", "jump",
@@ -85,10 +85,10 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 								 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 								  "char", "define", "enum", "on", "register", "constant",
 								  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
-								  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "#replace"};
+								  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "#replace", "mut"};
 
 	//Let's see if we have a keyword here
-	for(u_int8_t i = 0; i < 46; i++){
+	for(u_int8_t i = 0; i < 48; i++){
 		if(strcmp(keyword_arr[i], lexeme) == 0){
 			//We can get out of here
 			lex_item.tok = tok_arr[i];

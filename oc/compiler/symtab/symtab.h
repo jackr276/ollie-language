@@ -121,6 +121,8 @@ struct symtab_variable_record_t{
 	u_int8_t initialized;
 	//Is it a function parameter?
 	u_int8_t is_function_paramater;
+	//Is this mutable?
+	u_int8_t is_mutable;
 	//Is it an enumeration member?
 	u_int8_t is_enumeration_member;
 	//Is it a struct member?
@@ -129,8 +131,6 @@ struct symtab_variable_record_t{
 	symtab_function_record_t* parent_function;
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
-	//Is it a constant variable?
-	u_int8_t is_constant;
 	//What type is it?
 	generic_type_t* type;
 	//What struct was it defined in? For structs only
