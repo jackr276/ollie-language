@@ -7,21 +7,21 @@ define construct my_struct{
 alias u8* as int_ptr;
 
 fn unused() -> u16{
-	let char* str_literal := "I do nothing";
+	let str_literal:char* := "I do nothing";
 
 	ret 2;
 }
 
 
-fn my_func(u32 error_code) -> u32{
-	let u32 l := 0;
-	let u32 a := 1;
-	let u32 k := 0;
-	declare construct my_struct*[500] struct_arr;
+fn my_func(error_code:u32) -> u32{
+	let l:u32 := 0;
+	let a:u32 := 1;
+	let k:u32 := 0;
+	declare struct_arr : construct my_struct*[300];
 
-	let u32 struct_access := struct_arr[3]=>i;
+	let struct_access:u32 := struct_arr[3]=>i;
 	
-	declare f64 i_do_not_exist;
+	declare i_do_not_exist:f64;
 
 	@main(i, j, i_do_not_exist); 
 }

@@ -1,17 +1,17 @@
 fn main(u32 argc, char** argv) -> i32{
 	while(argc < 5) do {
-		declare u32 i;
+		declare i:u32;
 		i := 3;
 	}
 
 	//Array of addresses
-	declare u32*[32] address_array;
+	declare address_array:u32*[10];
 	
-	let my_enum mine := ENUM_TYPE_1;
+	let mine:my_enum := ENUM_TYPE_1;
 
-	declare mut u32 j;
+	declare mut j:u32;
 
-	let i64 long := 234l;
+	let long:i64 := 234l;
 
 	
 	for(j := 0; j <= 33; j++) do {
@@ -21,5 +21,5 @@ fn main(u32 argc, char** argv) -> i32{
 
 	ret j;
 
-	let u32 my_int := 234;
+	let my_int:u32 := 234;
 }

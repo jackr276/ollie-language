@@ -7,15 +7,15 @@ define construct my_struct{
 	i8 c;
 } as aliased_struct;
 
-fn:static main(i32 argc, char** argv) -> i32 {
-	let u32 i := 0;
-	declare u32 j;
+fn:static main(argc:i32, argv:char**) -> i32 {
+	let i:u32 := 0;
+	declare j:u32;
 
 	j := i;
 
-	let u32 k := 0;
-	let u32 l := 0;
-	declare f32[10] float_arr;
+	let k:u32 := 0;
+	let l:u32 := 0;
+	declare float_arr:f32[10];
 
 	if(i == 0) then {
 		i := 2;

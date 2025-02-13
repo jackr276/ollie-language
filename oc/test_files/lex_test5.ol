@@ -1,12 +1,12 @@
-fn main(u32 argc, char** argv) -> i32 {
-	let char x := 'a';
-	let char y := 'c';
+fn main(argc:u32, argv:char**) -> i32 {
+	let x : char := 'a';
+	let y : char := 'c';
 
-	let mut u64 x := 1;
+	let mut x:u64 := 1;
 	
 	switch on(x){
 		case 1:
-			declare u_int32 i;
+			declare i : u32;
 			i := 32;
 			break;
 

@@ -13,14 +13,14 @@ define enum type_enum{
 	TYPE_CHAR
 } as my_enum_type;
 
-fn my_func(char** argv) -> void{
-	let char* a := argv;
+fn my_func(argv:char**) -> void{
+	let a:char* := argv;
 }
 
-fn:static main(char** argv, i8 argc) -> i32{
-	let my_enum_type a := TYPE_NORMAL;
-	let u32 a := 32;
-	let mut u8 b := 9 * 7 + 3 * a;
+fn:static main(argv:char**, argc:i8) -> i32{
+	let a:my_enum_type := TYPE_NORMAL;
+	let a:u32 := 32;
+	let mut b:u8 := 9 * 7 + 3 * a;
 	//Should fail
 	while(b >= 9 && b <= "hi"){
 		b--;

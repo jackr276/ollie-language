@@ -1,12 +1,12 @@
 fn my_fn() -> void{
-	let u32 i := 32;
+	let i:u32 := 32;
 }
 
-fn:static main(char** argv) -> i32{
-	declare mut u32 a;
-	declare u32 b;
-	declare u32 c;
-	declare u32 d;
+fn:static main(argv:char**) -> i32{
+	declare mut a:u32;
+	declare mut b:u32;
+	declare mut c:u32;
+	declare mut d:u32;
 
 	a := 32;
 	b := 27;
@@ -27,10 +27,10 @@ fn:static main(char** argv) -> i32{
 
 	//do{
 	//while(d >= 32) do{
-	for(let mut u32 i := 0; i < 323; i++) do{
-		declare u32 a;
-		declare u32 b;
-		declare u32 c;
+	for(let mut i:u32 := 0; i < 323; i++) do{
+		declare a:u32;
+		declare b:u32;
+		declare c:u32;
 
 		a := 32;
 		b := 27;
@@ -39,7 +39,7 @@ fn:static main(char** argv) -> i32{
 	};// while(d >= 32);
 
 	@my_fn();
-	let u32 abcd := 322;
+	let abcd:u32 := 322;
 
 	ret a;
 }

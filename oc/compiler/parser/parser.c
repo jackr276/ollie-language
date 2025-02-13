@@ -4753,7 +4753,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
  * top lexical scope for the function itself. Like all rules, it returns a reference to the
  * root of the subtree that it creates
  *
- * BNF Rule: <parameter-declaration> ::= {mut}? <type-specifier> <identifier>
+ * BNF Rule: <parameter-declaration> ::= {mut}? <identifier> : <type-specifier>
  */
 static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//For any needed error printing
@@ -4775,16 +4775,6 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	} else {
 		//Put it back and move on
 		push_back_token(lookahead);
-	}
-
-	//We are now required to see a valid type specifier node
-	generic_ast_node_t* type_spec_node = type_specifier(fl);
-	
-	//If the node fails, we'll just send the error up the chain
-	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier gien to function parameter", parser_line_num);
-		//It's already an error, just propogate it up
-		return type_spec_node;
 	}
 
 	//Following the valid type specifier declaration, we are required to to see a valid variable. This
@@ -4843,6 +4833,26 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 		num_errors++;
 		//Return a fresh error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we need to see a colon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If it isn't a colon, we're out
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We are now required to see a valid type specifier node
+	generic_ast_node_t* type_spec_node = type_specifier(fl);
+	
+	//If the node fails, we'll just send the error up the chain
+	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier gien to function parameter", parser_line_num);
+		//It's already an error, just propogate it up
+		return type_spec_node;
 	}
 
 	//Once we get here, we have actually seen an entire valid parameter 
@@ -6643,16 +6653,6 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		return ident_node;
 	}
 
-	//The last thing that we are required to see before final assembly is a semicolon
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required at the end of declaration statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
 	//Let's get a pointer to the name for convenience
 	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
 
@@ -6735,6 +6735,15 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//The last thing that we are required to see before final assembly is a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required at the end of declaration statement", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function

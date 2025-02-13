@@ -9,13 +9,13 @@ define construct con{
 	char*[32] b;
 };
 
-fn main(i32 argc, char** argv) -> i32
+fn main(argc:u32, argv:char**) -> i32
 {
 	if(argv) then {
-		let str i := "hi";
+		let i:str := "hi";
 	} else if(argc >= 2) then {
 		if(argc == 3) then {
-			let str i := "hi";
+			let i:str := "hi";
 		}
 	}
 

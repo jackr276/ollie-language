@@ -5,18 +5,18 @@
 alias char** as str_arr;
 alias char* as str;
 
-fn:static main(u32 arg_count, str_arr arg_vector) -> i32{
-	declare str my_str;
-	declare u32 c;
+fn:static main(arg_count:u32, arg_vector:str_arr) -> i32{
+	declare my_str:str;
+	declare c:u32;
 
 	if(arg_count != 0) then {
 		arg_count := -1;
 		//arg_vector := "hello";
 
 	} else if(arg_count >= -1) then {
-		let f32 a := .23;
-		let f32 b := 2.322;
-		let f32 c := a + b;
+		let a:f32 := .23;
+		let b:f32 := 2.322;
+		let c:f32 := a + b;
 
 
 	} else {

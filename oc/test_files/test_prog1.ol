@@ -6,7 +6,7 @@ define construct my_struct {
 } as my_struct;
 
 
-fn my_func(mut u32 args, mut f32 my_float) -> u32{
+fn my_func(mut args:u32, mut my_float:f32) -> u32{
 	if(args == 2) then{
 		ret 3;
 	} else {
@@ -25,9 +25,9 @@ fn my_func(mut u32 args, mut f32 my_float) -> u32{
 		//ret *(<u32*>(&my_float));
 	}
 
-	for(let mut u32 i := 0; i < 232; i++) do{
+	for(let mut i:u32 := 0; i < 232; i++) do{
 		i--;
-		let i32 j := 32;
+		let j:i32 := 32;
 		continue when (i == 32);
 	}
 
@@ -35,28 +35,28 @@ fn my_func(mut u32 args, mut f32 my_float) -> u32{
 }
 
 
-fn test_func(mut u32 i) -> void{
+fn test_func(mut i:u32) -> void{
 	i := 32;
 }
 
 
-fn main(i32 argc, char** argv) -> i32{
+fn main(argc:i32, argv:char**) -> i32{
 	//Allocate a struct
-	declare my_struct my_structure;
+	declare my_structure:my_struct;
 
 	my_structure:a := 2;
 	my_structure:b := 3;
 	 my_structure:c := 32.2;
 
-	let i64 j := 2342l;
+	let j:i64 := 2342l;
 
 	//Sample call
 	@test_func(2);
 
-	let mut u32 idx := 0;
+	let mut idx:u32 := 0;
 
 	while(idx < 15) do{
-		let u32 bab := @my_func(idx, 32.2);
+		let bab:u32 := @my_func(idx, 32.2);
 		idx++;
 	}
 	
@@ -74,12 +74,12 @@ fn main(i32 argc, char** argv) -> i32{
 	} while (idx > 0);
 
 	//Example for loop
-	for(let mut u32 i := 0; i <= 234; i := i + 2) do{
+	for(let mut i:u32 := 0; i <= 234; i := i + 2) do{
 		@test_func(i);
 	}
 
 
 	ret my_structure:b;
 
-	let u32 my_integer := 0x02;
+	let my_integer:u32 := 0x02;
 }

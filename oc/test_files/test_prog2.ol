@@ -1,6 +1,6 @@
 fn test_func() -> i32 {
-	let mut u32 i := 232;
-	let mut u32 j := 32;
+	let mut i:u32 := 232;
+	let mut j:u32 := 32;
 
 	while(i >= 232) do{
 		if(i == 2) then{ 
@@ -31,8 +31,8 @@ fn test_func() -> i32 {
 		ret i;
 	} while (i < 232);
 
-	let u32 sample := 2232;
-	for(let u32 i := 0; i < 2323; i++) do {
+	let sample:u32 := 2232;
+	for(let i:u32 := 0; i < 2323; i++) do {
 		@test_func();
 		if(i == -1) then{
 			ret -1;
@@ -40,17 +40,17 @@ fn test_func() -> i32 {
 
 	}
 
-	let i32 my_int := -2;
+	let my_int:i32 := -2;
 	ret 32;
 }
 
-fn main(u32 argc, char** argv)->i32{
-	let u32 i := 0;
-	let mut u32 a := 0;
-	let u32 v := 0;
-	let u32 b := 0;
-	let u32 j := 0;
-	let u32 sadf := 0;
+fn main(argc:u32, argv:char**)->i32{
+	let i:u32 := 0;
+	let mut a:u32 := 0;
+	let v:u32 := 0;
+	let b:u32 := 0;
+	let j:u32 := 0;
+	let sadf:u32 := 0;
 
 	if(i == 0) then {
 		if(j == a) then{
@@ -59,10 +59,10 @@ fn main(u32 argc, char** argv)->i32{
 			ret j;
 		}
 	} else if( i == 1) then{
-		let u32 i_copy := i;
+		let i_copy:u32 := i;
 	} else {
 		@test_func();
-		let u32 j_copy := i;
+		let j_copy:u32 := i;
 	}
 
 	defer @test_func();

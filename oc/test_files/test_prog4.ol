@@ -1,21 +1,21 @@
 //Link to test prog 4
 
-fn my_func(mut u32 i, mut u32 j) -> i32{
+fn my_func(mut i:u32, mut j:u32) -> i32{
 	i := i + 1;
 	ret i;
 }
 
 
-fn main(mut u32 argc, mut char** argv)->i32{
-	let mut i32 i := 0;
-	let mut i32 a := 0;
-	let i32 v := 0;
-	let i32 b := 0;
-	let i32 j := 0;
-	let i32 sadf := 0;
+fn main(mut argc:u32, mut argv:char**)->i32{
+	let mut i:i32 := 0;
+	let mut a:i32 := 0;
+	let v:i32 := 0;
+	let b:i32 := 0;
+	let j:i32 := 0;
+	let sadf:i32 := 0;
 
-	declare char* abcd;
-	let char ex := 'c';
+	declare abcd:char*;
+	let ex:char := 'c';
 
 	**argv := ~ex;
 	
@@ -35,22 +35,22 @@ fn main(mut u32 argc, mut char** argv)->i32{
 		}
 
 		//Just some junk
-		let i32 sadfa := 232;
+		let sadfa:i32 := 232;
 
 		a := a + 323;
 	}
 	*/
 
-	for(let mut u32 i := 3; i < 232; i := i + 1) do{
+	for(let mut i:u32 := 3; i < 232; i := i + 1) do{
 		a := a + 1;
 		continue when (a == 32);
 		//break when(a == 32);
-		let u32 masdfasdf := 232;
+		let masdfasdf:u32 := 232;
 	}
 
 	@my_func(i, j);
 
-	let f32 j_copy := 32.0;
+	let j_copy:f32 := 32.0;
 	++j_copy;
 
 	ret j + a;
