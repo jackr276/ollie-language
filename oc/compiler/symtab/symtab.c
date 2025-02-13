@@ -134,6 +134,17 @@ void finalize_type_scope(type_symtab_t* symtab){
 
 /**
  * Hash a name before entry/search into the hash table
+ *
+ * Universal hashing algorithm:
+ * 	Start with an initial small prime
+ * 	key <- small_prime
+ *
+ * 	for each hashable value:
+ * 		key <- (key * prime) ^ (value * other prime)
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
 */
 static u_int16_t hash(char* name){
 	u_int32_t key = 37;

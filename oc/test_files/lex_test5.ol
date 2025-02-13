@@ -2,8 +2,7 @@ fn main(u32 argc, char** argv) -> i32 {
 	let char x := 'a';
 	let char y := 'c';
 
-	/* Should fail on parse */
-	let u64 x := 1;
+	let mut u64 x := 1;
 	
 	switch on(x){
 		case 1:

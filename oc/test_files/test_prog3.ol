@@ -3,7 +3,7 @@ fn my_fn() -> void{
 }
 
 fn:static main(char** argv) -> i32{
-	declare u32 a;
+	declare mut u32 a;
 	declare u32 b;
 	declare u32 c;
 	declare u32 d;
@@ -27,7 +27,7 @@ fn:static main(char** argv) -> i32{
 
 	//do{
 	//while(d >= 32) do{
-	for(let u32 i := 0; i < 323; i++) do{
+	for(let mut u32 i := 0; i < 323; i++) do{
 		declare u32 a;
 		declare u32 b;
 		declare u32 c;

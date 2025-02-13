@@ -8,8 +8,8 @@ define construct my_struct{
 } as aliased_struct;
 
 fn:static main(i32 argc, char** argv) -> i32 {
-	let constant u32 i := 0;
-	declare constant u32 j;
+	let u32 i := 0;
+	declare u32 j;
 
 	j := i;
 

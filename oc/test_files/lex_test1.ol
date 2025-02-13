@@ -9,7 +9,7 @@ declare u8 j;
 alias u8[100] as int_arr;
 
 fn test_func(f32 my_float, void* ptr) -> void{
-	let u32 i := 0x01;
+	let mut u32 i := 0x01;
 	//Cast ptr to an int
 	i := *(<u32*>ptr);
 

@@ -11,8 +11,8 @@ fn main(i32 argc, char** argv) -> i32 {
 	declare i32[500] my_arr;
 	my_arr[0] := 3;
 
-	let u32 argc := 14;
-	//let u32 example := 2;
+	let mut u32 argc := 14;
+	//let mut u32 example := 2;
 
 	while(argc > 0) do {
 		argc--;

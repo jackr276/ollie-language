@@ -9,7 +9,7 @@ fn main(u32 argc, char** argv) -> i32{
 	
 	let my_enum mine := ENUM_TYPE_1;
 
-	declare u32 j;
+	declare mut u32 j;
 
 	let i64 long := 234l;
 

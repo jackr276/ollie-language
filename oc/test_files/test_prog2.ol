@@ -1,6 +1,6 @@
 fn test_func() -> i32 {
-	let u32 i := 232;
-	 let u32 j := 32;
+	let mut u32 i := 232;
+	let mut u32 j := 32;
 
 	while(i >= 232) do{
 		if(i == 2) then{ 
@@ -46,7 +46,7 @@ fn test_func() -> i32 {
 
 fn main(u32 argc, char** argv)->i32{
 	let u32 i := 0;
-	let u32 a := 0;
+	let mut u32 a := 0;
 	let u32 v := 0;
 	let u32 b := 0;
 	let u32 j := 0;
