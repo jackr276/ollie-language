@@ -1237,6 +1237,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	//Add the inferred type in
 	postfix_expr_node->inferred_type = return_type;
 
+	//Carry through
+	postfix_expr_node->variable = result->variable;
+
 	//Add the assignability in
 	postfix_expr_node->is_assignable = 0;
 
@@ -3490,24 +3493,15 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  *
  * As a reminder, type specifier will give us an error if the type is not defined
  *
- * BNF Rule: <construct-member> ::= <type-specifier> <identifier>
+ * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> 
  */
 static generic_ast_node_t* construct_member(FILE* fl){
 	//The error printing string
 	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
-
-	//Now we are required to see a valid type specifier
-	generic_ast_node_t* type_spec = type_specifier(fl);
-
-	//If this is an error, the whole thing fails
-	if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in construct member", parser_line_num);
-		num_errors++;
-		//It's already an error, so just send it up
-		return type_spec;
-	}
+	//Is this mutable or not
+	u_int8_t is_mutable = 0;
 
 	//Otherwise we know that it worked here
 	//Now we need to see a valid ident and check it for duplication
@@ -3574,17 +3568,39 @@ static generic_ast_node_t* construct_member(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//After the ident, we need to see a colon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//Fail out here
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required between ident and type specifier in construct member declaration", parser_line_num);
+		num_errors++;
+		//Error out
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we are required to see a valid type specifier
+	generic_ast_node_t* type_spec = type_specifier(fl);
+
+	//If this is an error, the whole thing fails
+	if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in construct member", parser_line_num);
+		num_errors++;
+		//It's already an error, so just send it up
+		return type_spec;
+	}
+
+
 	//Now if we finally make it all of the way down here, we are actually set. We'll construct the
 	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record
 	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
-	//It is a construct member
 	member_record->is_construct_member = 1;
 	member_record->line_number = parser_line_num;
 	//Store what the type is
 	member_record->type = type_spec->inferred_type;
-	//These are always mutable
+	//Is it mutable or not
 	member_record->is_mutable = 1;
 	
 	//We can now add this into the symbol table

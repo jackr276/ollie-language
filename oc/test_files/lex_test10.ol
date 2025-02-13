@@ -1,7 +1,7 @@
 define construct my_struct{
-	u32 i;
-	u32 j;
-	u32 prog;
+	i:u32;
+	j:u32;
+	prog:u32;
 };
 
 alias u8* as int_ptr;

@@ -4,9 +4,9 @@
 alias char* as str;
 
 define construct con{
-	i8 x;
-	i8 y;
-	char*[32] b;
+	x:i8;
+	y:i8;
+	b:char*[32];
 };
 
 fn main(argc:u32, argv:char**) -> i32
