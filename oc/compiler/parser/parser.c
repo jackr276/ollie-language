@@ -774,8 +774,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Mark that this var was in fact initialized
-	current_var->initialized = 1;
+	//If it was already intialized, this means that it's been "assigned to"
+	if(current_var->initialized == 1){
+		current_var->assigned_to = 1;
+	} else {
+		//Mark that this var was in fact initialized
+		current_var->initialized = 1;
+	}
 
 	//Now we are required to see the := terminal
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -1195,7 +1200,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		push_back_token(lookahead);
 		//Assign the type
 		postfix_expr_node->inferred_type = return_type;
-		//Not assignable
+		//This was assigned to
+		result->variable->assigned_to = 1;
+		//Assignable
 		postfix_expr_node->is_assignable = 1;
 		//And we'll give back what we had constructed so far
 		return postfix_expr_node;
@@ -1604,6 +1611,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//Otherwise it worked just fine here. The return type is the same type that we had initially
 			return_type = cast_expr->inferred_type;
+			//This counts as mutation
+			cast_expr->variable->assigned_to = 1;
 
 			//This is not assignable
 			is_assignable = 0;
@@ -1646,6 +1655,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//Otherwise he is the unary expression node here
 		add_child_node(unary_expr_node, postfix_expr_node);
+
+		//Carry the var through
+		unary_expr_node->variable = postfix_expr_node->variable;
 
 		//This type info is also sent up
 		unary_expr_node->inferred_type = postfix_expr_node->inferred_type;
@@ -4865,6 +4877,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	param_record->is_function_paramater = 1;
 	//We assume that it was initialized
 	param_record->initialized = 1;
+	//Add the line number
+	param_record->line_number = parser_line_num;
 	//If it is mutable
 	param_record->is_mutable = is_mut;
 	//Store the type as well, very important

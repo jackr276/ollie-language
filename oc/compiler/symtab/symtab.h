@@ -119,6 +119,8 @@ struct symtab_variable_record_t{
 	u_int64_t offset;
 	//Was it initialized?
 	u_int8_t initialized;
+	//Was it assigned to?
+	u_int8_t assigned_to;
 	//Is it a function parameter?
 	u_int8_t is_function_paramater;
 	//Is this mutable?
@@ -345,6 +347,10 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name);
  */
 void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnings);
 
+/**
+ * Run through and check for any unused vars, bad mut keywords, etc
+ */
+void check_for_var_errors(variable_symtab_t* symtab, u_int16_t* num_warnings);
 
 /**
  * A printing function for development purposes

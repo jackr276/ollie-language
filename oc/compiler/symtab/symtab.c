@@ -689,7 +689,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnin
 	//For temporary holding
 	symtab_function_record_t* record;
 
-	//Run through and free all function records
+	//Run through all keyspace records
 	for(u_int16_t i = 0; i < KEYSPACE; i++){
 		record = symtab->records[i];
 
@@ -726,6 +726,61 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnin
 			//Advance record up
 			record = record->next;
 		}
+	}
+}
+
+
+/**
+ * If a variable is declared as "mut"(mutable) but is never assigned to throughout it's
+ * entire lifetime, that mut keyword is not needed
+ */
+void check_for_var_errors(variable_symtab_t* symtab, u_int16_t* num_warnings){
+	//For any/all error printing
+	char info[1000];
+	//For record holding
+	symtab_variable_record_t* record;
+
+	//Sheaf cursor
+	symtab_variable_sheaf_t** sheaf_cursor = symtab->sheafs;
+	
+	//So long as we have a sheaf
+	while(*sheaf_cursor != NULL){
+		//Grab the actual sheaf out
+		symtab_variable_sheaf_t* sheaf = *sheaf_cursor;
+
+		//Now we'll run through every variable in here
+		for(u_int32_t i = 0; i < KEYSPACE; i++){
+			record = sheaf->records[i];
+
+			//This will happen alot
+			if(record == NULL){
+				continue;
+			}
+
+			//Let's now analyze this record
+			
+			//We have a non initialized variable
+			if(record->initialized == 0){
+				sprintf(info, "Variable \"%s\" is never initialized. First defined here:", record->var_name);
+				print_warning(info, record->line_number);
+				print_variable_name(record);
+				(*num_warnings)++;
+				//Go to the next iteration
+				continue;
+			}
+
+			//If it's mutable but never mutated
+			if(record->is_mutable == 1 && record->assigned_to == 0){
+				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name);
+				print_warning(info, record->line_number);
+				print_variable_name(record);
+				(*num_warnings)++;
+			}
+
+		}
+
+		//Advance the sheaf cursor
+		sheaf_cursor++;
 	}
 }
 
