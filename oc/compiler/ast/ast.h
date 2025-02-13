@@ -146,6 +146,8 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_DO_WHILE_STMT,
 	AST_NODE_CLASS_FOR_STMT,
 	AST_NODE_CLASS_COMPOUND_STMT,
+	//For special elaborative parameters
+	AST_NODE_CLASS_ELABORATIVE_PARAM,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 

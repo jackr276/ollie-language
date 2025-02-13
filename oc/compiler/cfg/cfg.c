@@ -123,7 +123,6 @@ static jump_type_t select_appropriate_jump_stmt(Token operator, jump_category_t 
 				return JUMP_TYPE_JNZ;
 			}
 	}
-
 }
 
 

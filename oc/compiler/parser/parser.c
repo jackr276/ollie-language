@@ -3500,8 +3500,6 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	char info[1000];
 	//The lookahead token
 	Lexer_item lookahead;
-	//Is this mutable or not
-	u_int8_t is_mutable = 0;
 
 	//Otherwise we know that it worked here
 	//Now we need to see a valid ident and check it for duplication
@@ -3601,7 +3599,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	//Store what the type is
 	member_record->type = type_spec->inferred_type;
 	//Is it mutable or not
-	member_record->is_mutable = 1;
+	member_record->is_mutable = 0;
 	
 	//We can now add this into the symbol table
 	insert_variable(variable_symtab, member_record);
@@ -4792,12 +4790,22 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	Lexer_item lookahead;
 
 	//Let's first create the top level node here
-	generic_ast_node_t* parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_PARAM_DECL);
+	generic_ast_node_t* parameter_decl_node;
 
 	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//Is this parameter constant? If so we'll just set a flag for later
+	if(lookahead.tok == DOTDOTDOT){
+		//This is a special elaborative param
+		parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_ELABORATIVE_PARAM);
+		//We're done here
+		return parameter_decl_node;
+	} else {
+		//Otherwise we have a regular param node
+		parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_PARAM_DECL);
+	}
+
 	if(lookahead.tok == MUT){
 		is_mut = 1;
 	} else {
@@ -4956,6 +4964,16 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
 			//It's already an error so send it on up
 			return param_decl;
+		}
+
+		//Let's see if we have a special parameter elaboration type here
+		if(param_decl->CLASS == AST_NODE_CLASS_ELABORATIVE_PARAM){
+			//Add it as a child node
+			add_child_node(param_list_node, param_decl);
+
+			//Now we'll return the entire thing
+			param_list_node->line_number = parser_line_num;
+			return param_list_node;
 		}
 
 		//Add this in as a child node

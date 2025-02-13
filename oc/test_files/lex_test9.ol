@@ -1,4 +1,4 @@
-fn main(u32 argc, char** argv) -> i32{
+fn main(argc:u32, argv:char**) -> i32{
 	while(argc < 5) do {
 		declare i:u32;
 		i := 3;

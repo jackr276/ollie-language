@@ -455,6 +455,27 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lexeme_cursor++;
 							*lexeme_cursor = ch2;
 							lexeme_cursor++;
+						} else if(ch2 == '.'){
+							//Let's see if ch3 is '.'
+							char ch3 = get_next_char(fl);
+							//We have a DOTDOTDOT
+							if(ch3 == '.'){
+								lex_item.tok = DOTDOTDOT;
+								lex_item.line_num = line_num;
+								lex_item.char_count = token_char_count;
+								//Give it back
+								return lex_item;
+							}
+
+							//Otherwise, we'll put them both back
+							fseek(fl, -2, SEEK_CUR);
+
+							//And return a DOT
+							lex_item.tok = DOT;	
+							lex_item.line_num = line_num;
+							lex_item.char_count = 1;
+							return lex_item;
+
 						} else {
 							//Put back ch2
 							put_back_char(fl);

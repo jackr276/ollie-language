@@ -42,6 +42,12 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_FOR_LOOP_CONDITION;
 			break;
 
+		//The parameter elaboration node, only for type system
+		case AST_NODE_CLASS_ELABORATIVE_PARAM:
+			//Just stuff the class in here
+			node->CLASS = AST_NODE_CLASS_ELABORATIVE_PARAM;
+			break;
+
 		//The defer statement node
 		case AST_NODE_CLASS_DEFER_STMT:
 			//Just allocate the proper size and set the class

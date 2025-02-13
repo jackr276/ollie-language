@@ -27,6 +27,8 @@ typedef enum {
 	IF,
 	THEN,
 	REPLACE,
+	//For expansion of func params
+	DOTDOTDOT,
 	ELSE,
 	DO,
 	WHILE,

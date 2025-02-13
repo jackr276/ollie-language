@@ -46,7 +46,7 @@ fn main(argc:i32, argv:char**) -> i32{
 
 	my_structure:a := 2;
 	my_structure:b := 3;
-	my_structure:c := 32.2;
+	my_structure:c := 32;
 
 	let j:i64 := 2342l;
 

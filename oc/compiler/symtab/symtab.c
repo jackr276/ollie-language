@@ -616,9 +616,8 @@ void print_variable_name(symtab_variable_record_t* record){
 		print_function_name(record->parent_function);
 		return;
 	} else if(record->is_enumeration_member || record->is_construct_member){
-		print_generic_type(record->type);
 		//The var name
-		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name);
+		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name, record->type->type_name);
 	} else {
 		//Line num
 		printf("\n---> %d | ", record->line_number);
