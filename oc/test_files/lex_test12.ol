@@ -18,13 +18,16 @@ fn my_func(argv:char**) -> void{
 }
 
 fn:static main(argv:char**, argc:i8) -> i32{
-	let a:my_enum_type := TYPE_NORMAL;
-	let a:u32 := 32;
-	let mut b:u8 := 9 * 7 + 3 * a;
+	let a:my_enum_type := TYPE_STRONG;
+	let mut b:u32 := 9 * 7 + 3 + a;
 	//Should fail
-	while(b >= 9 && b <= "hi"){
+	while(b >= 9 && b <= 32) do{
 		b--;
 	}
 
-	ret;
+	if(a == TYPE_STRONG) then{
+		let mut b:u32 := 32;
+	}
+
+	ret 32;
 }

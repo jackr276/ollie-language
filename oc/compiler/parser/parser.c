@@ -198,7 +198,7 @@ static generic_ast_node_t* constant(FILE* fl){
 			((constant_ast_node_t*)(constant_node->node))->int_val = int_val;
 
 			//By default, int constants are of type s_int32
-			constant_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+			constant_node->inferred_type = lookup_type(type_symtab, "u32")->type;
 			break;
 
 		case HEX_CONST:
@@ -209,7 +209,7 @@ static generic_ast_node_t* constant(FILE* fl){
 			((constant_ast_node_t*)(constant_node->node))->int_val = hex_val;
 
 			//By default, int constants are of type s_int32
-			constant_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+			constant_node->inferred_type = lookup_type(type_symtab, "u32")->type;
 			break;
 
 		case LONG_CONST:
@@ -220,7 +220,7 @@ static generic_ast_node_t* constant(FILE* fl){
 			((constant_ast_node_t*)(constant_node->node))->long_val = long_val;
 
 			//By default, int constants are of type s_int64 
-			constant_node->inferred_type = lookup_type(type_symtab, "i64")->type;
+			constant_node->inferred_type = lookup_type(type_symtab, "u64")->type;
 			break;
 
 		case FLOAT_CONST:
@@ -2181,8 +2181,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		TYPE_CLASS temp_holder_type_class = temp_holder->inferred_type->type_class;
 
 		//Fail case right here
-		if(temp_holder_type_class == TYPE_CLASS_CONSTRUCT || temp_holder_type_class == TYPE_CLASS_ARRAY
-		  || temp_holder_type_class == TYPE_CLASS_ENUMERATED){
+		if(temp_holder_type_class == TYPE_CLASS_CONSTRUCT || temp_holder_type_class == TYPE_CLASS_ARRAY){
 			sprintf(info, "Type %s cannot be added or subtracted from", temp_holder->inferred_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
@@ -2218,8 +2217,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		TYPE_CLASS right_child_type_class = right_child->inferred_type->type_class;
 
 		//Fail case right here
-		if(right_child_type_class == TYPE_CLASS_CONSTRUCT || right_child_type_class == TYPE_CLASS_ARRAY
-		  || right_child_type_class == TYPE_CLASS_ENUMERATED){
+		if(right_child_type_class == TYPE_CLASS_CONSTRUCT || right_child_type_class == TYPE_CLASS_ARRAY){
 			sprintf(info, "Type %s cannot be added or subtracted from", right_child->inferred_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
@@ -2270,6 +2268,25 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			return_type = temp_holder->inferred_type;
 
 			//We've done all of our type checking, just jump out
+			goto additive_loop_end;
+		}
+
+		//We'll just see what the other thing here says
+		if(right_child_type_class == TYPE_CLASS_ENUMERATED || temp_holder_type_class == TYPE_CLASS_ENUMERATED){
+			//Are they compatible?
+			generic_type_t* result = types_compatible(temp_holder->inferred_type, right_child->inferred_type);
+
+			//If no, this will be null
+			if(result == NULL){
+				sprintf(info, "Types \"%s\" and \"%s\" cannot be added together", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise the return type is this
+			return_type = result;
+			//Get out
 			goto additive_loop_end;
 		}
 
@@ -2823,9 +2840,8 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		
 		//We do not allow bitwise or to be done on arrays, enums or constructs
 		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
-		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
-		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
-			print_parse_message(PARSE_ERROR, "Equality operators do not work with arrays, enums or constructs", parser_line_num);
+		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT){
+			print_parse_message(PARSE_ERROR, "Equality operators do not work with arrays or constructs", parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
@@ -3939,7 +3955,7 @@ static u_int8_t construct_definer(FILE* fl){
  *
  * BNF Rule: <enum-member> ::= <identifier>
  */
-static generic_ast_node_t* enum_member(FILE* fl){
+static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
 	//For error printing
 	char info[1000];
 
@@ -4003,6 +4019,12 @@ static generic_ast_node_t* enum_member(FILE* fl){
 	//Once we make it all the way down here, we know that we don't have any duplication
 	//We can now make the record of the enum
 	symtab_variable_record_t* enum_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	//Store the current value
+	enum_record->enum_member_value = current_member_val;
+	//It is an enum member
+	enum_record->is_enumeration_member = 1;
+	//This is always initialized
+	enum_record->initialized = 1;
 	//Later down the line, we'll assign the type that this thing is
 	
 	//We can now add it into the symtab
@@ -4030,6 +4052,8 @@ static generic_ast_node_t* enum_member(FILE* fl){
 static generic_ast_node_t* enum_member_list(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
+	//The enum member current number
+	u_int16_t current_member_val = 0;
 
 	//We will first create the list node
 	generic_ast_node_t* enum_list_node = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER_LIST);
@@ -4037,7 +4061,9 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
 	//Now, we can see as many enumerators as we'd like here, each separated by a comma
 	do{
 		//First we need to see a valid enum member
-		generic_ast_node_t* member = enum_member(fl);
+		generic_ast_node_t* member = enum_member(fl, current_member_val);
+		//Increment this
+		current_member_val++;
 
 		//If the member is bad, we bail right out
 		if(member->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7857,8 +7883,8 @@ front_end_results_package_t parse(FILE* fl){
 	prog = program(fl);
 
 	//Finalize the scopes
-	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
+	//finalize_type_scope(type_symtab);
+	//finalize_variable_scope(variable_symtab);
 
 	//Initialize our results package here
 	front_end_results_package_t results;

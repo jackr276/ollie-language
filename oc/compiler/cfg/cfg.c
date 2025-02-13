@@ -20,6 +20,8 @@ u_int32_t* num_warnings_ref;
 heap_stack_t* deferred_stmts;
 //Keep a variable symtab of temporary variables
 variable_symtab_t* temp_vars;
+//Keep the type symtab up and running
+type_symtab_t* type_symtab;
 //The CFG that we're working with
 cfg_t* cfg_ref;
 
@@ -301,6 +303,19 @@ static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_
 	return const_var->assignee;
 }
 
+/**
+ * Emit the abstract machine code for a constant to variable assignment. 
+ */
+static three_addr_var_t* emit_constant_code_direct(basic_block_t* basic_block, three_addr_const_t* constant, generic_type_t* inferred_type){
+	//We'll use the constant var feature here
+	three_addr_code_stmt_t* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(inferred_type), constant);
+	
+	//Add this into the basic block
+	add_statement(basic_block, const_var);
+
+	//Now give back the assignee variable
+	return const_var->assignee;
+}
 
 /**
  * Emit the identifier machine code. This function is to be used in the instance where we want
@@ -311,6 +326,13 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 	if(use_temp == PRESERVE_ORIG_VAR){
 		//No new generation here
 		return emit_var(ident_node->variable, !use_temp);
+
+	//We will do an on-the-fly conversion to a number
+	} else if(ident_node->inferred_type->type_class == TYPE_CLASS_ENUMERATED) {
+		symtab_type_record_t* type_record = lookup_type(type_symtab, "u32");
+		generic_type_t* type = type_record->type;
+		return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), type);
+
 	} else {
 		//Let's first create the assignment statement	
 		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable, 0));
@@ -536,7 +558,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Return the temporary character from here
-		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, USE_TEMP_VAR);
+		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, PRESERVE_ORIG_VAR);
 		return package;
 	}
 
@@ -2276,6 +2298,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Store our references here
 	num_errors_ref = num_errors;
 	num_warnings_ref = num_warnings;
+
+	//Add this in
+	type_symtab = results.type_symtab;
 
 	//Create the stack here
 	deferred_stmts = create_stack();

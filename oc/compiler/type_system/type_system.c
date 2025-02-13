@@ -59,6 +59,18 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 
 	//Handle enum types: also very strict compatibility rules here
 	if(typeA->type_class == TYPE_CLASS_ENUMERATED){
+		//If it's an int it works
+		if(typeB->type_class == TYPE_CLASS_BASIC){
+			if(typeB->basic_type->basic_type == U_INT8 ||
+	  		   typeB->basic_type->basic_type == U_INT16 ||
+	  		   typeB->basic_type->basic_type == U_INT32 ||
+	  		   typeB->basic_type->basic_type == U_INT64){
+
+				//Non fancy type wings
+				return typeB;
+			}
+		}
+
 		//If type B isn't an enum, we're out
 		if(typeB->type_class != TYPE_CLASS_ENUMERATED){
 			return NULL;
@@ -120,6 +132,15 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 	//If we make it down here, we know that type A is a basic type. If type B isn't,
 	//then we're done here
 	if(typeB->type_class != TYPE_CLASS_BASIC){
+		//One exception -- if type A is an int
+		if(typeA->basic_type->basic_type == U_INT8 ||
+		   typeA->basic_type->basic_type == U_INT16 ||
+		   typeA->basic_type->basic_type == U_INT32 ||
+		   typeA->basic_type->basic_type == U_INT64){
+			return typeA;
+		}
+
+		//Otherwise it's bad
 		return NULL;
 	}
 
