@@ -6594,7 +6594,7 @@ static generic_ast_node_t* statement(FILE* fl){
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {register | static}? {mut}? <type-specifier> <identifier>;
+ * BNF Rule: <declare-statement> ::= declare {register | static}? {mut}? <identifier> : <type-specifier>;
  */
 static generic_ast_node_t* declare_statement(FILE* fl){
 	//For error printing
@@ -6631,23 +6631,6 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	} else {
 		//Push the token back
 		push_back_token(lookahead);
-	}
-	
-	//Now we are required to see a valid type specifier
-	generic_ast_node_t* type_spec_node = type_specifier(fl);
-
-	//If this fails, the whole thing is bunk
-	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier given in declaration", parser_line_num);
-		//It's already an error, so we'll just send it back up
-		return type_spec_node;
-	}
-
-	//One thing here, we aren't allowed to see void
-	if(strcmp(type_spec_node->inferred_type->type_name, "void") == 0){
-		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//The last thing before we perform checks is for us to see a valid identifier
@@ -6726,6 +6709,33 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Now we need to see a colon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required between identifier and type specifier in declare statement", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Now we are required to see a valid type specifier
+	generic_ast_node_t* type_spec_node = type_specifier(fl);
+
+	//If this fails, the whole thing is bunk
+	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier given in declaration", parser_line_num);
+		//It's already an error, so we'll just send it back up
+		return type_spec_node;
+	}
+
+	//One thing here, we aren't allowed to see void
+	if(strcmp(type_spec_node->inferred_type->type_name, "void") == 0){
+		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
@@ -6764,7 +6774,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {register | static}? {mut}? <type-specifier> <identifier> := <conditional-expression>;
+ * BNF Rule: <let-statement> ::= let {register | static}? {mut}? <identifier> : <type-specifier> := <conditional-expression>;
  */
 static generic_ast_node_t* let_statement(FILE* fl){
 	//For error printing
@@ -6801,23 +6811,6 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	} else {
 		//Otherwise push this back
 		push_back_token(lookahead);
-	}
-
-	//Now we are required to see a valid type specifier
-	generic_ast_node_t* type_spec_node = type_specifier(fl);
-
-	//If this fails, the whole thing is bunk
-	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier given in let statement", parser_line_num);
-		//It's already an error, so we'll just send it back up
-		return type_spec_node;
-	}
-	
-	//One thing here, we aren't allowed to see void
-	if(strcmp(type_spec_node->inferred_type->type_name, "void") == 0){
-		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//The last thing before we perform checks is for us to see a valid identifier
@@ -6885,6 +6878,33 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Now we need to see a colon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Expected colon between identifier and type specifier in let statement", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we are required to see a valid type specifier
+	generic_ast_node_t* type_spec_node = type_specifier(fl);
+
+	//If this fails, the whole thing is bunk
+	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier given in let statement", parser_line_num);
+		//It's already an error, so we'll just send it back up
+		return type_spec_node;
+	}
+	
+	//One thing here, we aren't allowed to see void
+	if(strcmp(type_spec_node->inferred_type->type_name, "void") == 0){
+		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+
 	//Now we know that it wasn't a duplicate, so we must see a valid assignment operator
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -6900,7 +6920,6 @@ static generic_ast_node_t* let_statement(FILE* fl){
 
 	//We now need to complete type checking. Is what we're assigning to the new variable
 	//compatible with what we're given by the logical or expression here?
-	//TODO
 
 	//If it fails, we fail out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
