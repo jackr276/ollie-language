@@ -18,6 +18,8 @@ fn main(mut argc:u32, mut argv:char**)->i32{
 	let ex:char := 'c';
 
 	**argv := ~ex;
+
+	--argv;
 	
 	/*
 	while(a <= 32) do {

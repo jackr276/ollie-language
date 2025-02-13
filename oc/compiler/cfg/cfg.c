@@ -406,6 +406,21 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 
 
 /**
+ * Emit a binary operation statement with a constant built in
+ */
+static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant){
+	//First let's create it
+	three_addr_code_stmt_t* stmt = emit_bin_op_with_const_three_addr_code(assignee, op1, op, constant);
+
+	//Then we'll add it into the block
+	add_statement(basic_block, stmt);
+
+	//Finally we'll return it
+	return assignee;
+}
+
+
+/**
  * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
@@ -437,11 +452,27 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		//What kind of unary operator do we have?
 		//Handle plus plus case
 		if(unary_operator->unary_operator == PLUSPLUS){
-			//We really just have an "inc" instruction here
-			return emit_inc_code(basic_block, assignee);
+			//What if the assignee is a complex type(pointer, array, etc)
+			if(assignee->type->type_class != TYPE_CLASS_BASIC){
+				//Emit the constant size
+				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size);
+				//Now we'll make the statement
+				return emit_binary_op_with_constant_code(basic_block, assignee, assignee, PLUS, constant);
+			} else {
+				//We really just have an "inc" instruction here
+				return emit_inc_code(basic_block, assignee);
+			}
 		} else if(unary_operator->unary_operator == MINUSMINUS){
-			//We really just have a decrement statement here
-			return emit_dec_code(basic_block, assignee);
+			//What if the assignee is a complex type(pointer, array, etc)
+			if(assignee->type->type_class != TYPE_CLASS_BASIC){
+				//Emit the constant size
+				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size);
+				//Now we'll make the statement
+				return emit_binary_op_with_constant_code(basic_block, assignee, assignee, MINUS, constant);
+			} else {
+				//We really just have an "inc" instruction here
+				return emit_dec_code(basic_block, assignee);
+			}
 		} else if (unary_operator->unary_operator == STAR){
 			//Memory address
 			return emit_mem_code(basic_block, assignee);
