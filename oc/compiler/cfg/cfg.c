@@ -64,6 +64,12 @@ typedef enum{
 	JUMP_CATEGORY_NORMAL,
 } jump_category_t;
 
+//A type for which side we're on
+typedef enum{
+	SIDE_TYPE_LEFT,
+	SIDE_TYPE_RIGHT,
+} side_type_t;
+
 //An enum for temp variable selection
 typedef enum{
 	USE_TEMP_VAR,
@@ -321,11 +327,16 @@ static three_addr_var_t* emit_constant_code_direct(basic_block_t* basic_block, t
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
-static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, temp_selection_t use_temp){
+static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, temp_selection_t use_temp, side_type_t side){
 	//Just give back the name
-	if(use_temp == PRESERVE_ORIG_VAR){
+	if(use_temp == PRESERVE_ORIG_VAR || side == SIDE_TYPE_RIGHT){
+		//If it's an enum constant
+		if(ident_node->variable->is_enumeration_member == 1){
+			return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), lookup_type(type_symtab, "u32")->type);
+		}
+
 		//No new generation here
-		return emit_var(ident_node->variable, !use_temp);
+		return emit_var(ident_node->variable, use_temp);
 
 	//We will do an on-the-fly conversion to a number
 	} else if(ident_node->inferred_type->type_class == TYPE_CLASS_ENUMERATED) {
@@ -447,7 +458,7 @@ static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, temp_selection_t use_temp){
+static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, temp_selection_t use_temp, side_type_t side){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
@@ -468,7 +479,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 
 		//No matter what here, the next sibling will also be some kind of unary expression.
 		//We'll need to handle that first before going forward
-		three_addr_var_t* assignee = emit_unary_expr_code(basic_block, first_child->next_sibling, use_temp);
+		three_addr_var_t* assignee = emit_unary_expr_code(basic_block, first_child->next_sibling, use_temp, side);
 
 		//What kind of unary operator do we have?
 		//Handle plus plus case
@@ -523,7 +534,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 	//OR it could be a primary expression, which has a whole host of options
 	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
-		 return emit_ident_expr_code(basic_block, first_child, use_temp);
+		 return emit_ident_expr_code(basic_block, first_child, use_temp, side);
 	//If it's a constant, emit this and leave
 	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
 		return emit_constant_code(basic_block, first_child);
@@ -558,7 +569,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Return the temporary character from here
-		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, PRESERVE_ORIG_VAR);
+		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, USE_TEMP_VAR, SIDE_TYPE_RIGHT);
 		return package;
 	}
 
@@ -646,7 +657,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		}
 
 		//Emit the left hand unary expression
-		three_addr_var_t* left_hand_var = emit_unary_expr_code(basic_block, cursor, PRESERVE_ORIG_VAR);
+		three_addr_var_t* left_hand_var = emit_unary_expr_code(basic_block, cursor, PRESERVE_ORIG_VAR, SIDE_TYPE_LEFT);
 
 		//Advance the cursor up
 		cursor = cursor->next_sibling;
@@ -676,7 +687,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		return ret_package;
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		//Let this rule handle it
-		ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, PRESERVE_ORIG_VAR);
+		ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, PRESERVE_ORIG_VAR, SIDE_TYPE_RIGHT);
 		return ret_package;
 	} else {
 		return ret_package;
