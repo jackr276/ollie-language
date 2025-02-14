@@ -345,6 +345,8 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		printf("dec %s\n", stmt->assignee->var_name);
 	} else if (stmt->CLASS == THREE_ADDR_CODE_BITWISE_NOT_STMT){
 		printf("%s <- not %s\n", stmt->assignee->var_name, stmt->op1->var_name);
+	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
+		printf("%s <- neg %s\n", stmt->assignee->var_name, stmt->op1->var_name);
 	}
 }
 
@@ -565,6 +567,23 @@ three_addr_const_t* emit_int_constant_direct(int int_const){
 
 	//Return out
 	return constant;
+}
+
+
+/**
+ * Emit a negation statement
+ */
+three_addr_code_stmt_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* negatee){
+	//First we'll create the negation
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Now we'll assign whatever we need
+	stmt->CLASS = THREE_ADDR_CODE_NEG_STATEMENT;
+	stmt->assignee = assignee;
+	stmt->op1 = negatee;
+
+	//Give it back
+	return stmt;
 }
 
 

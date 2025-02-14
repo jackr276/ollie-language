@@ -65,6 +65,8 @@ typedef enum{
 	THREE_ADDR_CODE_JUMP_STMT,
 	//A function call node
 	THREE_ADDR_CODE_FUNC_CALL,
+	//A negation statement
+	THREE_ADDR_CODE_NEG_STATEMENT,
 } three_addr_code_stmt_class_t;
 
 /**
@@ -199,6 +201,11 @@ three_addr_code_stmt_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incremen
  * Emit a decrement instruction
  */
 three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decrementee);
+
+/**
+ * Emit a negation(negX) statement
+ */
+three_addr_code_stmt_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* negatee);
 
 /**
  * Emit a not instruction

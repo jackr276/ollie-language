@@ -52,7 +52,7 @@ fn main(mut argc:u32, mut argv:char**)->i32{
 
 	@my_func(i, j);
 
-	let j_copy:f32 := 32.0;
+	let j_copy:u32 := -i * 32 - 322;
 	++j_copy;
 
 	ret j + a;

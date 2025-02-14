@@ -3,7 +3,6 @@
 */
 
 #include "cfg.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -453,6 +452,30 @@ static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_
 
 
 /**
+ * Emit a negation statement
+ */
+static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, temp_selection_t use_temp){
+	three_addr_var_t* var;
+
+	//We make our temp selection based on this
+	if(use_temp == USE_TEMP_VAR){
+		var = emit_temp_var(negated->type);
+	} else {
+		var = negated;
+	}
+
+	//Now let's create it
+	three_addr_code_stmt_t* stmt = emit_neg_stmt_three_addr_code(var, negated);
+	
+	//Add it into the block
+	add_statement(basic_block, stmt);
+
+	//We always return the assignee
+	return var;
+}
+
+
+/**
  * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
@@ -522,9 +545,16 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		} else if(unary_operator->unary_operator == L_NOT){
 
 		/**
+		 * x = -a;
+		 * t <- a;
+		 * negl t;
+		 * x <- t;
+		 *
 		 * Uses strategy of: negl rdx
 		 */
 		} else if(unary_operator->unary_operator == MINUS){
+			//We will emit the negation code here
+			return emit_neg_stmt_code(basic_block, assignee, use_temp);
 
 		}
 
