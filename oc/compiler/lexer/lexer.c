@@ -703,7 +703,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					strcpy(lex_item.lexeme, lexeme);
 					lex_item.line_num = line_num;
 					lex_item.char_count = token_char_count;
-					lex_item.tok = INT_CONST;
+					lex_item.tok = LONG_CONST;
 					return lex_item;
 
 				} else if (ch == 'u' || ch == 'U'){
