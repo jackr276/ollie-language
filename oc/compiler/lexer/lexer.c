@@ -155,6 +155,8 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 	Lexer_item lex_item;
 	//Have we seen hexadecimal?
 	u_int8_t seen_hex = 0;
+	//Are we forcing to unsigned
+	u_int8_t forced_to_unsigned = 0;
 
 	//If we're at the start -- added to avoid overcounts
 	if(ftell(fl) == 0){
@@ -698,7 +700,28 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 				} else if (ch == 'l'){
 					//We have seen a long constant
 					current_state = IN_START;
-					lex_item.tok = LONG_CONST;
+					strcpy(lex_item.lexeme, lexeme);
+					lex_item.line_num = line_num;
+					lex_item.char_count = token_char_count;
+					lex_item.tok = INT_CONST;
+					return lex_item;
+
+				} else if (ch == 'u' || ch == 'U'){
+					//We are forcing this to be unsigned
+					//We can still see "l", so let's check
+					ch2 = get_next_char(fl);
+
+					//If this is an l, it's a long
+					if(ch2 == 'l'){
+						lex_item.tok = LONG_CONST_FORCE_U;
+					} else {
+						//Put it back
+						put_back_char(fl);
+						lex_item.tok = INT_CONST_FORCE_U;
+					}
+
+					//Pack everything up and return
+					current_state = IN_START;
 					strcpy(lex_item.lexeme, lexeme);
 					lex_item.line_num = line_num;
 					lex_item.char_count = token_char_count;

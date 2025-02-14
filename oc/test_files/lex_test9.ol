@@ -6,20 +6,14 @@ fn main(argc:u32, argv:char**) -> i32{
 
 	//Array of addresses
 	declare address_array:u32*[10];
-	
-	let mine:my_enum := ENUM_TYPE_1;
 
-	declare mut j:u32;
 
 	let long:i64 := 234l;
 
-	
-	for(j := 0; j <= 33; j++) do {
-		j := j - 3;
+	for(let mut j : u32 := 0; j <= 33; j := j + 1) do {
+		j := -32ul;
 	}
 
 
-	ret j;
-
-	let my_int:u32 := 234;
+	ret 342U;
 }

@@ -191,6 +191,7 @@ static generic_ast_node_t* constant(FILE* fl){
 	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
 		case INT_CONST:
+		case INT_CONST_FORCE_U:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = INT_CONST;
 			//Store the int value we were given
 			int32_t int_val = atoi(lookahead.lexeme);
@@ -198,7 +199,12 @@ static generic_ast_node_t* constant(FILE* fl){
 			((constant_ast_node_t*)(constant_node->node))->int_val = int_val;
 
 			//By default, int constants are of type s_int32
-			constant_node->inferred_type = lookup_type(type_symtab, "u32")->type;
+			if(lookahead.tok == INT_CONST_FORCE_U){
+				constant_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+			} else {
+				//Otherwise it's signed
+				constant_node->inferred_type = lookup_type(type_symtab, "u32")->type;
+			}
 			break;
 
 		case HEX_CONST:
@@ -209,10 +215,11 @@ static generic_ast_node_t* constant(FILE* fl){
 			((constant_ast_node_t*)(constant_node->node))->int_val = hex_val;
 
 			//By default, int constants are of type s_int32
-			constant_node->inferred_type = lookup_type(type_symtab, "u32")->type;
+			constant_node->inferred_type = lookup_type(type_symtab, "i32")->type;
 			break;
 
 		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = LONG_CONST;
 			//Store the int value we were given
 			int64_t long_val = atol(lookahead.lexeme);
@@ -220,7 +227,13 @@ static generic_ast_node_t* constant(FILE* fl){
 			((constant_ast_node_t*)(constant_node->node))->long_val = long_val;
 
 			//By default, int constants are of type s_int64 
-			constant_node->inferred_type = lookup_type(type_symtab, "u64")->type;
+			if(lookahead.tok == LONG_CONST_FORCE_U){
+				constant_node->inferred_type = lookup_type(type_symtab, "u64")->type;
+			} else {
+				//Otherwise it's signed 
+				constant_node->inferred_type = lookup_type(type_symtab, "i64")->type;
+			}
+
 			break;
 
 		case FLOAT_CONST:
@@ -251,7 +264,7 @@ static generic_ast_node_t* constant(FILE* fl){
 			((constant_ast_node_t*)(constant_node->node))->constant_type = STR_CONST;
 			//String contants are of a char[] type. We will determine what the size of this char[] is here
 			//Let's first find the string length
-			u_int32_t length = strlen(lookahead.lexeme);
+			u_int32_t length = strlen(lookahead.lexeme + 1);
 
 			//If it's empty throw a warning
 			if(length == 0){
@@ -596,7 +609,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 	//We can also see a constant
 	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
-			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == HEX_CONST){
+			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == HEX_CONST
+			  || lookahead.tok == INT_CONST_FORCE_U || lookahead.tok == LONG_CONST_FORCE_U){
 		//Again put the token back
 		push_back_token(lookahead);
 
@@ -1282,7 +1296,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//The lookahead token
 	Lexer_item lookahead;
 	//Is this assignable
-	u_int8_t is_assignable = 0;
+	u_int8_t is_assignable = 1;
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -1666,8 +1680,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		unary_expr_node->inferred_type = postfix_expr_node->inferred_type;
 		//Store the line number
 		unary_expr_node->line_number = parser_line_num;
-
+		//Duplicate the assignability
 		unary_expr_node->is_assignable = postfix_expr_node->is_assignable;
+
 		//Postfix already has type inference built in
 		return unary_expr_node;
 	}

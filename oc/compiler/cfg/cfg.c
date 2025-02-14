@@ -308,6 +308,7 @@ static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_
 	return const_var->assignee;
 }
 
+
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
@@ -321,6 +322,7 @@ static three_addr_var_t* emit_constant_code_direct(basic_block_t* basic_block, t
 	//Now give back the assignee variable
 	return const_var->assignee;
 }
+
 
 /**
  * Emit the identifier machine code. This function is to be used in the instance where we want
@@ -384,6 +386,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 	//Return the incrementee
 	return decrementee;
 }
+
 
 /**
  * Emit memory indirection three address code
