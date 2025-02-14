@@ -848,6 +848,9 @@ static void emit_blocks_dfs(cfg_t* cfg){
 			}
 		}
 	}
+
+	//Deallocate our stack once done
+	destroy_stack(stack);
 }
 
 
@@ -871,7 +874,7 @@ static void basic_block_dealloc(basic_block_t* block){
 		temp = cursor;
 		cursor = cursor->next_statement;
 		//Destroy temp
-		//deallocate_three_addr_stmt(temp);
+		deallocate_three_addr_stmt(temp);
 	}
 	
 
@@ -900,6 +903,11 @@ void dealloc_cfg(cfg_t* cfg){
 		//Free the overall structure too
 		free(temp);
 	}
+
+	//Destroy all variables
+	deallocate_all_vars();
+	//Destroy all constants
+	deallocate_all_consts();
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
@@ -1007,6 +1015,10 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->is_exit_block = b->is_exit_block;
 	//If we're merging return statements
 	a->is_return_stmt = b->is_return_stmt;
+
+	//IMPORTANT--wipe b's statements out
+	b->leader_statement = NULL;
+	b->exit_statement = NULL;
 
 	//Give back the pointer to a
 	return a;

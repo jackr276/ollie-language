@@ -96,6 +96,8 @@ int main(int argc, char** argv){
 
 	//FOR NOW -- deallocate this stuff
 	deallocate_ast(results.root);
+	//Free the call graph holder
+	free(results.os);
 	destroy_function_symtab(results.function_symtab);
 	destroy_type_symtab(results.type_symtab);
 	destroy_variable_symtab(results.variable_symtab);

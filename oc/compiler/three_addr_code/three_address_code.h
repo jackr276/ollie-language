@@ -75,8 +75,9 @@ typedef enum{
  * for eventual SSA and type information
 */
 struct three_addr_var_t{
+	//For memory management
 	//For convenience
-	char var_name[115];
+	char var_name[160];
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
 	//Is this a temp variable?
@@ -90,6 +91,8 @@ struct three_addr_var_t{
 	generic_type_t* type;
 	//Linked list functionality
 	three_addr_var_t* next;
+	//For memory management
+	three_addr_var_t* next_created;
 };
 
 
@@ -107,6 +110,8 @@ struct three_addr_const_t{
 	char char_const;
 	float float_const;
 	int int_const;
+	//For memory management
+	three_addr_const_t* next_created;
 };
 
 
@@ -236,5 +241,15 @@ void deallocate_three_addr_var(three_addr_var_t* var);
  * Destroy an entire three address code statement
 */
 void deallocate_three_addr_stmt(three_addr_code_stmt_t* stmt);
+
+/**
+ * Destroy all variables
+*/
+void deallocate_all_vars();
+
+/**
+ * Destroy all constants
+*/
+void deallocate_all_consts();
 
 #endif

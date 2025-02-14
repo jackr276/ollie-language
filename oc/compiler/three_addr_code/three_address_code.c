@@ -13,6 +13,11 @@
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
 
+//All created vars
+three_addr_var_t* emitted_vars = NULL;
+//All created constants
+three_addr_const_t* emitted_consts = NULL;
+
 /**
  * A helper function for our atomically increasing temp id
  */
@@ -28,6 +33,10 @@ static int32_t increment_and_get_temp_id(){
 three_addr_var_t* emit_temp_var(generic_type_t* type){
 	//Let's first create the temporary variable
 	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
+
+	//Attach this for memory management
+	var->next_created = emitted_vars;
+	emitted_vars = var;
 
 	//Mark this as temporary
 	var->is_temporary = 1;
@@ -48,6 +57,10 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Attach it for memory management
+	emitted_var->next_created = emitted_vars;
+	emitted_vars = emitted_var;
 
 	//This is not temporary
 	emitted_var->is_temporary = 0;
@@ -77,8 +90,14 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
 	//Copy the memory
-	memcpy(emitted_var, var, sizeof(three_addr_var_t));
+	//memcpy(emitted_var, var, sizeof(three_addr_var_t));
+	memmove(emitted_var, var, sizeof(three_addr_var_t));
 	
+	//Attach it for memory management
+	emitted_var->next_created = emitted_vars;
+	emitted_vars = emitted_var;
+
+
 	return emitted_var;
 }
 
@@ -91,7 +110,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//print the whole thing
 	if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
 		//What is our op?
-		char* op;
+		char* op = "";
 
 		//Whatever we have here
 		switch (stmt->op) {
@@ -157,7 +176,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//If we have a bin op with const
 	} else if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//What is our op?
-		char* op;
+		char* op = "";
 
 		//Whatever we have here
 		switch (stmt->op) {
@@ -390,6 +409,10 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	//First we'll dynamically allocate the constant
 	three_addr_const_t* const_var = calloc(1, sizeof(three_addr_const_t));
 
+	//Attach it for memory management
+	const_var->next_created = emitted_consts;
+	emitted_consts = const_var;
+
 	//Grab a reference to the const node for convenience
 	constant_ast_node_t* const_node_raw = (constant_ast_node_t*)(const_node->node);
 
@@ -560,6 +583,10 @@ three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t*
 three_addr_const_t* emit_int_constant_direct(int int_const){
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
+	//Attach it for memory management
+	constant->next_created = emitted_consts;
+	emitted_consts = constant;
+
 	//Store the class
 	constant->const_type = INT_CONST;
 	//Store the int value
@@ -635,12 +662,44 @@ void deallocate_three_addr_stmt(three_addr_code_stmt_t* stmt){
 		return;
 	}
 	
-	//Otherwise we'll deallocate all variables here
-	deallocate_three_addr_var(stmt->assignee);
-	deallocate_three_addr_var(stmt->op1);
-	deallocate_three_addr_const(stmt->op1_const);
-	deallocate_three_addr_var(stmt->op2);
-
-	//Finally free the overall structure
+	//Free the overall stmt -- variables handled elsewhere
 	free(stmt);
+}
+
+
+/**
+ * Deallocate all variables using our global list strategy
+*/
+void deallocate_all_vars(){
+	//For holding 
+	three_addr_var_t* temp;
+
+	//Run through the whole list
+	while(emitted_vars != NULL){
+		//Hold onto it here
+		temp = emitted_vars;
+		//Advance
+		emitted_vars = emitted_vars->next_created;
+		//Free the one we just had
+		free(temp);
+	}
+}
+
+
+/**
+ * Deallocate all constants using our global list strategy
+*/
+void deallocate_all_consts(){
+	//For holding
+	three_addr_const_t* temp;
+
+	//Run through the whole list
+	while(emitted_consts != NULL){
+		//Hold onto it here
+		temp = emitted_consts;
+		//Advance
+		emitted_consts = emitted_consts->next_created;
+		//Deallocate temp
+		free(temp);
+	}
 }
