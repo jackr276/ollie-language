@@ -42,7 +42,7 @@ typedef enum {
 	SWITCH,
 	TRUE,
 	FALSE,
-	FUNC,
+	FN,
 	REGISTER,
 	CONSTANT,
 	TYPESIZE,

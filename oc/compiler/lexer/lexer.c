@@ -73,7 +73,7 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 	lex_item.line_num = line_number;
 
 	//Token array, we will index using their enum values
-	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, TRUE, FALSE, FUNC, RET, JUMP, LINK,
+	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, TRUE, FALSE, FN, RET, JUMP, LINK,
 						STATIC, COMPTIME, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
 						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM, ON,
 						REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
@@ -153,6 +153,9 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 
 	//We'll eventually return this
 	Lexer_item lex_item;
+	//By default it's an error
+	lex_item.tok = ERROR;
+
 	//Have we seen hexadecimal?
 	u_int8_t seen_hex = 0;
 	//Are we forcing to unsigned
@@ -163,7 +166,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 		line_num = 1;
 		*parser_line_num = 1;
 	}
-
 
 	//We begin in the start state
 	Lex_state current_state = IN_START;
@@ -182,7 +184,8 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 	//We'll run through character by character until we hit EOF
 	while((ch = get_next_char(fl)) != EOF){
 		//Check to make sure we aren't overrunning our bounds
-		if(token_char_count > MAX_TOKEN_LENGTH-1){
+		if(current_state != IN_MULTI_COMMENT && token_char_count > MAX_TOKEN_LENGTH-1){
+			printf("HERE\n");
 			Lexer_item l;
 			l.tok = ERROR;
 			return l;
@@ -630,6 +633,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							*lexeme_cursor = ch;
 							lexeme_cursor++;
 						} else {
+							printf("HERE");
 							lex_item.tok = ERROR;
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
@@ -801,14 +805,15 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 			case IN_MULTI_COMMENT:
 				//Are we at the start of an escape sequence?
 				if(ch == '*'){
-					ch2 = fgetc(fl);	
+					ch2 = get_next_char(fl);
 					if(ch2 == '/'){
 						//We are now out of the comment
 						current_state = IN_START;
+						//Reset the char count
+						token_char_count = 0;
 						break;
 					} else {
-						//"Put back" char2
-						fseek(fl, -1, SEEK_CUR);
+						put_back_char(fl);
 						break;
 					}
 				}
@@ -824,9 +829,16 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 					line_num++;
 					(*parser_line_num)++;
 					current_state = IN_START;
+					//Reset the char count
+					token_char_count = 0;
 				} 
 				//Otherwise just go forward
 				break;
+
+			//Some very weird error here
+			default:
+				fprintf(stderr, "[LEXER ERROR]: Found a stateless token\n");
+				return lex_item;
 		}
 	}
 

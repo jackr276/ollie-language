@@ -7765,9 +7765,16 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num);
 
+	if(lookahead.tok == ERROR){
+		print_parse_message(PARSE_ERROR, "Fatal error. Found error token\n", lookahead.line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+
 	//We know that we have a function here
 	//We consume the function token here, NOT in the function rule
-	if(lookahead.tok == FUNC){
+	if(lookahead.tok == FN){
 		//We'll just let the function definition rule handle this. If it fails, 
 		//that will be caught above
 		return function_definition(fl);

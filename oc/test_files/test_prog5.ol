@@ -12,7 +12,7 @@ fn saturating_add(x:i32, y:i32) -> i32{
 	//For utility, get an int where we have 1000...000
 	let mut one_as_msb:i32 := 1 << (num_bits - 1);
 
-	//If x and y have the same sign, XORing will cause the MSB to be 0
+	//If x y have the same sign, XORing will cause the MSB to be 0
 	//and inverting it will make it 1 if they do
 	let mut x_y_same_sign:i32 := ~(x ^ y);
 
@@ -28,7 +28,6 @@ fn saturating_add(x:i32, y:i32) -> i32{
 	ret (~was_overflow & sum) + (was_overflow & maxint_or_minint);
 }
 */
-
 
 /**
  * Demonstrate the functionality of saturating add for positive and negative overflows
