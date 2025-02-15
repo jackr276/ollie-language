@@ -50,7 +50,7 @@ fn main(mut argc:u32, mut argv:char**)->i32{
 		let masdfasdf:u32 := 232;
 	}
 
-	@my_func(i, j);
+	@my_func(i+2, j);
 
 	let j_copy:u32 := -i * 32 - 322;
 	++j_copy;

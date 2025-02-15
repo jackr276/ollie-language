@@ -14,6 +14,8 @@
 #define MAX_SUCCESSORS 40
 #define MAX_PREDECESSORS 40
 #define INITIAL_STATEMENT_SIZE 2000
+//Probably way too high, but just being safe
+#define MAX_LIVE_VARS 300
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
@@ -103,8 +105,10 @@ struct basic_block_t{
 	//Hold onto the number of both that we have
 	u_int8_t num_predecessors;
 	u_int8_t num_successors;
-	//We need to keep track of all active variables in this block
-	three_addr_var_t* active_vars_head;
+	//Keep track of all active(live) variables
+	three_addr_var_t* active_vars[MAX_LIVE_VARS];
+	//The number of active vars
+	u_int16_t active_var_count;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements

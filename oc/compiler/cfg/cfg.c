@@ -158,6 +158,25 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
 
 
 /**
+ * A simple helper function that allows us to add a live variable into the block's
+ * header. It is important to note that only actual variables(not temp variables) count
+ * as live
+ */
+static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//Just check this for safety--for dev use only
+	if(basic_block->active_var_count == MAX_LIVE_VARS){
+		fprintf(stderr, "MAXIMUM VARIABLE COUNT EXCEEDED\n");
+		exit(0);
+	}
+
+	//Add the given variable in
+	basic_block->active_vars[basic_block->active_var_count] = var;
+	//We've seen one more
+	(basic_block->active_var_count)++;
+}
+
+
+/**
  * Print a block our for reading
 */
 static void pretty_print_block(basic_block_t* block){
@@ -336,8 +355,14 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 			return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), lookup_type(type_symtab, "u32")->type);
 		}
 
-		//No new generation here
-		return emit_var(ident_node->variable, use_temp);
+		//Emit the variable
+		three_addr_var_t* var = emit_var(ident_node->variable, use_temp);
+		
+		//Add it as a live variable to the block
+		add_live_variable(basic_block, var);
+
+		//Give it back
+		return var;
 
 	//We will do an on-the-fly conversion to a number
 	} else if(ident_node->inferred_type->type_class == TYPE_CLASS_ENUMERATED) {
@@ -346,8 +371,14 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), type);
 
 	} else {
-		//Let's first create the assignment statement	
-		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable, 0));
+		//First we'll create the non-temp var here
+		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, 0);
+
+		//Add it into the block
+		add_live_variable(basic_block, non_temp_var);
+
+		//Let's first create the assignment statement
+		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), non_temp_var);
 
 		//Add the statement in
 		add_statement(basic_block, temp_assnment);
@@ -665,6 +696,9 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 		//Create the variable associated with this
 	 	three_addr_var_t* left_hand_var = emit_var(var, 1);
+
+		//Add it in as a live variable
+		add_live_variable(basic_block, left_hand_var);
 
 		//Now emit whatever binary expression code that we have
 		expr_ret_package_t package = emit_binary_op_expr_code(basic_block, expr_node->first_child);
