@@ -371,6 +371,8 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		printf("%s <- test %s, %s\n", stmt->assignee->var_name, stmt->op1->var_name, stmt->op1->var_name);
 		//Then we "set if equal"(sete) the assigned
 		printf("sete %s\n", stmt->assignee->var_name);
+		//Then we move it into itself for flag setting purposes
+		printf("%s <- %s\n", stmt->assignee->var_name, stmt->assignee->var_name);
 	}
 }
 

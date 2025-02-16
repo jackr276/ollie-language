@@ -591,6 +591,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		 * Uses strategy of:
 		 * 	test rdx, rdx
 		 * 	sete rdx
+		 * 	mov rdx, rdx //this specifically exists to set flags
 		 * for implementation
 		 */
 		} else if(unary_operator->unary_operator == L_NOT){
