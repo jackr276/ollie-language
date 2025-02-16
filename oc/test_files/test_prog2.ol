@@ -2,6 +2,8 @@ fn test_func() -> i32 {
 	let mut i:u32 := 232;
 	let mut j:u32 := 32;
 
+	defer i++;
+
 	while(i >= 232) do{
 		if(i == 2) then{ 
 			i := i + 2;

@@ -42,8 +42,12 @@ fn main() -> i32{
 	let mut x:i32 := 2;
 
 	if(!x) then {
+		defer x + 3;
 		++x;
+	} else {
+		--x;
 	}
+
 	
 	ret 0;
 }

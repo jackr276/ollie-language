@@ -99,8 +99,6 @@ typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 //An AST node for let statements
 typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
-//An AST node for defer statements
-typedef struct defer_stmt_ast_node_t defer_stmt_ast_node_t;
 //An AST node for for-loop conditions
 typedef struct for_loop_condition_ast_node_t for_loop_condition_ast_node_t;
 
@@ -108,7 +106,6 @@ typedef struct for_loop_condition_ast_node_t for_loop_condition_ast_node_t;
 typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PROG,
 	AST_NODE_CLASS_ALIAS_STMT,
-	AST_NODE_CLASS_DEFER_STMT,
 	AST_NODE_CLASS_FOR_LOOP_CONDITION,
 	AST_NODE_CLASS_DECL_STMT,
 	AST_NODE_CLASS_LET_STMT,
@@ -203,10 +200,6 @@ struct func_specifier_ast_node_t{
 	//Just holds a token for us
 	Token funcion_storage_class_tok;
 	STORAGE_CLASS_T function_storage_class;
-};
-
-//Holds a defer statement for us
-struct defer_stmt_ast_node_t{
 };
 
 //Holds references to our parameter list

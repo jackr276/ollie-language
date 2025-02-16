@@ -18,6 +18,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../stack/lexstack.h"
+#include "../queue/heap_queue.h"
 
 //The function is reentrant
 //Variable and function symbol tables
@@ -6530,13 +6531,8 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 				return stmt_node;
 			}
 
-			//If it's a defer statement, we'll push this to the stack
-			if(stmt_node->CLASS == AST_NODE_CLASS_DEFER_STMT){
-				push(defer_statements, stmt_node);
-			} else {
-				//Otherwise, we'll add it as a child node
-				add_child_node(compound_stmt_node, stmt_node);
-			}
+			//Otherwise, we'll add it as a child node
+			add_child_node(compound_stmt_node, stmt_node);
 		}
 
 	loop_end:
@@ -6603,8 +6599,11 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//Store the line number
 	expr_node->line_number = parser_line_num;
 
-	//We will just return the expression node here
-	return expr_node;
+	//Push this onto the stack
+	push(defer_statements, expr_node);
+
+	//We return nothing here -- there is no need
+	return NULL;
 }
 
 
@@ -7322,7 +7321,7 @@ static generic_ast_node_t* declaration(FILE* fl){
  * statement. Since functions can have many return statements, it makes sense to insert these right
  * before each return statement.
  */
-static void insert_all_defered_statements(symtab_function_record_t* func_record, generic_ast_node_t* compound_stmt){
+static void insert_all_defered_statements(generic_ast_node_t* compound_stmt){
 	//If it's empty just get out here
 	if(is_empty(defer_statements) == 1){
 		return;
@@ -7356,9 +7355,50 @@ static void insert_all_defered_statements(symtab_function_record_t* func_record,
 	}
 
 	//Now we have finally constructed our linked list and made appropriate references. We now need to
-	//find every return statement and insert these before it	
-		
+	//find every return statement and insert these before it. We will do this in a BFS(level order) fashion
+	
+	//We'll need a queue for this
+	heap_queue_t* queue = heap_queue_alloc();
+	//Our current node
+	generic_ast_node_t* current_node;
+	//Temporarily hold the ret stmt
+	generic_ast_node_t* ret_stmt_node;
+	//The child cursor
+	generic_ast_node_t* child_cursor;
 
+	//Let's see the BFS with our first node here
+	enqueue(queue, compound_stmt);
+	
+	//So long as we have nodes to search
+	while(queue_is_empty(queue) == 0){
+		//Dequeue from the front
+		current_node = dequeue(queue);
+
+		//If the current node's NEXT sibling is a ret statement, we take action
+		if(current_node->next_sibling != NULL 
+		   && current_node->next_sibling->CLASS == AST_NODE_CLASS_RET_STMT){
+			//Grab a reference to this, we're about to break it
+			ret_stmt_node = current_node->next_sibling;
+
+			//We will now break the tree here and insert our deferred statements
+			current_node->next_sibling = deferred_stmts_head;
+			deferred_stmts_tail->next_sibling = ret_stmt_node;
+		}
+
+		//Now we'll add in all of his children
+		child_cursor = current_node->first_child;
+
+		//So long as there are children
+		while(child_cursor != NULL){
+			//Enqueue
+		 	enqueue(queue, child_cursor);
+			//Advance it up
+			child_cursor = child_cursor->next_sibling;
+		}
+	}
+
+	//Destroy when done
+	heap_queue_dealloc(queue);
 }
 
 
@@ -7799,6 +7839,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//If we get here we know that it worked, so we'll add it in as a child
 		add_child_node(function_node, compound_stmt_node);
 		
+		//Once here, we need to add in all deferred statements into the overall compound statement node
+		insert_all_defered_statements(compound_stmt_node);
+
 		//Finalize the variable scope for the parameter list
 		finalize_variable_scope(variable_symtab);
 

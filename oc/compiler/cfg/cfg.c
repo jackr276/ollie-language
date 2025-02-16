@@ -298,25 +298,6 @@ static void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block,
 
 
 /**
- * Emit the abstract machine code for a defer statement. There is nothing
- * inherently special about a defer statement, so this rule behaves like any other
- *
- * Defer statements take place AFTER any return computation has happened but BEFORE
- * the actual ret stmt
- */
-static void emit_defer_stmt(basic_block_t* basic_block, generic_ast_node_t* def_stmt){
-	//If this is null, then we have no effect
-	if(def_stmt->first_child == NULL){
-		//Throw a warning and leave
-		print_cfg_message(WARNING, "Defer statement has no effect", def_stmt->line_number);
-		(*num_warnings_ref)++;
-		return;
-	}
-
-}
-
-
-/**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
@@ -2015,17 +1996,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 
 			//But if we don't then this is the current node
-
-		//Handle a defer statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DEFER_STMT){
-			/**
-			 * Defer statements are a special case. The are supposed to be executed 
-			 * "after" the function returns. Of course, in assembly, there is no such thing.
-			 * As such, deferred statements are executed immediately after a "ret" statement
-			 * in the assembly
-			 */
-			//We'll now add this into the stack
-			push(deferred_stmts, ast_cursor);
 
 		//Handle a continue statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_CONTINUE_STMT){

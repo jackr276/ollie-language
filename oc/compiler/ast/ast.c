@@ -48,13 +48,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->CLASS = AST_NODE_CLASS_ELABORATIVE_PARAM;
 			break;
 
-		//The defer statement node
-		case AST_NODE_CLASS_DEFER_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(defer_stmt_ast_node_t));
-			node->CLASS = AST_NODE_CLASS_DEFER_STMT;
-			break;
-	
 		//The function specifier AST node
 		case AST_NODE_CLASS_FUNC_DEF:
 			//Just allocate the proper size and set the class
