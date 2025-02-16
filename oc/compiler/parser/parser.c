@@ -5200,7 +5200,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		char* label_name = ((identifier_ast_node_t*)(label_ident->node))->identifier;
 
 		//We now need to make sure that it isn't a duplicate
-		symtab_variable_record_t* found = lookup_variable(variable_symtab, label_name);
+		symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, current_function, label_name);
 
 		//If we did find it, that's bad
 		if(found != NULL){
@@ -5230,6 +5230,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		found->type = label_type->type;
 		//Store the fact that it is a label
 		found->is_label = 1;
+		//Store what function it's defined in(important for later)
+		found->function_declared_in = current_function;
 
 		//Put into the symtab
 		insert_variable(variable_symtab, found);
@@ -7399,7 +7401,7 @@ static void insert_all_defered_statements(generic_ast_node_t* compound_stmt){
  * We need to go through and check all of the jump statements that we have in the function. If any
  * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
  */
-static int8_t check_jump_labels(){
+static int8_t check_jump_labels(symtab_function_record_t* func_record){
 	//For error printing
 	char info[1000];
 	//Grab a reference to our current jump statement
@@ -7416,8 +7418,9 @@ static int8_t check_jump_labels(){
 		//Let's grab out the name for convenience
 		char* name = ((identifier_ast_node_t*)(label_ident_node->node))->identifier;
 
-		//We now need to lookup the name in here
-		symtab_variable_record_t* label = lookup_variable(variable_symtab, name);
+		//We now need to lookup the name in here. We use a special function that allows
+		//us to look deeper into the scopes 
+		symtab_variable_record_t* label = lookup_variable_lower_scope(variable_symtab, func_record, name);
 
 		//If we didn't find it, we fail out
 		if(label == NULL){
@@ -7881,7 +7884,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		insert_all_defered_statements(compound_stmt_node);
 		
 		//We now need to check and see if our jump statements are actually valid
-		if(check_jump_labels() == -1){
+		if(check_jump_labels(function_record) == -1){
 			//If this fails, we fail out here too
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}

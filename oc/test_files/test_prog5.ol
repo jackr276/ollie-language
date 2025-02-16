@@ -41,18 +41,20 @@ fn tester() -> void{
  * Demonstrate the functionality of saturating add for positive and negative overflows
  */
 fn main() -> i32{
-		let mut x:i32 := 2;
+
+	let mut x:i32 := 2;
 
 	
 	if(!x) then {
 		defer x + 3;
 		defer x + 232;
-		jump $label1;
+
+		$label1:
 		++x;
 	} else {
 		--x;
 	}
 
-	$label1:
+	jump $label1;
 	ret 0;
 }

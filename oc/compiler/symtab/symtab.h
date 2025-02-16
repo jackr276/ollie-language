@@ -141,6 +141,8 @@ struct symtab_variable_record_t{
 	generic_type_t* type;
 	//What struct was it defined in? For structs only
 	generic_type_t* struct_defined_in;
+	//What function was it declared in?
+	symtab_function_record_t* function_declared_in;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 	//The next hashtable record
@@ -173,8 +175,6 @@ struct symtab_type_record_t{
 struct symtab_variable_sheaf_t{
 	//Link to the prior level
 	symtab_variable_sheaf_t* previous_level;
-	//Link to the lower level -- for JUMP statements only
-	symtab_variable_sheaf_t* lower_level;
 	//How many records(names) we can have
 	symtab_variable_record_t* records[KEYSPACE];
 	//The level of this particular symtab
@@ -345,7 +345,7 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
  * Lookup a variable in all lower scopes. This is specifically and only intended for
  * jump statements
  */
-symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name);
+symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, symtab_function_record_t* function_declared_in, char* name);
 
 /**
  * Lookup a type name in the symtab

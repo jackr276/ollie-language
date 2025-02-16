@@ -77,10 +77,6 @@ void initialize_variable_scope(variable_symtab_t* symtab){
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;
 
-	//The old current will have this as it's "lower level" if it exists
-	if(symtab->current != NULL){
-		symtab->current->lower_level = current;	
-	}
 	
 	//Set this so it's up-to-date
 	symtab->current = current;
@@ -480,6 +476,51 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
 	}
 
 	//Otherwise if we get here there's no match, so
+	return NULL;
+}
+
+
+/**
+ * Lookup a variable in all lower scopes. This is specifically and only intended for
+ * jump statements
+ */
+symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, symtab_function_record_t* function_declared_in, char* name){
+	//Grab the hash
+	u_int16_t h = hash(name);
+
+	//Define the cursor so we don't mess with the original reference
+	symtab_variable_sheaf_t* cursor;
+	//A cursor for records iterating
+	symtab_variable_record_t* records_cursor;
+
+	//So long as the cursor is not null
+	for(u_int16_t i = 0; i < symtab->next_index; i++){
+		//Grab the current sheaf
+		cursor = symtab->sheafs[i];
+
+		//Grab a records cursor
+		records_cursor = cursor->records[h];
+
+		//We could have had collisions so we'll hunt here
+		while(records_cursor != NULL){
+			//If these don't match we move right along
+			if(strcmp(function_declared_in->func_name, records_cursor->function_declared_in->func_name) != 0){
+				//Advance it
+				records_cursor = records_cursor->next;
+				continue;
+			}
+
+			//If we find the right one, then we can get out
+			if(strcmp(records_cursor->var_name, name) == 0){
+				return records_cursor;
+			}
+
+			//Advance it
+			records_cursor = records_cursor->next;
+		}
+	}
+
+	//If we found nothing give back NULL
 	return NULL;
 }
 
