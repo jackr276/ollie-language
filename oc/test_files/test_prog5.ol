@@ -29,6 +29,12 @@ fn saturating_add(x:i32, y:i32) -> i32{
 }
 */
 
+fn tester() -> void{
+	let mut x:i32 := 3;
+	++x;
+	ret;
+}
+
 /**
  * Demonstrate the functionality of saturating add for positive and negative overflows
  */

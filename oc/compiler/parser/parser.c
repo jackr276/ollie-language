@@ -6572,11 +6572,14 @@ static generic_ast_node_t* compound_statement(FILE* fl){
  *
  * Remember: By the time that we get here, we will have already seen the defer keyword
  *
- * <defer-statement> ::= defer <expression-statement>
+ * <defer-statement> ::= defer <logical-or-expression>;
  */
 static generic_ast_node_t* defer_statement(FILE* fl){
+	//For searching
+	Lexer_item lookahead;
+
 	//We must first see a valid expression statement
-	generic_ast_node_t* expr_node = expression_statement(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl);
 
 	//We have a bad expression, fail out here
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -6584,6 +6587,17 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 		num_errors++;
 		//It's already an error, just send it up
 		return expr_node;
+	}
+
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If it isn't a semicolon, we fail out
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Defer statement must be terminated with a semicolon", parser_line_num);
+		num_errors++;
+		//Error out
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//If we make it here we know that we're all set
@@ -7307,6 +7321,28 @@ static generic_ast_node_t* declaration(FILE* fl){
 
 
 /**
+ * When we have deferred statements, we'll need to insert them right before a function returns.
+ * Defer statements happen, in appearance only, to execute after the return statement. Anyone 
+ * with a basic knowledge of assembly knows that such execution is impossible. Instead, in Ollie
+ * lang, defer statements are simply reoriented to be the last statement that happens before a return
+ * statement. Since functions can have many return statements, it makes sense to insert these right
+ * before each return statement.
+ */
+static void insert_all_defered_statements(symtab_function_record_t* func_record, generic_ast_node_t* compound_stmt){
+	//If it's empty just get out here
+	if(is_empty(defer_statements) == 1){
+		return;
+	}
+
+	//Let's first create the linked list that we need to insert deferred statments
+	
+	
+
+
+}
+
+
+/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
@@ -7719,6 +7755,26 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Where was this function defined
 		function_record->line_number = current_line;
+
+		//If this function is a void return type, we need to manually insert
+		//a ret statement at the very end, if there isn't one already
+		if(strcmp(type->type_name, "void") == 0){
+			//Let's drill down to the very end
+			generic_ast_node_t* cursor = compound_stmt_node->first_child;
+
+			//So long as we don't see ret statements here, we keep going
+			while(cursor->next_sibling != NULL && cursor->CLASS != AST_NODE_CLASS_RET_STMT){
+				//Advance
+				cursor = cursor->next_sibling;
+			}
+
+			//Once we get here, we need to check and see if we have a ret stmt
+			if(cursor->CLASS != AST_NODE_CLASS_RET_STMT){
+				//If we don't have one, we'll manually add one
+				add_child_node(compound_stmt_node, ast_node_alloc(AST_NODE_CLASS_RET_STMT));
+			}
+			//Otherwise we're fine
+		}
 
 		//If we get here we know that it worked, so we'll add it in as a child
 		add_child_node(function_node, compound_stmt_node);

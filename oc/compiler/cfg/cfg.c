@@ -267,6 +267,9 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 	//For holding our temporary return variable
 	expr_ret_package_t package;
 
+	//Is null by default
+	package.assignee = NULL;
+
 	//If the ret node's first child is not null, we'll let the expression rule
 	//handle it
 	if(ret_node->first_child != NULL){
@@ -2261,14 +2264,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	while(is_empty(deferred_stmts) == 0){
 		//Add them in one by one
 		add_statement(function_ending_block, pop(deferred_stmts));
-	}
-
-	//If the function was a null return type, add an inherit ret at the end
-	if(strcmp(func_record->return_type->type_name, "void") == 0){
-		three_addr_code_stmt_t* ret_smt = emit_ret_stmt_three_addr_code(NULL);
-
-		//Add this into the function block
-		add_statement(function_ending_block, ret_smt);
 	}
 
 	perform_function_reachability_analysis(function_node, function_starting_block);
