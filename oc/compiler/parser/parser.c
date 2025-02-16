@@ -6594,6 +6594,9 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//Store the line number
 	expr_node->line_number = parser_line_num;
 
+	//Mark that this is deferred
+	expr_node->is_deferred = 1;
+
 	//Push this onto the stack
 	push(defer_statements, expr_node);
 
@@ -7309,6 +7312,32 @@ static generic_ast_node_t* declaration(FILE* fl){
 
 
 /**
+ * We will completely duplicate a deferred statement here. Since all deferred statements
+ * are logical expressions, we will perform a deep copy to create an entirely new
+ * chain of deferred statements
+ */
+static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee){
+	//Base case here
+	if(duplicatee == NULL){
+		return NULL;
+	}
+
+	//Grab the root here
+	generic_ast_node_t* root = ast_node_alloc(duplicatee->CLASS);
+
+	//We will perform a deep copy here
+	memcpy(root, duplicatee, sizeof(generic_ast_node_t));	
+
+	//Now we must also copy the entire node
+	memcpy(root->node, duplicatee->node, duplicatee->inner_node_size);
+
+	return NULL;
+
+}
+
+
+
+/**
  * When we have deferred statements, we'll need to insert them right before a function returns.
  * Defer statements happen, in appearance only, to execute after the return statement. Anyone 
  * with a basic knowledge of assembly knows that such execution is impossible. Instead, in Ollie
@@ -7348,6 +7377,9 @@ static void insert_all_defered_statements(generic_ast_node_t* compound_stmt){
 	while(deferred_stmts_tail->next_sibling != NULL){
 		deferred_stmts_tail = deferred_stmts_tail->next_sibling;
 	}
+
+	//We need a way of completely duplicating these whenever we have more than one 
+	//deferred statement
 
 	//Now we have finally constructed our linked list and made appropriate references. We now need to
 	//find every return statement and insert these before it. We will do this in a BFS(level order) fashion

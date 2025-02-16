@@ -10,6 +10,7 @@
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
 #include "../symtab/symtab.h"
+#include <stddef.h>
 #include <sys/types.h>
 
 /**
@@ -176,6 +177,10 @@ struct generic_ast_node_t{
 	u_int16_t line_number;
 	//Is this assignable?
 	u_int8_t is_assignable;
+	//Is this a deferred node?
+	u_int8_t is_deferred;
+	//What is the size of it's inner node
+	size_t inner_node_size;
 	//This is where we hold the actual node
 	void* node;
 	//What variable do we have?
