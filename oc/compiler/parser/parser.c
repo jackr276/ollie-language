@@ -6600,17 +6600,11 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//If we make it here we know that we're all set
-	generic_ast_node_t* defer_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT);
+	//Store the line number
+	expr_node->line_number = parser_line_num;
 
-	//Add the expression in as a child
-	add_child_node(defer_node, expr_node);
-
-	//Add the line number
-	defer_node->line_number = parser_line_num;
-
-	//Return the deferral here
-	return defer_node;
+	//We will just return the expression node here
+	return expr_node;
 }
 
 
@@ -7335,9 +7329,35 @@ static void insert_all_defered_statements(symtab_function_record_t* func_record,
 	}
 
 	//Let's first create the linked list that we need to insert deferred statments
-	
-	
+	generic_ast_node_t* deferred_stmts_head = NULL;
 
+	//Hold what we've popped
+	generic_ast_node_t* popped_stmt;
+
+	//So long as there are statements on here
+	while(is_empty(defer_statements) == 0){
+		//Pop it off
+		popped_stmt = pop(defer_statements);
+
+		//The most recent one on the stack is the latest one, so he will
+		//actually go last. As such, we'll add these in in a head-first fashion
+		
+		//Add these in bit by bit
+		popped_stmt->next_sibling = deferred_stmts_head;
+		deferred_stmts_head = popped_stmt;
+	}
+	
+	//Once we get here, we have our linked list -- we'll now grab the tail
+	generic_ast_node_t* deferred_stmts_tail = deferred_stmts_head;
+
+	//Run down to the end
+	while(deferred_stmts_tail->next_sibling != NULL){
+		deferred_stmts_tail = deferred_stmts_tail->next_sibling;
+	}
+
+	//Now we have finally constructed our linked list and made appropriate references. We now need to
+	//find every return statement and insert these before it	
+		
 
 }
 
@@ -7778,18 +7798,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//If we get here we know that it worked, so we'll add it in as a child
 		add_child_node(function_node, compound_stmt_node);
-
-		/**
-		 * Once we're here, we'll need to add any/all defer statements to the end of the chain as well.
-		 * These statements happen in a LIFO order. The very last defer statement is the very first
-		 * to be executed
-		 */
-		while(is_empty(defer_statements) == 0){
-			generic_ast_node_t* defer_stmt = pop(defer_statements);
-
-			//Add this in as a child
-			add_child_node(function_node, defer_stmt);
-		}
 		
 		//Finalize the variable scope for the parameter list
 		finalize_variable_scope(variable_symtab);
