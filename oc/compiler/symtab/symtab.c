@@ -76,6 +76,11 @@ void initialize_variable_scope(variable_symtab_t* symtab){
 
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;
+
+	//The old current will have this as it's "lower level" if it exists
+	if(symtab->current != NULL){
+		symtab->current->lower_level = current;	
+	}
 	
 	//Set this so it's up-to-date
 	symtab->current = current;
@@ -754,6 +759,11 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int16_t* num_warnings){
 			//This will happen alot
 			if(record == NULL){
 				continue;
+			}
+
+			//If it's a label, don't bother with it
+			if(record->is_label == 1){
+				continue;;
 			}
 
 			//Let's now analyze this record

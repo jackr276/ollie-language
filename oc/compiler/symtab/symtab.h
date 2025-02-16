@@ -131,6 +131,8 @@ struct symtab_variable_record_t{
 	u_int16_t enum_member_value;
 	//Is it a struct member?
 	u_int8_t is_construct_member;
+	//Is this a label?
+	u_int8_t is_label;
 	//If it is, we'll store the function as a reference
 	symtab_function_record_t* parent_function;
 	//What's the storage class?
@@ -171,6 +173,8 @@ struct symtab_type_record_t{
 struct symtab_variable_sheaf_t{
 	//Link to the prior level
 	symtab_variable_sheaf_t* previous_level;
+	//Link to the lower level -- for JUMP statements only
+	symtab_variable_sheaf_t* lower_level;
 	//How many records(names) we can have
 	symtab_variable_record_t* records[KEYSPACE];
 	//The level of this particular symtab
@@ -337,6 +341,11 @@ symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name)
  */
 symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab, char* name);
 
+/**
+ * Lookup a variable in all lower scopes. This is specifically and only intended for
+ * jump statements
+ */
+symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name);
 
 /**
  * Lookup a type name in the symtab

@@ -37,6 +37,8 @@ static symtab_function_record_t* current_function = NULL;
 static symtab_variable_record_t* current_var = NULL;
 //What is the type of our current var
 static generic_type_t* current_var_type = NULL;
+//The queue that holds all of our jump statements for a given function
+static heap_queue_t* current_function_jump_statements = NULL;
 
 //Our stack for storing variables, etc
 static lex_stack_t* grouping_stack = NULL;
@@ -5226,6 +5228,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		found = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
 		//Store the type
 		found->type = label_type->type;
+		//Store the fact that it is a label
+		found->is_label = 1;
 
 		//Put into the symtab
 		insert_variable(variable_symtab, found);
@@ -5335,7 +5339,6 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//If this node fails, whole thing is bad
 	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid compound statement given to if statement", current_line);
 		num_errors++;
 		//It's already an error, so just send it back up
 		return compound_stmt_node;
@@ -5406,6 +5409,10 @@ static generic_ast_node_t* if_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we will have already consumed the jump token
  *
+ * All checking for jump statements has to occur after we add labels in. We cannot check if a label
+ * is valid before the function is fully processed. As such, we add all of these jump statements into a
+ * queue for processing
+ *
  * BNF Rule: <jump-statement> ::= jump <label-identifier>;
  */
 static generic_ast_node_t* jump_statement(FILE* fl){
@@ -5428,21 +5435,6 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 		return label_ident;
 	}
 
-	//Grab the name out for convenience
-	char* name = ((identifier_ast_node_t*)(label_ident->node))->identifier;
-
-	//We now need to ensure that this actually exists in the symbol table as an identifier
-	symtab_variable_record_t* label_record = lookup_variable(variable_symtab, name);
-
-	//If it's not there, whole thing fails
-	if(label_record == NULL){
-		sprintf(info, "%s is not a defined label", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -5459,11 +5451,12 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 	//First we'll add the label ident as a child of the jump
 	add_child_node(jump_stmt, label_ident);
 
-	//Then we'll sotre the label record in the jump statement for ease of use later
-	((jump_stmt_ast_node_t*)(jump_stmt->node))->label_record = label_record;
-
 	//Store the line number
 	jump_stmt->line_number = parser_line_num;
+
+	//Add this jump statement into the queue for processing
+	enqueue(current_function_jump_statements, jump_stmt); 
+
 	//Finally we'll give back the root reference
 	return jump_stmt;
 }
@@ -7403,6 +7396,47 @@ static void insert_all_defered_statements(generic_ast_node_t* compound_stmt){
 
 
 /**
+ * We need to go through and check all of the jump statements that we have in the function. If any
+ * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
+ */
+static int8_t check_jump_labels(){
+	//For error printing
+	char info[1000];
+	//Grab a reference to our current jump statement
+	generic_ast_node_t* current_jump_statement;
+
+	//So long as there are jump statements in the queue
+	while(queue_is_empty(current_function_jump_statements) == 0){
+		//Grab the jump statement
+		current_jump_statement = dequeue(current_function_jump_statements);
+
+		//Grab the label ident node
+		generic_ast_node_t* label_ident_node = current_jump_statement->first_child;
+
+		//Let's grab out the name for convenience
+		char* name = ((identifier_ast_node_t*)(label_ident_node->node))->identifier;
+
+		//We now need to lookup the name in here
+		symtab_variable_record_t* label = lookup_variable(variable_symtab, name);
+
+		//If we didn't find it, we fail out
+		if(label == NULL){
+			sprintf(info, "Attempt to jump to nonexistent label \"%s\".", name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Fail out
+			return -1;
+		}
+
+		//Otherwise it worked, so we'll add this as the function's jumping to label
+		((jump_stmt_ast_node_t*)(current_jump_statement->node))->label_record = label;
+	}
+
+	//If we get here then they all worked
+	return 0;
+}
+
+
+/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
@@ -7426,6 +7460,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
+
+	//We need a stack for storing jump statements. We need to check these later because if
+	//we check them as we go, we don't get full jump functionality
+	current_function_jump_statements = heap_queue_alloc();
 
 	//We also have the AST function node, this will be intialized immediately
 	//It also requires a symtab record of the function, but this will be assigned
@@ -7841,9 +7879,18 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		
 		//Once here, we need to add in all deferred statements into the overall compound statement node
 		insert_all_defered_statements(compound_stmt_node);
+		
+		//We now need to check and see if our jump statements are actually valid
+		if(check_jump_labels() == -1){
+			//If this fails, we fail out here too
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 
 		//Finalize the variable scope for the parameter list
 		finalize_variable_scope(variable_symtab);
+
+		//We're done with this, so destroy it
+		heap_queue_dealloc(current_function_jump_statements);
 
 		//Store the line number
 		function_node->line_number = current_line;

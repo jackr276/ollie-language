@@ -30,6 +30,8 @@ fn saturating_add(x:i32, y:i32) -> i32{
 */
 
 fn tester() -> void{
+
+	$label1:
 	let mut x:i32 := 3;
 	++x;
 	ret;
@@ -39,15 +41,18 @@ fn tester() -> void{
  * Demonstrate the functionality of saturating add for positive and negative overflows
  */
 fn main() -> i32{
-	let mut x:i32 := 2;
+		let mut x:i32 := 2;
 
+	
 	if(!x) then {
 		defer x + 3;
+		defer x + 232;
+		jump $label1;
 		++x;
 	} else {
 		--x;
 	}
 
-	
+	$label1:
 	ret 0;
 }
