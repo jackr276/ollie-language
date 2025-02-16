@@ -486,7 +486,7 @@ static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_
 
 
 /**
- * Emit a negation statement
+ * Emit a bitwise negation statement
  */
 static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, temp_selection_t use_temp){
 	three_addr_var_t* var;
@@ -506,6 +506,21 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
 
 	//We always return the assignee
 	return var;
+}
+
+
+/**
+ * Emit a logical negation statement
+ */
+static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated){
+	//We ALWAYS use a temp var here
+	three_addr_code_stmt_t* stmt = emit_logical_not_stmt_three_addr_code(emit_temp_var(negated->type), negated);
+
+	//From here, we'll add the statement in
+	add_statement(basic_block, stmt);
+
+	//We'll give back the assignee temp variable
+	return stmt->assignee;
 }
 
 
@@ -573,10 +588,10 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		 * Uses strategy of:
 		 * 	test rdx, rdx
 		 * 	sete rdx
-		 *
 		 * for implementation
 		 */
 		} else if(unary_operator->unary_operator == L_NOT){
+			return emit_logical_neg_stmt_code(basic_block, assignee);
 
 		/**
 		 * x = -a;
@@ -589,7 +604,6 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		} else if(unary_operator->unary_operator == MINUS){
 			//We will emit the negation code here
 			return emit_neg_stmt_code(basic_block, assignee, use_temp);
-
 		}
 
 		//FOR NOW ONLY

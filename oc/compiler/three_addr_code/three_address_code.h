@@ -51,6 +51,8 @@ typedef enum{
 	THREE_ADDR_CODE_DEC_STMT,
 	//A bitwise not statement
 	THREE_ADDR_CODE_BITWISE_NOT_STMT,
+	//A logical not statement
+	THREE_ADDR_CODE_LOGICAL_NOT_STMT,
 	//An indirection statement
 	THREE_ADDR_CODE_DEREF_STMT,
 	//Binary op with const
@@ -213,9 +215,14 @@ three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decremen
 three_addr_code_stmt_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* negatee);
 
 /**
- * Emit a not instruction
+ * Emit a bitwise not instruction
  */
 three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var);
+
+/**
+ * Emit a logical not instruction
+ */
+three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var);
 
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump

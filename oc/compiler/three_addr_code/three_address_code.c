@@ -366,6 +366,11 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		printf("%s <- not %s\n", stmt->assignee->var_name, stmt->op1->var_name);
 	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
 		printf("%s <- neg %s\n", stmt->assignee->var_name, stmt->op1->var_name);
+	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
+		//First we use the test command
+		printf("%s <- test %s, %s\n", stmt->assignee->var_name, stmt->op1->var_name, stmt->op1->var_name);
+		//Then we "set if equal"(sete) the assigned
+		printf("sete %s\n", stmt->assignee->var_name);
 	}
 }
 
@@ -629,6 +634,23 @@ three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var){
 	stmt->op1 = var;
 
 	//Give the statement back
+	return stmt;
+}
+
+/**
+ * Emit a logical not statement
+ */
+three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var){
+	//First allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's make it a logical not stmt
+	stmt->CLASS = THREE_ADDR_CODE_LOGICAL_NOT_STMT;
+	stmt->assignee = assignee;
+	//Leave it in here
+	stmt->op1 = var;
+
+	//Give the stmt back
 	return stmt;
 }
 
