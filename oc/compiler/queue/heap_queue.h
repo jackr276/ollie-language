@@ -19,6 +19,7 @@ struct heap_queue_t{
 	//The head and tail
 	heap_queue_node_t* head;
 	heap_queue_node_t* tail;
+	u_int32_t num_nodes;
 };
 
 //Heap queue node struct
@@ -37,6 +38,8 @@ heap_queue_t* heap_queue_alloc();
 
 /**
  * Deallocate an entire heap queue structure
+ *
+ * NOTE: Only the nodes are freed, not the underlying data
  */
 void heap_queue_dealloc(heap_queue_t* heap_queue);
 
@@ -47,12 +50,14 @@ void enqueue(heap_queue_t* heap_queue, void* data);
 
 /**
  * Dequeue a node from the queue
+ *
+ * Returns NULL if there was an error or empty queue
  */
 void* dequeue(heap_queue_t* heap_queue);
 
 /**
- * Determine if the heap is empty
+ * Determine if the heap is empty. Returns 1 if empty, 0 if not
  */
-u_int8_t heap_is_empty(heap_queue_t* heap_queue);
+u_int8_t queue_is_empty(heap_queue_t* heap_queue);
 
 #endif /* HEAP_QUEUE_H */
