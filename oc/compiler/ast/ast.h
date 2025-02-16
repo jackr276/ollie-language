@@ -161,6 +161,8 @@ typedef enum address_specifier_type_t{
  * to what the actual node is
 */
 struct generic_ast_node_t{
+	//What is the next created AST NODE? Used for memory deallocation
+	generic_ast_node_t* next_created_ast_node;
 	//What is the next statement? This is used in our CFG
 	generic_ast_node_t* next_statement;
 	//What is the inferred type of the node
@@ -445,7 +447,7 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child);
 /**
  * Global tree deallocation function
  */
-void deallocate_ast(generic_ast_node_t* root);
+void deallocate_ast();
 
 
 #endif /* AST_T */

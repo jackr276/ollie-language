@@ -533,7 +533,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 	function_call_node->line_number = current_line;
 
 	//Destroy the ident node, we no longer need it
-	deallocate_ast(ident);
+	//deallocate_ast(ident);
 
 	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
@@ -1340,7 +1340,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		u_int32_t type_size = type_spec->inferred_type->type_size;
 
 		//And then we no longer need the type-spec node, we can just remove it
-		deallocate_ast(type_spec);
+		//deallocate_ast(type_spec);
 
 		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
 		lookahead = get_next_token(fl, &parser_line_num);
@@ -1801,7 +1801,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	right_hand_unary->inferred_type = type_spec->inferred_type;
 
 	//Once we get here, we no longer need the type specifier
-	deallocate_ast(type_spec);
+	//deallocate_ast(type_spec);
 
 	//Finally, we're all set to go here, so we can return the root reference
 	return right_hand_unary;
@@ -3645,7 +3645,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	add_child_node(member_node, ident);
 
 	//Destory the type spec node when here
-	deallocate_ast(type_spec);
+	//deallocate_ast(type_spec);
 
 	//Store the line number
 	member_node->line_number = parser_line_num;
@@ -3757,7 +3757,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Valid identifier required after construct keyword", parser_line_num);
 		num_errors++;
 		//Destroy the node
-		deallocate_ast(ident);
+		//deallocate_ast(ident);
 		//Fail out
 		return 1;
 	}
@@ -3766,7 +3766,7 @@ static u_int8_t construct_definer(FILE* fl){
 	strcat(type_name, ((identifier_ast_node_t*)(ident->node))->identifier);	
 
 	//Once we have this, the actual node is useless so we'll free it
-	deallocate_ast(ident);
+	//deallocate_ast(ident);
 
 	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
 	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
@@ -3804,7 +3804,7 @@ static u_int8_t construct_definer(FILE* fl){
 	if(mem_list->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid construct member list given in construct definition", parser_line_num);
 		//We'll destroy it first
-		deallocate_ast(mem_list);
+		//deallocate_ast(mem_list);
 		return 0;
 	}
 
@@ -3861,7 +3861,7 @@ static u_int8_t construct_definer(FILE* fl){
 	insert_type(type_symtab, create_type_record(construct_type));
 
 	//Once we're done with this, the mem list itself has no use so we'll destroy it
-	deallocate_ast(mem_list);
+	//deallocate_ast(mem_list);
 	
 	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
 	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
@@ -3890,7 +3890,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
-		deallocate_ast(alias_ident);
+		//deallocate_ast(alias_ident);
 		return 0;
 	}
 
@@ -3898,7 +3898,7 @@ static u_int8_t construct_definer(FILE* fl){
 	strcpy(alias_name, ((identifier_ast_node_t*)(alias_ident->node))->identifier);
 
 	//Once we have this, the alias ident is of no use to us
-	deallocate_ast(alias_ident);
+	//deallocate_ast(alias_ident);
 
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4147,7 +4147,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid name given to enum definition", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
-		deallocate_ast(ident);
+		//deallocate_ast(ident);
 		return 0;
 	}
 
@@ -4155,7 +4155,7 @@ static u_int8_t enum_definer(FILE* fl){
 	strcat(name, ((identifier_ast_node_t*)(ident->node))->identifier);
 
 	//Once we have this, we no longer need the ident node
-	deallocate_ast(ident);
+	//deallocate_ast(ident);
 
 	//Now we need to check that this name isn't already currently in use. We only need to check against the
 	//type symtable, because nothing else could have enum in the name
@@ -4193,7 +4193,7 @@ static u_int8_t enum_definer(FILE* fl){
 	if(member_list->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid enumeration member list given in enum definition", current_line);
 		//Destroy the member list
-		deallocate_ast(member_list);
+		//deallocate_ast(member_list);
 		return 0;
 	}
 
@@ -4205,7 +4205,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enum member list", parser_line_num);
 		num_errors++;
 		//Destroy the member list
-		deallocate_ast(member_list);
+		//deallocate_ast(member_list);
 		return 0;
 	}
 
@@ -4214,7 +4214,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected in enum defintion", parser_line_num);
 		num_errors++;
 		//Destroy the member list
-		deallocate_ast(member_list);
+		//deallocate_ast(member_list);
 		return 0;
 	}
 
@@ -4256,7 +4256,7 @@ static u_int8_t enum_definer(FILE* fl){
 	insert_type(type_symtab, create_type_record(enum_type));
 
 	//Once we're here the member list is useless, so we'll deallocate it
-	deallocate_ast(member_list);
+	//deallocate_ast(member_list);
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
 	//for redefining variables immediately upon declaration. They are prefaced by the "As" keyword
@@ -4286,7 +4286,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
-		deallocate_ast(alias_ident);
+		//deallocate_ast(alias_ident);
 		return 0;
 	}
 
@@ -4294,7 +4294,7 @@ static u_int8_t enum_definer(FILE* fl){
 	strcpy(alias_name, ((identifier_ast_node_t*)(alias_ident->node))->identifier);
 
 	//Now that we're here we don't need the node anymore
-	deallocate_ast(alias_ident);
+	//deallocate_ast(alias_ident);
 	
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -4958,9 +4958,9 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//Store the line number
 	parameter_decl_node->line_number = parser_line_num;
 	//Destroy the type specifier node
-	deallocate_ast(type_spec_node);
+	//deallocate_ast(type_spec_node);
 	//Destroy the ident node
-	deallocate_ast(ident);
+	//deallocate_ast(ident);
 
 	//Finally, we'll send this node back
 	return parameter_decl_node;
@@ -6865,8 +6865,8 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	decl_node->line_number = current_line;
 
 	//We no longer need the ident or type specifier nodes
-	deallocate_ast(ident_node);
-	deallocate_ast(type_spec_node);
+	//deallocate_ast(ident_node);
+	//deallocate_ast(type_spec_node);
 
 	//All went well so we can return this
 	return decl_node;
@@ -7089,8 +7089,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	let_stmt_node->line_number = current_line;
 
 	//Once we get here, the ident nodes and type specifiers are useless
-	deallocate_ast(type_spec_node);
-	deallocate_ast(ident_node);
+	//deallocate_ast(type_spec_node);
+	//deallocate_ast(ident_node);
 
 	//Give back the let statement node here
 	return let_stmt_node;
@@ -7122,7 +7122,7 @@ static u_int8_t alias_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given to alias statement", parser_line_num);
 		num_errors++;
 		//Free it
-		deallocate_ast(type_spec_node);
+		//deallocate_ast(type_spec_node);
 		//Fail out
 		return 0;
 	}
@@ -7131,7 +7131,7 @@ static u_int8_t alias_statement(FILE* fl){
 	generic_type_t* type = type_spec_node->inferred_type;
 
 	//Once we have the reference, the actual node is useless so we'll free it
-	deallocate_ast(type_spec_node);
+	//deallocate_ast(type_spec_node);
 
 	//We now need to see the as keyword
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -7152,7 +7152,7 @@ static u_int8_t alias_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
 		num_errors++;
 		//Free the ident node
-		deallocate_ast(ident_node);
+		//deallocate_ast(ident_node);
 		//Fail out
 		return 0;
 	}
@@ -7169,7 +7169,7 @@ static u_int8_t alias_statement(FILE* fl){
 	strcpy(ident_name, ((identifier_ast_node_t*)(ident_node->node))->identifier);
 
 	//Once we have the ident name, we no longer need the ident node
-	deallocate_ast(ident_node);
+	//deallocate_ast(ident_node);
 
 	//Let's do our last syntax check--the semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -7757,9 +7757,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	function_record->return_type = type;
 
 	//Once we have the type, most nodes that we have here are useless
-	deallocate_ast(return_type_node);
-	deallocate_ast(ident_node);
-	deallocate_ast(param_list_node);
+	//deallocate_ast(return_type_node);
+	//deallocate_ast(ident_node);
+	//deallocate_ast(param_list_node);
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition
@@ -7787,7 +7787,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Otherwise it should be ok
 
 		//If this is the case, then we essentially have a compiler directive here. We'll return NULL
-		deallocate_ast(function_node);
+		//deallocate_ast(function_node);
 
 		//Finalize the variable scope
 		finalize_variable_scope(variable_symtab);

@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+//The very first created node
+static generic_ast_node_t* head_node = NULL;
+//The current node, this is used for our memory creation scheme
+static generic_ast_node_t* current_ast_node = NULL;
 
 /**
  * Simple function that handles all of the hard work for node allocation for us. The user gives us the pointer
@@ -18,6 +22,16 @@
 generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
+
+	//If we have the very first node
+	if(head_node == NULL){
+		head_node = node;
+		current_ast_node = node;
+	} else {
+		//Add to the back of the list
+		current_ast_node->next_created_ast_node = node;
+		current_ast_node = node;
+	}
 
 	switch (CLASS) {
 		//The starting node of the entire AST
@@ -351,25 +365,28 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child){
 /**
  * Global tree deallocation function
  */
-void deallocate_ast(generic_ast_node_t* root){
-	//Base case
-	if(root == NULL){
+void deallocate_ast(){
+	//For our own safety here
+	if(head_node == NULL){
 		return;
 	}
 
-	//We can off the bat free it's data
-	if(root->node != NULL){
-		free(root->node);
+	//Store our temp var here
+	generic_ast_node_t* temp;
+
+	while(head_node != NULL){
+		//Grab a reference to it
+		temp = head_node;
+
+		//Advance root along
+		head_node = head_node->next_created_ast_node;
+
+		//We can off the bat free it's data
+		if(temp->node != NULL){
+			free(temp->node);
+		}
+
+		//Destroy temp here
+		free(temp);
 	}
-
-	//Recursively free it's subtree first
-	generic_ast_node_t* sub_tree = root->first_child;
-	generic_ast_node_t* sibling = root->next_sibling;
-
-	//Once we have the pointers we actually no longer need root
-	free(root);
-	
-	//Recursively call deallocate on both of these references
-	deallocate_ast(sub_tree);
-	deallocate_ast(sibling);
 }
