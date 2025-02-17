@@ -298,6 +298,15 @@ static void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block,
 
 
 /**
+ * Emit an unconditional jump statement to a label as opposed to a block ID. This is used for
+ * when the user wishes to jump directly
+ */
+static void emit_jmp_stmt_direct(basic_block_t* basic_block, generic_ast_node_t* jump_node){
+
+}
+
+
+/**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
@@ -1151,7 +1160,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//nodes contain an "is_blank" field that will alert us if this is just a placeholder. The first 2 parts of a for
 
 	//If the very first one is not blank
-	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
+	if(ast_cursor->first_child != NULL){
 		//Add it's child in as a statement to the entry block
 		emit_expr_code(for_stmt_entry_block, ast_cursor->first_child);
 	}
@@ -1173,7 +1182,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	condition_block_vals.operator = BLANK;
 	
 	//If the second one is not blank
-	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
+	if(ast_cursor->first_child != NULL){
 		//This is always the first part of the repeating block
 		condition_block_vals = emit_expr_code(condition_block, ast_cursor->first_child);
 
@@ -1190,7 +1199,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	basic_block_t* for_stmt_update_block = basic_block_alloc();
 
 	//If the third one is not blank
-	if(((for_loop_condition_ast_node_t*)(ast_cursor->node))->is_blank == 0){
+	if(ast_cursor->first_child != NULL){
 		//Emit the update expression
 		emit_expr_code(for_stmt_update_block, ast_cursor->first_child);
 	}

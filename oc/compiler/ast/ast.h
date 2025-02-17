@@ -64,8 +64,6 @@ typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 //An AST node for let statements
 typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
-//An AST node for for-loop conditions
-typedef struct for_loop_condition_ast_node_t for_loop_condition_ast_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
@@ -282,12 +280,6 @@ struct decl_stmt_ast_node_t{
 struct let_stmt_ast_node_t{
 	//Hold the variable that we declared
 	symtab_variable_record_t* declared_var;
-};
-
-//An AST for loop condition
-struct for_loop_condition_ast_node_t{
-	//Is blank is true if there is no actual expression
-	u_int8_t is_blank;
 };
 
 /**

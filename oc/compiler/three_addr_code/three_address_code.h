@@ -65,6 +65,8 @@ typedef enum{
 	THREE_ADDR_CODE_RET_STMT,
 	//A jump statement -- used for control flow
 	THREE_ADDR_CODE_JUMP_STMT,
+	//A direct to label jump statement
+	THREE_ADDR_CODE_DIR_JUMP_STMT,
 	//A function call node
 	THREE_ADDR_CODE_FUNC_CALL,
 	//A negation statement
@@ -139,6 +141,8 @@ struct three_addr_code_stmt_t{
 	jump_type_t jump_type;
 	//The function called
 	symtab_function_record_t* func_record;
+	//The variable record
+	symtab_variable_record_t* var_record;
 	//The list of temp variable parameters at most 6
 	three_addr_var_t* params[6];
 	//TODO may add more

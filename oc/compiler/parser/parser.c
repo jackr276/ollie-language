@@ -6267,8 +6267,6 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	//Just add in a blank node as a placeholder
 	} else {
 		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
-		//Mark as blank
-		((for_loop_condition_ast_node_t*)(for_loop_cond_node->node))->is_blank = 1;
 		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
@@ -6352,8 +6350,6 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	//Create a blank node here as a placeholder
 	} else {
 		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
-		//Mark as blank
-		((for_loop_condition_ast_node_t*)(for_loop_cond_node->node))->is_blank = 1;
 		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
