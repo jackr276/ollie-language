@@ -49,9 +49,8 @@ static u_int16_t num_warnings = 0;
 //The current parser line number
 static u_int16_t parser_line_num = 1;
 
-//The stack that holds all of our defer statements
-heap_stack_t* defer_statements;
-
+//The overall node that holds all deferred statements for a function
+generic_ast_node_t* deferred_stmts_node = NULL;
 
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
@@ -6575,8 +6574,8 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//Mark that this is deferred
 	expr_node->is_deferred = 1;
 
-	//Push this onto the stack
-	push(defer_statements, expr_node);
+	//Add this in as a child node to the overall deferred statements node
+	add_child_node(deferred_stmts_node, expr_node);
 
 	//We return nothing here -- there is no need
 	return NULL;
@@ -7297,8 +7296,6 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
 	//node. We must preserve this reference
 	generic_ast_node_t* root = ast_node_alloc(duplicatee->CLASS);
 
-	generic_ast_node_t* root_next_created = root->next_created_ast_node;
-
 	//We will perform a deep copy here
 	memcpy(root, duplicatee, sizeof(generic_ast_node_t));
 
@@ -7308,8 +7305,6 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
 	//We don't want to hold onto any of these old references here
 	root->first_child = NULL;
 	root->next_sibling = NULL;
-	//We don't want this reference either
-	root->next_created_ast_node = root_next_created;
 	root->next_statement = NULL;
 
 	//Now for each child in the node, we duplicate it and add it in as a child
@@ -7343,38 +7338,19 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
  * statement. Since functions can have many return statements, it makes sense to insert these right
  * before each return statement.
  */
-static void insert_all_defered_statements(generic_ast_node_t* compound_stmt){
-	//If it's empty just get out here
-	if(is_empty(defer_statements) == 1){
+static void insert_all_deferred_statements(generic_ast_node_t* compound_stmt){
+	//If there is no first child, that means that this node is done for
+	if(deferred_stmts_node->first_child == NULL){
 		return;
 	}
+
+	//Otherwise there actually were some deferred statements
 
 	//Let's first create the linked list that we need to insert deferred statments
 	generic_ast_node_t* deferred_stmts_head = NULL;
 
 	//Hold what we've popped
 	generic_ast_node_t* popped_stmt;
-
-	//So long as there are statements on here
-	while(is_empty(defer_statements) == 0){
-		//Pop it off
-		popped_stmt = pop(defer_statements);
-
-		//The most recent one on the stack is the latest one, so he will
-		//actually go last. As such, we'll add these in in a head-first fashion
-		
-		//Add these in bit by bit
-		popped_stmt->next_sibling = deferred_stmts_head;
-		deferred_stmts_head = popped_stmt;
-	}
-	
-	//Once we get here, we have our linked list -- we'll now grab the tail
-	generic_ast_node_t* deferred_stmts_tail = deferred_stmts_head;
-
-	//Run down to the end
-	while(deferred_stmts_tail->next_sibling != NULL){
-		deferred_stmts_tail = deferred_stmts_tail->next_sibling;
-	}
 
 	//Now we have finally constructed our linked list and made appropriate references. We now need to
 	//find every return statement and insert these before it. We will do this in a BFS(level order) fashion
@@ -7402,33 +7378,12 @@ static void insert_all_defered_statements(generic_ast_node_t* compound_stmt){
 			//Grab a reference to this, we're about to break it
 			ret_stmt_node = current_node->next_sibling;
 
-			generic_ast_node_t* duplicated_head = NULL;
-			generic_ast_node_t* duplicated_tail = NULL;
-			//Grab a cursor so we don't mess up original references
-			generic_ast_node_t* cursor = deferred_stmts_head;
-
-			//So long as we aren't null
-			while(cursor != NULL){
-				//Duplicate the cursor
-				generic_ast_node_t* duplicated = duplicate_subtree(cursor);
-
-				//Special case -- adding at front
-				if(duplicated_head == NULL){
-					duplicated_head = duplicated;
-					duplicated_tail = duplicated;
-				//Otherwise it goes on the tail
-				} else {
-					duplicated_tail->next_sibling = duplicated;
-					duplicated_tail = duplicated;
-				}
-
-				//Advance the cursor
-				cursor = cursor->next_sibling;
-			}
-
+			//Just duplicate the whole thing
+			generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node);
+		
 			//After we've duplicated we can add in
-			current_node->next_sibling = duplicated_head;
-			duplicated_tail->next_sibling = ret_stmt_node;
+			//current_node->next_sibling = deferred_stmts;
+			//deferred_stmts->next_sibling = ret_stmt_node;
 		}
 
 		//Now we'll add in all of his children
@@ -7890,6 +7845,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		push_back_token(lookahead);
 		//Call compound statement
 
+		//Let's allocate our deferred statments to hold any/all potential
+		//ones here
+		deferred_stmts_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT);
+
 		//We are finally required to see a valid compound statement
 		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
@@ -7928,7 +7887,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		add_child_node(function_node, compound_stmt_node);
 		
 		//Once here, we need to add in all deferred statements into the overall compound statement node
-		insert_all_defered_statements(compound_stmt_node);
+		insert_all_deferred_statements(compound_stmt_node);
 		
 		//We now need to check and see if our jump statements are actually valid
 		if(check_jump_labels(function_record) == -1){
@@ -7944,6 +7903,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Store the line number
 		function_node->line_number = current_line;
+
+		//Wipe this away, it will be freed by the deallocator
+		deferred_stmts_node = NULL;
 
 		//All good so we can get out
 		return function_node;
@@ -8098,8 +8060,6 @@ front_end_results_package_t parse(FILE* fl){
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = create_lex_stack();
-	//Create the defer statements stack
-	defer_statements = create_stack();
 
 	//Global entry/run point, will give us a tree with
 	//the root being here
@@ -8128,7 +8088,6 @@ front_end_results_package_t parse(FILE* fl){
 
 	//Destroy the stack, no longer needed
 	destroy_lex_stack(grouping_stack);
-	destroy_stack(defer_statements);
 
 	return results;
 }
