@@ -651,7 +651,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	expr_ret_package_t right_hand_temp = emit_binary_op_expr_code(basic_block, cursor);
 
 	//Let's see what binary operator that we have
-	Token binary_operator = ((binary_expr_ast_node_t*)(logical_or_expr->node))->binary_operator;
+	Token binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
 	package.operator = binary_operator;
 

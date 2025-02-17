@@ -36,8 +36,6 @@ typedef struct constant_ast_node_t constant_ast_node_t;
 typedef struct type_name_ast_node_t type_name_ast_node_t;
 //Type address specifier node
 typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node_t;
-//The binary expression node
-typedef struct binary_expr_ast_node_t binary_expr_ast_node_t;
 //The unary operator node
 typedef struct unary_operator_ast_node_t unary_operator_ast_node_t;
 //The function call node
@@ -142,6 +140,8 @@ struct generic_ast_node_t{
 	ast_node_class_t CLASS;
 	//What line number is this from
 	u_int16_t line_number;
+	//Store a binary operator(if one exists)
+	Token binary_operator;
 	//Is this assignable?
 	u_int8_t is_assignable;
 	//Is this a deferred node?
@@ -207,12 +207,6 @@ struct type_name_ast_node_t{
 struct type_address_specifier_ast_node_t{
 	//Is it an address or array?
 	address_specifier_type_t address_type;
-};
-
-//This node will hold data about any binary expression
-struct binary_expr_ast_node_t{
-	//What operator is it
-	Token binary_operator;
 };
 
 //The function node call
@@ -301,6 +295,10 @@ struct for_loop_condition_ast_node_t{
  */
 generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS);
 
+/**
+ * A utility function for node duplication
+ */
+generic_ast_node_t* duplicate_node(const generic_ast_node_t* node);
 
 /**
  * A helper function that will appropriately add a child node into the parent

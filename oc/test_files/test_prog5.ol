@@ -45,7 +45,6 @@ fn main() -> i32{
 	let mut x:i32 := 2;
 
 	defer x + 3;	
-	defer x + 5;
 	
 	if(!x) then {
 
@@ -53,7 +52,7 @@ fn main() -> i32{
 		++x;
 	} else {
 		--x;
-		ret x;
+		//ret x;
 	}
 
 	jump $label1;

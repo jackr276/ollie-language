@@ -15,6 +15,44 @@ static generic_ast_node_t* head_node = NULL;
 //The current node, this is used for our memory creation scheme
 static generic_ast_node_t* current_ast_node = NULL;
 
+
+/**
+ * A utility function for duplicating nodes
+ */
+generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
+	//Firs allocate the overall node here
+	generic_ast_node_t* duplicated = calloc(1, sizeof(generic_ast_node_t));
+
+	//We will perform a deep copy here
+	memcpy(duplicated, node, sizeof(generic_ast_node_t));
+
+	//Now we must also copy the entire node
+	if(node->node != NULL){
+		memcpy(duplicated->node, node->node, node->inner_node_size);
+	}
+
+	//We don't want to hold onto any of these old references here
+	duplicated->first_child = NULL;
+	duplicated->next_sibling = NULL;
+	duplicated->next_statement = NULL;
+	duplicated->next_created_ast_node = NULL;
+
+	//And now we'll link this in to our linked list here
+	//If we have the very first node
+	if(head_node == NULL){
+		head_node = duplicated;
+		current_ast_node = duplicated;
+	} else {
+		//Add to the back of the list
+		current_ast_node->next_created_ast_node = duplicated;
+		current_ast_node = duplicated;
+	}
+
+	//Give back the duplicated node
+	return duplicated;
+}
+
+
 /**
  * Simple function that handles all of the hard work for node allocation for us. The user gives us the pointer
  * that they want to use. It is assumed that the user already knows the proper type and takes appropriate action based
@@ -137,8 +175,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		//Binary expression node
 		case AST_NODE_CLASS_BINARY_EXPR:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(binary_expr_ast_node_t));
-			node->inner_node_size = sizeof(binary_expr_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_BINARY_EXPR;
 			break;
 

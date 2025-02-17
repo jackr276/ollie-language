@@ -1881,9 +1881,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
-
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -2210,7 +2208,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -2600,7 +2598,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -2711,7 +2709,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -2828,7 +2826,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -2946,7 +2944,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -3066,7 +3064,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 		//TODO handle type stuff later on
 
 		//We actually already know this guy's first child--it's the previous root currently
@@ -3188,7 +3186,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -3309,7 +3307,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -3434,7 +3432,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
-		((binary_expr_ast_node_t*)(sub_tree_root->node))->binary_operator = lookahead.tok;
+		sub_tree_root->binary_operator = lookahead.tok;
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -7291,26 +7289,12 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
 		return NULL;
 	}
 
-	//We create an entirely fresh node here
-	//In this function, we store a reference to the root's "next-created"
-	//node. We must preserve this reference
-	generic_ast_node_t* root = ast_node_alloc(duplicatee->CLASS);
-
-	//We will perform a deep copy here
-	memcpy(root, duplicatee, sizeof(generic_ast_node_t));
-
-	//Now we must also copy the entire node
-	if(duplicatee->node != NULL){
-		memcpy(root->node, duplicatee->node, duplicatee->inner_node_size);
-	}
-
-	//We don't want to hold onto any of these old references here
-	root->first_child = NULL;
-	root->next_sibling = NULL;
-	root->next_statement = NULL;
+	//Duplicate the node here
+	generic_ast_node_t* duplicated_root = duplicate_node(duplicatee);
 
 	//Now for each child in the node, we duplicate it and add it in as a child
 	generic_ast_node_t* child_cursor = duplicatee->first_child;
+
 	//The duplicated child
 	generic_ast_node_t* duplicated_child = NULL;
 
@@ -7320,14 +7304,14 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
 		duplicated_child = duplicate_subtree(child_cursor);
 
 		//Add the duplicate child into the node
-		add_child_node(root, duplicated_child);
+		add_child_node(duplicated_root, duplicated_child);
 
 		//Advance the cursor
 		child_cursor = child_cursor->next_sibling;
 	}
 
 	//Return the duplicate root
-	return root;
+	return duplicated_root;
 }
 
 
