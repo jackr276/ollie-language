@@ -22,12 +22,8 @@
 
 //A generic AST node can be any AST node
 typedef struct generic_ast_node_t generic_ast_node_t;
-//The starting AST node
-typedef struct prog_ast_node_t prog_ast_node_t;
 //A function definition AST node
 typedef struct func_def_ast_node_t func_def_ast_node_t;
-//A function specifier node
-typedef struct func_specifier_ast_node_t func_specifier_ast_node_t;
 //A parameter list node
 typedef struct param_list_ast_node_t param_list_ast_node_t;
 //A parameter node
@@ -36,28 +32,18 @@ typedef struct param_decl_ast_node_t param_decl_ast_node_t;
 typedef struct identifier_ast_node_t identifier_ast_node_t;
 //A constant node. Can represent any of the four kinds of constant
 typedef struct constant_ast_node_t constant_ast_node_t;
-//A type specifier node
-typedef struct type_spec_ast_node_t type_spec_ast_node_t;
 //A type name node
 typedef struct type_name_ast_node_t type_name_ast_node_t;
 //Type address specifier node
 typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node_t;
-//The top level node that holds together an assignment expression
-typedef struct asnmnt_expr_ast_node_t asnmnt_expr_ast_node_t;
 //The binary expression node
 typedef struct binary_expr_ast_node_t binary_expr_ast_node_t;
-//The postfix expression node
-typedef struct postfix_expr_ast_node_t postfix_expr_ast_node_t;
-//The unary expression node
-typedef struct unary_expr_ast_node_t unary_expr_ast_node_t;
 //The unary operator node
 typedef struct unary_operator_ast_node_t unary_operator_ast_node_t;
 //The function call node
 typedef struct function_call_ast_node_t function_call_ast_node_t;
 //A struct accessor node
 typedef struct construct_accessor_ast_node_t construct_accessor_ast_node_t;
-//An array accessor node
-typedef struct array_accessor_ast_node_t array_accessor_ast_node_t;
 //A construct member list node
 typedef struct construct_member_list_ast_node_t construct_member_list_ast_node_t;
 //A construct member node
@@ -68,32 +54,12 @@ typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
 typedef struct enum_member_ast_node_t enum_member_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
-//An AST node for the case blocks in switches
-typedef struct case_stmt_ast_node_t case_stmt_ast_node_t;
-//An AST node for the default blocks in switches
-typedef struct default_stmt_ast_node_t default_stmt_ast_node_t;
 //An AST node for label statements
 typedef struct label_stmt_ast_node_t label_stmt_ast_node_t;
 //An AST node for if statements
 typedef struct if_stmt_ast_node_t if_stmt_ast_node_t;
 //An AST node for jump statements
 typedef struct jump_stmt_ast_node_t jump_stmt_ast_node_t;
-//An AST node for break statements
-typedef struct break_stmt_ast_node_t break_stmt_ast_node_t;
-//An AST node for continue statements
-typedef struct continue_stmt_ast_node_t continue_stmt_ast_node_t;
-//An AST node for ret statements
-typedef struct ret_stmt_ast_node_t ret_stmt_ast_node_t;
-//An AST node for switch statements
-typedef struct switch_stmt_ast_node_t switch_stmt_ast_node_t;
-//An AST node for while statements
-typedef struct while_stmt_ast_node_t while_stmt_ast_node_t;
-//An AST node for do-while statements
-typedef struct do_while_stmt_ast_node_t do_while_stmt_ast_node_t;
-//An AST node for compound statements
-typedef struct compound_stmt_ast_node_t compound_stmt_ast_node_t;
-//An AST node for for statements
-typedef struct for_stmt_ast_node_t for_stmt_ast_node_t;
 //An AST node for alias statements
 typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 //An AST node for declaration statements
@@ -111,7 +77,6 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_DECL_STMT,
 	AST_NODE_CLASS_LET_STMT,
 	AST_NODE_CLASS_FUNC_DEF,
-	AST_NODE_CLASS_FUNC_SPECIFIER,
 	AST_NODE_CLASS_PARAM_LIST,
 	AST_NODE_CLASS_CONSTANT,
 	AST_NODE_CLASS_PARAM_DECL,
@@ -188,13 +153,6 @@ struct generic_ast_node_t{
 };
 
 
-//The starting AST node really only exists to hold the tree root
-struct prog_ast_node_t{
-	//The lexer item, really a formality
-	Lexer_item lex;
-};
-
-
 //Represents a top level function definition
 struct func_def_ast_node_t{
 	//The symtable function record that is created in parallel
@@ -242,12 +200,6 @@ struct param_decl_ast_node_t{
 	symtab_variable_record_t* param_record;
 };
 
-
-//Holds information about a type
-struct type_spec_ast_node_t{
-};
-
-
 //Simply holds a name that we get for a type
 struct type_name_ast_node_t{
 	//Holds the name of the type as a string
@@ -263,13 +215,6 @@ struct type_address_specifier_ast_node_t{
 	address_specifier_type_t address_type;
 };
 
-//This node will hold data about an assignment expression
-struct asnmnt_expr_ast_node_t{
-	//Nothing here currently, except for
-	//maybe type matching
-	u_int8_t types_matched; //Will probably delete this or not use
-};
-
 //This node will hold data about any binary expression
 struct binary_expr_ast_node_t{
 	//What operator is it
@@ -282,10 +227,6 @@ struct function_call_ast_node_t{
 	symtab_function_record_t* func_record;
 };
 
-//The unary expression node
-struct unary_expr_ast_node_t{
-};
-
 //The unary operator node
 struct unary_operator_ast_node_t{
 	//We will keep the token of the unary operator
@@ -296,15 +237,6 @@ struct unary_operator_ast_node_t{
 struct construct_accessor_ast_node_t{
 	//The token that we saw(either : or =>)
 	Token tok;
-};
-
-//The array accessor AST Node. Doesn't really do much, just there
-//to represent what we're doing
-struct array_accessor_ast_node_t{
-};
-
-//The postfix expression ast node. Does not do all that much currently
-struct postfix_expr_ast_node_t{
 };
 
 //The construct member list node
@@ -331,18 +263,6 @@ struct enum_member_ast_node_t{
 	symtab_variable_record_t* member_var;
 };
 
-//A case statement node
-struct case_stmt_ast_node_t{
-	//Just hold the memory offset for now
-	u_int64_t mem_location;
-};
-
-//A default statement node
-struct default_stmt_ast_node_t{
-	//Just hold the memory location for now
-	u_int64_t mem_location;
-};
-
 //A label statement node
 struct label_stmt_ast_node_t{
 	//Just hold the memory location for now
@@ -351,66 +271,11 @@ struct label_stmt_ast_node_t{
 	symtab_variable_record_t* associate_var;
 };
 
-//An if statement node
-struct if_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status; //todo may get rid of
-};
 
 //A jump statement node
 struct jump_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status; //todo may get rid of
 	//Contain where we are jumping to
 	symtab_variable_record_t* label_record;
-};
-
-//A break statement node
-struct break_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status; //todo may get rid of
-};
-
-//A continue statement node
-struct continue_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status; //todo may get rid of
-};
-
-//A ret statement node
-struct ret_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status; //todo may get rid of
-};
-
-//A switch statement
-struct switch_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status;
-};
-
-//A while statement
-struct while_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status;
-};
-
-//A do-while statement
-struct do_while_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status;
-};
-
-//A for statement
-struct for_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status;
-};
-
-//A compound statement
-struct compound_stmt_ast_node_t{
-	//Just hold status for now
-	u_int8_t status;
 };
 
 //An alias stmt

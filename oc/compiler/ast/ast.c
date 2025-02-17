@@ -37,19 +37,8 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	switch (CLASS) {
 		//The starting node of the entire AST
 		case AST_NODE_CLASS_PROG:
-			//If we have this kind of node, we'll allocate and set
-			//the void ptr to be what we allocate
-			node->node = calloc(1, sizeof(prog_ast_node_t));
-			node->inner_node_size = sizeof(prog_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_PROG;
-			break;
-
-		//The function specifier AST node
-		case AST_NODE_CLASS_FUNC_SPECIFIER:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(func_specifier_ast_node_t));
-			node->inner_node_size = sizeof(func_specifier_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_FUNC_SPECIFIER;
 			break;
 
 		//The for-loop condition AST node
@@ -97,9 +86,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//The type specifier node
 		case AST_NODE_CLASS_TYPE_SPECIFIER:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(type_spec_ast_node_t));
-			node->inner_node_size = sizeof(type_spec_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_TYPE_SPECIFIER;
 			break;
 
@@ -137,9 +124,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//Assignment expression node
 		case AST_NODE_CLASS_ASNMNT_EXPR:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(asnmnt_expr_ast_node_t));
-			node->inner_node_size = sizeof(asnmnt_expr_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_ASNMNT_EXPR;
 			break;
 
@@ -162,8 +147,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		//Unary expression node
 		case AST_NODE_CLASS_UNARY_EXPR:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(unary_expr_ast_node_t));
-			node->inner_node_size = sizeof(unary_expr_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_UNARY_EXPR;
 			break;
 
@@ -185,17 +169,13 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//Array accessor AST node
 		case AST_NODE_CLASS_ARRAY_ACCESSOR:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(array_accessor_ast_node_t));
-			node->inner_node_size = sizeof(array_accessor_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_ARRAY_ACCESSOR;
 			break;
 
 		//Postfix expression AST node
 		case AST_NODE_CLASS_POSTFIX_EXPR:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(postfix_expr_ast_node_t));
-			node->inner_node_size = sizeof(postfix_expr_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_POSTFIX_EXPR;
 			break;
 
@@ -233,17 +213,13 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//Case stmt node
 		case AST_NODE_CLASS_CASE_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(case_stmt_ast_node_t));
-			node->inner_node_size = sizeof(case_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_CASE_STMT;
 			break;
 
 		//Default statement node
 		case AST_NODE_CLASS_DEFAULT_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(default_stmt_ast_node_t));
-			node->inner_node_size = sizeof(default_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_DEFAULT_STMT;
 			break;
 			
@@ -257,9 +233,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//If statement node
 		case AST_NODE_CLASS_IF_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(if_stmt_ast_node_t));
-			node->inner_node_size = sizeof(if_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_IF_STMT;
 			break;
 
@@ -273,65 +247,49 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//Break statement node
 		case AST_NODE_CLASS_BREAK_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(break_stmt_ast_node_t));
-			node->inner_node_size = sizeof(break_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_BREAK_STMT;
 			break;
 
 		//Continue statement node
 		case AST_NODE_CLASS_CONTINUE_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(continue_stmt_ast_node_t));
-			node->inner_node_size = sizeof(continue_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_CONTINUE_STMT;
 			break;
 
 		//Ret statement node
 		case AST_NODE_CLASS_RET_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(ret_stmt_ast_node_t));
-			node->inner_node_size = sizeof(ret_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_RET_STMT;
 			break;
 
 		//Switch statement node
 		case AST_NODE_CLASS_SWITCH_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(switch_stmt_ast_node_t));
-			node->inner_node_size = sizeof(switch_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_SWITCH_STMT;
 			break;
 
 		//While statement node
 		case AST_NODE_CLASS_WHILE_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(while_stmt_ast_node_t));
-			node->inner_node_size = sizeof(while_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_WHILE_STMT;
 			break;
 
 		//Do-while statement node
 		case AST_NODE_CLASS_DO_WHILE_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(do_while_stmt_ast_node_t));
-			node->inner_node_size = sizeof(do_while_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_DO_WHILE_STMT;
 			break;
 
 		//For statement node
 		case AST_NODE_CLASS_FOR_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(for_stmt_ast_node_t));
-			node->inner_node_size = sizeof(for_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_FOR_STMT;
 			break;
 
 		//A compound statement node
 		case AST_NODE_CLASS_COMPOUND_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(compound_stmt_ast_node_t));
-			node->inner_node_size = sizeof(compound_stmt_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_COMPOUND_STMT;
 			break;
 

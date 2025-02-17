@@ -8017,9 +8017,6 @@ static generic_ast_node_t* program(FILE* fl){
 	if(prog == NULL){
 		//Create the ROOT of the tree
 		prog = ast_node_alloc(AST_NODE_CLASS_PROG);
-
-		//Assign the lexer item to it for completeness
-		((prog_ast_node_t*)(prog->node))->lex = start;
 	}
 
 	//As long as we aren't done
