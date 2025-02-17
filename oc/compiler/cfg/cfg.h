@@ -33,12 +33,12 @@ typedef struct cfg_statement_holder_t cfg_statement_holder_t;
 struct cfg_t{
 	//The current number of blocks
 	u_int32_t num_blocks;
-	//The overall root node
+	//The overall root node.
 	basic_block_t* root;
 	//The current block of the CFG
 	basic_block_t* current;
-	//The head of the list of all created blocks
-	cfg_node_holder_t* head;
+	//The currently last attached block
+	basic_block_t* last_attached;
 };
 
 
@@ -114,6 +114,8 @@ struct basic_block_t{
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
 	three_addr_code_stmt_t* leader_statement;
 	three_addr_code_stmt_t* exit_statement;
+	//The next created block
+	basic_block_t* next_created;
 };
 
 //Build the entire CFG from the AST. This function returns the CFG struct, which

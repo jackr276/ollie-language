@@ -832,15 +832,9 @@ static basic_block_t* basic_block_alloc(){
 	//Put the block ID in
 	created->block_id = increment_and_get();
 
-	//Now allocate the linked list block for it too
-	cfg_node_holder_t* holder = calloc(1, sizeof(cfg_node_holder_t));
-
-	//Store the block in it
-	holder->block = created;
-	
-	//Append to the front of the linked list
-	holder->next = cfg_ref->head;
-	cfg_ref->head = holder;
+	//Attach this to the memory management structure
+	created->next_created = cfg_ref->last_attached;
+	cfg_ref->last_attached = created;
 
 	return created;
 }
@@ -923,21 +917,19 @@ static void basic_block_dealloc(basic_block_t* block){
  * Memory management code that allows us to deallocate the entire CFG
  */
 void dealloc_cfg(cfg_t* cfg){
-	//Hold a cursor
-	cfg_node_holder_t* current = cfg->head;
-	//Have a basic holder here
-	cfg_node_holder_t* temp;
+	//Hold a cursor here
+	basic_block_t* cursor = cfg->last_attached;
+	//Have a temp too
+	basic_block_t* temp;
 
-	//We go through the CFG head, destroying as we go
-	while(current != NULL){
-		//Store this
-		temp = current;
-		//Advance to the next
-		current = current->next;
-		//Destroy the block of our current one
-		basic_block_dealloc(temp->block);
-		//Free the overall structure too
-		free(temp);
+	//So long as there is stuff to free
+	while(cursor != NULL){
+		//Hold onto this
+		temp = cursor;
+		//Advance this one up
+		cursor = cursor->next_created;
+		//Destroy the block
+		basic_block_dealloc(temp);
 	}
 
 	//Destroy all variables

@@ -7331,6 +7331,8 @@ static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee){
 	//Now we must also copy the entire node
 	memcpy(root->node, duplicatee->node, duplicatee->inner_node_size);
 
+
+
 	return NULL;
 
 }
