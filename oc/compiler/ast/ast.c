@@ -20,14 +20,15 @@ static generic_ast_node_t* current_ast_node = NULL;
  * A utility function for duplicating nodes
  */
 generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
-	//Firs allocate the overall node here
+	//First allocate the overall node here
 	generic_ast_node_t* duplicated = calloc(1, sizeof(generic_ast_node_t));
 
 	//We will perform a deep copy here
 	memcpy(duplicated, node, sizeof(generic_ast_node_t));
 
 	//Now we must also copy the entire node
-	if(node->node != NULL){
+	if(node->inner_node_size != 0){
+		duplicated->node = calloc(1, node->inner_node_size);
 		memcpy(duplicated->node, node->node, node->inner_node_size);
 	}
 

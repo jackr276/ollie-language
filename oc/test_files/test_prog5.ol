@@ -52,7 +52,7 @@ fn main() -> i32{
 		++x;
 	} else {
 		--x;
-		//ret x;
+		ret x;
 	}
 
 	jump $label1;
