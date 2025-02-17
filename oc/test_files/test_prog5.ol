@@ -44,15 +44,16 @@ fn main() -> i32{
 
 	let mut x:i32 := 2;
 
+	defer x + 3;	
+	defer x + 3;
 	
 	if(!x) then {
-		defer x + 3;
-		defer x + 232;
 
 		$label1:
 		++x;
 	} else {
 		--x;
+		ret x;
 	}
 
 	jump $label1;

@@ -159,14 +159,6 @@ struct func_def_ast_node_t{
 	symtab_function_record_t* func_record;
 };
 
-
-//Holds the static or external keywords for a function
-struct func_specifier_ast_node_t{
-	//Just holds a token for us
-	Token funcion_storage_class_tok;
-	STORAGE_CLASS_T function_storage_class;
-};
-
 //Holds references to our parameter list
 struct param_list_ast_node_t{
 	//Hold how many params that we actually have
