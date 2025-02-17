@@ -53,6 +53,7 @@ static basic_block_t* visit_if_statement(values_package_t* values);
 static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
+static basic_block_t* visit_defer_statment(values_package_t* values);
 //Return a three address code variable
 static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
@@ -2123,6 +2124,28 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Emit our conditional jump now
 				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
 			}
+
+		//Handle a defer statement. Remember that a defer statment is one monolithic
+		//node with a bunch of sub-nodes underneath that are all handleable by "expr"
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DEFER_STMT){
+			//This really shouldn't happen, but it can't hurt
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//Grab a cursor here
+			generic_ast_node_t* defer_stmt_cursor = ast_cursor->first_child;
+
+			//Run through all of the children, emitting their respective
+			//expr codes
+			while(defer_stmt_cursor != NULL){
+				//Let the helper deal with it
+				emit_expr_code(current_block, defer_stmt_cursor);
+				//Move this up
+				defer_stmt_cursor = defer_stmt_cursor->next_sibling;
+			}
+
 
 		//This means that we have some kind of expression statement
 		} else {

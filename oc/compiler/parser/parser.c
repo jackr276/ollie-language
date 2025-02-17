@@ -7300,7 +7300,9 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
 	memcpy(root, duplicatee, sizeof(generic_ast_node_t));
 
 	//Now we must also copy the entire node
-	memcpy(root->node, duplicatee->node, duplicatee->inner_node_size);
+	if(duplicatee->node != NULL){
+		memcpy(root->node, duplicatee->node, duplicatee->inner_node_size);
+	}
 
 	//We don't want to hold onto any of these old references here
 	root->first_child = NULL;
@@ -7382,8 +7384,8 @@ static void insert_all_deferred_statements(generic_ast_node_t* compound_stmt){
 			generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node);
 		
 			//After we've duplicated we can add in
-			//current_node->next_sibling = deferred_stmts;
-			//deferred_stmts->next_sibling = ret_stmt_node;
+			current_node->next_sibling = deferred_stmts;
+			deferred_stmts->next_sibling = ret_stmt_node;
 		}
 
 		//Now we'll add in all of his children
