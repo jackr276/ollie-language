@@ -95,7 +95,7 @@ int main(int argc, char** argv){
 	ast_node_class_t CLASS = results.root->CLASS;
 
 	//FOR NOW -- deallocate this stuff
-	deallocate_ast();
+	//deallocate_ast();
 	//Free the call graph holder
 	free(results.os);
 	destroy_function_symtab(results.function_symtab);

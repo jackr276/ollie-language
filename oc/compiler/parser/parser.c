@@ -7287,31 +7287,35 @@ static generic_ast_node_t* declaration(FILE* fl){
  * chain of deferred statements
  */
 static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee){
-	//Base case here
+	//Base case here -- although in theory we shouldn't make it here
 	if(duplicatee == NULL){
 		return NULL;
 	}
 
 	//We create an entirely fresh node here
+	//In this function, we store a reference to the root's "next-created"
+	//node. We must preserve this reference
 	generic_ast_node_t* root = ast_node_alloc(duplicatee->CLASS);
+
+	generic_ast_node_t* root_next_created = root->next_created_ast_node;
 
 	//We will perform a deep copy here
 	memcpy(root, duplicatee, sizeof(generic_ast_node_t));
+
+	//Now we must also copy the entire node
+	memcpy(root->node, duplicatee->node, duplicatee->inner_node_size);
 
 	//We don't want to hold onto any of these old references here
 	root->first_child = NULL;
 	root->next_sibling = NULL;
 	//We don't want this reference either
-	root->next_created_ast_node = NULL;
+	root->next_created_ast_node = root_next_created;
 	root->next_statement = NULL;
-
-	//Now we must also copy the entire node
-	memcpy(root->node, duplicatee->node, duplicatee->inner_node_size);
 
 	//Now for each child in the node, we duplicate it and add it in as a child
 	generic_ast_node_t* child_cursor = duplicatee->first_child;
 	//The duplicated child
-	generic_ast_node_t* duplicated_child;
+	generic_ast_node_t* duplicated_child = NULL;
 
 	//So long as we aren't null
 	while(child_cursor != NULL){
@@ -7410,7 +7414,8 @@ static void insert_all_defered_statements(generic_ast_node_t* compound_stmt){
 
 				//Special case -- adding at front
 				if(duplicated_head == NULL){
-					duplicated_head = duplicated_tail = duplicated;
+					duplicated_head = duplicated;
+					duplicated_tail = duplicated;
 				//Otherwise it goes on the tail
 				} else {
 					duplicated_tail->next_sibling = duplicated;
