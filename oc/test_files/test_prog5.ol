@@ -30,8 +30,6 @@ fn saturating_add(x:i32, y:i32) -> i32{
 */
 
 fn tester() -> void{
-
-	$label1:
 	let mut x:i32 := 3;
 	++x;
 	ret;

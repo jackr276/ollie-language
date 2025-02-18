@@ -503,13 +503,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 
 		//We could have had collisions so we'll hunt here
 		while(records_cursor != NULL){
-			//If these don't match we move right along
-			if(strcmp(function_declared_in->func_name, records_cursor->function_declared_in->func_name) != 0){
-				//Advance it
-				records_cursor = records_cursor->next;
-				continue;
-			}
-
+		
 			//If we find the right one, then we can get out
 			if(strcmp(records_cursor->var_name, name) == 0){
 				return records_cursor;
@@ -660,6 +654,9 @@ void print_variable_name(symtab_variable_record_t* record){
 	//If it's part of a function we'll just print that
 	if(record->is_function_paramater == 1){
 		print_function_name(record->parent_function);
+		return;
+	} else if (record->is_label == 1){
+		printf("\n---> %d | %s:\n", record->line_number, record->var_name);
 		return;
 	} else if(record->is_enumeration_member || record->is_construct_member){
 		//The var name

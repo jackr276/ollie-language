@@ -285,6 +285,21 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 
 
 /**
+ * Emit the abstract machine code for a label statement
+ */
+static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t* label_node){
+	//Emit the appropriate variable
+	three_addr_var_t* label_var = emit_var(((label_stmt_ast_node_t*)(label_node->node))->associate_var, 0, 1);
+
+	//We'll just use the helper to emit this
+	three_addr_code_stmt_t* stmt = emit_label_stmt_three_addr_code(label_var);
+
+	//Add this statement into the block
+	add_statement(basic_block, stmt);
+}
+
+
+/**
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
@@ -349,7 +364,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		}
 
 		//Emit the variable
-		three_addr_var_t* var = emit_var(ident_node->variable, use_temp);
+		three_addr_var_t* var = emit_var(ident_node->variable, use_temp, 0);
 		
 		//Add it as a live variable to the block
 		add_live_variable(basic_block, var);
@@ -365,7 +380,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 
 	} else {
 		//First we'll create the non-temp var here
-		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, 0);
+		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, 0, 0);
 
 		//Add it into the block
 		add_live_variable(basic_block, non_temp_var);
@@ -703,7 +718,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
 
 		//Create the variable associated with this
-	 	three_addr_var_t* left_hand_var = emit_var(var, 1);
+	 	three_addr_var_t* left_hand_var = emit_var(var, 1, 0);
 
 		//Add it in as a live variable
 		add_live_variable(basic_block, left_hand_var);
@@ -2154,6 +2169,16 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				defer_stmt_cursor = defer_stmt_cursor->next_sibling;
 			}
 
+		//Handle a labeled statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LABEL_STMT){
+			//This really shouldn't happen, but it can't hurt
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+			
+			//We rely on the helper to do it for us
+			emit_label_stmt_code(current_block, ast_cursor);
 
 		//This means that we have some kind of expression statement
 		} else {

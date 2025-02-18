@@ -54,7 +54,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 /**
  * Dynamically allocate and create a non-temp var
 */
-three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment){
+three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u_int8_t is_label){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
@@ -75,7 +75,11 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment){
 	}
 
 	//Finally we'll get the name printed
-	sprintf(emitted_var->var_name, "%s%d", var->var_name, var->current_generation);
+	if(is_label == 0){
+		sprintf(emitted_var->var_name, "%s%d", var->var_name, var->current_generation);
+	} else {
+		sprintf(emitted_var->var_name, "%s", var->var_name);
+	}
 
 	//And we're all done
 	return emitted_var;
@@ -99,6 +103,22 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 
 
 	return emitted_var;
+}
+
+/**
+ * Emit a copy of this statement
+ */
+three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* label){
+	//Let's first allocate the statement
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//All we do now is give this the label 
+	stmt->assignee = label;
+	//Note the class too
+	stmt->CLASS = THREE_ADDR_CODE_LABEL_STMT;
+
+	//And give it back
+	return stmt;
 }
 
 
@@ -373,6 +393,10 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		printf("sete %s\n", stmt->assignee->var_name);
 		//Then we move it into itself for flag setting purposes
 		printf("%s <- %s\n", stmt->assignee->var_name, stmt->assignee->var_name);
+	//For a label statement, we need to trim off the $ that it has
+	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
+		//Let's print it out
+		printf("%s:\n", stmt->assignee->var_name + 1);
 	}
 }
 

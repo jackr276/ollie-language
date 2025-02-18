@@ -5144,6 +5144,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	} else {
 		//Let's create the label ident node
 		generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT);
+		//Save our line number
+		label_stmt->line_number = parser_line_num;
 
 		//Put it back for label ident
 		push_back_token(lookahead);
@@ -5179,9 +5181,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 		//If we did find it, that's bad
 		if(found != NULL){
-			sprintf(info, "Label identifier %s has already been declared. First declared here", label_name); 
-			print_parse_message(PARSE_ERROR, label_name, parser_line_num);
-			//Also print out the original declaration
+			sprintf(info, "Label identifier %s has already been declared. First declared here: ", label_name); 
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_variable_name(found);
 			num_errors++;
 			//give back an error node
@@ -5205,6 +5206,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		found->type = label_type->type;
 		//Store the fact that it is a label
 		found->is_label = 1;
+		//Store the line number
+		found->line_number = parser_line_num;
 		//Store what function it's defined in(important for later)
 		found->function_declared_in = current_function;
 
@@ -7415,6 +7418,13 @@ static int8_t check_jump_labels(symtab_function_record_t* func_record){
 			sprintf(info, "Attempt to jump to nonexistent label \"%s\".", name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Fail out
+			return -1;
+		}
+
+		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
+		if(strcmp(current_function->func_name, label->function_declared_in->func_name) != 0){
+			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			return -1;
 		}
 

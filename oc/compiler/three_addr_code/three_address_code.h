@@ -67,6 +67,8 @@ typedef enum{
 	THREE_ADDR_CODE_JUMP_STMT,
 	//A direct to label jump statement
 	THREE_ADDR_CODE_DIR_JUMP_STMT,
+	//A label statement
+	THREE_ADDR_CODE_LABEL_STMT,
 	//A function call node
 	THREE_ADDR_CODE_FUNC_CALL,
 	//A negation statement
@@ -159,7 +161,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type);
  * we are assigning to a variable, that will create a new generation of variable.
  * As such, we will pass 1 in as a flag here
 */
-three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment);
+three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u_int8_t is_label);
 
 /**
  * Emit a variable copied from another variable
@@ -222,6 +224,11 @@ three_addr_code_stmt_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee
  * Emit a bitwise not instruction
  */
 three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var);
+
+/**
+ * Emit a label statement here
+ */
+three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* var);
 
 /**
  * Emit a logical not instruction
