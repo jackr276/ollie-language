@@ -50,9 +50,9 @@ fn main() -> i32{
 		++x;
 	} else {
 		--x;
+		jump $label1;
 		ret x;
 	}
 
-	jump $label1;
 	ret 0;
 }

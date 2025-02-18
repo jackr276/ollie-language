@@ -300,6 +300,21 @@ static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t*
 
 
 /**
+ * Emit the abstract machine code for a jump statement
+ */
+static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* jump_statement){
+	//Emit the appropriate variable
+	three_addr_var_t* label_var = emit_var(((jump_stmt_ast_node_t*)(jump_statement->node))->label_record, 0, 1);
+
+	//We'll just use the helper to do this
+	three_addr_code_stmt_t* stmt = emit_dir_jmp_stmt_three_addr_code(label_var);
+
+	//Add this statement into the block
+	add_statement(basic_block, stmt);
+}
+
+
+/**
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
@@ -2179,6 +2194,17 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			
 			//We rely on the helper to do it for us
 			emit_label_stmt_code(current_block, ast_cursor);
+
+		//Handle a jump statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_JUMP_STMT){
+			//This really shouldn't happen, but it can't hurt
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//We rely on the helper to do it for us
+			emit_jump_stmt_code(current_block, ast_cursor);
 
 		//This means that we have some kind of expression statement
 		} else {

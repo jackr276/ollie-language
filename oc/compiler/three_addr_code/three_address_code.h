@@ -241,6 +241,11 @@ three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* 
 three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id, jump_type_t jump_type);
 
 /**
+ * Emit a direct jump statement. This is used only with jump statements the user has made
+ */
+three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jumping_to);
+
+/**
  * Emit a function call statement. Once emitted, no paramters will have been added in
  */
 three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);

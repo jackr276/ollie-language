@@ -105,6 +105,7 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	return emitted_var;
 }
 
+
 /**
  * Emit a copy of this statement
  */
@@ -118,6 +119,23 @@ three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* label)
 	stmt->CLASS = THREE_ADDR_CODE_LABEL_STMT;
 
 	//And give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a direct jump statement. This is used only with jump statements the user has made
+ */
+three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jumping_to){
+	//First allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Now all we need to do is give it the label
+	stmt->assignee = jumping_to;
+	//Note the class too
+	stmt->CLASS = THREE_ADDR_CODE_DIR_JUMP_STMT;
+
+	//and give it back
 	return stmt;
 }
 
@@ -397,6 +415,8 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
 		//Let's print it out
 		printf("%s:\n", stmt->assignee->var_name + 1);
+	} else if(stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
+		printf("jmp %s\n", stmt->assignee->var_name + 1);
 	}
 }
 
