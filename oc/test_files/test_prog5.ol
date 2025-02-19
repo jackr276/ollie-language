@@ -56,9 +56,7 @@ fn main() -> i32{
 
 	let f:f32 := 23.2;
 
-	switch on(f){
-		case 1:
-			x := 2;
+	switch on(x){
 
 	}
 

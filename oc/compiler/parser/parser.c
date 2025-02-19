@@ -12,7 +12,6 @@
 */
 
 #include "parser.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5921,7 +5920,16 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
 	//that switch statements have at least one thing in them
 
-	do{
+	//Seed our search here
+	lookahead = get_next_token(fl, &parser_line_num);
+	//Is this statement occupied? Set this flag if no
+	u_int8_t is_empty = 1;
+
+	//So long as we don't see a right curly
+	while(lookahead.tok != R_CURLY){
+		//Put it back now that we made it here
+		push_back_token(lookahead);
+
 		//We need to see a valid statement 
 		generic_ast_node_t* stmt_node = statement(fl);
 
@@ -5936,11 +5944,19 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		//If we get here we know it worked, so we can add it in as a child
 		add_child_node(switch_stmt_node, stmt_node);
 
+		//No longer empty
+		is_empty = 0;
+
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num);
+	}
 
-	//Keep going so long as we don't see an end
-	} while(lookahead.tok != R_CURLY);
+	//If we have an entirely empty switch statement
+	if(is_empty == 1){
+		print_parse_message(WARNING, "Switch statement is empty, has no effect", current_line);
+		num_warnings++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 
 	//By the time we reach this, we should have seen a right curly
 	//However, we could still have matching issues, so we'll check for that here
