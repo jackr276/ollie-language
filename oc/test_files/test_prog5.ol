@@ -53,10 +53,16 @@ fn main() -> i32{
 		jump $label1;
 		ret x;
 	}
+	
+	let y:i32 := 32;
 
 	let f:f32 := 23.2;
 
 	switch on(x){
+		case 1:
+			switch on (y){
+
+			}
 
 	}
 

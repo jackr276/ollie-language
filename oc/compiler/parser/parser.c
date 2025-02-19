@@ -36,6 +36,8 @@ static symtab_function_record_t* current_function = NULL;
 static symtab_variable_record_t* current_var = NULL;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t* current_function_jump_statements = NULL;
+//What is the current switch statement type?
+static generic_type_t* current_switch_statement_type = NULL;
 
 //Our stack for storing variables, etc
 static lex_stack_t* grouping_stack = NULL;
@@ -5073,8 +5075,11 @@ static generic_ast_node_t* expression_statement(FILE* fl){
  * always followed by a colon. Like all rules, this rule returns a reference to
  * it's root node
  *
+ * We must also ensure, in the case of a case statement, that the type of what we're matching with
+ * is compatible with what we're switching on
+ *
  * <labeled-statement> ::= <label-identifier> : 
- * 						 | case {<constant> | <enum-ident>}:
+ * 						 | case {constant | enum-member}:
  * 						 | default :
  */
 static generic_ast_node_t* labeled_statement(FILE* fl){
@@ -5085,15 +5090,41 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//The lookahead token
 	Lexer_item lookahead;
 
+	
 	//Let's see what kind of statement that we have here
 	lookahead = get_next_token(fl, &parser_line_num);
 
+	
 	//We have some kind of case statement
 	if(lookahead.tok == CASE){
 		//Create the node
 		generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT);
+
+		/*
+		//Let's now lookahead and see if we have a valid constant or not
+		lookahead = get_next_token(fl, &parser_line_num);
+
+		//If we have some kind of identifier -- it is probably an enum-member
+		if(lookahead.tok == IDENT){
+			//Put it back
+			push_back_token(lookahead);
+
+			//Let the subrule handle it
+			generic_ast_node_t* enum_ident_rule = identifier(fl);
+
+			//If it's invalid fail out
+			if(enum_ident_rule->CLASS == AST_NODE_CLASS_ERR_NODE){
+				return enum_ident_rule;
+			}
+
+			//Otherwise we know that it is good, but is it the right type
+
+		}
+		*/
+
 		//We are now required to see a valid constant
 		generic_ast_node_t* const_node = constant(fl);
+
 
 		//If this fails, the whole thing is over
 		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5800,6 +5831,13 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
 
+	//Ollie language does not allow for nested switch statements. If this happens, we fail out
+	if(current_switch_statement_type != NULL){
+		print_parse_message(PARSE_ERROR, "Nested switch statements are not supported", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
 	//We've already seen the switch keyword, so now we have to see the on keyword
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -5870,7 +5908,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		}
 	}
 
-	//Otherwise it's fine
+	//Otherwise it's fine, set this for statements down the line
+	current_switch_statement_type = type;
 
 	//Since we know it's valid, we can add this in as a child
 	add_child_node(switch_stmt_node, expr_node);
@@ -5935,7 +5974,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 		//If we fail, we get out
 		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid statement inside of switch statement", current_line);
 			num_errors++;
 			//It's already an error, so just send it back
 			return stmt_node;
@@ -5973,6 +6011,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Return the line number
 	switch_stmt_node->line_number = current_line;
+	//Reset this back to NULL for who comes next
+	current_switch_statement_type = NULL;
+
 	//If we make it here, all went well
 	return switch_stmt_node;
 }
