@@ -5075,7 +5075,7 @@ static generic_ast_node_t* expression_statement(FILE* fl){
  * it's root node
  *
  * <labeled-statement> ::= <label-identifier> : 
- * 						 | case <constant>: 
+ * 						 | case {<constant> | <enum-ident>}:
  * 						 | default :
  */
 static generic_ast_node_t* labeled_statement(FILE* fl){
@@ -5794,6 +5794,8 @@ static generic_ast_node_t* branch_statement(FILE* fl){
  * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) { {<statement>}+ }
  */
 static generic_ast_node_t* switch_statement(FILE* fl){
+	//For error printing
+	char info[1000];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -5838,6 +5840,39 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		return expr_node;
 	}
 	
+	//For a switch statement, we need an enum or some other kind of numeric type to switch based on. We cannot switch on
+	//types like floats, etc
+	
+	//Grab the type info out
+	generic_type_t* type = expr_node->inferred_type;
+
+	//Let's see what kind of type we have here. If it isn't a basic type, it MUST be an enum
+	if(type->type_class != TYPE_CLASS_BASIC){
+		//Error out here
+		if(type->type_class != TYPE_CLASS_ENUMERATED){
+			sprintf(info, "Type \"%s\" cannot be switched", type->type_name);
+			print_parse_message(PARSE_ERROR, info, expr_node->line_number);
+			num_errors++;
+			//Fail out
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
+	} else {
+		//Grab the basic type
+		Token basic_type = type->basic_type->basic_type;
+
+		//It needs to be an int or char
+		if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
+			sprintf(info, "Type \"%s\" cannot be switched", type->type_name);
+			print_parse_message(PARSE_ERROR, info, expr_node->line_number);
+			num_errors++;
+			//Fail out
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+	}
+
+	//Otherwise it's fine
+
 	//Since we know it's valid, we can add this in as a child
 	add_child_node(switch_stmt_node, expr_node);
 

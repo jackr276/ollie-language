@@ -54,5 +54,13 @@ fn main() -> i32{
 		ret x;
 	}
 
+	let f:f32 := 23.2;
+
+	switch on(f){
+		case 1:
+			x := 2;
+
+	}
+
 	ret 0;
 }
