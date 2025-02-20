@@ -62,8 +62,10 @@ fn main() -> i32{
 		case 1:
 		case 2:
 		case 3:
+			{
 			x := x + 3;
 			break;
+			}
 		default:
 			x := x + 3;
 		default:
