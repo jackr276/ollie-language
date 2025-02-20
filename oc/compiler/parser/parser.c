@@ -66,6 +66,8 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
+static generic_ast_node_t* case_statement(FILE* fl);
+static generic_ast_node_t* default_statement(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 
@@ -5214,142 +5216,6 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 }
 
 
-/**
- * Handle a case statement. A case statement does not terminate until we see another or default statement or the closing
- * curly of a switch statement
- *
- * NOTE: We assume that we have already seen and consumed the first case token here
- */
-static generic_ast_node_t* case_statement(FILE* fl){
-	//For error printing
-	char info[1000];
-
-	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
-	//Lookahead token
-	Lexer_item lookahead;
-	
-	//Remember that we've already seen the first "case" keyword here, so now we need
-	//to consume whatever comes after it(constant or enum value)
-	
-	//Create the node
-	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT);
-	
-	//Let's now lookahead and see if we have a valid constant or not
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we have some kind of identifier -- it is probably an enum-member
-	if(lookahead.tok == IDENT){
-		//Put it back
-		push_back_token(lookahead);
-
-		//Let the subrule handle it
-		generic_ast_node_t* enum_ident_node = identifier(fl);
-
-		//If it's invalid fail out
-		if(enum_ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return enum_ident_node;
-		}
-
-		//Extract the name
-		char* name = ((identifier_ast_node_t* )(enum_ident_node->node))->identifier;
-
-		//If it's an identifier, then it has to be an enum
-		symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, name);
-
-		//If we somehow couldn't find it
-		if(enum_record == NULL){
-			sprintf(info, "Identifier \"%s\" has never been declared", name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//If we could find it, but it isn't an enum
-		if(enum_record->is_enumeration_member == 0){
-			sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);	
-		}
-
-		//Otherwise we know that it is good, but is it the right type
-		//Are the types here compatible?
-		case_stmt->inferred_type = types_compatible(current_switch_statement_type, enum_ident_node->inferred_type);
-
-		//If this fails, they're incompatible
-		if(case_stmt->inferred_type == NULL){
-			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  current_switch_statement_type->type_name, enum_ident_node->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-			//Otherwise if we make it here then all went well, so we'll add this in as a child node
-			add_child_node(case_stmt, enum_ident_node);
-	
-		//Is the lookahead a constant?
-	} else if(lookahead.tok == INT_CONST || lookahead.tok == INT_CONST_FORCE_U || lookahead.tok == HEX_CONST
-			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == LONG_CONST_FORCE_U){
-		//Put it back
-		push_back_token(lookahead);
-	
-		//We are now required to see a valid constant
-		generic_ast_node_t* const_node = constant(fl);
-
-		//If this fails, the whole thing is over
-		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid constant found in switch statment", current_line);
-			num_errors++;
-			//It's already an error, so we'll just give it back
-			return const_node;
-		}
-
-		//Otherwise we know that it is good, but is it the right type
-		//Are the types here compatible?
-		case_stmt->inferred_type = types_compatible(current_switch_statement_type, const_node->inferred_type);
-
-		//If this fails, they're incompatible
-		if(case_stmt->inferred_type == NULL){
-			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  current_switch_statement_type->type_name, const_node->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Now once we get down here, we know that the constant node worked, so we'll add it as the child
-		add_child_node(case_stmt, const_node);
-
-	} else {
-		print_parse_message(PARSE_ERROR, "Enum member or constant required as argument to case statement", current_line);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-
-	//One last thing to check -- we need a colon
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//If we don't see one, we need to scrap it
-	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required after case statement", current_line);
-		num_errors++;
-		//Error node return
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Now we get to the main part of our case statement. We can keep seeing extra tokens so long as they are not 
-	//"case", "default" or "}"(indicates end of switch statement)
-	lookahead = get_next_token(fl, &parser_line_num);
-
-	//So long as we don't have the aforementioned keywords
-	while(lookahead.tok != CASE && lookahead.tok != DEFAULT && lookahead.tok != R_CURLY){
-
-	}
-
-}
 
 
 /**
@@ -5920,7 +5786,7 @@ static generic_ast_node_t* branch_statement(FILE* fl){
  *
  * NOTE: The caller has already consumed the switch keyword by the time we get here
  *
- * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) { {<statement>}+ }
+ * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) { {<case-statement | default-statement>}+ }
  */
 static generic_ast_node_t* switch_statement(FILE* fl){
 	//For error printing
@@ -6879,7 +6745,234 @@ static generic_ast_node_t* statement(FILE* fl){
  * default statements. This statement type is intended to be used inside of swtich statements
  */
 static generic_ast_node_t* statement_in_block(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
 
+	//Let's grab the next item and see what we have here
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we see a label ident, we know we're seeing a labeled statement
+	if(lookahead.tok == LABEL_IDENT){
+		//This rule relies on these tokens, so we'll push them back
+		push_back_token(lookahead);
+	
+		//Just return whatever the rule gives us
+		return labeled_statement(fl);
+	
+	//If we see an L_CURLY, we are seeing a compound statement
+	} else if(lookahead.tok == L_CURLY){
+		//The rule relies on it, so put it back
+		push_back_token(lookahead);
+
+		//Return whatever the rule gives us
+		return compound_statement(fl);
+	
+	//If we see for, we are seeing a for statement
+	} else if(lookahead.tok == FOR){
+		//This rule relies on for already being consumed, so we won't put it back
+		return for_statement(fl);
+
+	//If we see this, we are seeing a defer statment
+	} else if(lookahead.tok == DEFER){
+		//This rule relies on the defer keyword already being consumed, so we won't put it back
+		return defer_statement(fl);
+
+	//While statement
+	} else if(lookahead.tok == WHILE){
+		//This rule relies on while already being consumed, so we won't put it back
+		return while_statement(fl);
+
+	//Do while statement
+	} else if(lookahead.tok == DO){
+		//This rule relies on do already being consumed, so we won't put it back
+		return do_while_statement(fl);
+
+	//Switch statement -- not allowed here
+	} else if(lookahead.tok == SWITCH){
+		print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested switch statements", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+
+	//Nested case statements -- should not happen
+	} else if(lookahead.tok == CASE || lookahead.tok == DEFAULT){
+		print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested case or default statements", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	
+	//If statement
+	} else if(lookahead.tok == IF){
+		//This rule relies on if already being consumed, so we won't put it back
+		return if_statement(fl);
+
+	//Some kind of branch statement
+	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
+			|| lookahead.tok == RET){
+		//The branch rule needs these, so we'll put them back
+		push_back_token(lookahead);
+		//return whatever this gives us
+		return branch_statement(fl);
+
+	} else {
+		//Otherwise, this is some kind of expression statement. We'll put the token back and
+		//return that
+		push_back_token(lookahead);
+		return expression_statement(fl);
+	}
+}
+
+
+/**
+ * Handle a case statement. A case statement does not terminate until we see another or default statement or the closing
+ * curly of a switch statement
+ *
+ * NOTE: We assume that we have already seen and consumed the first case token here
+ */
+static generic_ast_node_t* case_statement(FILE* fl){
+	//For error printing
+	char info[1000];
+
+	//Freeze the current line number
+	u_int16_t current_line = parser_line_num;
+	//Lookahead token
+	Lexer_item lookahead;
+	
+	//Remember that we've already seen the first "case" keyword here, so now we need
+	//to consume whatever comes after it(constant or enum value)
+	
+	//Create the node
+	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT);
+	
+	//Let's now lookahead and see if we have a valid constant or not
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we have some kind of identifier -- it is probably an enum-member
+	if(lookahead.tok == IDENT){
+		//Put it back
+		push_back_token(lookahead);
+
+		//Let the subrule handle it
+		generic_ast_node_t* enum_ident_node = identifier(fl);
+
+		//If it's invalid fail out
+		if(enum_ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return enum_ident_node;
+		}
+
+		//Extract the name
+		char* name = ((identifier_ast_node_t* )(enum_ident_node->node))->identifier;
+
+		//If it's an identifier, then it has to be an enum
+		symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, name);
+
+		//If we somehow couldn't find it
+		if(enum_record == NULL){
+			sprintf(info, "Identifier \"%s\" has never been declared", name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//If we could find it, but it isn't an enum
+		if(enum_record->is_enumeration_member == 0){
+			sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);	
+		}
+
+		//Otherwise we know that it is good, but is it the right type
+		//Are the types here compatible?
+		case_stmt->inferred_type = types_compatible(current_switch_statement_type, enum_ident_node->inferred_type);
+
+		//If this fails, they're incompatible
+		if(case_stmt->inferred_type == NULL){
+			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
+						  current_switch_statement_type->type_name, enum_ident_node->inferred_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+			//Otherwise if we make it here then all went well, so we'll add this in as a child node
+			add_child_node(case_stmt, enum_ident_node);
+	
+		//Is the lookahead a constant?
+	} else if(lookahead.tok == INT_CONST || lookahead.tok == INT_CONST_FORCE_U || lookahead.tok == HEX_CONST
+			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == LONG_CONST_FORCE_U){
+		//Put it back
+		push_back_token(lookahead);
+	
+		//We are now required to see a valid constant
+		generic_ast_node_t* const_node = constant(fl);
+
+		//If this fails, the whole thing is over
+		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid constant found in switch statment", current_line);
+			num_errors++;
+			//It's already an error, so we'll just give it back
+			return const_node;
+		}
+
+		//Otherwise we know that it is good, but is it the right type
+		//Are the types here compatible?
+		case_stmt->inferred_type = types_compatible(current_switch_statement_type, const_node->inferred_type);
+
+		//If this fails, they're incompatible
+		if(case_stmt->inferred_type == NULL){
+			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
+						  current_switch_statement_type->type_name, const_node->inferred_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Now once we get down here, we know that the constant node worked, so we'll add it as the child
+		add_child_node(case_stmt, const_node);
+
+	} else {
+		print_parse_message(PARSE_ERROR, "Enum member or constant required as argument to case statement", current_line);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+
+	//One last thing to check -- we need a colon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see one, we need to scrap it
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required after case statement", current_line);
+		num_errors++;
+		//Error node return
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we get to the main part of our case statement. We can keep seeing extra tokens so long as they are not 
+	//"case", "default" or "}"(indicates end of switch statement)
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//So long as we don't have the aforementioned keywords
+	while(lookahead.tok != CASE && lookahead.tok != DEFAULT && lookahead.tok != R_CURLY){
+		//Put it back
+		push_back_token(lookahead);
+
+		//We will use our special statement rule to handle this
+		generic_ast_node_t* stmt_node = statement_in_block(fl);
+
+		//If this fails, we error out
+		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return stmt_node;
+		}
+
+		//Otherwise we add this in as a child under the case statement umbrella
+		add_child_node(case_stmt, stmt_node);
+
+		//And refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//Finally give this back
+	return case_stmt;
 }
 
 
