@@ -5083,136 +5083,89 @@ static generic_ast_node_t* expression_statement(FILE* fl){
  * is compatible with what we're switching on
  *
  * <labeled-statement> ::= <label-identifier> : 
- * 						 | case {constant | enum-member}:
- * 						 | default :
  */
 static generic_ast_node_t* labeled_statement(FILE* fl){
 	//For error printing
 	char info[2000];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	//The lookahead token
+	//Lookahead token
 	Lexer_item lookahead;
 
-	//Let's see what kind of statement that we have here
-	lookahead = get_next_token(fl, &parser_line_num);
-	//We have a default statement
-	} else if(lookahead.tok == DEFAULT){
-		//If we aren't in a switch statement, this is automatically bad
-		if(current_switch_statement_type == NULL){
-			print_parse_message(PARSE_ERROR, "Case statements may only exist in switch statements", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
+	//Let's create the label ident node
+	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT);
+	//Save our line number
+	label_stmt->line_number = parser_line_num;
 
-		//So we've found a switch statement, but have we already found a default clause? Let's see to find out
-		if(found_default_clause == 1){
-			print_parse_message(PARSE_ERROR, "Duplicate \"default\" clause found in switch statements. Only one default per statement is allowed", parser_line_num);
-			num_errors++;
-			//Error out
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
+	//Let's see if we can find one
+	generic_ast_node_t* label_ident = label_identifier(fl);
 
-		//If we see default, we can just make the default node
-		generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT);
-
-		//All that we need to see now is a colon
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//If we don't see one, we need to scrap it
-		if(lookahead.tok != COLON){
-			print_parse_message(PARSE_ERROR, "Colon required after default statement", current_line);
-			num_errors++;
-			//Error node return
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-		
-		//Mark that we've actually found a default clause
-		found_default_clause = 1;
-
-		//Otherwise it all worked, so we'll just return
-		return default_stmt;
-
-	//Otherwise, we need to see a valid label identifier
-	} else {
-		//Let's create the label ident node
-		generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT);
-		//Save our line number
-		label_stmt->line_number = parser_line_num;
-
-		//Put it back for label ident
-		push_back_token(lookahead);
-
-		//Let's see if we can find one
-		generic_ast_node_t* label_ident = label_identifier(fl);
-
-		//If it's bad we'll fail out here
-		if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid label identifier given as label ident statement", current_line);
-			num_errors++;
-			//Return the label ident, it's already an error
-			return label_ident;
-		}
-		
-		//Let's also verify that we have the colon right now
-		lookahead = get_next_token(fl, &parser_line_num);
-
-		//If we don't see one, we need to scrap it
-		if(lookahead.tok != COLON){
-			print_parse_message(PARSE_ERROR, "Colon required after label statement", current_line);
-			num_errors++;
-			//Error node return
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-		//Otherwise we are all good syntactically here
-
-		//Grab the name out for convenience
-		char* label_name = ((identifier_ast_node_t*)(label_ident->node))->identifier;
-
-		//We now need to make sure that it isn't a duplicate
-		symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, current_function, label_name);
-
-		//If we did find it, that's bad
-		if(found != NULL){
-			sprintf(info, "Label identifier %s has already been declared. First declared here: ", label_name); 
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_variable_name(found);
-			num_errors++;
-			//give back an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Grab the label type
-		//The label type is one of our core types
-		symtab_type_record_t* label_type = lookup_type(type_symtab, "label");
-
-		//Sanity check here
-		if(label_type == NULL){
-			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Basic type label was not found", parser_line_num);
-			//Get out if this happens
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Now that we know we didn't find it, we'll create it
-		found = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
-		//Store the type
-		found->type = label_type->type;
-		//Store the fact that it is a label
-		found->is_label = 1;
-		//Store the line number
-		found->line_number = parser_line_num;
-		//Store what function it's defined in(important for later)
-		found->function_declared_in = current_function;
-
-		//Put into the symtab
-		insert_variable(variable_symtab, found);
-
-		//We'll also associate this variable with the node
-		((label_stmt_ast_node_t*)(label_stmt->node))->associate_var = found;
-
-		//Now we can get out
-		return label_stmt;
+	//If it's bad we'll fail out here
+	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid label identifier given as label ident statement", current_line);
+		num_errors++;
+		//Return the label ident, it's already an error
+		return label_ident;
 	}
+		
+	//Let's also verify that we have the colon right now
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see one, we need to scrap it
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required after label statement", current_line);
+		num_errors++;
+		//Error node return
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	//Otherwise we are all good syntactically here
+
+	//Grab the name out for convenience
+	char* label_name = ((identifier_ast_node_t*)(label_ident->node))->identifier;
+
+	//We now need to make sure that it isn't a duplicate
+	symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, current_function, label_name);
+
+	//If we did find it, that's bad
+	if(found != NULL){
+		sprintf(info, "Label identifier %s has already been declared. First declared here: ", label_name); 
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(found);
+		num_errors++;
+		//give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Grab the label type
+	//The label type is one of our core types
+	symtab_type_record_t* label_type = lookup_type(type_symtab, "label");
+
+	//Sanity check here
+	if(label_type == NULL){
+		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Basic type label was not found", parser_line_num);
+		//Get out if this happens
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now that we know we didn't find it, we'll create it
+	found = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
+	//Store the type
+	found->type = label_type->type;
+	//Store the fact that it is a label
+	found->is_label = 1;
+	//Store the line number
+	found->line_number = parser_line_num;
+	//Store what function it's defined in(important for later)
+	found->function_declared_in = current_function;
+
+	//Put into the symtab
+	insert_variable(variable_symtab, found);
+
+	//We'll also associate this variable with the node
+	((label_stmt_ast_node_t*)(label_stmt->node))->associate_var = found;
+
+	//Now we can get out
+	return label_stmt;
 }
 
 
@@ -5935,29 +5888,34 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
-		//Put it back now that we made it here
-		push_back_token(lookahead);
-
 		//We need to see a valid case or default statement
 		if(lookahead.tok == CASE){
+			//Handle a case statement here
+			stmt = case_statement(fl);
+
+			//If it fails, then we're done
+			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+				return stmt;
+			}
 			
 		} else if(lookahead.tok == DEFAULT){
+			//Handle a default statement
+			stmt = default_statement(fl);
 
+			//If it fails, then we're done
+			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+				return stmt;
+			}
+
+		//We fail out here -- something went wrong
 		} else {
 			print_parse_message(PARSE_ERROR, "\"case\" or \"default\" keywords expected", parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//If we fail, we get out
-		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			num_errors++;
-			//It's already an error, so just send it back
-			return stmt_node;
-		}
-
 		//If we get here we know it worked, so we can add it in as a child
-		add_child_node(switch_stmt_node, stmt_node);
+		add_child_node(switch_stmt_node, stmt);
 
 		//No longer empty
 		is_empty = 0;
@@ -6822,6 +6780,86 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 
 
 /**
+ * Handle a default statement. A default statement cannot terminate until we see a "case" or "}"
+ *
+ * NOTE: We assume that we have already seen and consumed the first case token here
+ */
+static generic_ast_node_t* default_statement(FILE* fl){
+	//For error printing
+	char info[1000];
+	//Lookaehad token
+	Lexer_item lookahead;
+	//Freeze the line number
+	u_int16_t current_line = parser_line_num;
+
+	//So we've found a switch statement, but have we already found a default clause? Let's see to find out
+	if(found_default_clause == 1){
+		print_parse_message(PARSE_ERROR, "Duplicate \"default\" clause found in switch statements. Only one default per statement is allowed", parser_line_num);
+		num_errors++;
+		//Error out
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//If we see default, we can just make the default node
+	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT);
+
+	//All that we need to see now is a colon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see one, we need to scrap it
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required after default statement", current_line);
+		num_errors++;
+		//Error node return
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Seed the search
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//The statement node
+	generic_ast_node_t* stmt;
+
+	//Now we need to go through and process the statement
+	while(lookahead.tok != CASE && lookahead.tok != R_CURLY){
+		//If for some reason it's another default statement, we have a duplicate
+		if(lookahead.tok == DEFAULT){
+			print_parse_message(PARSE_ERROR, "Duplicate \"default\" clause found in switch statements. Only one default per statement is allowed", parser_line_num);
+			num_errors++;
+			//Error out
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Push it back
+		push_back_token(lookahead);
+
+		//Handle whatever it is that we have in here
+		stmt = statement_in_block(fl);
+
+		//If it's an error send it up
+		if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return stmt;
+		}
+
+		//Now that it's good, add this into the statement umbrella
+		add_child_node(default_stmt, stmt);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num);
+	}
+
+	//Push it back, we're done here
+	push_back_token(lookahead);
+
+	//Mark that we've actually found a default clause
+	found_default_clause = 1;
+
+	//Otherwise it all worked, so we'll just return
+	return default_stmt;
+}
+
+
+/**
  * Handle a case statement. A case statement does not terminate until we see another or default statement or the closing
  * curly of a switch statement
  *
@@ -6970,6 +7008,9 @@ static generic_ast_node_t* case_statement(FILE* fl){
 		//And refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//Push it back, we're done here
+	push_back_token(lookahead);
 
 	//Finally give this back
 	return case_stmt;

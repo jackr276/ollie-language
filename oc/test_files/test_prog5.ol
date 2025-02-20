@@ -68,8 +68,6 @@ fn main() -> i32{
 			}
 		default:
 			x := x + 3;
-		default:
-			x := x + 3;
 
 	}
 
