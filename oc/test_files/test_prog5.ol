@@ -60,9 +60,14 @@ fn main() -> i32{
 
 	switch on(x){
 		case 1:
-			switch on (y){
-
-			}
+		case 2:
+		case 3:
+			x := x + 3;
+			break;
+		default:
+			x := x + 3;
+		default:
+			x := x + 3;
 
 	}
 

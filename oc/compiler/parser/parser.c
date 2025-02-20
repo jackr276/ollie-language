@@ -38,6 +38,8 @@ static symtab_variable_record_t* current_var = NULL;
 static heap_queue_t* current_function_jump_statements = NULL;
 //What is the current switch statement type?
 static generic_type_t* current_switch_statement_type = NULL;
+//Have we found a default clause yet? -- reset for every switch statement
+static u_int8_t found_default_clause = 0;
 
 //Our stack for storing variables, etc
 static lex_stack_t* grouping_stack = NULL;
@@ -5222,6 +5224,14 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
+		//So we've found a switch statement, but have we already found a default clause? Let's see to find out
+		if(found_default_clause == 1){
+			print_parse_message(PARSE_ERROR, "Duplicate \"default\" clause found in switch statements. Only one default per statement is allowed", parser_line_num);
+			num_errors++;
+			//Error out
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//If we see default, we can just make the default node
 		generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT);
 
@@ -5236,6 +5246,9 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 		
+		//Mark that we've actually found a default clause
+		found_default_clause = 1;
+
 		//Otherwise it all worked, so we'll just return
 		return default_stmt;
 
@@ -5899,6 +5912,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
+	//Wipe this, it's no longer valid
+	found_default_clause = 0;
 
 	//Ollie language does not allow for nested switch statements. If this happens, we fail out
 	if(current_switch_statement_type != NULL){
@@ -6057,6 +6072,13 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num);
 	}
+
+	//If we haven't found a default clause, it's a failure
+	if(found_default_clause == 0){
+		print_parse_message(PARSE_ERROR, "Switch statements are required to have a \"default\" clause", current_line);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}	
 
 	//If we have an entirely empty switch statement
 	if(is_empty == 1){
