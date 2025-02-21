@@ -139,6 +139,8 @@ struct three_addr_code_stmt_t{
 	Token op;
 	//If we have a jump statement, where we're jumping to
 	int32_t jumping_to_id;
+	//Is this a jump table? -- for use in switch statements
+	u_int8_t is_jump_table;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
 	//The function called

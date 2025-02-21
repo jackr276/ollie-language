@@ -1780,6 +1780,51 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	}
 }
 
+
+/**
+ * Visit a case statement. These statements are handled like individual blocks
+ */
+static basic_block_t* visit_case_statement(values_package_t* values){
+	//For a case statement, we just go through the statement and process
+	//as usual. However first, we need to assign it it's own block ID. These
+	//block IDs will be important, as our jump table uses them to implement the
+	//switch statement functionality
+	
+	//Create it
+	basic_block_t* case_stmt_block = basic_block_alloc();
+
+
+	//We'll always give this one back
+	return case_stmt_block;
+}
+
+
+/**
+ * Visit a default statement.  These statements are also handled like individual blocks that can 
+ * be jumped to
+ */
+static basic_block_t* visit_default_statement(values_package_t* values){
+	//For a default statement, it performs very similarly to a case statement. 
+	//It will be handled slightly differently in the jump table, but we'll get to that 
+	//later on
+	
+	//Create it
+	basic_block_t* default_stmt_block = basic_block_alloc();
+
+
+	//Give it back
+	return default_stmt_block;
+}
+
+
+/**
+ * Visit a switch statement
+ */
+static basic_block_t* visit_switch_statement(values_package_t* values){
+
+}
+
+
 /**
  * A compound statement also acts as a sort of multiplexing block. It runs through all of it's statements, calling
  * the appropriate functions and making the appropriate additions
@@ -2210,6 +2255,12 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We rely on the helper to do it for us
 			emit_jump_stmt_code(current_block, ast_cursor);
 
+		//A very unique case exists in the switch statement. For a switch 
+		//statement, we leverage some very unique properties of the enumerable
+		//types that it uses
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_SWITCH_STMT){
+
+
 		//This means that we have some kind of expression statement
 		} else {
 			//This could happen where we have nothing here
@@ -2319,31 +2370,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//We always return the start block
 	return function_starting_block;
-}
-
-
-/**
- * Visit a case statement. These statements are handled like individual blocks
- */
-static basic_block_t* visit_case_statement(values_package_t* values){
-
-}
-
-
-/**
- * Visit a default statement.  These statements are also handled like individual blocks that can 
- * be jumped to
- */
-static basic_block_t* visit_default_statement(values_package_t* values){
-
-}
-
-
-/**
- * Visit a switch statement
- */
-static basic_block_t* visit_switch_statement(values_package_t* values){
-
 }
 
 
