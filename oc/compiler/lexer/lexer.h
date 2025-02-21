@@ -24,6 +24,7 @@ typedef enum {
 	WHEN,
 	MUT,
 	DEFER,
+	ASM,
 	IF,
 	THEN,
 	REPLACE,
