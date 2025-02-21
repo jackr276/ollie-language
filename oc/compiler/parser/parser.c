@@ -8259,6 +8259,29 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 
 /**
+ * Preprocessor directive chunks allow us to define preprocessor directives in one big chunk
+ * Currently, this will be used for our "#link" statements. #replace statements are also  
+ * valid in here
+ */
+static u_int8_t preprocessor_directive_chunk(FILE* fl){
+	
+
+}
+
+
+/**
+ * Handle a replace statement. A replace statement allows the programmer to eliminate any/all
+ * magic numbers in the program. A replace statement is the only kind of statement that 
+ *
+ * Example:
+ * #replace MY_INT with 2;
+ */
+static u_int8_t replace_statement(FILE* fl){
+
+}
+
+
+/**
  * Here we can either have a function definition or a declaration
  *
  * Like all other functions, this function returns a pointer to the 

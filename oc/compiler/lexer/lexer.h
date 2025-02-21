@@ -29,6 +29,8 @@ typedef enum {
 	REPLACE,
 	//For expansion of func params
 	DOTDOTDOT,
+	//For preprocessor sections
+	DEPENDENCY,
 	ELSE,
 	DO,
 	WHILE,
