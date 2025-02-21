@@ -53,6 +53,10 @@ static basic_block_t* visit_if_statement(values_package_t* values);
 static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
+static basic_block_t* visit_case_statement(values_package_t* values);
+static basic_block_t* visit_default_statement(values_package_t* values);
+static basic_block_t* visit_switch_statement(values_package_t* values);
+
 //Return a three address code variable
 static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
@@ -2315,6 +2319,31 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//We always return the start block
 	return function_starting_block;
+}
+
+
+/**
+ * Visit a case statement. These statements are handled like individual blocks
+ */
+static basic_block_t* visit_case_statement(values_package_t* values){
+
+}
+
+
+/**
+ * Visit a default statement.  These statements are also handled like individual blocks that can 
+ * be jumped to
+ */
+static basic_block_t* visit_default_statement(values_package_t* values){
+
+}
+
+
+/**
+ * Visit a switch statement
+ */
+static basic_block_t* visit_switch_statement(values_package_t* values){
+
 }
 
 
