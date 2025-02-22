@@ -45,6 +45,7 @@ variable_symtab_t* initialize_variable_symtab(){
 	return symtab;
 }
 
+
 /**
  * Dynamically allocate a type symtab
  */
@@ -54,6 +55,16 @@ type_symtab_t* initialize_type_symtab(){
 	symtab->current_lexical_scope = 0;
 	symtab->current = NULL;
 
+	return symtab;
+}
+
+
+/**
+ * Initialize a symbol table for constants
+ */
+constants_symtab_t* intialize_constants_symtab(){
+	//Simply allocate with the standard allocator
+	constants_symtab_t* symtab = calloc(1, sizeof(constants_symtab_t));
 	return symtab;
 }
 
@@ -221,6 +232,21 @@ symtab_type_record_t* create_type_record(generic_type_t* type){
 
 
 /**
+ * Dynamically allocate and create a constant record
+ * NOTE: we just need the name here to make the hash
+ */
+symtab_constant_record_t* create_constant_record(char* name){
+	//Allocate it
+	symtab_constant_record_t* record = calloc(1, sizeof(symtab_constant_record_t));
+	
+	//Hash the name and store it
+	record->hash = hash(name);
+	//Everything else will be handled by caller, just give this back
+	return record;
+}
+
+
+/**
  * Insert a record into the function symbol table. This assumes that the user
  * has already checked to see if this record exists in the table
  *
@@ -252,6 +278,39 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 	record->next = NULL;
 
 	//1 = success, but there was a collision
+	return 1;
+}
+
+
+/**
+ * Insert a constant into the symtab. This assumes that the user has already checked
+ * to see if this constant exists or not
+ *
+ * RETURNS 0 if no collision, 1 if collision
+ */
+u_int8_t insert_constant(constants_symtab_t* symtab, symtab_constant_record_t* record){
+	//Let's see if we have a collision or not
+	if(symtab->records[record->hash] == NULL){
+		//No collision, just store it and we're done here
+		symtab->records[record->hash] = record;
+		return 0;
+	}
+
+	//Otherwise there is a collision, so we'll need to store this new record
+	//at the end of the linked list
+	symtab_constant_record_t* cursor = symtab->records[record->hash];
+	
+	//So long as the next isn't null, we keep drilling
+	while(cursor->next != NULL){
+		cursor = cursor->next;
+	}
+
+	//Now that we're here, we append this guy onto the end
+	cursor->next = record;
+	//This should be null, but insurance never hurts
+	record->next = NULL;
+
+	//We had a collision here
 	return 1;
 }
 
@@ -289,6 +348,7 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
 	//1 = success, but there was a collision
 	return 1;
 }
+
 
 /**
  * Inserts a type record into the symtab. This assumes that the user has already checked to see if
@@ -409,6 +469,35 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 	}
 
 	//When we make it down here, we found nothing so
+	return NULL;
+}
+
+
+/**
+ * Lookup the record in the constants symtab that corresponds to the following name, if
+ * such a record exists. There is only one lexical scope for constants(global scope) so
+ * this lookup should be quite easy
+ */
+symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name){
+	//First we'll grab the hash
+	u_int16_t h = hash(name);
+
+	//Grab whatever record is at that hash
+	symtab_constant_record_t* cursor = symtab->records[h];
+
+	//So long as this isn't null, we'll do string comparisons to find our match. Recall
+	//that it is possible to have collisions, so two records having the same hash is not 
+	//always enough to know for sure
+	while(cursor != NULL){
+		if(strcmp(cursor->name, name) == 0){
+			return cursor;
+		}
+
+		//Otherwise we keep moving
+		cursor = cursor->next;
+	}
+
+	//If we made it here, that means there's no match, so return null
 	return NULL;
 }
 
@@ -927,3 +1016,35 @@ void destroy_type_symtab(type_symtab_t* symtab){
 	//Finally free the symtab itself
 	free(symtab);
 }
+
+
+/**
+ * Destroy a constants symtab
+ */
+void destroy_constants_symtab(constants_symtab_t* symtab){
+	//Create a temp record and cursor for ourselves
+	symtab_constant_record_t* cursor;
+	symtab_constant_record_t* temp;
+
+	//Run through every single record. If it isn't null, we free it
+	for(u_int16_t i = 0; i < KEYSPACE; i++){
+		//Grab the record here
+		cursor = symtab->records[i];
+
+		//If this isn't NULL, we need to traverse the potential
+		//linked list and free everything
+		while(cursor != NULL){
+			//Hold onto it
+			temp = cursor;
+			//Advance it up
+			cursor = cursor->next;
+			//Free the temp
+			free(temp);
+		}
+	}
+
+	//Once, we're done, free the overall thing
+	free(symtab);
+}
+
+

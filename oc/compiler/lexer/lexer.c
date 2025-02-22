@@ -239,6 +239,26 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
+						//We are trying to make an int positive 
+						} else if(ch2 >= '0' && ch2 <= '9'){
+							current_state = IN_INT;
+							//Add these both in
+							*lexeme_cursor = ch;
+							*(lexeme_cursor + 1) = ch2;
+							//Increment here
+							lexeme_cursor += 2;
+							//Break out
+							break;
+						//We are trying to make a float positive 
+						} else if(ch2 == '.'){
+							current_state = IN_FLOAT;
+							//Add these both in
+							*lexeme_cursor = ch;
+							*(lexeme_cursor + 1) = ch2;
+							//Increment here
+							lexeme_cursor += 2;
+							//Break out
+							break;
 						} else {
 							current_state = IN_START;
 							//"Put back" the char
@@ -270,7 +290,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							return lex_item;
 						//We are trying to make an int negative
 						} else if(ch2 >= '0' && ch2 <= '9'){
-							printf("HERE\n");
 							current_state = IN_INT;
 							//Add these both in
 							*lexeme_cursor = ch;

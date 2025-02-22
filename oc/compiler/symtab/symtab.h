@@ -181,6 +181,8 @@ struct symtab_constant_record_t{
 	u_int16_t hash;
 	//Line number
 	u_int16_t line_number;
+	//The name
+	char name[160];
 	//What is the type of the constant?
 	generic_type_t* type;
 	//All possible values -- float, char, int, long
@@ -189,6 +191,8 @@ struct symtab_constant_record_t{
 	long long_val;
 	char char_val;
 	char string_val[500];
+	//For linked list functionality
+	symtab_constant_record_t* next;
 };
 
 
@@ -347,9 +351,11 @@ symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T sto
 symtab_type_record_t* create_type_record(generic_type_t* type);
 
 /**
- * Create a type record for the constant table
+ * Create a type record for the constant table. Unlike our
+ * other rules, this rule will actually have most of it's processing
+ * done by the client
  */
-symtab_constant_record_t* create_constant_record();
+symtab_constant_record_t* create_constant_record(char* name);
 
 /**
  * Insert a function into the symbol table
@@ -367,6 +373,11 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
 
 /**
+ * Insert a constant into the symtab
+ */
+u_int8_t insert_constant(constants_symtab_t* symtab, symtab_constant_record_t* record);
+
+/**
  * A helper function that adds all basic types to the type symtab
  */
 void add_all_basic_types(type_symtab_t* symtab);
@@ -380,6 +391,11 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
  * Lookup a variable name in the symtab
  */
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
+
+/**
+ * Lookup a constant in the symtab
+ */
+symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name);
 
 /**
  * Lookup a variable name in the symtab, only one scope
@@ -452,5 +468,10 @@ void destroy_variable_symtab(variable_symtab_t* symtab);
  * Destroy a type symtab 
  */
 void destroy_type_symtab(type_symtab_t* symtab);
+
+/**
+ * Destroy a constants symtab
+ */
+void destroy_constants_symtab(constants_symtab_t* symtab);
 
 #endif /* SYMTAB_H */

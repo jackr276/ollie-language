@@ -198,7 +198,6 @@ static generic_ast_node_t* constant(FILE* fl){
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
 			((constant_ast_node_t*)(constant_node->node))->constant_type = INT_CONST;
-			printf("%s\n", lookahead.lexeme);
 			//Store the int value we were given
 			int32_t int_val = atoi(lookahead.lexeme);
 
