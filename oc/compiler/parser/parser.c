@@ -5344,8 +5344,6 @@ static generic_ast_node_t* if_statement(FILE* fl){
  * BNF Rule: <jump-statement> ::= jump <label-identifier>;
  */
 static generic_ast_node_t* jump_statement(FILE* fl){
-	//Error message holding
-	char info[2000];
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -6614,6 +6612,19 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 
 
 /**
+ * Assembly inline statements allow the programmer to write assembly
+ * directly into a file. This assembly will be inserted, in the exact logical control 
+ * flow where it came from, and will not be altered or analyzed by oc.
+ *
+ * BNF Rule: <assembly-statement> ::= #asm{assembly statement \}
+ */
+static generic_ast_node_t* assembly_inline_statement(FILE* fl){
+	//TODO MAKEME
+	return NULL;
+}
+
+
+/**
  * A statement is a kind of multiplexing rule that just determines where we need to go to. Like all rules in the parser,
  * this function returns a reference to the the root node that it creates, even though that actual root node is created 
  * further down the chain
@@ -6689,6 +6700,10 @@ static generic_ast_node_t* statement(FILE* fl){
 		push_back_token(lookahead);
 		//return whatever this gives us
 		return branch_statement(fl);
+	//We have an asm statement here--this really acts like a compiler directive, but we still
+	//need to consider it
+	} else if(lookahead.tok == ASM){
+		return assembly_inline_statement(fl);
 	} else {
 		//Otherwise, this is some kind of expression statement. We'll put the token back and
 		//return that
@@ -6785,8 +6800,6 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
 static generic_ast_node_t* default_statement(FILE* fl){
-	//For error printing
-	char info[1000];
 	//Lookaehad token
 	Lexer_item lookahead;
 	//Freeze the line number
@@ -7683,12 +7696,8 @@ static void insert_all_deferred_statements(generic_ast_node_t* compound_stmt){
 	}
 
 	//Otherwise there actually were some deferred statements
-
 	//Let's first create the linked list that we need to insert deferred statments
 	generic_ast_node_t* deferred_stmts_head = NULL;
-
-	//Hold what we've popped
-	generic_ast_node_t* popped_stmt;
 
 	//Now we have finally constructed our linked list and made appropriate references. We now need to
 	//find every return statement and insert these before it. We will do this in a BFS(level order) fashion
@@ -8357,12 +8366,6 @@ static generic_ast_node_t* program(FILE* fl){
 	//Freeze the line number
 	Lexer_item lookahead;
 
-	//We first symbolically "see" the START token. The start token
-	//is the lexer symbol that the top level node holds
-	Lexer_item start;
-	//We really only care about the tok here
-	start.tok = START;
-	
 	//If prog is null we make it here
 	if(prog == NULL){
 		//Create the ROOT of the tree

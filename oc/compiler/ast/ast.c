@@ -32,6 +32,8 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 		memcpy(duplicated->node, node->node, node->inner_node_size);
 	}
 
+	//TODO SPECIAL CASE FOR ASM NODES
+
 	//We don't want to hold onto any of these old references here
 	duplicated->first_child = NULL;
 	duplicated->next_sibling = NULL;
@@ -350,6 +352,17 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->inner_node_size = sizeof(let_stmt_ast_node_t);
 			node->CLASS = AST_NODE_CLASS_LET_STMT;
 			break;
+		
+		//An assembly inline statement
+		case AST_NODE_CLASS_ASM_INLINE_STMT:
+			//Allocate the inner node with the proper size
+			node->node = calloc(1, sizeof(asm_inline_stmt_ast_node_t));
+			node->inner_node_size = sizeof(asm_inline_stmt_ast_node_t);
+			//We need to allocate the inside string as well
+			((asm_inline_stmt_ast_node_t*)(node))->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
+			((asm_inline_stmt_ast_node_t*)(node))->length = 0;
+			((asm_inline_stmt_ast_node_t*)(node))->max_length = DEFAULT_ASM_INLINE_SIZE;
+			node->CLASS = AST_NODE_CLASS_LET_STMT;
 
 		//An alias statement node
 		case AST_NODE_CLASS_ALIAS_STMT:
@@ -425,6 +438,13 @@ void deallocate_ast(){
 
 		//We can off the bat free it's data
 		if(temp->node != NULL){
+			//Special case here, we need to free the interior string
+			if(temp->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+				//Deallocate this string in here
+				free(((asm_inline_stmt_ast_node_t*)(temp->node))->asm_line_statements);
+			}
+
+			//No matter what, we always free this
 			free(temp->node);
 		}
 

@@ -14,6 +14,12 @@
 #include <sys/types.h>
 
 /**
+ * Most inline assembly statements are small, so the default statement 
+ * size is only 1000 bytes. This can be realloc'd as needed automatically
+ */
+#define DEFAULT_ASM_INLINE_SIZE 1000
+
+/**
  * All nodes here are N-ary trees. This means that, in addition
  * to all of the data that each unique one holds, they all also 
  * hold references to their first child and next sibling, with
@@ -64,6 +70,8 @@ typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
 //An AST node for let statements
 typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
+//An AST node for assembly inline statements
+typedef struct asm_inline_stmt_ast_node_t asm_inline_stmt_ast_node_t;
 
 //What type is in the AST node?
 typedef enum ast_node_class_t{
@@ -109,6 +117,8 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_DEFER_STMT,
 	//For special elaborative parameters
 	AST_NODE_CLASS_ELABORATIVE_PARAM,
+	//For assembly inline statements
+	AST_NODE_CLASS_ASM_INLINE_STMT,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -280,6 +290,16 @@ struct decl_stmt_ast_node_t{
 struct let_stmt_ast_node_t{
 	//Hold the variable that we declared
 	symtab_variable_record_t* declared_var;
+};
+
+//An assembly inline statement
+struct asm_inline_stmt_ast_node_t{
+	//We just need to hold all of the statements in a big chunk
+	char* asm_line_statements;
+	//The currently string length
+	u_int16_t length;
+	//The current max length(will be realloc'd if needed)
+	u_int16_t max_length;
 };
 
 /**
