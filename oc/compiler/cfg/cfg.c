@@ -1,5 +1,11 @@
 /**
  * The implementation file for all CFG related operations
+ *
+ * The CFG will translate the higher level code into something referred to as 
+ * "Ollie Intermediate Representation Language"(OIR). This intermediary form 
+ * is a hybrid of abstract machine code and assembly. Some operations, like 
+ * jump commands, are able to be deciphered at this stage, and as such we do
+ * so in the OIR
 */
 
 #include "cfg.h"

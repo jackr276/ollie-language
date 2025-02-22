@@ -29,6 +29,9 @@ fn saturating_add(x:i32, y:i32) -> i32{
 }
 */
 
+#comptime
+#comptime
+
 fn tester() -> void{
 	let mut x:i32 := 3;
 	++x;
