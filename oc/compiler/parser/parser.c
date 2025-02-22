@@ -1357,6 +1357,60 @@ static void increment_constant_value(generic_ast_node_t* constant_node){
 
 
 /**
+ * This helper function will logically not a consant node's value
+ */
+static void logical_not_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = !(const_node->int_val);
+			break;
+		case CHAR_CONST:
+			const_node->char_val = !(const_node->char_val);
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = !(const_node->long_val);
+		//This should never happen
+		default:
+			print_parse_message(PARSE_ERROR, "Attempt to logically not an invalid value", constant_node->line_number);
+			exit(0);
+	}
+}
+
+
+/**
+ * This helper function will logically not a consant node's value
+ */
+static void bitwise_not_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = ~(const_node->int_val);
+			break;
+		case CHAR_CONST:
+			const_node->char_val = ~(const_node->char_val);
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = ~(const_node->long_val);
+		//This should never happen
+		default:
+			print_parse_message(PARSE_ERROR, "Attempt to bitwise not an invalid value", constant_node->line_number);
+			exit(0);
+	}
+}
+
+
+/**
  * A unary expression decays into a postfix expression. With a unary expression, we are able to
  * apply unary operators and take the size of given types. Like all rules, a unary expression
  * will always return a pointer to the root node of the tree that it creates
@@ -1746,6 +1800,10 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 				decrement_constant_value(cast_expr->first_child);
 			} else if(unary_op_tok == PLUSPLUS){
 				increment_constant_value(cast_expr->first_child);
+			} else if(unary_op_tok == L_NOT){
+				logical_not_constant_value(cast_expr->first_child);
+			} else if(unary_op_tok == B_NOT){
+				bitwise_not_constant_value(cast_expr->first_child);
 			}
 
 			//Give back this node and we're done
