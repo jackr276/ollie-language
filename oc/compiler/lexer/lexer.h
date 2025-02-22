@@ -50,7 +50,7 @@ typedef enum {
 	CONSTANT,
 	TYPESIZE,
 	SIZEOF,
-	LINK,
+	REQUIRE,
 	COMPTIME,
 	RET,
 	JUMP,

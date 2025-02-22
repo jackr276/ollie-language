@@ -27,6 +27,8 @@ typedef struct variable_symtab_t variable_symtab_t;
 typedef struct function_symtab_t function_symtab_t;
 //A type symtab
 typedef struct type_symtab_t type_symtab_t;
+//A constants symtab for #replace directives
+typedef struct constants_symtab_t constants_symtab_t;
 
 //The sheafs in the variable symtab
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
@@ -39,6 +41,8 @@ typedef struct symtab_function_record_t symtab_function_record_t;
 typedef struct symtab_variable_record_t symtab_variable_record_t;
 //The records in a type symtab
 typedef struct symtab_type_record_t symtab_type_record_t;
+//The records in a constants symtab
+typedef struct symtab_constant_record_t symtab_constant_record_t;
 
 //Parameter type
 typedef struct parameter_t parameter_t;
@@ -170,6 +174,25 @@ struct symtab_type_record_t{
 
 
 /**
+ * This struct represents a specific constant record in the compiler. This is
+ * how we will keep references to constants as they're defined by the user
+ */
+struct symtab_constant_record_t{
+	u_int16_t hash;
+	//Line number
+	u_int16_t line_number;
+	//What is the type of the constant?
+	generic_type_t* type;
+	//All possible values -- float, char, int, long
+	float float_val;
+	int int_val;
+	long long_val;
+	char char_val;
+	char string_val[500];
+};
+
+
+/**
  * This struct represents a specific lexical level of a symtab
  */
 struct symtab_variable_sheaf_t{
@@ -232,6 +255,17 @@ struct type_symtab_t{
 
 
 /**
+ * This struct represents the constants symtab. Much like the function symtab, 
+ * there is only one lexical level, so no sheafs exist here. All constants
+ * declared with #replace are global across all files
+ */
+struct constants_symtab_t{
+	//How many records(names) we can have
+	symtab_constant_record_t* records[KEYSPACE];
+};
+
+
+/**
  * There is only one namespace for functions, that being the global namespace.
  * As such, there are no "sheafs" like we have for types or variables
  */
@@ -250,7 +284,7 @@ function_symtab_t* initialize_function_symtab();
 
 
 /**
- * Initialize a symbol table for vairables.
+ * Initialize a symbol table for variables.
  */
 variable_symtab_t* initialize_variable_symtab();
 
@@ -259,6 +293,12 @@ variable_symtab_t* initialize_variable_symtab();
  * Initialize a symbol table for types
  */
 type_symtab_t* initialize_type_symtab();
+
+
+/**
+ * Initialize a symbol table for constants
+ */
+constants_symtab_t* intialize_constants_symtab();
 
 
 /**
@@ -305,6 +345,11 @@ symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T sto
  * Create a type record for the symbol table
  */
 symtab_type_record_t* create_type_record(generic_type_t* type);
+
+/**
+ * Create a type record for the constant table
+ */
+symtab_constant_record_t* create_constant_record();
 
 /**
  * Insert a function into the symbol table

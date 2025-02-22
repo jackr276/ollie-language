@@ -30,6 +30,10 @@ fn saturating_add(x:i32, y:i32) -> i32{
 */
 
 #comptime
+
+#require "test_prog4.ol";
+#require "test_prog3.ol";
+
 #comptime
 
 fn tester() -> void{
@@ -43,7 +47,8 @@ fn tester() -> void{
  */
 fn main() -> i32{
 
-	let mut x:i32 := 2;
+	let mut x:i32 := -2;
+	let mut my_float:f32 := -0.23;
 
 	defer x + 3;	
 	

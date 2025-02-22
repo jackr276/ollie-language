@@ -8,6 +8,8 @@
 #ifndef PREPROCESSOR_H
 #define PREPROCESSOR_H
 
+#include "../lexer/lexer.h"
+
 //The preprocessor results package
 typedef struct preproc_results_t preproc_results_t;
 
