@@ -1267,6 +1267,96 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 
 
 /**
+ * This helper function negates a constant node's value
+ */
+static void negate_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = const_node->int_val * -1;
+			break;
+		case FLOAT_CONST:
+			const_node->float_val = const_node->float_val * -1;
+			break;
+		case CHAR_CONST:
+			const_node->char_val = const_node->char_val * -1;
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = const_node->long_val * -1;
+		//This should never happen
+		default:
+			print_parse_message(PARSE_ERROR, "Attempt to negate an invalid value", constant_node->line_number);
+			exit(0);
+	}
+}
+
+
+/**
+ * This helper function decrements a constant node's value
+ */
+static void decrement_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = const_node->int_val - 1;
+			break;
+		case FLOAT_CONST:
+			const_node->float_val = const_node->float_val - 1;
+			break;
+		case CHAR_CONST:
+			const_node->char_val = const_node->char_val - 1;
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = const_node->long_val - 1;
+		//This should never happen
+		default:
+			print_parse_message(PARSE_ERROR, "Attempt to decrement an invalid value", constant_node->line_number);
+			exit(0);
+	}
+}
+
+
+/**
+ * This helper function increments a constant node's value
+ */
+static void increment_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = const_node->int_val + 1;
+			break;
+		case FLOAT_CONST:
+			const_node->float_val = const_node->float_val + 1;
+			break;
+		case CHAR_CONST:
+			const_node->char_val = const_node->char_val + 1;
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = const_node->long_val + 1;
+		//This should never happen
+		default:
+			print_parse_message(PARSE_ERROR, "Attempt to increment an invalid value", constant_node->line_number);
+			exit(0);
+	}
+}
+
+
+/**
  * A unary expression decays into a postfix expression. With a unary expression, we are able to
  * apply unary operators and take the size of given types. Like all rules, a unary expression
  * will always return a pointer to the root node of the tree that it creates
@@ -1301,6 +1391,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	Lexer_item lookahead;
 	//Is this assignable
 	u_int8_t is_assignable = 1;
+	//For folding cases
+	Token unary_op_tok = BLANK;
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num);
@@ -1467,7 +1559,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
 		//Assign the typesize operator to this
 		((unary_operator_ast_node_t*)(unary_op->node))->unary_operator = lookahead.tok;
-
+		//Save this for later too
+		unary_op_tok = lookahead.tok;
+		
 		//Following this, we are required to see a valid cast expression
 		generic_ast_node_t* cast_expr = cast_expression(fl);
 
@@ -1631,16 +1725,36 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//Otherwise it worked just fine here. The return type is the same type that we had initially
 			return_type = cast_expr->inferred_type;
-			//This counts as mutation
-			cast_expr->variable->assigned_to = 1;
+
+
+			//This counts as mutation -- unless it's a constant
+			if(cast_expr->variable != NULL){
+				cast_expr->variable->assigned_to = 1;
+			}
 
 			//This is not assignable
 			is_assignable = 0;
 		}
 
+		//If we have a special "fold" case here, i.e. we have something
+		//like -2, we can actually do that right now
+		if(cast_expr->first_child->CLASS == AST_NODE_CLASS_CONSTANT){
+			//We'll now try to perform some folding
+			if(unary_op_tok == MINUS){
+				negate_constant_value(cast_expr->first_child);
+			} else if(unary_op_tok == MINUSMINUS){
+				decrement_constant_value(cast_expr->first_child);
+			} else if(unary_op_tok == PLUSPLUS){
+				increment_constant_value(cast_expr->first_child);
+			}
+
+			//Give back this node and we're done
+			return cast_expr;
+		}
+
 		//One we get here, we have both nodes that we need
 		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
-
+		
 		//The unary operator always comes first
 		add_child_node(unary_node, unary_op);
 

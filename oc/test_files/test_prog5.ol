@@ -37,7 +37,7 @@ fn saturating_add(x:i32, y:i32) -> i32{
 #comptime
 
 fn tester() -> void{
-	let mut x:i32 := +3;
+	let mut x:i32 := 3;
 	++x;
 	ret;
 }
@@ -49,6 +49,7 @@ fn main() -> i32{
 
 	let mut x:i32 := -2U;
 	let mut my_float:f32 := -0.23;
+	let mut aa:i32 := ++3;
 
 	defer x + 3;	
 	
