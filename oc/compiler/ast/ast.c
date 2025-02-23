@@ -33,9 +33,15 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 
 		//Double special case for assembly nodes
 		if(node->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-			//We need to copy the entire inlined assembly
-			printf("TODO NOT READY\n");
+			//Grab a reference for convenience
+			asm_inline_stmt_ast_node_t* duplicated_asm = (asm_inline_stmt_ast_node_t*)(duplicated->node);
+			asm_inline_stmt_ast_node_t* old_asm = (asm_inline_stmt_ast_node_t*)(node->node);
+			duplicated_asm->asm_line_statements = calloc(sizeof(char), old_asm->max_length);
+			duplicated_asm->max_length = old_asm->max_length;
+			duplicated_asm->length = old_asm->length;
 
+			//Copy over the entirety of the inlined assembly
+			strcpy(duplicated_asm->asm_line_statements, old_asm->asm_line_statements);
 		}
 	}
 
