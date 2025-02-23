@@ -15,7 +15,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include "../stack/lexstack.h"
 #include "../queue/heap_queue.h"
 
@@ -586,6 +585,17 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 		//Grab this out for convenience
 		char* var_name = ((identifier_ast_node_t*)(ident->node))->identifier;
+
+		//We have a few options here, we could find a constant that has been declared
+		//like this. If so, we'll return a duplicate of the constant node that we have
+		//inside of here
+		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, var_name);
+		
+		//If this is in fact a constant, we'll duplicate the whole thing and send it
+		//out the door
+		if(found_const != NULL){
+			return duplicate_node(found_const->constant_node);
+		}
 
 		//Now we will look this up in the variable symbol table
 		symtab_variable_record_t* found = lookup_variable(variable_symtab, var_name);
@@ -6877,6 +6887,11 @@ static generic_ast_node_t* statement(FILE* fl){
 	//need to consider it
 	} else if(lookahead.tok == ASM){
 		return assembly_inline_statement(fl);
+	//Common mistake, but this isn't allowed in Ollie
+	} else if(lookahead.tok == REPLACE){
+		print_parse_message(PARSE_ERROR, "Replace statements have global effects, and therefore must be declared in the global scope", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	} else {
 		//Otherwise, this is some kind of expression statement. We'll put the token back and
 		//return that
@@ -7316,6 +7331,20 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Let's see if we've already named a constant this
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name);
+
+	//Fail out if this isn't null
+	if(found_const != NULL){
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_constant_name(found_const);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	
 	//Now we need to see a colon
 	lookahead = get_next_token(fl, &parser_line_num);
 
@@ -7489,6 +7518,19 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
 		//Return a fresh error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Let's see if we've already named a constant this
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name);
+
+	//Fail out if this isn't null
+	if(found_const != NULL){
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_constant_name(found_const);
+		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
@@ -8105,6 +8147,18 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
+		//Let's see if we've already named a constant this
+		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name);
+
+		//Fail out if this isn't null
+		if(found_const != NULL){
+			sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print out the original declaration
+			print_constant_name(found_const);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
 		function_record = create_function_record(function_name, storage_class);
@@ -8525,11 +8579,52 @@ static u_int8_t replace_statement(FILE* fl){
 		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
-		print_constant_name(found_var); num_errors++;
+		print_constant_name(found_const);
+		num_errors++;
 		return 0;
 	}
 
+	//We now need to see the with keyword
+	lookahead = get_next_token(fl, &parser_line_num);
 
+	//If we don't see it, then we're done here
+	if(lookahead.tok != WITH){
+		print_parse_message(PARSE_ERROR, "With keyword required in replace statement", parser_line_num);
+		num_errors++;
+		return 0;
+	}
+
+	//Otherwise it worked, so now we need to see a constant of some kind
+	generic_ast_node_t* constant_node = constant(fl);
+
+	//If this fails, then we are done
+	if(constant_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//Just return 0, printing already happened
+		return 0;
+	}
+
+	//One last thing, we need to see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num);
+
+	//If we don't see this, we're done
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after replace statement", parser_line_num);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we're ready for assembly and insertion
+	symtab_constant_record_t* created_const = create_constant_record(name);
+
+	//Once we've created it, we'll pack it with values
+	created_const->constant_node = constant_node;
+	created_const->line_number = parser_line_num;
+
+	//Insert the record into the symtab
+	insert_constant(constant_symtab, created_const);
+
+	//And we're all set, return success(1)
+	return 1;
 }
 
 
@@ -8726,6 +8821,7 @@ front_end_results_package_t parse(FILE* fl){
 	results.function_symtab = function_symtab;
 	results.variable_symtab = variable_symtab;
 	results.type_symtab = type_symtab;
+	results.constant_symtab = constant_symtab;
 	//AST root
 	results.root = prog;
 	//Call graph OS root

@@ -183,14 +183,8 @@ struct symtab_constant_record_t{
 	u_int16_t line_number;
 	//The name
 	char name[160];
-	//What is the type of the constant?
-	generic_type_t* type;
-	//All possible values -- float, char, int, long
-	float float_val;
-	int int_val;
-	long long_val;
-	char char_val;
-	char string_val[500];
+	//We'll link directly to the constant node here
+	void* constant_node;
 	//For linked list functionality
 	symtab_constant_record_t* next;
 };

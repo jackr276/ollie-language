@@ -363,6 +363,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			((asm_inline_stmt_ast_node_t*)(node))->length = 0;
 			((asm_inline_stmt_ast_node_t*)(node))->max_length = DEFAULT_ASM_INLINE_SIZE;
 			node->CLASS = AST_NODE_CLASS_LET_STMT;
+			break;
 
 		//An alias statement node
 		case AST_NODE_CLASS_ALIAS_STMT:

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "../ast/ast.h"
 
 #define LARGE_PRIME 611593
 static void print_generic_type(generic_type_t* type);
@@ -241,6 +242,8 @@ symtab_constant_record_t* create_constant_record(char* name){
 	
 	//Hash the name and store it
 	record->hash = hash(name);
+	//Store the name
+	strcpy(record->name, name);
 	//Everything else will be handled by caller, just give this back
 	return record;
 }
@@ -777,6 +780,47 @@ void print_variable_name(symtab_variable_record_t* record){
 	}
 }
 
+
+/**
+ * A helper method for constant name printing
+ * Intended for use by error messages
+ */
+void print_constant_name(symtab_constant_record_t* record){
+	//First the record
+	printf("\n---> %d | replace %s with ", record->line_number, record->name);
+	
+	//Grab the constant node out for convenience
+	constant_ast_node_t* const_node = (constant_ast_node_t*)(((generic_ast_node_t*)record->constant_node)->node);
+
+	//We'll now switch based on what kind of constant that we have
+	switch (const_node->constant_type) {
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+			printf("%d", const_node->int_val);
+			break;
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			printf("%ld", const_node->long_val);
+			break;
+		case CHAR_CONST:
+			printf("%d", const_node->char_val);
+			break;
+		case STR_CONST:
+			printf("%s", const_node->string_val);
+			break;
+		case FLOAT_CONST:
+			printf("%f", const_node->float_val);
+			break;
+		default:
+			printf("FATAL INTERNAL COMPILER ERROR\n");
+			exit(1);
+	}
+
+	//Now print out the semicolon
+	printf(";\n");
+}
+
+
 /**
  * Print a type name. Intended for error messages
  */
@@ -1023,7 +1067,7 @@ void destroy_type_symtab(type_symtab_t* symtab){
  */
 void destroy_constants_symtab(constants_symtab_t* symtab){
 	//Create a temp record and cursor for ourselves
-	symtab_constant_record_t* cursor;
+	symtab_constant_record_t* cursor = NULL;
 	symtab_constant_record_t* temp;
 
 	//Run through every single record. If it isn't null, we free it
