@@ -30,9 +30,14 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 	if(node->inner_node_size != 0){
 		duplicated->node = calloc(1, node->inner_node_size);
 		memcpy(duplicated->node, node->node, node->inner_node_size);
-	}
 
-	//TODO SPECIAL CASE FOR ASM NODES
+		//Double special case for assembly nodes
+		if(node->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+			//We need to copy the entire inlined assembly
+			printf("TODO NOT READY\n");
+
+		}
+	}
 
 	//We don't want to hold onto any of these old references here
 	duplicated->first_child = NULL;

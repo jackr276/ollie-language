@@ -189,11 +189,15 @@ Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 		return asm_statement;
 	}
 
+	//Otherwise we have a backslash, and we do want to add it in
+	*lexeme_cursor = ch;
+	lexeme_cursor++;
+	lexeme_index++;
+
 	//Grab the char count
 	asm_statement.char_count = token_char_count;
 
-	//Otherwise, when we make it here we'll have consumed the backslash token, but
-	//we don't want to add it in. The statement is now considered parsed
+	//Otherwise we're done
 	return asm_statement;
 }
 

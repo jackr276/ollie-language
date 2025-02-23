@@ -6820,11 +6820,11 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Push onto the stack just for good measure
-	push_token(grouping_stack, lookahead);
-
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
 	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT);
+	//Store this too
+	assembly_ast_node_t->line_number = parser_line_num;
+
 	//For quick reference, grab out the assembly node in here
 	asm_inline_stmt_ast_node_t* asm_node_ref = (asm_inline_stmt_ast_node_t*)(assembly_ast_node_t->node);
 
@@ -6839,10 +6839,44 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		//We'll now need to consume an assembly statement
 		lookahead = get_next_assembly_statement(fl, &parser_line_num);
 
+		//If it's an error, we'll fail out here
+		if(lookahead.tok == ERROR){
+			print_parse_message(PARSE_ERROR, "Unable to parse assembly statement. Did you enclose the whole block in curly braces({})?", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise it worked, so we'll need to add the statement in here
+		//Let's check -- we may be overrunning our allocate bounds
+		if(asm_node_ref->length + lookahead.char_count + 1 >= asm_node_ref->max_length){
+			//We'll realloc here and update the max length by doubling it
+			asm_node_ref->max_length *= 2;
+
+			//Realloc as needed to keep enough space
+			asm_node_ref->asm_line_statements = realloc(asm_node_ref->asm_line_statements, asm_node_ref->max_length);
+		}
+
+		//Now we can add whatever the assembly statement that we had before is in
+		strcat(asm_node_ref->asm_line_statements, lookahead.lexeme);
+
+		//Update the length too
+		asm_node_ref->length += lookahead.char_count;
+
+		//Now we'll refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
+	//Now we just need to see one last thing -- the closing semicolon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	return NULL;
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Expected semicolon after assembly statement", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Once we escape out here, we've seen the whole thing, so we're done
+	return assembly_ast_node_t;
 }
 
 
@@ -6860,6 +6894,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
  * 						   | <do-while-statement> 
  * 						   | <while-statement> 
  * 						   | <branch-statement>
+ * 						   | <assembly-statement>
  * 						   | <defer-statement>
  */
 static generic_ast_node_t* statement(FILE* fl){
