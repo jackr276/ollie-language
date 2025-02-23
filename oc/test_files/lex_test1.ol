@@ -2,13 +2,6 @@
 * Sample program
 */
 
-//All preprocessor commands must be handled here
-__BEGIN__
-
-
-__END__
-
-
 fn never_defined(example:f64) -> u32;
 
 declare j:u8;

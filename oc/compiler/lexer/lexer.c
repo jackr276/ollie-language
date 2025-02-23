@@ -870,6 +870,8 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 	//Return this token
 	if(ch == EOF){
 		lex_item.tok = DONE;
+		lex_item.char_count = 0;
+		lex_item.line_num = *parser_line_num;
 		//Destroy the stack
 		destroy_lex_stack(pushed_back_tokens);
 	}

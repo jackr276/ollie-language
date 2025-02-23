@@ -25,7 +25,7 @@ int main(int argc, char** argv){
 		}
 
 		//Very rudimentary here
-		while((l = get_next_token(fl, &parser_line_num)).tok != DONE){
+		while((l = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != DONE){
 			print_token(&l);
 		}
 		//Print the last one

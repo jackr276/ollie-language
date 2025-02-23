@@ -19,7 +19,7 @@ PROGS = lexer_test symtab_test parser_test oc
 all: $(PROGS)
 
 ltest: lexer_test
-	cat ./oc/test_files/test_files.txt | xargs ./oc/out/lexer_test
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/lexer_test
 
 lexer_test: lexer.o lexer_test.o lexstack.o
 	$(CC) -o $(OUT)/lexer_test $(OUT)/lexer_test.o $(OUT)/lexer.o $(OUT)/lexstack.o
