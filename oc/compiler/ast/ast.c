@@ -364,10 +364,10 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->node = calloc(1, sizeof(asm_inline_stmt_ast_node_t));
 			node->inner_node_size = sizeof(asm_inline_stmt_ast_node_t);
 			//We need to allocate the inside string as well
-			((asm_inline_stmt_ast_node_t*)(node))->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
-			((asm_inline_stmt_ast_node_t*)(node))->length = 0;
-			((asm_inline_stmt_ast_node_t*)(node))->max_length = DEFAULT_ASM_INLINE_SIZE;
-			node->CLASS = AST_NODE_CLASS_LET_STMT;
+			((asm_inline_stmt_ast_node_t*)(node->node))->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
+			((asm_inline_stmt_ast_node_t*)(node->node))->length = 0;
+			((asm_inline_stmt_ast_node_t*)(node->node))->max_length = DEFAULT_ASM_INLINE_SIZE;
+			node->CLASS = AST_NODE_CLASS_ASM_INLINE_STMT;
 			break;
 
 		//An alias statement node

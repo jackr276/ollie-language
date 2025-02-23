@@ -6752,6 +6752,8 @@ static generic_ast_node_t* compound_statement(FILE* fl){
  *
  * Remember: By the time that we get here, we will have already seen the defer keyword
  *
+ * TODO UPDATE THIS
+ *
  * <defer-statement> ::= defer <logical-or-expression>;
  */
 static generic_ast_node_t* defer_statement(FILE* fl){
@@ -6802,7 +6804,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
  * Recall: By the time that we reach this, we'll have already seen the asm
  * keyword
  *
- * BNF Rule: <assembly-statement> ::= #asm{{assembly-statement}+}
+ * BNF Rule: <assembly-statement> ::= #asm{{assembly-statement}+};
  */
 static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	//For error printing
@@ -6819,6 +6821,9 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
+
+	//Let's warn the user. Assembly inline statements are a great way to shoot yourself in the foot
+	print_parse_message(INFO, "Assembly inline statements are not analyzed by OC. Whatever is written will be executed verbatim. Please double check your assembly statements.", parser_line_num);
 
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
 	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT);
@@ -6859,12 +6864,18 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		//Now we can add whatever the assembly statement that we had before is in
 		strcat(asm_node_ref->asm_line_statements, lookahead.lexeme);
 
+		//For readability
+		strcat(asm_node_ref->asm_line_statements, "\n");
+
 		//Update the length too
-		asm_node_ref->length += lookahead.char_count;
+		asm_node_ref->length += lookahead.char_count + 1;
 
 		//Now we'll refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
+
+	//Testing code
+	printf("%s\n", asm_node_ref->asm_line_statements);
 
 	//Now we just need to see one last thing -- the closing semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

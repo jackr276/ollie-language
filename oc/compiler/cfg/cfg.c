@@ -2265,7 +2265,11 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		//statement, we leverage some very unique properties of the enumerable
 		//types that it uses
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_SWITCH_STMT){
+			//TODO IMPLEMENT
 
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+			printf("FOUND ASM INLINE\n");
+			//TODO IMPLEMENT
 
 		//This means that we have some kind of expression statement
 		} else {

@@ -65,7 +65,7 @@ fn main() -> i32{
 		addl $3, %rax \
 		pop %rbx \
 		pop %rax \
-	}
+	};
 
 	defer x + 3;	
 	

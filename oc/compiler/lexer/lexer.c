@@ -162,6 +162,8 @@ Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 		Lexer_item token = pop_token(pushed_back_tokens);
 		//Add it in here
 		strcat(asm_statement.lexeme, token.lexeme);
+		//Update the char count
+		lexeme_cursor += token.char_count;
 	}
 
 	//So long as we don't see a backslash, we keep going
