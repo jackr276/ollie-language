@@ -139,7 +139,7 @@ static void put_back_char(FILE* fl){
 /**
  * Constantly iterate through the file and grab the next token that we have
 */
-Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
+Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search){
 	//If this is NULL, we need to make it
 	if(pushed_back_tokens == NULL){
 		pushed_back_tokens = create_lex_stack();
@@ -269,6 +269,29 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num){
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
+						//If we're looking for a constant, there are more options
+						//here. This could be a negative sign.
+						} else if(const_search == SEARCHING_FOR_CONSTANT){
+							//We're in an int
+							if(ch2 >= '0' && ch2 <= '9'){
+								*lexeme_cursor = ch;
+								*(lexeme_cursor + 1) = ch2;
+								lexeme_cursor += 2;
+								current_state = IN_INT;
+								break;
+							}
+
+							//We're in a float
+							if(ch2 == '.'){
+								*lexeme_cursor = ch;
+								lexeme_cursor += 1;
+								current_state = IN_FLOAT;
+								break;
+							}
+							
+							//Break otherwise
+							break;
+
 						//Otherwise we didn't find anything here
 						} else {
 							current_state = IN_START;

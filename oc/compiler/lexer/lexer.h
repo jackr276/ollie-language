@@ -13,6 +13,12 @@
 #define MAX_TOKEN_LENGTH 500
 #define MAX_IDENT_LENGTH 100
 
+//Are we hunting for a constant?
+typedef enum {
+	SEARCHING_FOR_CONSTANT,
+	NOT_SEARCHING_FOR_CONSTANT
+} const_search_t;
+
 //All tokens that we can possible see
 //This list may grow as we go forward
 typedef enum {
@@ -140,7 +146,7 @@ struct Lexer_item{
 };
 
 //Grab the next token from this file
-Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num);
+Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search);
 
 //Push a token back
 void push_back_token(Lexer_item l);

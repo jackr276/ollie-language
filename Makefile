@@ -1,6 +1,6 @@
 # Makefile for OC
 CC = gcc
-CFLAGS = -Wall -Wextra -c
+CFLAGS = -Wall -Wextra -c -Wimplicit-fallthrough=0
 CFLAGSLINK = -Wall -Wextra
 LEX_PATH = ./oc/compiler/lexer
 STACK_PATH = ./oc/compiler/stack
