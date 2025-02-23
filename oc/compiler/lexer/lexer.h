@@ -31,6 +31,7 @@ typedef enum {
 	MUT,
 	DEFER,
 	ASM,
+	ASM_STATEMENT,
 	IF,
 	THEN,
 	REPLACE,
@@ -145,12 +146,24 @@ struct Lexer_item{
 	int16_t char_count;
 };
 
-//Grab the next token from this file
+/**
+ * Special case -- hunting for assembly statements
+ */
+Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num);
+
+/**
+ * Generic token grabbing function
+ */
 Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search);
 
-//Push a token back
+/**
+ * Push a token back to the stream
+ */
 void push_back_token(Lexer_item l);
 
-//Print a token out
+/**
+ * Developer utility for token printing
+ */
 void print_token(Lexer_item* l);
+
 #endif /* LEXER_H */

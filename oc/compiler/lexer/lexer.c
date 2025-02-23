@@ -137,6 +137,18 @@ static void put_back_char(FILE* fl){
 
 
 /**
+ * A special case here where we get the next assembly inline statement. Assembly
+ * inline statements are officially terminated by a backslash "\", so we 
+ * will simply run through what we have here until we get to that backslash. We'll
+ * then pack what we had into a lexer item and send it back to the caller
+ */
+Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
+
+}
+
+
+
+/**
  * Constantly iterate through the file and grab the next token that we have
 */
 Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search){

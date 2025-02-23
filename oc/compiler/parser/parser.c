@@ -6799,10 +6799,30 @@ static generic_ast_node_t* defer_statement(FILE* fl){
  * directly into a file. This assembly will be inserted, in the exact logical control 
  * flow where it came from, and will not be altered or analyzed by oc.
  *
+ * Recall: By the time that we reach this, we'll have already seen the asm
+ * keyword
+ *
  * BNF Rule: <assembly-statement> ::= #asm{assembly statement \}
  */
 static generic_ast_node_t* assembly_inline_statement(FILE* fl){
-	//TODO MAKEME
+	//For error printing
+	char info[1000];
+	//The next token
+	Lexer_item lookahead;
+
+	//We must first see an opening curly
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see one, we fail
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Assembly insertion statements must be wrapped in curly braces({})", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we're presumably good, so we can start hunting for assembly statements
+	generic_ast_node_t* assmebly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT);
+
 	return NULL;
 }
 

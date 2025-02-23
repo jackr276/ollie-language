@@ -37,6 +37,7 @@ fn saturating_add(x:i32, y:i32) -> i32{
 #comptime
 
 #replace TEST_INT with -1;
+#replace my_char with 'c';
 
 fn tester() -> void{
 	let mut x:i32 := !3;
@@ -51,9 +52,20 @@ fn main() -> i32{
 
 	let mut x:i32 := -2U;
 	let mut my_float:f32 := -0.23;
-	let mut aa:i32 := ++3;
+	let mut aa:i32 := --3;
 	let mut my_val:i32 := x + -32;
 	let mut teste:i32 := TEST_INT;
+	let test_char:char := my_char;
+
+	//Example asm inline statement
+	#asm{
+		push %rax \
+		push %rbx \
+		mov $2, %rax \
+		addl $3, %rax \
+		pop %rbx \
+		pop %rax \
+	}
 
 	defer x + 3;	
 	
