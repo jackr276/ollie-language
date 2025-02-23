@@ -53,6 +53,7 @@ struct front_end_results_package_t{
 	function_symtab_t* function_symtab;
 	variable_symtab_t* variable_symtab;
 	type_symtab_t* type_symtab;
+	constants_symtab_t* constant_symtab;
 	//Global call graph entry point
 	call_graph_node_t* os;
 	//Number of errors

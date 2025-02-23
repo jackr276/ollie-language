@@ -101,6 +101,7 @@ int main(int argc, char** argv){
 	destroy_function_symtab(results.function_symtab);
 	destroy_type_symtab(results.type_symtab);
 	destroy_variable_symtab(results.variable_symtab);
+	destroy_constants_symtab(results.constant_symtab);
 	dealloc_cfg(cfg);
 	
 	//Timer end

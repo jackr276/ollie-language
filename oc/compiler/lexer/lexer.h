@@ -47,6 +47,7 @@ typedef enum {
 	FALSE,
 	FN,
 	REGISTER,
+	WITH,
 	CONSTANT,
 	TYPESIZE,
 	SIZEOF,

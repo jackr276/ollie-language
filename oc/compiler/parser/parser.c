@@ -24,6 +24,7 @@
 static function_symtab_t* function_symtab = NULL;
 static variable_symtab_t* variable_symtab = NULL;
 static type_symtab_t* type_symtab = NULL;
+static constants_symtab_t* constant_symtab = NULL;
 
 //The "operating system" function that is symbolically referenced here
 static call_graph_node_t* os = NULL;
@@ -8440,17 +8441,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 
 /**
- * Preprocessor directive chunks allow us to define preprocessor directives in one big chunk
- * Currently, this will be used for our "#link" statements. #replace statements are also  
- * valid in here
- */
-static u_int8_t preprocessor_directive_chunk(FILE* fl){
-	
-
-}
-
-
-/**
  * Handle a replace statement. A replace statement allows the programmer to eliminate any/all
  * magic numbers in the program. A replace statement is the only kind of statement that 
  *
@@ -8458,6 +8448,87 @@ static u_int8_t preprocessor_directive_chunk(FILE* fl){
  * #replace MY_INT with 2;
  */
 static u_int8_t replace_statement(FILE* fl){
+	//For error printing
+	char info[1500];
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//We've already seen the with statement, now we need to see an
+	//identifier
+	generic_ast_node_t* ident_node = identifier(fl);
+
+	//If we failed, we're done here
+	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given to replace statement", parser_line_num);
+		num_errors++;
+		return 0;
+	}
+	
+	//Now that we have the ident, we need to make sure that it's not a duplicate
+	//Let's get a pointer to the name for convenience
+	char* name = ((identifier_ast_node_t*)(ident_node->node))->identifier;
+
+	//Array bounds checking real quick
+	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
+		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return 0;
+	}
+
+	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
+	//the same scope may not share names. This is also true regarding functions and types globally
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		return 0;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		return 0;
+	}
+
+	//Check that it isn't some duplicated variable name. We will only check in the
+	//local scope for this one
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var); num_errors++;
+		return 0;
+	}
+
+	//Let's see if we've already named a constant this
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name);
+
+	//Fail out if this isn't null
+	if(found_const != NULL){
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_constant_name(found_var); num_errors++;
+		return 0;
+	}
+
 
 }
 
@@ -8472,6 +8543,7 @@ static u_int8_t replace_statement(FILE* fl){
  * <declaration-partition>::= <function-definition>
  *                        	| <declaration>
  *                        	| <definition>
+ *                        	| <replace-statement>
  */
 static generic_ast_node_t* declaration_partition(FILE* fl){
 	//Lookahead token
@@ -8501,6 +8573,19 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 
 		//Call definition
 		u_int8_t status = definition(fl);
+
+		//If it's bad, we'll return an error node
+		if(status == 0){
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise we'll just return null, the caller will know what to do with it
+		return NULL;
+
+	//We'll let the replace rule handle this
+	} else if(lookahead.tok == REPLACE){
+		//We don't need to put it back
+		u_int8_t status = replace_statement(fl);
 
 		//If it's bad, we'll return an error node
 		if(status == 0){
@@ -8599,10 +8684,11 @@ front_end_results_package_t parse(FILE* fl){
 	num_warnings = 0;
 
 	//Initialize all of our symtabs
-	if(function_symtab == NULL && type_symtab == NULL && variable_symtab == NULL){
+	if(function_symtab == NULL && type_symtab == NULL && variable_symtab == NULL && constant_symtab == NULL){
 		function_symtab = initialize_function_symtab();
 		variable_symtab = initialize_variable_symtab();
 		type_symtab = initialize_type_symtab();
+		constant_symtab = initialize_constants_symtab(); 
 	}
 
 	//Initialize the OS call graph

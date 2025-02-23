@@ -62,7 +62,7 @@ type_symtab_t* initialize_type_symtab(){
 /**
  * Initialize a symbol table for constants
  */
-constants_symtab_t* intialize_constants_symtab(){
+constants_symtab_t* initialize_constants_symtab(){
 	//Simply allocate with the standard allocator
 	constants_symtab_t* symtab = calloc(1, sizeof(constants_symtab_t));
 	return symtab;

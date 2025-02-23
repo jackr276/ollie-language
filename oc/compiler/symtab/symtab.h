@@ -302,7 +302,7 @@ type_symtab_t* initialize_type_symtab();
 /**
  * Initialize a symbol table for constants
  */
-constants_symtab_t* intialize_constants_symtab();
+constants_symtab_t* initialize_constants_symtab();
 
 
 /**
@@ -448,6 +448,11 @@ void print_function_name(symtab_function_record_t* record);
  * A helper method for variable name printing
  */
 void print_variable_name(symtab_variable_record_t* record);
+
+/**
+ * A helper method for constant name printing
+ */
+void print_constant_name(symtab_constant_record_t* record);
 
 /**
  * A helper method for type name printing
