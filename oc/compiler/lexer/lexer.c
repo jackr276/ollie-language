@@ -143,9 +143,59 @@ static void put_back_char(FILE* fl){
  * then pack what we had into a lexer item and send it back to the caller
  */
 Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
+	//We'll be giving this back
+	Lexer_item asm_statement;
+	asm_statement.tok = ASM_STATEMENT;
+	//Wipe this while we're at it
+	memset(asm_statement.lexeme, 0, MAX_TOKEN_LENGTH*sizeof(char));
 
+	//Searching char
+	char ch;
+
+	//For lexeme concatenation
+	char* lexeme_cursor = asm_statement.lexeme;
+	u_int16_t lexeme_index = 0;
+
+	//First pop off all of the tokens if there are any on the stack
+	while(lex_stack_is_empty(pushed_back_tokens) == 0){
+		//Pop whatever we have off
+		Lexer_item token = pop_token(pushed_back_tokens);
+		//Add it in here
+		strcat(asm_statement.lexeme, token.lexeme);
+	}
+
+	//So long as we don't see a backslash, we keep going
+	ch = get_next_char(fl);
+
+	//So long as we don't see this move along, adding ch into 
+	//our lexeme
+	while(ch != '\\' && lexeme_index < MAX_TOKEN_LENGTH){
+		//Whitespace tracking
+		is_ws(ch, &line_num, parser_line_num);
+
+		//Add it in
+		*lexeme_cursor = ch;
+		lexeme_cursor++;
+		//Add one more to this too
+		lexeme_index++;
+
+		//Refresh the char
+		ch = get_next_char(fl);
+	}
+
+	//If for some reason we overran the length, we give back an error
+	if(lexeme_index >= MAX_TOKEN_LENGTH){
+		asm_statement.tok = ERROR;
+		return asm_statement;
+	}
+
+	//Grab the char count
+	asm_statement.char_count = token_char_count;
+
+	//Otherwise, when we make it here we'll have consumed the backslash token, but
+	//we don't want to add it in. The statement is now considered parsed
+	return asm_statement;
 }
-
 
 
 /**
@@ -198,7 +248,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 	while((ch = get_next_char(fl)) != EOF){
 		//Check to make sure we aren't overrunning our bounds
 		if(current_state != IN_MULTI_COMMENT && token_char_count > MAX_TOKEN_LENGTH-1){
-			printf("HERE\n");
 			Lexer_item l;
 			l.tok = ERROR;
 			return l;

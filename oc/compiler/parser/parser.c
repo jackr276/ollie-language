@@ -6802,7 +6802,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
  * Recall: By the time that we reach this, we'll have already seen the asm
  * keyword
  *
- * BNF Rule: <assembly-statement> ::= #asm{assembly statement \}
+ * BNF Rule: <assembly-statement> ::= #asm{{assembly-statement}+}
  */
 static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	//For error printing
@@ -6820,8 +6820,27 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Push onto the stack just for good measure
+	push_token(grouping_stack, lookahead);
+
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
-	generic_ast_node_t* assmebly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT);
+	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT);
+	//For quick reference, grab out the assembly node in here
+	asm_inline_stmt_ast_node_t* asm_node_ref = (asm_inline_stmt_ast_node_t*)(assembly_ast_node_t->node);
+
+	//We keep going here as long as we don't see the closing curly brace
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we don't see this
+	while(lookahead.tok != R_CURLY){
+		//Put it back
+		push_back_token(lookahead);
+
+		//We'll now need to consume an assembly statement
+		lookahead = get_next_assembly_statement(fl, &parser_line_num);
+
+	}
+
 
 	return NULL;
 }
