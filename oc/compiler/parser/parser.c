@@ -6748,83 +6748,6 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 
 
 /**
- * A defer statement allows users to defer execution until after a function occurs
- *
- * Remember: By the time that we get here, we will have already seen the defer keyword
- *
- * TODO UPDATE THIS
- *
- * <defer-statement> ::= defer {<logical-or-expression> | <assembly-inline-statement>};
- */
-static generic_ast_node_t* defer_statement(FILE* fl){
-	//For searching
-	Lexer_item lookahead;
-
-	//Let's see what we have here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//We are trying to defer an assembly statement
-	if(lookahead.tok == ASM){
-		//Let's handle our assembly inline
-		generic_ast_node_t* asm_inline = logical_or_expression(fl);
-
-		//If it failed, we're done here
-		if(asm_inline->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Bad assembly inline given for deferral", parser_line_num);
-			num_errors++;
-			return asm_inline;
-		}
-
-		//Otherwise it's fine. Also recall -- asm statements parse semicolons for us
-		asm_inline->line_number = parser_line_num;
-		//Mark this as deferred
-		asm_inline->is_deferred = 1;
-
-		//Add it in as a child
-		add_child_node(deferred_stmts_node, asm_inline);
-
-	//Otherwise we have a regular logical or expression here
-	} else {
-		//Put it back
-		push_back_token(lookahead);
-		//We must first see a valid expression statement
-		generic_ast_node_t* expr_node = logical_or_expression(fl);
-
-		//We have a bad expression, fail out here
-		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid statement given for deferral", parser_line_num);
-			num_errors++;
-			//It's already an error, just send it up
-			return expr_node;
-		}
-	
-		//Grab the next token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//If it isn't a semicolon, we fail out
-		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Defer statement must be terminated with a semicolon", parser_line_num);
-			num_errors++;
-			//Error out
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Store the line number
-		expr_node->line_number = parser_line_num;
-
-		//Mark that this is deferred
-		expr_node->is_deferred = 1;
-
-		//Add this in as a child node to the overall deferred statements node
-		add_child_node(deferred_stmts_node, expr_node);
-	}
-
-	//We return nothing here -- there is no need
-	return NULL;
-}
-
-
-/**
  * Assembly inline statements allow the programmer to write assembly
  * directly into a file. This assembly will be inserted, in the exact logical control 
  * flow where it came from, and will not be altered or analyzed by oc.
@@ -6917,6 +6840,89 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	//Once we escape out here, we've seen the whole thing, so we're done
 	return assembly_ast_node_t;
 }
+
+
+/**
+ * A defer statement allows users to defer execution until after a function occurs
+ *
+ * Remember: By the time that we get here, we will have already seen the defer keyword
+ *
+ * TODO UPDATE THIS
+ *
+ * <defer-statement> ::= defer {<logical-or-expression> | <assembly-inline-statement>};
+ */
+static generic_ast_node_t* defer_statement(FILE* fl){
+	//For searching
+	Lexer_item lookahead;
+
+	//Let's see what we have here
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We are trying to defer an assembly statement
+	if(lookahead.tok == ASM){
+		//Let's handle our assembly inline
+		generic_ast_node_t* asm_inline = assembly_inline_statement(fl);
+
+		//If it failed, we're done here
+		if(asm_inline->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Bad assembly inline given for deferral", parser_line_num);
+			num_errors++;
+			return asm_inline;
+		}
+
+		//We always display this warning
+		print_parse_message(INFO, "Deferring an assembly statement will likely crash your program if extreme caution is not used.", parser_line_num);
+
+		//Otherwise it's fine. Also recall -- asm statements parse semicolons for us
+		asm_inline->line_number = parser_line_num;
+		//Mark this as deferred
+		asm_inline->is_deferred = 1;
+
+		//Add it in as a child
+		add_child_node(deferred_stmts_node, asm_inline);
+
+	//Otherwise we have a regular logical or expression here
+	} else {
+		//Put it back
+		push_back_token(lookahead);
+		//We must first see a valid expression statement
+		generic_ast_node_t* expr_node = logical_or_expression(fl);
+
+		//We have a bad expression, fail out here
+		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid statement given for deferral", parser_line_num);
+			num_errors++;
+			//It's already an error, just send it up
+			return expr_node;
+		}
+	
+		//Grab the next token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//If it isn't a semicolon, we fail out
+		if(lookahead.tok != SEMICOLON){
+			print_parse_message(PARSE_ERROR, "Defer statement must be terminated with a semicolon", parser_line_num);
+			num_errors++;
+			//Error out
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Store the line number
+		expr_node->line_number = parser_line_num;
+
+		//Mark that this is deferred
+		expr_node->is_deferred = 1;
+
+		//Add this in as a child node to the overall deferred statements node
+		add_child_node(deferred_stmts_node, expr_node);
+	}
+
+	//We return nothing here -- there is no need
+	return NULL;
+}
+
+
+
 
 
 /**

@@ -2230,14 +2230,21 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Grab a cursor here
 			generic_ast_node_t* defer_stmt_cursor = ast_cursor->first_child;
 
-			//Run through all of the children, emitting their respective
-			//expr codes
-			while(defer_stmt_cursor != NULL){
+			if(defer_stmt_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+				//TODO FIXME
+				printf("FOUND ASM INLINE\n");
+
+			} else {
+				//Run through all of the children, emitting their respective
+				//expr codes
+				while(defer_stmt_cursor != NULL){
 				//Let the helper deal with it
 				emit_expr_code(current_block, defer_stmt_cursor);
 				//Move this up
 				defer_stmt_cursor = defer_stmt_cursor->next_sibling;
+				}			
 			}
+
 
 		//Handle a labeled statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LABEL_STMT){
@@ -2267,7 +2274,12 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_SWITCH_STMT){
 			//TODO IMPLEMENT
 
+		//These are 100% user generated,
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+			//If we find an assembly inline statement, the actuality of it is
+			//incredibly easy. All that we need to do is literally take the 
+			//user's statement and insert it into the code
+
 			printf("FOUND ASM INLINE\n");
 			//TODO IMPLEMENT
 

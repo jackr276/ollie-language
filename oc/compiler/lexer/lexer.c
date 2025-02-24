@@ -85,7 +85,7 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 								 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 								  "char", "define", "enum", "on", "register", "constant",
 								  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
-								  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "#replace", "mut", "#dependency", "#asm",
+								  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "#replace", "mut", "#dependency", "asm",
 								  "with"};
 
 	//Let's see if we have a keyword here
