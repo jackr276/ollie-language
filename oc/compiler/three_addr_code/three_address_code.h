@@ -73,6 +73,8 @@ typedef enum{
 	THREE_ADDR_CODE_FUNC_CALL,
 	//A negation statement
 	THREE_ADDR_CODE_NEG_STATEMENT,
+	//SPECIAL CASE - assembly inline statement
+	THREE_ADDR_CODE_ASM_INLINE_STMT,
 } three_addr_code_stmt_class_t;
 
 /**
@@ -149,6 +151,8 @@ struct three_addr_code_stmt_t{
 	symtab_variable_record_t* var_record;
 	//The list of temp variable parameters at most 6
 	three_addr_var_t* params[6];
+	//Very special case, only for inlined assembly
+	char* inlined_assembly;
 	//TODO may add more
 };
 

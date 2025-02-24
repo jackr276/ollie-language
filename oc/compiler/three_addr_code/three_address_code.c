@@ -729,6 +729,12 @@ void deallocate_three_addr_stmt(three_addr_code_stmt_t* stmt){
 	if(stmt == NULL){
 		return;
 	}
+
+	//If we have an asm inline statement
+	if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
+		//We must also free the pointer in here
+		free(stmt->inlined_assembly);
+	}
 	
 	//Free the overall stmt -- variables handled elsewhere
 	free(stmt);
