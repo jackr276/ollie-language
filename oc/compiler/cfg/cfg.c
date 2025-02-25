@@ -271,6 +271,12 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 
 
 /**
+ * Directly emit the assembly code for an inlined statement. Users who write assembly inline
+ * want it directly inserted in order, nothing more, nothing less
+ */
+
+
+/**
  * Emit the abstract machine code for a return statement
  */
 static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_node){
@@ -2238,10 +2244,10 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Run through all of the children, emitting their respective
 				//expr codes
 				while(defer_stmt_cursor != NULL){
-				//Let the helper deal with it
-				emit_expr_code(current_block, defer_stmt_cursor);
-				//Move this up
-				defer_stmt_cursor = defer_stmt_cursor->next_sibling;
+					//Let the helper deal with it
+					emit_expr_code(current_block, defer_stmt_cursor);
+					//Move this up
+					defer_stmt_cursor = defer_stmt_cursor->next_sibling;
 				}			
 			}
 

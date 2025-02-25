@@ -417,6 +417,10 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		printf("%s:\n", stmt->assignee->var_name + 1);
 	} else if(stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
 		printf("jmp %s\n", stmt->assignee->var_name + 1);
+	//Display an assembly inline statement
+	} else if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
+		//Should already have a trailing newline
+		printf("%s", stmt->inlined_assembly);
 	}
 }
 
@@ -683,6 +687,7 @@ three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var){
 	return stmt;
 }
 
+
 /**
  * Emit a logical not statement
  */
@@ -699,6 +704,26 @@ three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* 
 	//Give the stmt back
 	return stmt;
 }
+
+
+/**
+ * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
+ * by any future optimizations
+ */
+three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node){
+	//First we allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Then we'll allocate the needed space for the string holding the assembly
+	stmt->inlined_assembly = calloc(asm_inline_node->max_length, sizeof(char));
+
+	//Copy the assembly over
+	strncpy(stmt->inlined_assembly, asm_inline_node->asm_line_statements, asm_inline_node->length);
+
+	//And we're done, now we'll bail out
+	return stmt;
+}
+
 
 /**
  * Deallocate the variable portion of a three address code

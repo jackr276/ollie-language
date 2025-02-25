@@ -257,6 +257,12 @@ three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jump
 three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
 
 /**
+ * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
+ * by any future optimizations
+ */
+three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node);
+
+/**
  * Pretty print a three address code statement
 */
 void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt);
