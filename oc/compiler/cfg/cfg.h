@@ -41,30 +41,6 @@ struct cfg_t{
 	basic_block_t* last_attached;
 };
 
-
-/**
- * We will maintain a linked list of CFG nodes that we can eventually use for
- * freeing
- */
-struct cfg_node_holder_t{
-	//Hold onto the basic block
-	basic_block_t* block;
-	//Linked list property
-	cfg_node_holder_t* next;
-};
-
-/**
- * We will maintain a linked list of statements that we can eventually use for
- * freeing
- */
-struct cfg_statement_holder_t{
-	//Hold onto the basic block
-	basic_block_t* block;
-	//Linked list property
-	cfg_statement_holder_t* next;
-};
-
-
 /**
  * Define: a basic block is a sequence of consecutive 
  * intermediate language statements in which flow of 
@@ -88,6 +64,8 @@ struct basic_block_t{
 	u_int8_t is_return_stmt;
 	//Is it a continue statement?
 	u_int8_t is_cont_stmt;
+	//Is it an assembly statement
+	u_int8_t is_asm_stmt;
 	//Is it a break statement
 	u_int8_t is_break_stmt;
 	//Was this block visited by traverser?

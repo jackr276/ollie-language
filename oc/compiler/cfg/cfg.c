@@ -274,6 +274,15 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
  * Directly emit the assembly code for an inlined statement. Users who write assembly inline
  * want it directly inserted in order, nothing more, nothing less
  */
+static void emit_asm_inline_stmt(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node){
+	//First we allocate the whole thing
+	three_addr_code_stmt_t* asm_inline_stmt = emit_asm_statement_three_addr_code(asm_inline_node->node); 
+	
+	//Once done we add it into the block
+	add_statement(basic_block, asm_inline_stmt);
+	
+	//And that's all
+}
 
 
 /**
@@ -290,6 +299,7 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 	//handle it
 	if(ret_node->first_child != NULL){
 		package = emit_binary_op_expr_code(basic_block, ret_node->first_child);
+
 	}
 
 	//We'll use the ret stmt feature here
@@ -2286,8 +2296,14 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//incredibly easy. All that we need to do is literally take the 
 			//user's statement and insert it into the code
 
-			printf("FOUND ASM INLINE\n");
-			//TODO IMPLEMENT
+			//We'll need a new block here regardless
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//Let the helper handle
+			emit_asm_inline_stmt(current_block, ast_cursor);
 
 		//This means that we have some kind of expression statement
 		} else {

@@ -714,6 +714,9 @@ three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_n
 	//First we allocate it
 	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
+	//Store the class
+	stmt->CLASS = THREE_ADDR_CODE_ASM_INLINE_STMT;
+
 	//Then we'll allocate the needed space for the string holding the assembly
 	stmt->inlined_assembly = calloc(asm_inline_node->max_length, sizeof(char));
 
