@@ -2246,10 +2246,15 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Grab a cursor here
 			generic_ast_node_t* defer_stmt_cursor = ast_cursor->first_child;
 
+			//Ollie lang uniquely allows the user to defer assembly statements. 
+			//This can be useful IF you know what you're doing when it comes to assembly.
+			//Since, if you defer assembly, that is the entire statement, we only
+			//need to worry about emitting it once
 			if(defer_stmt_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-				//TODO FIXME
-				printf("FOUND ASM INLINE\n");
+				//Emit the inline assembly that we need here
+				emit_asm_inline_stmt(current_block, defer_stmt_cursor);
 
+			//Otherwise it's just a regular deferral
 			} else {
 				//Run through all of the children, emitting their respective
 				//expr codes

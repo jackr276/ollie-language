@@ -58,7 +58,7 @@ fn main() -> i32{
 	let test_char:char := my_char;
 
 	//Example asm inline statement
-	asm{
+	defer asm{
 		push %rax \
 		push %rbx \
 		mov $2, %rax \
