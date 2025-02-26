@@ -8,21 +8,44 @@
 #ifndef PREPROCESSOR_H
 #define PREPROCESSOR_H
 
-#include "../lexer/lexer.h"
+#include <sys/types.h>
 
-//The preprocessor results package
-typedef struct preproc_results_t preproc_results_t;
+//Max length for most linux-based file systems
+#define FILE_NAME_LENGTH 255
+//The default number of dependencies
+#define DEFAULT_DEPENDENCIES 10
+
+//The dependency package
+typedef struct dependency_package_t dependency_package_t;
 
 /**
- * When we're done preprocessing, we'll have some information
- * to return to the overall compiler
-*/
-struct preproc_results_t {
-
+ * When we're done preprocessing, we'll be handing this back
+ * to the compiler
+ */
+struct dependency_package_t{
+	//What do we depend on? We don't want to be limited here
+	char** dependencies;
+	//Count how many we have
+	u_int16_t num_dependencies;
+	//Max dependencies. This can be realloc'd if certain files
+	//demand it
+	u_int16_t max_dependencies;
 };
 
+/**
+ * The Ollie preprocessor's current sole job is to determine
+ * if the current file has any dependencies. These dependencies 
+ * are required to be listed within the given #comptime dividing
+ * bars. Not all files have these, and it is not required that they do.
+ * 
+ * However, if a file does have external dependencies, they will need to be
+ * declared at the absolute top of the file
+*/
+dependency_package_t determine_linkage_and_dependencies();
 
-
-
+/**
+ * For convenience, destroy the dependency package in its entirety
+*/
+void destroy_dependency_package(dependency_package_t* package);
 
 #endif
