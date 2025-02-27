@@ -6,3 +6,11 @@
 
 ## Current Goal
 Current goal involves getting a very basic subset of the language to produce workable assembly code
+
+### Global TODO(tentative)
+- Preprocessor implementation, testing and validation
+- Dependency graph build-up
+- Dependency graph implementation and compiler-order determination in compiler.c
+- (maybe) ternary operation support
+- SSA implementation
+- Backend build-up
