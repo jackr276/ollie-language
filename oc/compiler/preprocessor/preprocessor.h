@@ -19,6 +19,17 @@
 typedef struct dependency_package_t dependency_package_t;
 
 /**
+ * The type of error that we give back. Ollie compiler uses an
+ * errors-as-values approach, so this will dictate how the regular 
+ * compiler responds
+ */
+typedef enum {
+	PREPROC_SUCCESS,
+	PREPROC_ERROR,
+} preproc_return_token_t;
+
+
+/**
  * When we're done preprocessing, we'll be handing this back
  * to the compiler
  */
@@ -30,6 +41,8 @@ struct dependency_package_t{
 	//Max dependencies. This can be realloc'd if certain files
 	//demand it
 	u_int16_t max_dependencies;
+	//What kind of token do we have(errors as values approach)
+	preproc_return_token_t return_token;
 };
 
 /**
@@ -41,7 +54,7 @@ struct dependency_package_t{
  * However, if a file does have external dependencies, they will need to be
  * declared at the absolute top of the file
 */
-dependency_package_t determine_linkage_and_dependencies();
+dependency_package_t preprocess(char* filename);
 
 /**
  * For convenience, destroy the dependency package in its entirety

@@ -13,8 +13,30 @@
 #include "preprocessor.h"
 //For tokenizing/lexical analyzing purposes
 #include "../lexer/lexer.h"
+#include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
+
+/**
+ * This dictates any errors that we print out
+ */
+typedef enum{
+	PREPROC_ERR = 0,
+	PREPROC_WARN,
+	PREPROC_INFO,
+} preproc_msg_type_t;
+
+
+/**
+ * Print out a custom, stylized preprocessor error for the user
+ */
+static void print_preproc_error(preproc_msg_type_t type, char* error_message){
+	//For ease of printing
+	char* message_types[3] = {"ERROR", "WARNING", "INFO"};
+
+	//Print out the error in a stylized manner
+	printf("[PREPROCESSOR %s]: %s\n", message_types[type], error_message);
+}
 
 
 /**
@@ -22,9 +44,14 @@
  * The dependencies that we have here will be used to build the overall dependency
  * tree, which will determine the entire order of compilation
 */
-dependency_package_t determine_linkage_and_dependencies(){
+static dependency_package_t determine_linkage_and_dependencies(){
 	//We will be returning a copy here, no need for dynamic allocation
 	dependency_package_t return_package;
+
+	//We will run through the opening part of the file. If we do not
+	//see the comptime guards, we will back right out
+	Lexer_item lookahead;
+
 
 
 	return return_package;
@@ -55,5 +82,19 @@ void destroy_dependency_package(dependency_package_t* package){
 
 
 
+/**
+ * Our entry point method to the ollie preprocessor. This also serves
+ * as a useful first check to see if any files do not exist(fail to open).
+ * As a reminder, Ollie lang does not do incremental builds. It does a full build,
+ * from scratch, every time. This ensures that there are no incremental build errors, but
+ * it also means that if one file can't be compiled, the whole thing will fail
+ */
+dependency_package_t preprocess(char* filename){
+	//First and most obvious check
+	if(filename == NULL){
+		print_preproc_error(PREPROC_ERR, "Empty string given as filename");
+	}
 
+	//Let's 
 
+}
