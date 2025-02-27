@@ -71,6 +71,7 @@ typedef enum {
 	COLONEQ, /* := */
 	DOT,
 	PLUS,
+	LIB,
 	PLUSPLUS,
 	DEFINE,
 	AS,
