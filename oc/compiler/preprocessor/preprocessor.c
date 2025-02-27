@@ -89,12 +89,41 @@ void destroy_dependency_package(dependency_package_t* package){
  * from scratch, every time. This ensures that there are no incremental build errors, but
  * it also means that if one file can't be compiled, the whole thing will fail
  */
-dependency_package_t preprocess(char* filename){
+dependency_package_t preprocess(const char* filename){
+	//For any/all error printing
+	char info[500];
+	//The return token. Remember that OC uses an "errors-as-values" approach, 
+	//so this return token will be what we use to communicate errors as well
+	dependency_package_t ret_package;
+
 	//First and most obvious check
 	if(filename == NULL){
 		print_preproc_error(PREPROC_ERR, "Empty string given as filename");
 	}
 
-	//Let's 
+	//Let's open the file up. This open operation will eventually result in a close, we just need
+	//to read the preprocessor information
+	FILE* fl = fopen(filename, "r");
+
+	//If this didn't work, we're in bad territory
+	if(fl == NULL){
+		sprintf(info, "The file \"%s\" could not be opened.", filename);
+		print_preproc_error(PREPROC_ERR, info);
+
+		//We will package and return an error node here
+		ret_package.return_token = PREPROC_ERROR;
+		//Give it back -- we're done here
+		return ret_package;
+	}
+
+	//And at the end we'll close it
+	fclose(fl);
+
+	return ret_package;
 
 }
+
+
+
+
+
