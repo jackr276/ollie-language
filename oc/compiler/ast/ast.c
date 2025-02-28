@@ -136,9 +136,8 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//The parameter declaration node
 		case AST_NODE_CLASS_PARAM_DECL:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(param_decl_ast_node_t));
-			node->inner_node_size = sizeof(param_decl_ast_node_t);
+			//No inner node size
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_PARAM_DECL;
 			break;
 
@@ -210,9 +209,8 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//Unary operator node
 		case AST_NODE_CLASS_UNARY_OPERATOR:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(unary_operator_ast_node_t));
-			node->inner_node_size = sizeof(unary_operator_ast_node_t);
+			//No inner node 
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_UNARY_OPERATOR;
 			break;
 

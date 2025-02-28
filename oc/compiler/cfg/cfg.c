@@ -596,7 +596,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 	//If we have some kind of unary operator here
 	} else if(first_child->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
 		//Grab this internal reference for ease
-		unary_operator_ast_node_t* unary_operator = first_child->node;
+		generic_ast_node_t* unary_operator = first_child;
 
 		//No matter what here, the next sibling will also be some kind of unary expression.
 		//We'll need to handle that first before going forward

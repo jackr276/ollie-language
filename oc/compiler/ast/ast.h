@@ -32,8 +32,6 @@ typedef struct generic_ast_node_t generic_ast_node_t;
 typedef struct func_def_ast_node_t func_def_ast_node_t;
 //A parameter list node
 typedef struct param_list_ast_node_t param_list_ast_node_t;
-//A parameter node
-typedef struct param_decl_ast_node_t param_decl_ast_node_t;
 //An identifier node
 typedef struct identifier_ast_node_t identifier_ast_node_t;
 //A constant node. Can represent any of the four kinds of constant
@@ -42,8 +40,6 @@ typedef struct constant_ast_node_t constant_ast_node_t;
 typedef struct type_name_ast_node_t type_name_ast_node_t;
 //Type address specifier node
 typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node_t;
-//The unary operator node
-typedef struct unary_operator_ast_node_t unary_operator_ast_node_t;
 //The function call node
 typedef struct function_call_ast_node_t function_call_ast_node_t;
 //A struct accessor node
@@ -56,8 +52,6 @@ typedef struct construct_member_ast_node_t construct_member_ast_node_t;
 typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
 //An enumerated member node
 typedef struct enum_member_ast_node_t enum_member_ast_node_t;
-//A declaration AST node
-typedef struct decl_ast_node_t decl_ast_node_t;
 //An AST node for if statements
 typedef struct if_stmt_ast_node_t if_stmt_ast_node_t;
 //An AST node for alias statements
@@ -142,6 +136,8 @@ struct generic_ast_node_t{
 	u_int16_t line_number;
 	//Store a binary operator(if one exists)
 	Token binary_operator;
+	//Store a unary operator(if one exists)
+	Token unary_operator;
 	//Is this assignable?
 	u_int8_t is_assignable;
 	//Is this a deferred node?
@@ -187,13 +183,6 @@ struct constant_ast_node_t{
 	char string_val[MAX_TOKEN_LENGTH];
 };
 
-//Holds information about a parameter declaration. This will also hold 
-//a reference to the associated record in the symtab
-struct param_decl_ast_node_t{
-	//Holds a reference to the symtab record
-	symtab_variable_record_t* param_record;
-};
-
 //Simply holds a name that we get for a type
 struct type_name_ast_node_t{
 	//Holds the name of the type as a string
@@ -213,12 +202,6 @@ struct type_address_specifier_ast_node_t{
 struct function_call_ast_node_t{
 	//Store the function record
 	symtab_function_record_t* func_record;
-};
-
-//The unary operator node
-struct unary_operator_ast_node_t{
-	//We will keep the token of the unary operator
-	Token unary_operator;
 };
 
 //The construct accessor node

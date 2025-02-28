@@ -1259,7 +1259,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
 
 	//Store the token
-	((unary_operator_ast_node_t*)(unary_post_op->node))->unary_operator = lookahead.tok;
+	unary_post_op->unary_operator = lookahead.tok;
 
 	//This will always be the last child of whatever we've built so far
 	add_child_node(postfix_expr_node, unary_post_op);
@@ -1624,7 +1624,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//We'll first create the unary operateor node for ourselves here
 		generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
 		//Assign the typesize operator to this
-		((unary_operator_ast_node_t*)(unary_op->node))->unary_operator = lookahead.tok;
+		unary_op->unary_operator = lookahead.tok;
 		//Save this for later too
 		unary_op_tok = lookahead.tok;
 		
@@ -5122,7 +5122,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	insert_variable(variable_symtab, param_record);
 
 	//We'll also save the associated record in the node
-	((param_decl_ast_node_t*)(parameter_decl_node->node))->param_record = param_record;
+	parameter_decl_node->variable = param_record;
 	//Store the line number
 	parameter_decl_node->line_number = parser_line_num;
 	//Destroy the type specifier node
@@ -8396,7 +8396,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//Grab this out for reference
 			func_param = function_record->func_params[param_count].associate_var;
 			//The variable record for this param node
-			symtab_variable_record_t* param_rec = ((param_decl_ast_node_t*)(param_list_cursor->node))->param_record;
+			symtab_variable_record_t* param_rec = param_list_cursor->variable;
 
 			//Let's now compare the types here
 			if(strcmp(param_rec->type->type_name, func_param->type->type_name) != 0){
@@ -8428,7 +8428,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			}
 
 			//The variable record for this param node
-			symtab_variable_record_t* param_rec = ((param_decl_ast_node_t*)(param_list_cursor->node))->param_record;
+			symtab_variable_record_t* param_rec = param_list_cursor->variable;
 
 			//We'll add it in as a reference to the function
 			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
