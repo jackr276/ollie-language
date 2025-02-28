@@ -334,6 +334,11 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 						//If we're looking for a constant, there are more options
 						//here. This could be a negative sign.
 						} else if(const_search == SEARCHING_FOR_CONSTANT){
+							//Wipe this out now that we're here
+							memset(lexeme, 0, MAX_TOKEN_LENGTH);
+							//Set this too -- for iteration
+							lexeme_cursor = lexeme;
+
 							//We're in an int
 							if(ch2 >= '0' && ch2 <= '9'){
 								*lexeme_cursor = ch;

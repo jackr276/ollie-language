@@ -44,15 +44,52 @@ static void print_preproc_error(preproc_msg_type_t type, char* error_message){
  * The dependencies that we have here will be used to build the overall dependency
  * tree, which will determine the entire order of compilation
 */
-static dependency_package_t determine_linkage_and_dependencies(){
+static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 	//We will be returning a copy here, no need for dynamic allocation
 	dependency_package_t return_package;
 
+	//The parser line number -- largely unused in this module
+	u_int16_t parser_line_num = 0;
+
 	//We will run through the opening part of the file. If we do not
 	//see the comptime guards, we will back right out
-	Lexer_item lookahead;
+	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//If we see a COMPTIME token, we need to keep going. However if we don't see this, we're
+	//completely done here
+	if(lookahead.tok != COMPTIME){
+		//This is totally fine, we just move right along
+		return_package.return_token = PREPROC_SUCCESS;
+		//0 dependencies here
+		return_package.num_dependencies = 0;
+		//Give it back
+		return return_package;
+	}
 
+	//Otherwise it did have a comptime guard. As such, we'll need to parse through
+	//require statements one by one here, seeing which files are requested
+	
+	//We will go until we either a) see something that isn't "require"(an error)
+	//						  or b) see the ending #comptime guard
+
+	//Get our token here to seed the search
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we keep seeing require -- there is no limit here
+	while(lookahead.tok == REQUIRE){
+
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//At the very end, if what we saw here causing us to exit was not a COMPTIME token, we
+	//have some kind of issue
+	if(lookahead.tok != COMPTIME){
+		print_preproc_error(PREPROC_ERR, "#comptime end guard expected after preprocessor region");
+		//Package up an error and send it out
+		return_package.return_token = PREPROC_ERROR;
+		return return_package;
+	}
 
 	return return_package;
 }
@@ -116,14 +153,12 @@ dependency_package_t preprocess(const char* filename){
 		return ret_package;
 	}
 
-	//And at the end we'll close it
+	//Otherwise it did work. In this instance, we will return the dependency package result in here. The actual 
+	//orienting of compiler direction is done by a different submodule
+	ret_package = determine_linkage_and_dependencies(fl);
+
+	//And at the end we'll close it, no matter what happened
 	fclose(fl);
 
 	return ret_package;
-
 }
-
-
-
-
-
