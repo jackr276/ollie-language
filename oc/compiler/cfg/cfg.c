@@ -315,7 +315,7 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
  */
 static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t* label_node){
 	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(((label_stmt_ast_node_t*)(label_node->node))->associate_var, 0, 1);
+	three_addr_var_t* label_var = emit_var(label_node->variable, 0, 1);
 
 	//We'll just use the helper to emit this
 	three_addr_code_stmt_t* stmt = emit_label_stmt_three_addr_code(label_var);
@@ -330,7 +330,7 @@ static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t*
  */
 static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* jump_statement){
 	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(((jump_stmt_ast_node_t*)(jump_statement->node))->label_record, 0, 1);
+	three_addr_var_t* label_var = emit_var(jump_statement->variable, 0, 1);
 
 	//We'll just use the helper to do this
 	three_addr_code_stmt_t* stmt = emit_dir_jmp_stmt_three_addr_code(label_var);
@@ -756,7 +756,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	//Convert our let statement into abstract machine code 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_LET_STMT){
 		//Let's grab the associated variable record here
-		symtab_variable_record_t* var =  ((let_stmt_ast_node_t*)(expr_node->node))->declared_var;
+		symtab_variable_record_t* var =  expr_node->variable;
 
 		//Create the variable associated with this
 	 	three_addr_var_t* left_hand_var = emit_var(var, 1, 0);

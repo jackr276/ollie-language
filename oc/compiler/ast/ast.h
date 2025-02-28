@@ -58,18 +58,10 @@ typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
 typedef struct enum_member_ast_node_t enum_member_ast_node_t;
 //A declaration AST node
 typedef struct decl_ast_node_t decl_ast_node_t;
-//An AST node for label statements
-typedef struct label_stmt_ast_node_t label_stmt_ast_node_t;
 //An AST node for if statements
 typedef struct if_stmt_ast_node_t if_stmt_ast_node_t;
-//An AST node for jump statements
-typedef struct jump_stmt_ast_node_t jump_stmt_ast_node_t;
 //An AST node for alias statements
 typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
-//An AST node for declaration statements
-typedef struct decl_stmt_ast_node_t decl_stmt_ast_node_t;
-//An AST node for let statements
-typedef struct let_stmt_ast_node_t let_stmt_ast_node_t;
 //An AST node for assembly inline statements
 typedef struct asm_inline_stmt_ast_node_t asm_inline_stmt_ast_node_t;
 
@@ -259,37 +251,10 @@ struct enum_member_ast_node_t{
 	symtab_variable_record_t* member_var;
 };
 
-//A label statement node
-struct label_stmt_ast_node_t{
-	//Just hold the memory location for now
-	u_int64_t mem_location;
-	//The variable that is associated with it
-	symtab_variable_record_t* associate_var;
-};
-
-
-//A jump statement node
-struct jump_stmt_ast_node_t{
-	//Contain where we are jumping to
-	symtab_variable_record_t* label_record;
-};
-
 //An alias stmt
 struct alias_stmt_ast_node_t{
 	//Hold the alias that we made
 	symtab_type_record_t* alias;
-};
-
-//A declaration stmt
-struct decl_stmt_ast_node_t{
-	//Hold the variable that we declaraed
-	symtab_variable_record_t* declared_var;
-};
-
-//A let statement
-struct let_stmt_ast_node_t{
-	//Hold the variable that we declared
-	symtab_variable_record_t* declared_var;
 };
 
 //An assembly inline statement

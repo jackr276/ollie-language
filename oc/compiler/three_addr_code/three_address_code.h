@@ -85,7 +85,7 @@ typedef enum{
 struct three_addr_var_t{
 	//For memory management
 	//For convenience
-	char var_name[160];
+	char var_name[MAX_IDENT_LENGTH];
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
 	//Is this a temp variable?

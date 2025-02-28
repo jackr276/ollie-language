@@ -5346,7 +5346,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	insert_variable(variable_symtab, found);
 
 	//We'll also associate this variable with the node
-	((label_stmt_ast_node_t*)(label_stmt->node))->associate_var = found;
+	label_stmt->variable = found;
 
 	//Now we can get out
 	return label_stmt;
@@ -7520,7 +7520,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	insert_variable(variable_symtab, declared_var);
 
 	//Also store this record with the root node
-	((decl_stmt_ast_node_t*)(decl_node->node))->declared_var = declared_var;
+	decl_node->variable = declared_var;
 	//Store the line number
 	decl_node->line_number = current_line;
 
@@ -7755,7 +7755,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	insert_variable(variable_symtab, declared_var);
 	
 	//Add the reference into the root node
-	((let_stmt_ast_node_t*)(let_stmt_node->node))->declared_var = declared_var;
+	let_stmt_node->variable = declared_var;
 	//Store the line number
 	let_stmt_node->line_number = current_line;
 
@@ -8126,7 +8126,7 @@ static int8_t check_jump_labels(symtab_function_record_t* func_record){
 		}
 
 		//Otherwise it worked, so we'll add this as the function's jumping to label
-		((jump_stmt_ast_node_t*)(current_jump_statement->node))->label_record = label;
+		current_jump_statement->variable = label;
 	}
 
 	//If we get here then they all worked

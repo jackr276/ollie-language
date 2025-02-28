@@ -89,20 +89,22 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	switch (CLASS) {
 		//The starting node of the entire AST
 		case AST_NODE_CLASS_PROG:
+			//Has no inner node size
 			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_PROG;
 			break;
 
 		//The for-loop condition AST node
 		case AST_NODE_CLASS_FOR_LOOP_CONDITION:
+			//Has no inner node size
 			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_FOR_LOOP_CONDITION;
 			break;
 
 		case AST_NODE_CLASS_DEFER_STMT:
-			node->CLASS = AST_NODE_CLASS_DEFER_STMT;
 			//Has no inner size
 			node->inner_node_size = 0;
+			node->CLASS = AST_NODE_CLASS_DEFER_STMT;
 			break;
 
 		//The parameter elaboration node, only for type system
@@ -274,15 +276,15 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//Default statement node
 		case AST_NODE_CLASS_DEFAULT_STMT:
+			//No inner node size
 			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_DEFAULT_STMT;
 			break;
 			
 		//Label statement node
 		case AST_NODE_CLASS_LABEL_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(label_stmt_ast_node_t));
-			node->inner_node_size = sizeof(label_stmt_ast_node_t);
+			//No inner node size
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_LABEL_STMT;
 			break;
 
@@ -294,9 +296,8 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//Jump statement node
 		case AST_NODE_CLASS_JUMP_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(jump_stmt_ast_node_t));
-			node->inner_node_size = sizeof(jump_stmt_ast_node_t);
+			//No inner node size
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_JUMP_STMT;
 			break;
 
@@ -350,17 +351,15 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 
 		//A declare statement node
 		case AST_NODE_CLASS_DECL_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(decl_stmt_ast_node_t));
-			node->inner_node_size = sizeof(decl_stmt_ast_node_t);
+			//Set the size to be 0
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_DECL_STMT;
 			break;
 
 		//A let statement node
 		case AST_NODE_CLASS_LET_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(let_stmt_ast_node_t));
-			node->inner_node_size = sizeof(let_stmt_ast_node_t);
+			//Set the size to be 0
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_LET_STMT;
 			break;
 		
