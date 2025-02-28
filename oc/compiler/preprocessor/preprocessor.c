@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
+#include <string.h>
 
 /**
  * This dictates any errors that we print out
@@ -38,6 +39,16 @@ static void print_preproc_error(preproc_msg_type_t type, char* error_message){
 	printf("[PREPROCESSOR %s]: %s\n", message_types[type], error_message);
 }
 
+/**
+ * Print out a custom, stylized preprocessor error for the user with number line
+ */
+static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_message, u_int16_t line_num){
+	//For ease of printing
+	char* message_types[3] = {"ERROR", "WARNING", "INFO"};
+
+	//Print out the error in a stylized manner
+	printf("[LINE %d | PREPROCESSOR %s]: %s\n", line_num, message_types[type], error_message);
+}
 
 /**
  * Parse the beginning parts of a file and determine any/all dependencies.
@@ -45,8 +56,13 @@ static void print_preproc_error(preproc_msg_type_t type, char* error_message){
  * tree, which will determine the entire order of compilation
 */
 static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
+	//For any/all error printing
+	char info[1000];
 	//We will be returning a copy here, no need for dynamic allocation
 	dependency_package_t return_package;
+	//Set these initially here
+	return_package.dependencies = NULL;
+	return_package.num_dependencies = 0;
 
 	//The parser line number -- largely unused in this module
 	u_int16_t parser_line_num = 0;
@@ -77,6 +93,132 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 
 	//So long as we keep seeing require -- there is no limit here
 	while(lookahead.tok == REQUIRE){
+		//After the require keyword, we can either see the "lib" keyword or a string constant
+		lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+		//We have a library file here -- special location
+		//TODO LIKELY NOT DONE
+		if(lookahead.tok == LIB){
+			//We still need to see a string constant
+			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+			//If we don't see one here, then it's immediately a failure
+			if(lookahead.tok != STR_CONST){
+				print_preproc_error_linenum(PREPROC_ERR, "Filename required after \"lib\" keyword", parser_line_num);
+				//Package up and return an error here
+				return_package.return_token = PREPROC_ERROR;
+				return return_package;
+			}
+
+			//This is a linux-specific thing: max filename sizes are 255 bytes. If
+			//the length of the string is more than 255 bytes, it can't possibly
+			//be a valid linux file
+			if(strlen(lookahead.lexeme) >= 255){
+				//Throw the error
+				sprintf(info, "\"%s\" is not a valid filename", lookahead.lexeme); 
+				print_preproc_error_linenum(PREPROC_ERR, info, parser_line_num);
+				//Package up and return an error here
+				return_package.return_token = PREPROC_ERROR;
+				return return_package;
+			}
+
+			//If we see a string constant, that is our filename. We'll add it into the list
+			//If we need to create this, we'll do that now
+			if(return_package.dependencies == NULL){
+				//We need to allocate this
+				return_package.dependencies = calloc(DEFAULT_DEPENDENCIES, sizeof(char*));
+				return_package.max_dependencies = DEFAULT_DEPENDENCIES;
+			//There's a chance that we've overflown, and need to realloc
+			} else if(return_package.num_dependencies == return_package.max_dependencies){
+				//Double it
+				return_package.max_dependencies *= 2;
+				//Reallocate here
+				return_package.dependencies = realloc(return_package.dependencies, return_package.max_dependencies * sizeof(char*));
+			}
+
+			//Allocate it 
+			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
+
+			//Copy the lexeme over
+			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
+
+			//Now we'll store it in the proper location
+			return_package.dependencies[return_package.num_dependencies] = added_filename;
+
+			//And we'll increment the number that we have here
+			return_package.num_dependencies++;
+
+			//One last thing that we need to see -- closing semicolon
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//If it's not a semicolon, we fail
+			if(lookahead.tok != SEMICOLON){
+				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num);
+				//Package up and return an error here
+				return_package.return_token = PREPROC_ERROR;
+				return return_package;
+			}
+
+
+			//Otherwise it worked, so we can add this into the list
+
+		} else if(lookahead.tok == STR_CONST){
+			//This is a linux-specific thing: max filename sizes are 255 bytes. If
+			//the length of the string is more than 255 bytes, it can't possibly
+			//be a valid linux file
+			if(strlen(lookahead.lexeme) >= 255){
+				//Throw the error
+				sprintf(info, "\"%s\" is not a valid filename", lookahead.lexeme); 
+				print_preproc_error_linenum(PREPROC_ERR, info, parser_line_num);
+				//Package up and return an error here
+				return_package.return_token = PREPROC_ERROR;
+				return return_package;
+			}
+			
+			//If we see a string constant, that is our filename. We'll add it into the list
+			//If we need to create this, we'll do that now
+			if(return_package.dependencies == NULL){
+				//We need to allocate this
+				return_package.dependencies = calloc(DEFAULT_DEPENDENCIES, sizeof(char*));
+				return_package.max_dependencies = DEFAULT_DEPENDENCIES;
+			//There's a chance that we've overflown, and need to realloc
+			} else if(return_package.num_dependencies == return_package.max_dependencies){
+				//Double it
+				return_package.max_dependencies *= 2;
+				//Reallocate here
+				return_package.dependencies = realloc(return_package.dependencies, return_package.max_dependencies * sizeof(char*));
+			}
+
+			//Allocate it 
+			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
+
+			//Copy the lexeme over
+			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
+
+			//Now we'll store it in the proper location
+			return_package.dependencies[return_package.num_dependencies] = added_filename;
+
+			//And we'll increment the number that we have here
+			return_package.num_dependencies++;
+
+			//One last thing that we need to see -- closing semicolon
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//If it's not a semicolon, we fail
+			if(lookahead.tok != SEMICOLON){
+				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num);
+				//Package up and return an error here
+				return_package.return_token = PREPROC_ERROR;
+				return return_package;
+			}
+
+		} else {
+			//This is an error here
+			print_preproc_error(PREPROC_ERR, "\"lib\" keyword or filename required after \"require\" keyword");
+			//Package up and return an error here
+			return_package.return_token = PREPROC_ERROR;
+			return return_package;
+		}
 
 		//Refresh the token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
