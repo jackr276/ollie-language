@@ -3,12 +3,14 @@
  * full option details
 */
 
+#include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
 #include "parser/parser.h"
+#include "preprocessor/preprocessor.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
 
@@ -60,7 +62,24 @@ int main(int argc, char** argv){
 			exit(1);
 		}
 
-		//Otherwise we are all good to pass to the parser
+		//Otherwise we are all good to pass to the parser preprocessor
+		dependency_package_t dependencies = preprocess(fname);
+
+		//If it's an error, we fail out
+		if(dependencies.return_token == PREPROC_ERROR){
+			exit(0);
+		}
+
+		printf("======================= BEGIN DEPS =================================\n");
+
+		//FOR NOW - we want to see what the preprocessor picked up
+		for(u_int16_t i = 0; i < dependencies.num_dependencies; i++){
+			printf("DEPENDENCY %d: %s\n", i, dependencies.dependencies[i]);
+		}
+
+		printf("======================= END DEPS =================================\n");
+		//Just for now -- free this up
+		destroy_dependency_package(&dependencies);
 		
 		//Parse the file
 		results = parse(fl);

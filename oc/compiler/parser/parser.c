@@ -6826,9 +6826,6 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Testing code
-	printf("%s\n", asm_node_ref->asm_line_statements);
-
 	//Now we just need to see one last thing -- the closing semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 

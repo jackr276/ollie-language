@@ -233,6 +233,12 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 		return return_package;
 	}
 
+	//If we have a completely empty package, we should throw a warning
+	if(return_package.num_dependencies == 0){
+		print_preproc_error(PREPROC_WARN, "Empty #comptime region given. Consider removing this region entirely if not in use.");
+	}
+
+	//Give it back
 	return return_package;
 }
 
