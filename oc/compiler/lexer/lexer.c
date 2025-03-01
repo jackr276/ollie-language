@@ -725,7 +725,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 							*lexeme_cursor = ch;
 							lexeme_cursor++;
 						} else {
-							printf("HERE");
 							lex_item.tok = ERROR;
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;

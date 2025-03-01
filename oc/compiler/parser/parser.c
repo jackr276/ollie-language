@@ -8813,6 +8813,11 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 		print_parse_message(PARSE_ERROR, "The #dependencies section must be the very first thing in a file", parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	//This is out of place if we find it
+	} else if(lookahead.tok == REQUIRE){
+		print_parse_message(PARSE_ERROR, "Any require statements must be nested in a top level #dependencies block", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
 	//Otherwise it must be a declaration
 	} else {
@@ -8849,7 +8854,21 @@ static generic_ast_node_t* program(FILE* fl){
 	//will have already consumed these tokens, so we need to get past them
 	if(lookahead.tok == DEPENDENCIES){
 		//Just run through here until we see the end of the comptime section
-		while((lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != DEPENDENCIES);
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//So long as we don't hit the end or the end of the region, keep going
+		while(lookahead.tok != DEPENDENCIES && lookahead.tok != DONE){
+			//Refresh the token
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		}
+
+		//If we get to the DONE, we error out
+		if(lookahead.tok == DONE){
+			print_parse_message(PARSE_ERROR, "Unmatched #dependencies region detected", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 	} else {
 		//Put it back
 		push_back_token(lookahead);
