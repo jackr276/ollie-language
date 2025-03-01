@@ -31,16 +31,16 @@ fn saturating_add(x:i32, y:i32) -> i32{
 
 
 /**
-* TEST: Missing #comptime end directive
+* TEST: Missing #dependencies end directive
 */
 
-#comptime
+#dependencies
 //============================================
-#require "test_prog4.ol";
-#require "test_prog3.ol";
+require "test_prog4.ol";
+require "test_prog3.ol";
 //Require a library file. These files are stored
 //in "TBD" and are not in the local directory
-#require lib "stdlib.ol";
+require lib "stdlib.ol";
 //============================================
 
 #replace TEST_INT with -1;

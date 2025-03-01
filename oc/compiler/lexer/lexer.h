@@ -38,7 +38,7 @@ typedef enum {
 	//For expansion of func params
 	DOTDOTDOT,
 	//For preprocessor sections
-	DEPENDENCY,
+	DEPENDENCIES,
 	ELSE,
 	DO,
 	WHILE,
@@ -59,7 +59,6 @@ typedef enum {
 	TYPESIZE,
 	SIZEOF,
 	REQUIRE,
-	COMPTIME,
 	RET,
 	JUMP,
 	STATIC,

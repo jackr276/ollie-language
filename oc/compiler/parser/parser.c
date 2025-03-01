@@ -8807,10 +8807,10 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 		//Otherwise we'll just return null, the caller will know what to do with it
 		return NULL;
 
-	//This is an error. The __comptime__ directive must be the very first thing in a 
+	//This is an error. The #dependencies directive must be the very first thing in a 
 	//file
-	} else if(lookahead.tok == COMPTIME){
-		print_parse_message(PARSE_ERROR, "The __comptime__ section must be the very first thing in a file", parser_line_num);
+	} else if(lookahead.tok == DEPENDENCIES){
+		print_parse_message(PARSE_ERROR, "The #dependencies section must be the very first thing in a file", parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
@@ -8847,9 +8847,9 @@ static generic_ast_node_t* program(FILE* fl){
 	//If we've actually found the comptime section, we'll
 	//go through it until we don't have it anymore. The preprocessor
 	//will have already consumed these tokens, so we need to get past them
-	if(lookahead.tok == COMPTIME){
+	if(lookahead.tok == DEPENDENCIES){
 		//Just run through here until we see the end of the comptime section
-		while((lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != COMPTIME);
+		while((lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != DEPENDENCIES);
 	} else {
 		//Put it back
 		push_back_token(lookahead);

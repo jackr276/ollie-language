@@ -67,7 +67,7 @@ int main(int argc, char** argv){
 
 		//If it's an error, we fail out
 		if(dependencies.return_token == PREPROC_ERROR){
-			exit(0);
+			goto final_printout;
 		}
 
 		printf("======================= BEGIN DEPS =================================\n");

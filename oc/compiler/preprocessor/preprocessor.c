@@ -71,9 +71,9 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 	//see the comptime guards, we will back right out
 	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we see a COMPTIME token, we need to keep going. However if we don't see this, we're
+	//If we see a DEPENDENCIES token, we need to keep going. However if we don't see this, we're
 	//completely done here
-	if(lookahead.tok != COMPTIME){
+	if(lookahead.tok != DEPENDENCIES){
 		//This is totally fine, we just move right along
 		return_package.return_token = PREPROC_SUCCESS;
 		//0 dependencies here
@@ -226,8 +226,8 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 
 	//At the very end, if what we saw here causing us to exit was not a COMPTIME token, we
 	//have some kind of issue
-	if(lookahead.tok != COMPTIME){
-		print_preproc_error(PREPROC_ERR, "#comptime end guard expected after preprocessor region");
+	if(lookahead.tok != DEPENDENCIES){
+		print_preproc_error(PREPROC_ERR, "#dependencies end guard expected after preprocessor region");
 		//Package up an error and send it out
 		return_package.return_token = PREPROC_ERROR;
 		return return_package;
@@ -235,7 +235,7 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 
 	//If we have a completely empty package, we should throw a warning
 	if(return_package.num_dependencies == 0){
-		print_preproc_error(PREPROC_WARN, "Empty #comptime region given. Consider removing this region entirely if not in use.");
+		print_preproc_error(PREPROC_WARN, "Empty #dependencies region given. Consider removing this region entirely if not in use.");
 	}
 
 	//Give it back
