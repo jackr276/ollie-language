@@ -6920,7 +6920,29 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 }
 
 
+/**
+ * An idle statement simply inserts one nop statements. This can be
+ * used by the programmer to stall a program
+ *
+ * REMEMBER: We have already seen the stall keyword by the time that we get here
+ */
+static generic_ast_node_t* idle_statement(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
 
+	//We just need to see a semicolon now
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it isn't a semicolon, we error out
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after idle keyword", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We'll create and return an idle statement
+	return ast_node_alloc(AST_NODE_CLASS_IDLE_STMT);
+}
 
 
 /**
@@ -6939,6 +6961,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
  * 						   | <branch-statement>
  * 						   | <assembly-statement>
  * 						   | <defer-statement>
+ * 						   | <idle-statement>
  */
 static generic_ast_node_t* statement(FILE* fl){
 	//Lookahead token
@@ -6977,6 +7000,11 @@ static generic_ast_node_t* statement(FILE* fl){
 	} else if(lookahead.tok == WHILE){
 		//This rule relies on while already being consumed, so we won't put it back
 		return while_statement(fl);
+
+	//An idle(nop) statement
+	} else if(lookahead.tok == IDLE){
+		//This rule just gives back an idle statement
+		return idle_statement(fl);
 
 	//Do while statement
 	} else if(lookahead.tok == DO){

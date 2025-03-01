@@ -141,7 +141,24 @@ three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jump
 
 
 /**
+ * Directly emit an idle statement
+ */
+three_addr_code_stmt_t* emit_idle_statement_three_addr_code(){
+	//First we allocate
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Store the class
+	stmt->CLASS = THREE_ADDR_CODE_IDLE_STMT;
+
+	//And we're done
+	return stmt;
+}
+
+
+/**
  * Pretty print a three address code statement
+ *
+ * TODO REWRITE AS SWITCH STATEMENT
 */
 void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//If it's a binary operator statement(most common), we'll
@@ -421,6 +438,9 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
 		//Should already have a trailing newline
 		printf("%s", stmt->inlined_assembly);
+	} else if(stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
+		//Just print a nop
+		printf("nop\n");
 	}
 }
 

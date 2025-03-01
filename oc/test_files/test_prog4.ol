@@ -23,6 +23,8 @@ fn main(mut argc:u32, mut argv:char**)->i32{
 	
 	/*
 	while(a <= 32) do {
+		idle;
+		idle;
 		if(i <= 0) then {
 			a := a + 1;
 		} else if( i == 1) then{
@@ -44,6 +46,7 @@ fn main(mut argc:u32, mut argv:char**)->i32{
 	*/
 
 	for(let mut i:u32 := 3; i < 232; i := i + 1) do{
+		idle;
 		a := a + 1;
 		continue when (a == 32);
 		//break when(a == 32);

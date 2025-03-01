@@ -28,6 +28,7 @@ typedef enum {
 	DECLARE,
 	ALIAS,
 	WHEN,
+	IDLE,
 	MUT,
 	DEFER,
 	ASM,

@@ -71,6 +71,8 @@ typedef enum{
 	THREE_ADDR_CODE_LABEL_STMT,
 	//A function call node
 	THREE_ADDR_CODE_FUNC_CALL,
+	//An idle statement(nop)
+	THREE_ADDR_CODE_IDLE_STMT,
 	//A negation statement
 	THREE_ADDR_CODE_NEG_STATEMENT,
 	//SPECIAL CASE - assembly inline statement
@@ -261,6 +263,11 @@ three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t*
  * by any future optimizations
  */
 three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node);
+
+/**
+ * Emit an idle statement
+ */
+three_addr_code_stmt_t* emit_idle_statement_three_addr_code();
 
 /**
  * Pretty print a three address code statement

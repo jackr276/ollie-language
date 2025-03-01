@@ -271,6 +271,20 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 
 
 /**
+ * Directly emit the assembly nop instruction
+ */
+static void emit_idle_stmt(basic_block_t* basic_block){
+	//Use the helper
+	three_addr_code_stmt_t* idle_stmt = emit_idle_statement_three_addr_code();
+	
+	//Add it into the block
+	add_statement(basic_block, idle_stmt);
+
+	//And that's all
+}
+
+
+/**
  * Directly emit the assembly code for an inlined statement. Users who write assembly inline
  * want it directly inserted in order, nothing more, nothing less
  */
@@ -2309,7 +2323,17 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Let the helper handle
 			emit_asm_inline_stmt(current_block, ast_cursor);
+		//Handle a nop statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IDLE_STMT){
+			//Do we need a new block?
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
 
+			//Let the helper handle -- doesn't even need the cursor
+			emit_idle_stmt(current_block);
+	
 		//This means that we have some kind of expression statement
 		} else {
 			//This could happen where we have nothing here

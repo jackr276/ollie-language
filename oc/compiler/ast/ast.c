@@ -162,6 +162,13 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			node->inner_node_size = sizeof(type_address_specifier_ast_node_t);
 			node->CLASS = AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER;
 			break;
+		
+		//An idle statement
+		case AST_NODE_CLASS_IDLE_STMT:
+			//No inner node size
+			node->inner_node_size = 0;
+			node->CLASS = AST_NODE_CLASS_IDLE_STMT;
+			break;
 
 		//An identifier of any kind
 		case AST_NODE_CLASS_IDENTIFIER:
