@@ -963,4 +963,19 @@ void print_token(Lexer_item* l){
 	printf("TOKEN: %3d, Lexeme: %10s, Line: %4d, Characters: %4d\n", l->tok, l->lexeme, l->line_num, l->char_count);
 }
 
+/**
+ * Resetting the file allows us to start fresh from
+ * the top
+*/
+void reset_file(FILE* fl){
+	//Reset the file pointer
+	fseek(fl, 0, SEEK_SET);
 
+	//We need to refresh the entire stack too
+	destroy_lex_stack(pushed_back_tokens);
+
+	//And then recreate the entire thing
+	pushed_back_tokens = create_lex_stack();
+
+	//Now we've reset
+}

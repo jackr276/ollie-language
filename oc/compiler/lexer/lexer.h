@@ -148,6 +148,11 @@ struct Lexer_item{
 };
 
 /**
+ * Reset the entire file for reprocessing
+ */
+void reset_file(FILE* fl);
+
+/**
  * Special case -- hunting for assembly statements
  */
 Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num);

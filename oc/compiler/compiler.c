@@ -9,17 +9,62 @@
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
+#include "lexer/lexer.h"
 #include "parser/parser.h"
 #include "preprocessor/preprocessor.h"
 #include "dependency_analyzer/dependency_analyzer.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
 
+
+/**
+ *	Compile an individual file. This function can be recursively called to deal 
+ *	with dependencies
+ */
+static front_end_results_package_t compile(char* fname){
+	//Declare our return package
+	front_end_results_package_t results;
+
+	//First we try to open the file
+	FILE* fl = fopen(fname, "r");
+
+	//If this fails, the whole thing is done
+	if(fl == NULL){
+		fprintf(stderr, "[FATAL COMPILER ERROR]: Failed to open file \"%s\"", fname);
+		results.num_errors = 1;
+		results.lines_processed = 0;
+		//Failed here
+		results.success = 0;
+		//Give it back
+		return results;
+	}
+	
+	//Otherwise it opened, so we now need to process it and compile dependencies
+	dependency_package_t dependencies = preprocess(fl);
+
+	//After we are done preprocessing, we should reset the entire lexer to the start, so that
+	//we get an accurate parse
+	reset_file(fl);
+
+	//Now we'll parse the whole thing
+	results = parse(fl);
+
+	//Now that we're done, we can close
+	fclose(fl);
+
+	//Give back the results
+	return results;
+}
+
+
 /**
  * The main entry point for the compiler. This will be expanded as time goes on
  *
  * COMPILER OPTIONS:
- * 	1.) -f passing a file in
+ *  NOTE: The compiler only accepts one file at a time. This is because Ollie handles 
+ *  building all dependencies automatically, so there is no need to pass in more than
+ *  one file at a time. The file that you pass in should have dependencies declared
+ *  in the #dependencies block
 */
 int main(int argc, char** argv){
 	//How much time we've spent
@@ -47,47 +92,11 @@ int main(int argc, char** argv){
 		 *  4.) A fully fleshed out Abstract-Syntax-Tree(AST) that can be used by the middle end
 		*/
 
-	//We compile in one giant chain
-	for(u_int16_t i = 1; i < argc; i++){
-		//Grab whatever this file is
-		char* fname = argv[i];
+	//Grab whatever this file is
+	char* fname = argv[1];
 
-		printf("Attempting to compile: %s\n", fname);
-
-		//Once we get down here we should have the file available for parsing
-		FILE* fl = fopen(fname, "r");
-	
-		//Fail out if bad
-		if(fl == NULL){
-			fprintf(stderr, "File %s could not be found or opened", fname);
-			exit(1);
-		}
-
-		//Otherwise we are all good to pass to the parser preprocessor
-		dependency_package_t dependencies = preprocess(fname);
-
-		//If it's an error, we fail out
-		if(dependencies.return_token == PREPROC_ERROR){
-			goto final_printout;
-		}
-
-		printf("======================= BEGIN DEPS =================================\n");
-
-		//FOR NOW - we want to see what the preprocessor picked up
-		for(u_int16_t i = 0; i < dependencies.num_dependencies; i++){
-			printf("DEPENDENCY %d: %s\n", i, dependencies.dependencies[i]);
-		}
-
-		printf("======================= END DEPS =================================\n");
-		//Just for now -- free this up
-		destroy_dependency_package(&dependencies);
-		
-		//Parse the file
-		results = parse(fl);
-
-		//Close the file
-		fclose(fl);
-	}
+	//Call the compiler, let this handle it
+	results = compile(fname);
 
 	//We'll store the number of warnings and such here locally
 	u_int32_t num_warnings = results.num_warnings;

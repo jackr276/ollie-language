@@ -8,6 +8,7 @@
 #ifndef PREPROCESSOR_H
 #define PREPROCESSOR_H
 
+#include <stdio.h>
 #include <sys/types.h>
 
 //Max length for most linux-based file systems
@@ -54,7 +55,7 @@ struct dependency_package_t{
  * However, if a file does have external dependencies, they will need to be
  * declared at the absolute top of the file
 */
-dependency_package_t preprocess(const char* filename);
+dependency_package_t preprocess(FILE* fl);
 
 /**
  * For convenience, destroy the dependency package in its entirety
