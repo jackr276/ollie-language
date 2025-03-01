@@ -1,3 +1,6 @@
+
+#file LEX_TEST_5;
+
 fn main(argc:u32, argv:char**) -> i32 {
 	let x : char := 'a';
 	let y : char := 'c';

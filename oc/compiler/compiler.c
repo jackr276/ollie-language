@@ -4,6 +4,7 @@
 */
 
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -12,7 +13,6 @@
 #include "lexer/lexer.h"
 #include "parser/parser.h"
 #include "preprocessor/preprocessor.h"
-#include "dependency_analyzer/dependency_analyzer.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
 
@@ -24,6 +24,15 @@
 static front_end_results_package_t compile(char* fname){
 	//Declare our return package
 	front_end_results_package_t results;
+	//These are all NULL initially
+	results.constant_symtab = NULL;
+	results.function_symtab = NULL;
+	results.type_symtab = NULL;
+	results.variable_symtab = NULL;
+	results.os = NULL;
+	results.root = NULL;
+	results.num_warnings = 0;
+	results.num_errors = 0;
 
 	//First we try to open the file
 	FILE* fl = fopen(fname, "r");
@@ -41,6 +50,16 @@ static front_end_results_package_t compile(char* fname){
 	
 	//Otherwise it opened, so we now need to process it and compile dependencies
 	dependency_package_t dependencies = preprocess(fl);
+
+	//If this fails, we error out
+	if(dependencies.return_token == PREPROC_ERROR){
+		results.num_errors = 1;
+		results.lines_processed = 0;
+		//Failed here
+		results.success = 0;
+		//Give it back
+		return results;
+	}
 
 	//After we are done preprocessing, we should reset the entire lexer to the start, so that
 	//we get an accurate parse
@@ -103,7 +122,7 @@ int main(int argc, char** argv){
 	u_int32_t num_errors = results.num_errors;
 
 	//If the AST root is bad, there's no use in going on here
-	if(results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
 		goto final_printout;
 	}
 

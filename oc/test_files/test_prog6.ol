@@ -33,6 +33,8 @@ fn saturating_add(x:i32, y:i32) -> i32{
 * TEST: Empty #comptime directive
 */
 
+#file TEST_PROG_6;
+
 #dependencies
 #dependencies
 

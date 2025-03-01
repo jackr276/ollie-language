@@ -8874,6 +8874,38 @@ static generic_ast_node_t* program(FILE* fl){
 		prog = ast_node_alloc(AST_NODE_CLASS_PROG);
 	}
 
+	//We shouldn't even get here if this doesn't exist, but for our
+	//purposes we need to skip through the #file FILE_NAME; top-level
+	//declaration
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see this we fail
+	if(lookahead.tok != FILE_TOK){
+		print_parse_message(PARSE_ERROR, "Top-level \"#file FILE_TOKEN;\" declaration required.", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we need to see the file's identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	//If it isn't an identifier we fail
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Top-level \"#file FILE_TOKEN;\" declaration required.", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//One last thing -- need to see the semicolon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	//If it isn't an identifier we fail
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after top-level declaration", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
 	//Let's lookahead to see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 

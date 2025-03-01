@@ -1,3 +1,5 @@
+#file LEX_TEST_10;
+
 define construct my_struct{
 	i:u32;
 	j:u32;

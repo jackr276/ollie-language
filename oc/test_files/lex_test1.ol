@@ -2,6 +2,9 @@
 * Sample program
 */
 
+//What is the actual name of this file
+#file LEX_TEST_1;
+
 fn never_defined(example:f64) -> u32;
 
 declare j:u8;

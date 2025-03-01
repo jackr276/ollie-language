@@ -1,3 +1,6 @@
+
+#file LEX_TEST_2;
+
 fn:static main() -> i32 {
 	let i:u32 := 0;
 	//Useless, just testing

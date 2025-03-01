@@ -60,16 +60,54 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 	char info[1000];
 	//We will be returning a copy here, no need for dynamic allocation
 	dependency_package_t return_package;
+	//The lookahead token
+	Lexer_item lookahead;
 	//Set these initially here
 	return_package.dependencies = NULL;
 	return_package.num_dependencies = 0;
 
+
 	//The parser line number -- largely unused in this module
 	u_int16_t parser_line_num = 0;
 
+	//We shouldn't even get here if this doesn't exist, but for our
+	//purposes we need to skip through the #file FILE_NAME; top-level
+	//declaration
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see this we fail
+	if(lookahead.tok != FILE_TOK){
+		print_preproc_error_linenum(PREPROC_ERR, "Top-level \"#file FILE_TOKEN;\" declaration required.", parser_line_num);
+		return_package.return_token = PREPROC_ERROR;
+		return return_package;
+	}
+
+	//Now we need to see the file's identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	//If it isn't an identifier we fail
+	if(lookahead.tok != IDENT){
+		print_preproc_error_linenum(PREPROC_ERR, "Top-level \"#file FILE_TOKEN;\" declaration required.", parser_line_num);
+		return_package.return_token = PREPROC_ERROR;
+		return return_package;
+	}
+
+	//Now we can copy the name of this file(referred to as a token) into the results package
+	strncpy(return_package.module_name, lookahead.lexeme, 100);
+
+	//One last thing -- need to see the semicolon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	//If it isn't an identifier we fail
+	if(lookahead.tok != SEMICOLON){
+		print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after top-level declaration", parser_line_num);
+		return_package.return_token = PREPROC_ERROR;
+		return return_package;
+	}
+
 	//We will run through the opening part of the file. If we do not
 	//see the comptime guards, we will back right out
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we see a DEPENDENCIES token, we need to keep going. However if we don't see this, we're
 	//completely done here

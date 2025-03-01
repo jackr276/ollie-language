@@ -2,6 +2,7 @@
 * Attempt at using an undefined enumerated type
 */
 
+#file LEX_TEST_12;
 /**
 * An enum class
 */

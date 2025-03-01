@@ -1,6 +1,8 @@
 /**
 * Bad parens in here
 */
+
+#file LEX_TEST_8;
 define construct my_struct{
 	i:u32*;
 	a:i8;

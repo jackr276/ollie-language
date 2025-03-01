@@ -1,3 +1,6 @@
+
+#file TEST_PROG_3;
+
 fn my_fn() -> void{
 	let i:u32 := 32;
 }

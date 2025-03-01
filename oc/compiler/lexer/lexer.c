@@ -77,19 +77,19 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 						STATIC, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
 						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM, ON,
 						REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-						CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE};
+						CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, FILE_TOK};
 
 	//Direct one to one mapping
 	char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "fn", "ret", "jump",
-								 "require", "#replace", "static", "external", "u8", "i8", "u16",
-								 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
-								  "char", "define", "enum", "on", "register", "constant",
-								  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
-								  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
-								  "with", "lib", "idle"};
+							 "require", "#replace", "static", "external", "u8", "i8", "u16",
+							 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
+							  "char", "define", "enum", "on", "register", "constant",
+							  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
+							  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
+							  "with", "lib", "idle", "#file"};
 
 	//Let's see if we have a keyword here
-	for(u_int8_t i = 0; i < 50; i++){
+	for(u_int8_t i = 0; i < 51; i++){
 		if(strcmp(keyword_arr[i], lexeme) == 0){
 			//We can get out of here
 			lex_item.tok = tok_arr[i];
