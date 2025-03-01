@@ -11,6 +11,7 @@
 #include "ast/ast.h"
 #include "parser/parser.h"
 #include "preprocessor/preprocessor.h"
+#include "dependency_analyzer/dependency_analyzer.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
 
