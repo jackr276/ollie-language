@@ -5,3 +5,20 @@
 */
 
 #include "dependency_analyzer.h"
+#include <stdlib.h>
+
+/**
+ * Initialize the dependency graph
+ */
+compiler_order_graph_t* initialize_dependency_graph(){
+	//Allocate it
+	compiler_order_graph_t* graph = calloc(1, sizeof(compiler_order_graph_t));
+
+	//And we return it
+	return graph;
+}
+
+
+
+
+
