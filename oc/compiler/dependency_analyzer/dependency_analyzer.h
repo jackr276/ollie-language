@@ -25,6 +25,8 @@ typedef enum{
 } compiler_order_status_t;
 
 struct dependency_tree_node_t{
+	//What is the next-created node
+	dependency_tree_node_t* next_created;
 	//N-ary tree structure, first child and next sibling
 	dependency_tree_node_t* first_child;
 	dependency_tree_node_t* next_sibling;
@@ -42,13 +44,14 @@ struct dependency_tree_node_t{
 dependency_tree_node_t* dependency_tree_node_alloc(char* filename);
 
 /**
- * Add a directed connection between two nodes
+ * Add a directed connection between two nodes. This kind of relationship
+ * represents that the "parent" DEPENDS ON the "child"
  */
-void add_child_node(dependency_tree_node_t* parent, dependency_tree_node_t* child);
+void add_dependency_node(dependency_tree_node_t* parent, dependency_tree_node_t* child);
 
 /**
  * Destructor - used for memory freeing
 */
-void destroy_dependency_tree(dependency_tree_node_t* root);
+void destroy_dependency_tree();
 
 #endif
