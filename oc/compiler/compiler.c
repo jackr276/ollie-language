@@ -17,11 +17,74 @@
 #include "cfg/cfg.h"
 
 
+// A list of currently compiled files
+typedef struct compiled_file_token_t compiled_file_token_t;
+
+struct compiled_file_token_t{
+	//Linked list functionality - point to the next one
+	compiled_file_token_t* next;
+	//Store the file's token
+	char file_name[256];
+};
+
+//Initially nothing has been compiled
+compiled_file_token_t* head = NULL;
+
+/**
+ * Compiled file list destructor
+ */
+static void deallocate_compiled_files(){
+
+}
+
+
+/**
+ * Add a compiled file onto the compilation list
+ */
+static void add_compiled_file(char* file_name){
+	//First we allocate
+	compiled_file_token_t* new = calloc(1, sizeof(compiled_file_token_t));
+	
+	//Populate appropriately
+	strncpy(new->file_name, file_name, strlen(file_name));
+
+	//Then we append this to the front
+	new->next = head;	
+	head = new;
+}
+
+
+/**
+ * Crawl the linked list to see if this file has already been compiled
+ */
+static u_int8_t has_file_been_compiled(char* file_name){
+	//Crawl through the linked list, comparing for compiled files
+	compiled_file_token_t* cursor = head;
+
+	//So long as the cursor isn't null
+	while(cursor != NULL){
+		//If these match, then it has been compiled
+		if(strcmp(cursor->file_name, file_name) == 0){
+			return 1;
+		}
+
+		//Otherwise, iterate to the next one
+		cursor = cursor->next;
+	}
+
+	//If we make it here, it hasn't been compiled
+	return 0;
+}
+
+
 /**
  *	Compile an individual file. This function can be recursively called to deal 
  *	with dependencies
  */
 static front_end_results_package_t compile(char* fname){
+	//For user readability
+	printf("COMPILE STARTED FOR: %s", fname);
+
 	//Declare our return package
 	front_end_results_package_t results;
 	//These are all NULL initially
@@ -61,6 +124,28 @@ static front_end_results_package_t compile(char* fname){
 		return results;
 	}
 
+	/**
+	 * We now need to analyze the dependencies of this file. If there are dependencies,
+	 * the parser requires that those be loaded into memory first. Failure to do this will
+	 * result in parser errors about files not existing
+	 */
+	//We will go through dependency by dependency
+	for(u_int16_t i = 0; i < dependencies.num_dependencies; i++){
+		//Grab the current one out of here
+		char* current_dependency = dependencies.dependencies[i];
+
+		//There is a (strong) chance that whatever we've grabbed here has already been 
+		//compiled. If so, we'll just skip it. We don't want to continuously recompile commonly
+		//used files. To achieve this, we maintain a list of everything that has been compiled(specifically)
+		//their FILE_TOKENS, and we will cross these off as we compile them 
+
+		//If this has not been compiled already
+		if(has_file_been_compiled(current_dependency) == 0){
+			//Then we'll compile it
+			results = compile(current_dependency);
+		}
+	}
+
 	//After we are done preprocessing, we should reset the entire lexer to the start, so that
 	//we get an accurate parse
 	reset_file(fl);
@@ -70,6 +155,9 @@ static front_end_results_package_t compile(char* fname){
 
 	//Now that we're done, we can close
 	fclose(fl);
+
+	//Add this file to the list of compiled files
+	add_compiled_file(fname);
 
 	//Give back the results
 	return results;

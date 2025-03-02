@@ -32,11 +32,7 @@ fn saturating_add(x:i32, y:i32) -> i32{
 #file TEST_PROG_5;
 #dependencies
 //============================================
-require "test_prog4.ol";
-require "test_prog3.ol";
-//Require a library file. These files are stored
-//in "TBD" and are not in the local directory
-require lib "stdlib.ol";
+require "./oc/test_files/test_prog4.ol";
 //============================================
 #dependencies
 
