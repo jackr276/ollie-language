@@ -1,11 +1,13 @@
 
 #file TEST_PROG_3;
 
+/*
 fn my_fn() -> void{
 	let i:u32 := 32;
 }
+*/
 
-fn:static main(argv:char**) -> i32{
+fn:static test(argv:char**) -> i32{
 	declare mut a:u32;
 	declare mut b:u32;
 	declare mut c:u32;
@@ -41,7 +43,6 @@ fn:static main(argv:char**) -> i32{
 
 	};// while(d >= 32);
 
-	@my_fn();
 	let abcd:u32 := 322;
 
 	ret a;

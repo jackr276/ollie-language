@@ -88,6 +88,11 @@ static u_int8_t has_file_been_compiled(char* file_name){
 /**
  *	Compile an individual file. This function can be recursively called to deal 
  *	with dependencies
+ *
+ *  STRATEGY: This function will first invoke the preprocessor. The preprocessor
+ *  will perform dependency analysis and return a tree, rooted at the current node, 
+ *  that gives us the order needed for compilation. We will then perform a reverse
+ *  level-order traversal and compile in that order
  */
 static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
 	printf("\n===============================================================================\n");
@@ -121,9 +126,9 @@ static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
 		//Give it back
 		return results;
 	}
-	
+
 	//Otherwise it opened, so we now need to process it and compile dependencies
-	dependency_package_t dependencies = preprocess(fl);
+	dependency_package_t dependencies = preprocess(fname);
 
 	//If this fails, we error out
 	if(dependencies.return_token == PREPROC_ERROR){
@@ -162,11 +167,11 @@ static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
 		}
 	}
 
+	//Now we'll parse the whole thing
+	results = parse(fl, dependencies.module_name);
+
 	//We're done with this package, we don't need it 
 	destroy_dependency_package(&dependencies);
-
-	//Now we'll parse the whole thing
-	results = parse(fl);
 
 	//Now that we're done, we can close
 	fclose(fl);

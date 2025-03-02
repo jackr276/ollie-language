@@ -3,6 +3,9 @@
 */
 
 #file TEST_PROG_4;
+#dependencies
+require "./oc/test_files/test_prog3.ol";
+#dependencies
 
 fn my_func(mut i:u32, mut j:u32) -> i32{
 	i := i + 1;

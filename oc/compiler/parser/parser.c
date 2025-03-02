@@ -56,6 +56,8 @@ static u_int16_t parser_line_num = 1;
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
 
+//The actual file token that we have, given on each parse
+char* current_file_token = NULL;
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
@@ -93,7 +95,7 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	fprintf(stderr, "\n[LINE %d: COMPILER %s]: %s\n", parse_message.line_num, type[parse_message.message], parse_message.info);
+	fprintf(stderr, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_token, parse_message.line_num, type[parse_message.message], parse_message.info);
 }
 
 
@@ -8970,7 +8972,7 @@ static generic_ast_node_t* program(FILE* fl){
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
-front_end_results_package_t parse(FILE* fl){
+front_end_results_package_t parse(FILE* fl, char* file_token){
 	//We always reset the entire thing
 	reset_file(fl);
 
@@ -8986,6 +8988,9 @@ front_end_results_package_t parse(FILE* fl){
 	if(os == NULL){
 		os = calloc(1, sizeof(call_graph_node_t));
 	}
+
+	//Assign the file token
+	current_file_token = file_token;
 
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens

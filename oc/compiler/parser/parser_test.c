@@ -26,7 +26,7 @@ int main(int argc, char** argv){
 			printf("COULD NOT OPEN FILE %s\n", argv[i]);
 		}
 
-		parse(fl);
+		parse(fl, "Sample");
 
 		fclose(fl);
 	}

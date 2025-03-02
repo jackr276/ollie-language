@@ -312,16 +312,30 @@ void destroy_dependency_package(dependency_package_t* package){
  * from scratch, every time. This ensures that there are no incremental build errors, but
  * it also means that if one file can't be compiled, the whole thing will fail
  */
-dependency_package_t preprocess(FILE* fl){
+dependency_package_t preprocess(char* fname){
 	//For any/all error printing
 	char info[500];
 	//The return token. Remember that OC uses an "errors-as-values" approach, 
 	//so this return token will be what we use to communicate errors as well
 	dependency_package_t ret_package;
 
+	//Attempt to open the file
+	FILE* fl = fopen(fname, "r");
+
+	//Error out completely here
+	if(fl == NULL){
+		sprintf(info, "File \"%s\" could not be opened", fname);
+		print_preproc_error(PREPROC_ERR, "info");
+		ret_package.return_token = PREPROC_ERROR;
+		return ret_package;
+	}
+
 	//Otherwise it did work. In this instance, we will return the dependency package result in here. The actual 
 	//orienting of compiler direction is done by a different submodule
 	ret_package = determine_linkage_and_dependencies(fl);
+
+	//Now we close the file
+	fclose(fl);
 
 	return ret_package;
 }

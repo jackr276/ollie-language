@@ -76,6 +76,6 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 /**
  * Parse the entirety of the file. Returns 0 if successful
  */
-front_end_results_package_t parse(FILE* FL);
+front_end_results_package_t parse(FILE* FL, char* file_token);
 
 #endif /* PARSER_H */

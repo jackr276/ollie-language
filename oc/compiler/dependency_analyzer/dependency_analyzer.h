@@ -8,7 +8,6 @@
 //Include guards
 #ifndef DEPENDENCY_ANALYZER_H
 #define DEPENDENCY_ANALYZER_H
-#include "../preprocessor/preprocessor.h"
 #include <sys/types.h>
 
 //The length of filenames with some extra space for good measure

@@ -57,7 +57,7 @@ struct dependency_package_t{
  * However, if a file does have external dependencies, they will need to be
  * declared at the absolute top of the file
 */
-dependency_package_t preprocess(FILE* fl);
+dependency_package_t preprocess(char* fname);
 
 /**
  * For convenience, destroy the dependency package in its entirety
