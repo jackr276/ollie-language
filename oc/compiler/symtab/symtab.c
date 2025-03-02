@@ -16,8 +16,8 @@ static void print_generic_type(generic_type_t* type);
  * Print a generic warning for the type system. This is used when variables/functions are 
  * defined and not used
  */
-static void print_warning(char* info, u_int16_t line_number){
-	fprintf(stderr, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info);
+static void print_warning(char* info, char* file_token, u_int16_t line_number){
+	fprintf(stderr, "\n[FILE: %s] --> [LINE %d: COMPILER WARNING]: %s\n", file_token, line_number, info);
 }
 
 
@@ -706,6 +706,7 @@ void print_type_record(symtab_type_record_t* record){
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){
+	printf("In file with token %s:\n", record->module_defined_in);
 	//If it's static we'll add the keyword in
 	if(record->storage_class == STORAGE_CLASS_STATIC){
 		printf("\t---> %d | fn:static %s(", record->line_number, record->func_name);
@@ -743,6 +744,7 @@ void print_function_name(symtab_function_record_t* record){
  * Intended for error messages
  */
 void print_variable_name(symtab_variable_record_t* record){
+	printf("In file with token %s:\n", record->module_defined_in);
 	//If it's part of a function we'll just print that
 	if(record->is_function_paramater == 1){
 		print_function_name(record->parent_function);
@@ -875,7 +877,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnin
 				(*num_warnings)++;
 
 				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name);
-				print_warning(info, record->line_number);
+				print_warning(info, record->module_defined_in, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
 			} else if(record->called == 0 && record->defined == 1){
@@ -883,7 +885,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnin
 				(*num_warnings)++;
 
 				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name);
-				print_warning(info, record->line_number);
+				print_warning(info, record->module_defined_in, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
 
@@ -892,7 +894,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnin
 				(*num_warnings)++;
 
 				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name);
-				print_warning(info, record->line_number);
+				print_warning(info, record->module_defined_in, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
 
@@ -942,7 +944,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int16_t* num_warnings){
 			//We have a non initialized variable
 			if(record->initialized == 0){
 				sprintf(info, "Variable \"%s\" is never initialized. First defined here:", record->var_name);
-				print_warning(info, record->line_number);
+				print_warning(info, record->module_defined_in, record->line_number);
 				print_variable_name(record);
 				(*num_warnings)++;
 				//Go to the next iteration
@@ -952,7 +954,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int16_t* num_warnings){
 			//If it's mutable but never mutated
 			if(record->is_mutable == 1 && record->assigned_to == 0){
 				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name);
-				print_warning(info, record->line_number);
+				print_warning(info, record->module_defined_in, record->line_number);
 				print_variable_name(record);
 				(*num_warnings)++;
 			}

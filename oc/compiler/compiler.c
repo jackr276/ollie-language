@@ -94,15 +94,7 @@ static u_int8_t has_file_been_compiled(char* file_name){
  *  that gives us the order needed for compilation. We will then perform a reverse
  *  level-order traversal and compile in that order
  */
-static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
-	printf("\n===============================================================================\n");
-	//For user readability
-	if(is_dependency == 0){
-		printf("COMPILE STARTED FOR MAIN FILE: %s\n\n", fname);
-	} else {
-		printf("COMPILE STARTED FOR REQUIRED FILE: %s\n\n", fname);
-	}
-
+static front_end_results_package_t compile(char* fname){
 	//Declare our return package
 	front_end_results_package_t results;
 	//These are all NULL initially
@@ -158,7 +150,7 @@ static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
 		//If this has not been compiled already
 		if(has_file_been_compiled(current_dependency) == 0){
 			//Then we'll compile it
-			results = compile(current_dependency, 1);
+			results = compile(current_dependency);
 
 			//If results is bad, we fail here
 			if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -179,15 +171,6 @@ static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
 	//Add this file to the list of compiled files
 	add_compiled_file(fname);
 
-	//Display to the user that the compile worked
-	if(is_dependency == 1){
-		printf("COMPILE FOR REQUIRED FILE %s SUCCEEDED", fname);
-	} else {
-		printf("COMPILE FOR MAIN FILE %s SUCCEEDED", fname);
-	}
-
-	printf("\n===============================================================================\n");
-
 	//Give back the results
 	return results;
 }
@@ -206,7 +189,8 @@ int main(int argc, char** argv){
 	//How much time we've spent
 	double time_spent;
 
-	printf("==================================== Ollie Compiler ======================================\n");
+	fprintf(stderr, "==================================== Ollie Compiler ======================================\n");
+
 	//Just hop out here
 	if(argc < 2){
 		fprintf(stderr, "Ollie compiler requires a filename to be passed in\n");
@@ -232,7 +216,7 @@ int main(int argc, char** argv){
 	char* fname = argv[1];
 
 	//Call the compiler, let this handle it
-	results = compile(fname, 0);
+	results = compile(fname);
 
 	//We'll store the number of warnings and such here locally
 	u_int32_t num_warnings = results.num_warnings;

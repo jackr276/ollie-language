@@ -77,6 +77,8 @@ struct symtab_function_record_t{
 	void* entrance_block;
 	//The name that we are storing. This is used to derive the hash
 	char func_name[100];
+	//The module it was defined in
+	char module_defined_in[100];
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
@@ -111,6 +113,8 @@ struct symtab_function_record_t{
 struct symtab_variable_record_t{
 	//Variable name
 	char var_name[100];
+	//The module it was defined in
+	char module_defined_in[100];
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it
@@ -183,6 +187,8 @@ struct symtab_constant_record_t{
 	u_int16_t line_number;
 	//The name
 	char name[100];
+	//The module it was defined in
+	char module_defined_in[100];
 	//We'll link directly to the constant node here
 	void* constant_node;
 	//For linked list functionality

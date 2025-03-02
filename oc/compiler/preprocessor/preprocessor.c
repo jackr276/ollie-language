@@ -27,6 +27,8 @@ typedef enum{
 	PREPROC_INFO,
 } preproc_msg_type_t;
 
+//The token of the current file that we are in
+static char* current_file_token = NULL;
 
 /**
  * Print out a custom, stylized preprocessor error for the user
@@ -36,7 +38,12 @@ static void print_preproc_error(preproc_msg_type_t type, char* error_message){
 	char* message_types[3] = {"ERROR", "WARNING", "INFO"};
 
 	//Print out the error in a stylized manner
-	printf("[PREPROCESSOR %s]: %s\n", message_types[type], error_message);
+	if(current_file_token == NULL){
+		printf("[PREPROCESSOR %s]: %s\n", message_types[type], error_message);
+	//We can add the name in here
+	} else {
+		printf("[FILE: %s] --> [PREPROCESSOR %s]: %s\n", current_file_token, message_types[type], error_message);
+	}
 }
 
 /**
@@ -47,7 +54,11 @@ static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_mes
 	char* message_types[3] = {"ERROR", "WARNING", "INFO"};
 
 	//Print out the error in a stylized manner
-	printf("[LINE %d | PREPROCESSOR %s]: %s\n", line_num, message_types[type], error_message);
+	if(current_file_token == NULL){
+		printf("[LINE %d | PREPROCESSOR %s]: %s\n", line_num, message_types[type], error_message);
+	} else {
+		printf("[FILE: %s] --> [LINE %d | PREPROCESSOR %s]: %s\n", current_file_token, line_num, message_types[type], error_message);
+	}
 }
 
 /**
@@ -94,6 +105,9 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 
 	//Now we can copy the name of this file(referred to as a token) into the results package
 	strncpy(return_package.module_name, lookahead.lexeme, 100);
+
+	//Save this for later on
+	current_file_token = return_package.module_name;
 
 	//One last thing -- need to see the semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
