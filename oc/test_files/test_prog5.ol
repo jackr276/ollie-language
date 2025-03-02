@@ -33,6 +33,7 @@ fn saturating_add(x:i32, y:i32) -> i32{
 #dependencies
 //============================================
 require "./oc/test_files/test_prog4.ol";
+//require "test_prog4.ol";
 //============================================
 #dependencies
 

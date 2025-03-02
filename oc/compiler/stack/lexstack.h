@@ -64,6 +64,6 @@ Lexer_item peek_token(lex_stack_t* stack);
 /**
  * Destroy the stack with a proper cleanup
  */
-void destroy_lex_stack(lex_stack_t* stack);
+void destroy_lex_stack(lex_stack_t** stack);
 
 #endif /* LEX_STACK_H */

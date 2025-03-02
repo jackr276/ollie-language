@@ -40,7 +40,7 @@ u_int16_t line_num = 0;
 int16_t token_char_count = 0;
 
 //Our lexer stack
-lex_stack_t* pushed_back_tokens = NULL;
+static lex_stack_t* pushed_back_tokens = NULL;
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -939,7 +939,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 		lex_item.char_count = 0;
 		lex_item.line_num = *parser_line_num;
 		//Destroy the stack
-		destroy_lex_stack(pushed_back_tokens);
+		destroy_lex_stack(&pushed_back_tokens);
 	}
 
 	return lex_item;
@@ -970,12 +970,5 @@ void print_token(Lexer_item* l){
 void reset_file(FILE* fl){
 	//Reset the file pointer
 	fseek(fl, 0, SEEK_SET);
-
-	//We need to refresh the entire stack too
-	destroy_lex_stack(pushed_back_tokens);
-
-	//And then recreate the entire thing
-	pushed_back_tokens = create_lex_stack();
-
 	//Now we've reset
 }

@@ -129,7 +129,7 @@ Lexer_item peek_token(lex_stack_t* stack){
 /**
  * Completely free all memory in the stack
  */
-void destroy_lex_stack(lex_stack_t* stack){
+void destroy_lex_stack(lex_stack_t** stack){
 	//Just in case...
 	if(stack == NULL){
 		printf("ERROR: Attempt to free a null pointer\n");
@@ -138,7 +138,7 @@ void destroy_lex_stack(lex_stack_t* stack){
 
 	//Define a cursor and a temp
 	void* temp;
-	lex_node_t* cursor = stack->top;
+	lex_node_t* cursor = (*stack)->top;
 
 	//Free every node
 	while(cursor != NULL){
@@ -153,5 +153,8 @@ void destroy_lex_stack(lex_stack_t* stack){
 	}
 
 	//Finally free the stack
-	free(stack);
+	free(*stack);
+
+	//Set to NULL as a warning
+	*stack = NULL;
 }

@@ -7,6 +7,7 @@
 #define PARSER_H
 
 #include "../stack/heapstack.h"
+#include "../stack/lexstack.h"
 #include "../symtab/symtab.h"
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
@@ -54,6 +55,8 @@ struct front_end_results_package_t{
 	variable_symtab_t* variable_symtab;
 	type_symtab_t* type_symtab;
 	constants_symtab_t* constant_symtab;
+	//Grouping stack
+	lex_stack_t* grouping_stack;
 	//Global call graph entry point
 	call_graph_node_t* os;
 	//Number of errors

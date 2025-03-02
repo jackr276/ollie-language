@@ -1,3 +1,7 @@
+/**
+* Example
+*/
+
 #file TEST_PROG_4;
 
 fn my_func(mut i:u32, mut j:u32) -> i32{

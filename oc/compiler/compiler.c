@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
-#include "lexer/lexer.h"
 #include "parser/parser.h"
 #include "preprocessor/preprocessor.h"
 #include "symtab/symtab.h"
@@ -81,9 +80,14 @@ static u_int8_t has_file_been_compiled(char* file_name){
  *	Compile an individual file. This function can be recursively called to deal 
  *	with dependencies
  */
-static front_end_results_package_t compile(char* fname){
+static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
+	printf("\n===============================================================================\n");
 	//For user readability
-	printf("COMPILE STARTED FOR: %s", fname);
+	if(is_dependency == 0){
+		printf("COMPILE STARTED FOR MAIN FILE: %s\n\n", fname);
+	} else {
+		printf("COMPILE STARTED FOR REQUIRED FILE: %s\n\n", fname);
+	}
 
 	//Declare our return package
 	front_end_results_package_t results;
@@ -142,13 +146,14 @@ static front_end_results_package_t compile(char* fname){
 		//If this has not been compiled already
 		if(has_file_been_compiled(current_dependency) == 0){
 			//Then we'll compile it
-			results = compile(current_dependency);
+			results = compile(current_dependency, 1);
+
+			//If results is bad, we fail here
+			if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
+				return results;
+			}
 		}
 	}
-
-	//After we are done preprocessing, we should reset the entire lexer to the start, so that
-	//we get an accurate parse
-	reset_file(fl);
 
 	//Now we'll parse the whole thing
 	results = parse(fl);
@@ -158,6 +163,15 @@ static front_end_results_package_t compile(char* fname){
 
 	//Add this file to the list of compiled files
 	add_compiled_file(fname);
+
+	//Display to the user that the compile worked
+	if(is_dependency == 1){
+		printf("COMPILE FOR REQUIRED FILE %s SUCCEEDED", fname);
+	} else {
+		printf("COMPILE FOR MAIN FILE %s SUCCEEDED", fname);
+	}
+
+	printf("\n===============================================================================\n");
 
 	//Give back the results
 	return results;
@@ -203,7 +217,7 @@ int main(int argc, char** argv){
 	char* fname = argv[1];
 
 	//Call the compiler, let this handle it
-	results = compile(fname);
+	results = compile(fname, 0);
 
 	//We'll store the number of warnings and such here locally
 	u_int32_t num_warnings = results.num_warnings;

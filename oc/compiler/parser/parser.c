@@ -8974,6 +8974,9 @@ front_end_results_package_t parse(FILE* fl){
 	num_errors = 0;
 	num_warnings = 0;
 
+	//We always reset the entire thing
+	reset_file(fl);
+
 	//Initialize all of our symtabs
 	if(function_symtab == NULL && type_symtab == NULL && variable_symtab == NULL && constant_symtab == NULL){
 		function_symtab = initialize_function_symtab();
@@ -9000,7 +9003,9 @@ front_end_results_package_t parse(FILE* fl){
 	add_all_basic_types(type_symtab);
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
-	grouping_stack = create_lex_stack();
+	if(grouping_stack == NULL){
+		grouping_stack = create_lex_stack();
+	}
 
 	//Global entry/run point, will give us a tree with
 	//the root being here
@@ -9018,6 +9023,7 @@ front_end_results_package_t parse(FILE* fl){
 	results.variable_symtab = variable_symtab;
 	results.type_symtab = type_symtab;
 	results.constant_symtab = constant_symtab;
+	results.grouping_stack = grouping_stack;
 	//AST root
 	results.root = prog;
 	//Call graph OS root
@@ -9027,9 +9033,6 @@ front_end_results_package_t parse(FILE* fl){
 	results.num_warnings = num_warnings;
 	//How many lines did we process?
 	results.lines_processed = parser_line_num;
-
-	//Destroy the stack, no longer needed
-	destroy_lex_stack(grouping_stack);
 
 	return results;
 }
