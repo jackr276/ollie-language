@@ -8971,9 +8971,6 @@ static generic_ast_node_t* program(FILE* fl){
  * static methods
 */
 front_end_results_package_t parse(FILE* fl){
-	num_errors = 0;
-	num_warnings = 0;
-
 	//We always reset the entire thing
 	reset_file(fl);
 

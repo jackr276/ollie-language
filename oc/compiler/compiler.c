@@ -29,11 +29,20 @@ struct compiled_file_token_t{
 //Initially nothing has been compiled
 compiled_file_token_t* head = NULL;
 
+
 /**
  * Compiled file list destructor
  */
 static void deallocate_compiled_files(){
+	//Grab a temp variable for deallocation
+	compiled_file_token_t* temp;
 
+	//So long as this isn't null
+	while(head != NULL){
+		temp = head;
+		head = head->next;
+		free(temp);
+	}
 }
 
 
@@ -98,8 +107,6 @@ static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
 	results.variable_symtab = NULL;
 	results.os = NULL;
 	results.root = NULL;
-	results.num_warnings = 0;
-	results.num_errors = 0;
 
 	//First we try to open the file
 	FILE* fl = fopen(fname, "r");
@@ -154,6 +161,9 @@ static front_end_results_package_t compile(char* fname, u_int8_t is_dependency){
 			}
 		}
 	}
+
+	//We're done with this package, we don't need it 
+	destroy_dependency_package(&dependencies);
 
 	//Now we'll parse the whole thing
 	results = parse(fl);
@@ -253,6 +263,7 @@ int main(int argc, char** argv){
 	destroy_variable_symtab(results.variable_symtab);
 	destroy_constants_symtab(results.constant_symtab);
 	dealloc_cfg(cfg);
+	deallocate_compiled_files();
 	
 	//Timer end
 	clock_t end = clock();
