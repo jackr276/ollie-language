@@ -11,12 +11,11 @@
 #include "../preprocessor/preprocessor.h"
 #include <sys/types.h>
 
-#define MAX_DEPENDENCIES 100;
+//The length of filenames with some extra space for good measure
+#define FILENAME_LENGTH 260 
 
-//A struct that will be used for the compiler order of compilation
-typedef struct compiler_order_graph_t compiler_order_graph_t;
-//A node item intended as a linked list
-typedef struct compiler_order_node_t compiler_order_node_t;
+//A node for tree
+typedef struct dependency_tree_node_t dependency_tree_node_t;
 
 //Determine the health of the compiler order
 typedef enum{
@@ -25,48 +24,31 @@ typedef enum{
 	COMPILER_ORDER_CIRC_DEP
 } compiler_order_status_t;
 
-struct compiler_order_graph_t{
-	//We simply maintain a first node as a reference to the graph in
-	//memory
-	compiler_order_node_t* first_node;
-	//And we'll also keep track of the compiler order's status
-	compiler_order_status_t status;
-};
-
-struct compiler_order_node_t{
-	//The next node - linked list functionality
-	compiler_order_node_t* connections[100];
+struct dependency_tree_node_t{
+	//N-ary tree structure, first child and next sibling
+	dependency_tree_node_t* first_child;
+	dependency_tree_node_t* next_sibling;
 	//Keep track of how many that we have
 	u_int16_t num_connections;
 	//Has it been visited?
 	u_int8_t visited;
 	//The file that we'll need to compile
-	char filename[256];
+	char filename[FILENAME_LENGTH];
 };
-
-/**
- * Determine the overall dependency chain
- */
-//compiler_order_t determine_compiler_order(dependency_package_t* dependencies);
-
-/**
- * Initialize the dependency graph
- */
-compiler_order_graph_t* initialize_dependency_graph();
 
 /**
  * Create and add a node to the graph
  */
-compiler_order_node_t* create_and_add_node(compiler_order_graph_t* graph, char* filename);
+dependency_tree_node_t* dependency_tree_node_alloc(char* filename);
 
 /**
  * Add a directed connection between two nodes
  */
-void add_connections(compiler_order_node_t* from, compiler_order_graph_t* to);
+void add_child_node(dependency_tree_node_t* parent, dependency_tree_node_t* child);
 
 /**
  * Destructor - used for memory freeing
 */
-void destroy_dependency_graph(compiler_order_graph_t* compiler_order);
+void destroy_dependency_tree(dependency_tree_node_t* root);
 
 #endif
