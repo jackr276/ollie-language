@@ -77,6 +77,8 @@ typedef enum{
 	THREE_ADDR_CODE_NEG_STATEMENT,
 	//SPECIAL CASE - assembly inline statement
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
+	//Another special case - a switch statement
+	THREE_ADDR_CODE_SWITHC_STMT,
 } three_addr_code_stmt_class_t;
 
 /**

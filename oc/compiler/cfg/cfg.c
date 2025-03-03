@@ -1818,24 +1818,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 
 /**
- * Visit a case statement. These statements are handled like individual blocks
- */
-static basic_block_t* visit_case_statement(values_package_t* values){
-	//For a case statement, we just go through the statement and process
-	//as usual. However first, we need to assign it it's own block ID. These
-	//block IDs will be important, as our jump table uses them to implement the
-	//switch statement functionality
-	
-	//Create it
-	basic_block_t* case_stmt_block = basic_block_alloc();
-
-
-	//We'll always give this one back
-	return case_stmt_block;
-}
-
-
-/**
  * Visit a default statement.  These statements are also handled like individual blocks that can 
  * be jumped to
  */
@@ -1854,10 +1836,44 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 
 
 /**
+ * Visit a case statement. It is very important that case statements know
+ * where the end of the switch statement is, in case break statements are used
+ */
+static basic_block_t* visit_case_statement(values_package_t* values){
+	//We need to make the block first
+	basic_block_t* case_stmt = basic_block_alloc();
+
+
+	//Give the block back
+	return case_stmt;
+}
+
+
+/**
  * Visit a switch statement
  */
 static basic_block_t* visit_switch_statement(values_package_t* values){
+	//The starting block for the switch statement - we'll want this in a new
+	//block
+	basic_block_t* starting_block = basic_block_alloc();
+	//We also need to know the ending block here -- Knowing
+	//this is important for break statements
+	basic_block_t* ending_block = basic_block_alloc();
 
+	//We need a quick reference to the starting block ID
+	u_int16_t starting_block_id = starting_block->block_id;
+
+	//We also need a jump table block
+	basic_block_t* jump_table_block = basic_block_alloc();
+	//We need a reference to this block ID too
+	u_int16_t jump_table_block_id = starting_block->block_id;
+
+	
+
+
+	
+	//Give back the starting block
+	return starting_block;
 }
 
 
