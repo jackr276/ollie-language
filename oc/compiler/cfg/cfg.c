@@ -1868,7 +1868,55 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//We need a reference to this block ID too
 	u_int16_t jump_table_block_id = starting_block->block_id;
 
+	/**
+	 * Here's the plan: We will go through every single case statement
+	 * and the one default statement that we contain here, processing
+	 * them each time. We will make a note of the values that they
+	 * have for later on, and then after that fact we will create our
+	 * jump table. It is an expectation that users will enter in switch
+	 * statements out of order. This is unavoidable. To remedy this, we will
+	 * sort them ourselves. This will however destroy any fall through dependencies, 
+	 * so we will warn the user of this fact when we do
+	 */
+
+	//If this is empty, serious issue
+	if(values->initial_node == NULL){
+		//Print this message
+		print_cfg_message(WARNING, "Empty switch statement detected", values->initial_node->line_number);
+		(*num_warnings_ref)++;
+		//It's just going to be empty
+		return starting_block;
+	}
+
+	//Grab a cursor to the switch statements
+	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
+
+	//The very first thing should be an expression telling us what to switch on
+	//TODO COME BACK HERE
 	
+	//Get to the next statement
+	case_stmt_cursor = case_stmt_cursor->next_sibling;
+	
+
+	//We'll also keep a reference to the curent block.
+	while(case_stmt_cursor != NULL){
+		//Handle a case statement
+		if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CASE_STMT){
+
+		//Handle a default statement
+		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
+
+		//Otherwise we fail out here
+		} else {
+			print_cfg_message(PARSE_ERROR, "Switch statements are only allowed \"case\" and \"default\" statements", case_stmt_cursor->line_number);
+		}
+
+		//We are going to insert these into a priority queue
+
+
+		//Move the cursor up
+		case_stmt_cursor = case_stmt_cursor->next_sibling;
+	}
 
 
 	
@@ -2323,7 +2371,29 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		//statement, we leverage some very unique properties of the enumerable
 		//types that it uses
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_SWITCH_STMT){
-			//TODO IMPLEMENT
+			//Set the initial node
+			values->initial_node = ast_cursor;
+
+			//Visit the switch statement
+			basic_block_t* switch_stmt_entry = visit_switch_statement(values);
+
+			//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
+			//starting block's direct successor
+			if(starting_block == NULL){
+				starting_block = switch_stmt_entry;
+			} else {
+				//Otherwise this is a direct successor
+				add_successor(starting_block, switch_stmt_entry);
+			}
+
+			//We need to drill to the end
+			//Set this to be current
+			current_block = switch_stmt_entry;
+
+			//Once we're here the start is in current
+			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
+				current_block = current_block->direct_successor;
+			}
 
 		//These are 100% user generated,
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
