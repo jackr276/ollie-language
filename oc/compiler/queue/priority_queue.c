@@ -6,6 +6,8 @@
 
 #include "priority_queue.h"
 #include <stdlib.h>
+#include <strings.h>
+#include <sys/types.h>
 
 // Initially the queue size is 50. This is usually enough for most switch statements. Of course
 // if a user writes more than 50 cases, it will be accomodated
@@ -28,6 +30,74 @@ priority_queue_t initialize_priority_queue(){
 	//And give back a copy
 	return queue;
 }
+
+
+/**
+ * Get the parent index of something in the heap. This is
+ * always half of one less than the index
+ */
+static u_int16_t get_parent_index(u_int16_t index){
+	return (index - 1 ) / 2;
+}
+
+
+/**
+ * Swap the two given indices. Remember that this heap isn't a heap of
+ * pointers, so it's not as simple as swapping pointers
+ */
+static void swap(priority_queue_t* queue, u_int16_t index1, u_int16_t index2){
+	//Grab out index 1
+	priority_queue_node_t temp = queue->heap[index1];
+
+	//Put index 2 in 1's spot
+	queue->heap[index1] = queue->heap[index2];
+
+	//Then put 1 back in 2's spot
+	queue->heap[index2] = temp;
+}
+
+
+/**
+ * Generic min-heapify operation. This will recursively
+ * "down-heapify" because we start at the front and go forwards
+ */
+static void min_heapify(priority_queue_t* queue, u_int16_t index){
+	//Initially set smallest to be what we're given
+	u_int16_t smallest_index = index;
+
+	//Get the left and right children here
+	u_int16_t left_child_index = index * 2 + 1;
+	u_int16_t right_child_index = index * 2 + 2;
+
+	/**
+	 * If the left child is actually there(first condition) and it's priority
+	 * is less than the "smallest" index, it is our new smallest
+	 */
+	if(left_child_index < queue->next_index && 
+		queue->heap[left_child_index].priority < queue->heap[smallest_index].priority){
+		smallest_index = left_child_index;
+	}
+
+	/**
+	 * If the right child is actually there(first condition) and it's priority
+	 * is less than the "smallest" index, it is our new smallest
+	 */
+	if(right_child_index < queue->next_index && 
+		queue->heap[right_child_index].priority < queue->heap[smallest_index].priority){
+		smallest_index = right_child_index;
+	}
+
+	//If we found something smaller than the index, we must swap
+	if(smallest_index != index){
+		//Swap the index and smallest index
+		swap(queue, index, smallest_index);
+
+		//Recursively min-heapify with the new 
+		//smallest index
+		min_heapify(queue, smallest_index);
+	}
+}
+
 
 /**
  * Insert a node into the priority queue
