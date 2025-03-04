@@ -4926,7 +4926,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 				//Otherwise, just set the current type record to be what we found
 				current_type_record = found_pointer;
 				//We don't need the other ponter if this is the case
-				destroy_type(pointer);
+				type_dealloc(pointer);
 			}
 
 		//Otherwise we know that we found an array pointer
@@ -4963,7 +4963,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 				//Otherwise, just set the current type record to be what we found
 				current_type_record = found_array;
 				//We don't need the other one if this is the case
-				destroy_type(array_type);
+				type_dealloc(array_type);
 			}
 		}
 
@@ -8985,10 +8985,10 @@ front_end_results_package_t parse(FILE* fl, char* file_token){
 
 	//Initialize all of our symtabs
 	if(function_symtab == NULL && type_symtab == NULL && variable_symtab == NULL && constant_symtab == NULL){
-		function_symtab = initialize_function_symtab();
-		variable_symtab = initialize_variable_symtab();
-		type_symtab = initialize_type_symtab();
-		constant_symtab = initialize_constants_symtab(); 
+		function_symtab = function_symtab_alloc();
+		variable_symtab = variable_symtab_alloc();
+		type_symtab = type_symtab_alloc();
+		constant_symtab = constants_symtab_alloc(); 
 	}
 
 	//Initialize the OS call graph
@@ -9013,7 +9013,7 @@ front_end_results_package_t parse(FILE* fl, char* file_token){
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	if(grouping_stack == NULL){
-		grouping_stack = create_lex_stack();
+		grouping_stack = lex_stack_alloc();
 	}
 
 	//Global entry/run point, will give us a tree with

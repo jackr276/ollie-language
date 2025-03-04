@@ -38,7 +38,7 @@ typedef struct {
 /**
  * Initialize a stack
  */
-lex_stack_t* create_lex_stack();
+lex_stack_t* lex_stack_alloc();
 
 /**
  * Push a pointer onto the top of the stack
@@ -64,6 +64,6 @@ Lexer_item peek_token(lex_stack_t* stack);
 /**
  * Destroy the stack with a proper cleanup
  */
-void destroy_lex_stack(lex_stack_t** stack);
+void lex_stack_dealloc(lex_stack_t** stack);
 
 #endif /* LEX_STACK_H */

@@ -51,6 +51,6 @@ void add_dependency_node(dependency_tree_node_t* parent, dependency_tree_node_t*
 /**
  * Destructor - used for memory freeing
 */
-void destroy_dependency_tree();
+void dependency_tree_dealloc();
 
 #endif

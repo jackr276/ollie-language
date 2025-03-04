@@ -279,12 +279,12 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt);
 /**
  * Destroy a three address variable
 */
-void deallocate_three_addr_var(three_addr_var_t* var);
+void three_addr_var_dealloc(three_addr_var_t* var);
 
 /**
  * Destroy an entire three address code statement
 */
-void deallocate_three_addr_stmt(three_addr_code_stmt_t* stmt);
+void three_addr_stmt_dealloc(three_addr_code_stmt_t* stmt);
 
 /**
  * Destroy all variables

@@ -436,7 +436,7 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child){
 /**
  * Global tree deallocation function
  */
-void deallocate_ast(){
+void ast_dealloc(){
 	//For our own safety here
 	if(head_node == NULL){
 		return;

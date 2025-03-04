@@ -18,7 +18,7 @@ int main(){
 	char* idents_l2[] = {"x", "y"};
 
 	//Initialize the global symtab
-	variable_symtab_t* symtab = initialize_variable_symtab();
+	variable_symtab_t* symtab = variable_symtab_alloc();
 
 	//We always initialize the scope
 	initialize_variable_scope(symtab);
@@ -57,5 +57,5 @@ int main(){
 	print_variable_record(found);
 
 	//Destroy it with the top reference
-	destroy_variable_symtab(symtab);
+	variable_symtab_dealloc(symtab);
 }

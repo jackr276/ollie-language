@@ -442,7 +442,7 @@ generic_type_t* dealias_type(generic_type_t* type){
 /**
  * Provide a way of destroying a type variable easily
 */
-void destroy_type(generic_type_t* type){
+void type_dealloc(generic_type_t* type){
 	//We'll take action based on what kind of type it is
 	if(type->type_class == TYPE_CLASS_BASIC){
 		free(type->basic_type);

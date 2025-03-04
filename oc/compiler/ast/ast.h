@@ -270,7 +270,6 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child);
 /**
  * Global tree deallocation function
  */
-void deallocate_ast();
-
+void ast_dealloc();
 
 #endif /* AST_T */

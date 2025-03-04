@@ -36,7 +36,7 @@ typedef struct {
 /**
  * Initialize a stack
  */
-heap_stack_t* create_stack();
+heap_stack_t* heap_stack_alloc();
 
 /**
  * Push a pointer onto the top of the stack
@@ -62,6 +62,6 @@ void* peek(heap_stack_t* stack);
 /**
  * Destroy the stack with a proper cleanup
  */
-void destroy_stack(heap_stack_t* stack);
+void heap_stack_dealloc(heap_stack_t* stack);
 
 #endif /* HEAP_STACK_H */

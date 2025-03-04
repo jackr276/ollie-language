@@ -284,25 +284,25 @@ struct function_symtab_t{
 /**
  * Initialize a function symtab
  */
-function_symtab_t* initialize_function_symtab();
+function_symtab_t* function_symtab_alloc();
 
 
 /**
  * Initialize a symbol table for variables.
  */
-variable_symtab_t* initialize_variable_symtab();
+variable_symtab_t* variable_symtab_alloc();
 
 
 /**
  * Initialize a symbol table for types
  */
-type_symtab_t* initialize_type_symtab();
+type_symtab_t* type_symtab_alloc();
 
 
 /**
  * Initialize a symbol table for constants
  */
-constants_symtab_t* initialize_constants_symtab();
+constants_symtab_t* constants_symtab_alloc();
 
 
 /**
@@ -462,21 +462,21 @@ void print_type_name(symtab_type_record_t* record);
 /**
  * Destroy a function symtab
  */
-void destroy_function_symtab(function_symtab_t* symtab);
+void function_symtab_dealloc(function_symtab_t* symtab);
 
 /**
  * Destroy a variable symtab
  */
-void destroy_variable_symtab(variable_symtab_t* symtab);
+void variable_symtab_dealloc(variable_symtab_t* symtab);
 
 /**
  * Destroy a type symtab 
  */
-void destroy_type_symtab(type_symtab_t* symtab);
+void type_symtab_dealloc(type_symtab_t* symtab);
 
 /**
  * Destroy a constants symtab
  */
-void destroy_constants_symtab(constants_symtab_t* symtab);
+void constants_symtab_dealloc(constants_symtab_t* symtab);
 
 #endif /* SYMTAB_H */

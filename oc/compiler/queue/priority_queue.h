@@ -50,7 +50,7 @@ struct priority_queue_node_t{
 /**
  * Initialize the priority queue - returns a copy
  */
-priority_queue_t initialize_priority_queue();
+priority_queue_t priority_queue_alloc();
 
 /**
  * Insert a node with a given priority into the priority queue. Return
@@ -71,6 +71,6 @@ u_int8_t priority_queue_is_empty(priority_queue_t* queue);
 /**
  * Deallocate the memory of the priority queue
 */
-void deallocate_priority_queue(priority_queue_t* queue);
+void priority_queue_dealloc(priority_queue_t* queue);
 
 #endif /* PRIORITY_QUEUE_H */

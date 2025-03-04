@@ -750,7 +750,7 @@ three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_n
 /**
  * Deallocate the variable portion of a three address code
 */
-void deallocate_three_addr_var(three_addr_var_t* var){
+void three_addr_var_dealloc(three_addr_var_t* var){
 	//Null check as appropriate
 	if(var != NULL){
 		free(var);
@@ -760,7 +760,7 @@ void deallocate_three_addr_var(three_addr_var_t* var){
 /**
  * Dellocate the constant portion of a three address code
  */
-void deallocate_three_addr_const(three_addr_const_t* constant){
+void three_addr_const_dealloc(three_addr_const_t* constant){
 	//Null check as appropriate
 	if(constant != NULL){
 		free(constant);
@@ -771,7 +771,7 @@ void deallocate_three_addr_const(three_addr_const_t* constant){
 /**
  * Deallocate the entire three address code statement
 */
-void deallocate_three_addr_stmt(three_addr_code_stmt_t* stmt){
+void three_addr_stmt_dealloc(three_addr_code_stmt_t* stmt){
 	//If the statement is null we bail out
 	if(stmt == NULL){
 		return;

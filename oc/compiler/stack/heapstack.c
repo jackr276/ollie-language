@@ -12,7 +12,7 @@
 /**
  * Create a stack
  */
-heap_stack_t* create_stack(){
+heap_stack_t* heap_stack_alloc(){
 	//Allocate our stack
 	heap_stack_t* stack = (heap_stack_t*)malloc(sizeof(heap_stack_t));
 
@@ -132,7 +132,7 @@ u_int8_t is_empty(heap_stack_t* stack){
  *
  * NOTE: This does nothing to touch whatever void* actually is
  */
-void destroy_stack(heap_stack_t* stack){
+void heap_stack_dealloc(heap_stack_t* stack){
 	//Just in case...
 	if(stack == NULL){
 		printf("ERROR: Attempt to free a null pointer\n");

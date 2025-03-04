@@ -205,7 +205,7 @@ Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search){
 	//If this is NULL, we need to make it
 	if(pushed_back_tokens == NULL){
-		pushed_back_tokens = create_lex_stack();
+		pushed_back_tokens = lex_stack_alloc();
 	}
 
 	//IF we have pushed back tokens, we need to return them first
@@ -939,7 +939,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 		lex_item.char_count = 0;
 		lex_item.line_num = *parser_line_num;
 		//Destroy the stack
-		destroy_lex_stack(&pushed_back_tokens);
+		lex_stack_dealloc(&pushed_back_tokens);
 	}
 
 	return lex_item;

@@ -244,13 +244,13 @@ int main(int argc, char** argv){
 	ast_node_class_t CLASS = results.root->CLASS;
 
 	//FOR NOW -- deallocate this stuff
-	deallocate_ast();
+	ast_dealloc();
 	//Free the call graph holder
 	free(results.os);
-	destroy_function_symtab(results.function_symtab);
-	destroy_type_symtab(results.type_symtab);
-	destroy_variable_symtab(results.variable_symtab);
-	destroy_constants_symtab(results.constant_symtab);
+	function_symtab_dealloc(results.function_symtab);
+	type_symtab_dealloc(results.type_symtab);
+	variable_symtab_dealloc(results.variable_symtab);
+	constants_symtab_dealloc(results.constant_symtab);
 	dealloc_cfg(cfg);
 	deallocate_compiled_files();
 	

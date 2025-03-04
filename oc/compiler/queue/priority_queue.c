@@ -16,7 +16,7 @@
 /**
  * Initialize the priority queue with the default size
 */
-priority_queue_t initialize_priority_queue(){
+priority_queue_t priority_queue_alloc(){
 	//Stack allocated
 	priority_queue_t queue;
 
@@ -180,7 +180,7 @@ u_int8_t priority_queue_is_empty(priority_queue_t* queue){
 /**
  * Deallocate the priority queue
 */
-void deallocate_priority_queue(priority_queue_t* queue){
+void priority_queue_dealloc(priority_queue_t* queue){
 	//We need to deallocate the heap only here
 	free(queue->heap);
 	//And we're done

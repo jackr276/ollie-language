@@ -55,7 +55,7 @@ void add_dependency_node(dependency_tree_node_t* parent, dependency_tree_node_t*
 /**
  * Destroy the dependency tree by doing a depth first search
  */
-void destroy_dependency_tree(){
+void dependency_tree_dealloc(){
 	//We will run through the linked list of created nodes, freeing them
 	//one-by-one. This memory management style allows us to free memory
 	//in a low-computing cost way

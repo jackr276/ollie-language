@@ -24,7 +24,7 @@ static void print_warning(char* info, char* file_token, u_int16_t line_number){
 /**
  * Dynamically allocate a function symtab
  */
-function_symtab_t* initialize_function_symtab(){
+function_symtab_t* function_symtab_alloc(){
 	function_symtab_t* symtab = (function_symtab_t*)calloc(1, sizeof(function_symtab_t));
 	//The function symtab's lexical scope is always global
 	symtab->current_lexical_scope = 0;
@@ -36,7 +36,7 @@ function_symtab_t* initialize_function_symtab(){
 /**
  * Dynamically allocate a variable symtab
  */
-variable_symtab_t* initialize_variable_symtab(){
+variable_symtab_t* variable_symtab_alloc(){
 	variable_symtab_t* symtab = (variable_symtab_t*)calloc(1, sizeof(variable_symtab_t));
 	symtab->current_lexical_scope = 0;
 	//Nothing has been initialized yet
@@ -50,7 +50,7 @@ variable_symtab_t* initialize_variable_symtab(){
 /**
  * Dynamically allocate a type symtab
  */
-type_symtab_t* initialize_type_symtab(){
+type_symtab_t* type_symtab_alloc(){
 	type_symtab_t* symtab = (type_symtab_t*)calloc(1, sizeof(type_symtab_t));
 	symtab->next_index = 0;
 	symtab->current_lexical_scope = 0;
@@ -63,7 +63,7 @@ type_symtab_t* initialize_type_symtab(){
 /**
  * Initialize a symbol table for constants
  */
-constants_symtab_t* initialize_constants_symtab(){
+constants_symtab_t* constants_symtab_alloc(){
 	//Simply allocate with the standard allocator
 	constants_symtab_t* symtab = calloc(1, sizeof(constants_symtab_t));
 	return symtab;
@@ -970,7 +970,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int16_t* num_warnings){
 /**
  * Provide a function that will destroy the function symtab completely
  */
-void destroy_function_symtab(function_symtab_t* symtab){
+void function_symtab_dealloc(function_symtab_t* symtab){
 	//For temporary holding
 	symtab_function_record_t* record;
 	symtab_function_record_t* temp;
@@ -1001,7 +1001,7 @@ void destroy_function_symtab(function_symtab_t* symtab){
 /**
  * Provide a function that will destroy the variable symtab completely
  */
-void destroy_variable_symtab(variable_symtab_t* symtab){
+void variable_symtab_dealloc(variable_symtab_t* symtab){
 	symtab_variable_sheaf_t* cursor;
 	symtab_variable_record_t* record;
 	symtab_variable_record_t* temp;
@@ -1033,7 +1033,7 @@ void destroy_variable_symtab(variable_symtab_t* symtab){
 /**
  * Provide a function that will destroy the variable symtab completely
  */
-void destroy_type_symtab(type_symtab_t* symtab){
+void type_symtab_dealloc(type_symtab_t* symtab){
 	symtab_type_sheaf_t* cursor;
 	symtab_type_record_t* record;
 	symtab_type_record_t* temp;
@@ -1051,7 +1051,7 @@ void destroy_type_symtab(type_symtab_t* symtab){
 				temp = record;
 				record = record->next;
 				//Destroy the actual type while here
-				destroy_type(temp->type);
+				type_dealloc(temp->type);
 				free(temp);
 			}
 		}
@@ -1067,7 +1067,7 @@ void destroy_type_symtab(type_symtab_t* symtab){
 /**
  * Destroy a constants symtab
  */
-void destroy_constants_symtab(constants_symtab_t* symtab){
+void constants_symtab_dealloc(constants_symtab_t* symtab){
 	//Create a temp record and cursor for ourselves
 	symtab_constant_record_t* cursor = NULL;
 	symtab_constant_record_t* temp;

@@ -925,7 +925,7 @@ static basic_block_t* basic_block_alloc(){
  */
 static void emit_blocks_dfs(cfg_t* cfg){
 	//We'll need a stack for our DFS
-	heap_stack_t* stack = create_stack();
+	heap_stack_t* stack = heap_stack_alloc();
 
 	//The idea here is very simple. If we can walk the function tree and every control path leads 
 	//to a return statement, we return null from every control path
@@ -959,7 +959,7 @@ static void emit_blocks_dfs(cfg_t* cfg){
 	}
 
 	//Deallocate our stack once done
-	destroy_stack(stack);
+	heap_stack_dealloc(stack);
 }
 
 
@@ -983,7 +983,7 @@ static void basic_block_dealloc(basic_block_t* block){
 		temp = cursor;
 		cursor = cursor->next_statement;
 		//Destroy temp
-		deallocate_three_addr_stmt(temp);
+		three_addr_stmt_dealloc(temp);
 	}
 	
 
@@ -1149,7 +1149,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 	}
 
 	//We'll need a stack for our DFS
-	heap_stack_t* stack = create_stack();
+	heap_stack_t* stack = heap_stack_alloc();
 
 	//The idea here is very simple. If we can walk the function tree and every control path leads 
 	//to a return statement, we return null from every control path
@@ -1206,7 +1206,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 	}
 
 	//Destroy the stack once we're done
-	destroy_stack(stack);
+	heap_stack_dealloc(stack);
 }
 
 
@@ -2661,10 +2661,10 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	type_symtab = results.type_symtab;
 
 	//Create the stack here
-	deferred_stmts = create_stack();
+	deferred_stmts = heap_stack_alloc();
 	
 	//Create the temp vars symtab
-	temp_vars = initialize_variable_symtab();
+	temp_vars = variable_symtab_alloc();
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
@@ -2687,10 +2687,10 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	}
 
 	//Destroy the deferred statements stack
-	destroy_stack(deferred_stmts);
+	heap_stack_dealloc(deferred_stmts);
 	
 	//Destroy the temp variable symtab
-	destroy_variable_symtab(temp_vars);
+	variable_symtab_dealloc(temp_vars);
 
 	//FOR PRINTING
 	emit_blocks_dfs(cfg);

@@ -205,6 +205,6 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 /**
  * Destroy a type that is no longer in use
 */
-void destroy_type(generic_type_t* type);
+void type_dealloc(generic_type_t* type);
 
 #endif /* TYPE_SYSTEM_H */

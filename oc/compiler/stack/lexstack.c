@@ -11,7 +11,7 @@
 /**
  * Create a stack
  */
-lex_stack_t* create_lex_stack(){
+lex_stack_t* lex_stack_alloc(){
 	//Allocate our stack
 	lex_stack_t* stack = (lex_stack_t*)malloc(sizeof(lex_stack_t));
 
@@ -129,7 +129,7 @@ Lexer_item peek_token(lex_stack_t* stack){
 /**
  * Completely free all memory in the stack
  */
-void destroy_lex_stack(lex_stack_t** stack){
+void lex_stack_dealloc(lex_stack_t** stack){
 	//Just in case...
 	if(stack == NULL){
 		printf("ERROR: Attempt to free a null pointer\n");
