@@ -44,7 +44,7 @@ struct priority_queue_node_t{
 	u_int16_t priority;
 	//What is actually in here - usually an AST node,
 	//but this could be anything if needed
-	void* node;
+	void* ptr;
 };
 
 /**

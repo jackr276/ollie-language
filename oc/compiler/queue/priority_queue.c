@@ -108,10 +108,73 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
  * priority has 1 added to it, that way even if it is 0 passed in, it won't be in the system
  */
 insertion_status_t priority_queue_enqueue(priority_queue_t* queue, void *ptr, u_int16_t priority){
+	//Was it out of order or not?
+	insertion_status_t out_of_order = IN_ORDER_INSERT;
 
+	//Automatic resize if needed
+	if(queue->next_index == queue->maximum_size){
+		//Double it
+		queue->maximum_size *= 2;
+		//Realloc
+		queue->heap = realloc(queue->heap, sizeof(priority_queue_node_t) * queue->maximum_size);
+	}
+
+	//See the top explanation for why we do this
+	u_int16_t adjusted_priority = priority + 1;
+
+	//Insert the value at the very end
+	queue->heap[queue->next_index].priority = adjusted_priority;
+	queue->heap[queue->next_index].ptr = ptr;
+
+	//We'll need a reference to this to min-heapify
+	u_int32_t current_index = queue->next_index;
+
+	//Increment this for the next go around
+	queue->next_index++;
+
+	//So long as we're in valid bounds and the child/parent are backwards
+	while(current_index > 0 && 
+		  queue->heap[get_parent_index(current_index)].priority > queue->heap[current_index].priority){
+		//Swap the values
+		swap(queue, get_parent_index(current_index), current_index);
+
+		//Update this index to be it's parent
+		current_index = get_parent_index(current_index);
+
+		//And since we had to reorder, this was an out of order insertion
+		out_of_order = OUT_OF_ORDER_INSERT;
+	}
+
+	return out_of_order;
+}
+
+/**
+ * Dequeue from the priority queue
+ */
+void* priority_queue_dequeue(priority_queue_t* queue){
+	//Save the pointer
+	void* dequeued = queue->heap[0].ptr;
+
+	//Put the last element in the front to prime the heap
+	queue->heap[0] = queue->heap[queue->next_index - 1];
+ 
+	//Decrement the next index
+	queue->next_index--;
+
+	//Minheapify with 0 as the seed to maintain the minheap property
+	min_heapify(queue, 0);
+
+	//Give this pointer back
+	return dequeued;
 }
 
 
+/**
+ * Simply return if the next index is 0
+ */
+u_int8_t priority_queue_is_empty(priority_queue_t* queue){
+	return queue->next_index == 0;
+}
 
 
 /**
