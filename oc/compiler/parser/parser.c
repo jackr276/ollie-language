@@ -47,9 +47,9 @@ static u_int8_t found_default_clause = 0;
 static lex_stack_t* grouping_stack = NULL;
 
 //The number of errors
-static u_int16_t num_errors = 0;
+static u_int16_t num_errors;
 //The number of warnings
-static u_int16_t num_warnings = 0;
+static u_int16_t num_warnings;
 
 //The current parser line number
 static u_int16_t parser_line_num = 1;
@@ -8986,6 +8986,10 @@ static generic_ast_node_t* program(FILE* fl){
 front_end_results_package_t parse(FILE* fl, char* file_token){
 	//We always reset the entire thing
 	reset_file(fl);
+
+	//Set the number of errors here
+	num_errors = 0;
+	num_warnings = 0;
 
 	//Initialize all of our symtabs
 	if(function_symtab == NULL && type_symtab == NULL && variable_symtab == NULL && constant_symtab == NULL){

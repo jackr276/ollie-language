@@ -417,12 +417,12 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name);
 /**
  * Check for and print out any unused functions
  */
-void check_for_unused_functions(function_symtab_t* symtab, u_int16_t* num_warnings);
+void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings);
 
 /**
  * Run through and check for any unused vars, bad mut keywords, etc
  */
-void check_for_var_errors(variable_symtab_t* symtab, u_int16_t* num_warnings);
+void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings);
 
 /**
  * A printing function for development purposes

@@ -19,6 +19,10 @@
 // A list of currently compiled files
 typedef struct compiled_file_token_t compiled_file_token_t;
 
+//The number of errors and warnings
+u_int32_t num_errors;
+u_int32_t num_warnings;
+
 struct compiled_file_token_t{
 	//Linked list functionality - point to the next one
 	compiled_file_token_t* next;
@@ -162,6 +166,10 @@ static front_end_results_package_t compile(char* fname){
 	//Now we'll parse the whole thing
 	results = parse(fl, dependencies.module_name);
 
+	//Increment these while we're here
+	num_errors += results.num_errors;
+	num_warnings += results.num_warnings;
+
 	//We're done with this package, we don't need it 
 	destroy_dependency_package(&dependencies);
 
@@ -218,10 +226,6 @@ int main(int argc, char** argv){
 	//Call the compiler, let this handle it
 	results = compile(fname);
 
-	//We'll store the number of warnings and such here locally
-	u_int32_t num_warnings = results.num_warnings;
-	u_int32_t num_errors = results.num_errors;
-
 	//If the AST root is bad, there's no use in going on here
 	if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
 		goto final_printout;
@@ -229,9 +233,9 @@ int main(int argc, char** argv){
 
 	//Run through and check for any unused functions. This generates warnings for the user,
 	//and can be done before any construction of a CFG. As such, we do this here
-	check_for_unused_functions(results.function_symtab, &results.num_warnings);
+	check_for_unused_functions(results.function_symtab, &num_warnings);
 	//Check for any bad variable declarations
-	check_for_var_errors(results.variable_symtab, &results.num_warnings);
+	check_for_var_errors(results.variable_symtab, &num_warnings);
 	
 	//============================= Middle End =======================================
 		/**
