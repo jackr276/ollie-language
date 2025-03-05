@@ -2178,15 +2178,24 @@ static basic_block_t* visit_statement(values_package_t* values){
 				//Mark this for later
 				current_block->is_break_stmt = 1;
 
-				//There are two options here
-				//Otherwise we need to break out of the loop
-				add_successor(current_block, values->loop_stmt_end);
-				//We will jump to it -- this is always an uncoditional jump
-				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+				//There are two options here. If we're in a loop, that takes precedence. If we're in
+				//a switch statement, then that takes precedence
+				if(values->loop_stmt_start != NULL){
+					//Otherwise we need to break out of the loop
+					add_successor(current_block, values->loop_stmt_end);
+					//We will jump to it -- this is always an uncoditional jump
+					emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+				//We must've seen a switch statement then
+				} else {
+					//Break out of the switch statement
+					add_successor(current_block, values->switch_statement_end);
+					//We will jump to it -- this is always an uncoditional jump
+					emit_jmp_stmt(current_block, values->switch_statement_end, JUMP_TYPE_JMP);
+				}
 
 				//If we see anything after this, it is unreachable so throw a warning
-				if(ast_cursor->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after break statement", ast_cursor->next_sibling->line_number);
+				if(current_node->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after break statement", current_node->next_sibling->line_number);
 					(*num_errors_ref)++;
 				}
 
@@ -2196,27 +2205,43 @@ static basic_block_t* visit_statement(values_package_t* values){
 
 			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 			} else {
-				//This block can jump right out of the loop
-				basic_block_t* successor = current_block->direct_successor;
-				add_successor(current_block, values->loop_stmt_end);
-				//Restore
-				current_block->direct_successor = successor;
-				
-				//However, this block is not an ending break statement, so we will not mark it
-
 				//First let's emit the conditional code
-				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child);
+				expr_ret_package_t ret_package = emit_expr_code(current_block, current_node->first_child);
 
-				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+				//There are two options here. If we're in a loop, that takes precedence. If we're in
+				//a switch statement, then that takes precedence
+				if(values->loop_stmt_start != NULL){
+					//This block can jump right out of the loop
+					basic_block_t* successor = current_block->direct_successor;
+					add_successor(current_block, values->loop_stmt_end);
+					//Restore
+					current_block->direct_successor = successor;
 
-				//Emit our conditional jump now
-				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
+					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+
+					//Emit our conditional jump now
+					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);			
+
+				//We must've seen a switch statement then
+				} else {
+					//This block can jump right out of the loop
+					basic_block_t* successor = current_block->direct_successor;
+					add_successor(current_block, values->loop_stmt_end);
+					//Restore
+					current_block->direct_successor = successor;
+
+					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+
+					//Emit our conditional jump now
+					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);			
+				}
 			}
 
 		//Handle a defer statement. Remember that a defer statment is one monolithic
 		//node with a bunch of sub-nodes underneath that are all handleable by "expr"
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DEFER_STMT){
+		} else if(current_node->CLASS == AST_NODE_CLASS_DEFER_STMT){
 			//This really shouldn't happen, but it can't hurt
 			if(starting_block == NULL){
 				starting_block = basic_block_alloc();
@@ -2224,7 +2249,7 @@ static basic_block_t* visit_statement(values_package_t* values){
 			}
 
 			//Grab a cursor here
-			generic_ast_node_t* defer_stmt_cursor = ast_cursor->first_child;
+			generic_ast_node_t* defer_stmt_cursor = current_node->first_child;
 
 			//Ollie lang uniquely allows the user to defer assembly statements. 
 			//This can be useful IF you know what you're doing when it comes to assembly.
@@ -2246,20 +2271,19 @@ static basic_block_t* visit_statement(values_package_t* values){
 				}			
 			}
 
-
 		//Handle a labeled statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LABEL_STMT){
-			//This really shouldn't happen, but it can't hurt
+		} else if(current_node->CLASS == AST_NODE_CLASS_LABEL_STMT){
+			//Thisreally shouldn't happen, but it can't hurt
 			if(starting_block == NULL){
 				starting_block = basic_block_alloc();
 				current_block = starting_block;
 			}
 			
 			//We rely on the helper to do it for us
-			emit_label_stmt_code(current_block, ast_cursor);
+			emit_label_stmt_code(current_block, current_node);
 
 		//Handle a jump statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_JUMP_STMT){
+		} else if(current_node->CLASS == AST_NODE_CLASS_JUMP_STMT){
 			//This really shouldn't happen, but it can't hurt
 			if(starting_block == NULL){
 				starting_block = basic_block_alloc();
@@ -2267,38 +2291,10 @@ static basic_block_t* visit_statement(values_package_t* values){
 			}
 
 			//We rely on the helper to do it for us
-			emit_jump_stmt_code(current_block, ast_cursor);
-
-		//A very unique case exists in the switch statement. For a switch 
-		//statement, we leverage some very unique properties of the enumerable
-		//types that it uses
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_SWITCH_STMT){
-			//Set the initial node
-			values->initial_node = ast_cursor;
-
-			//Visit the switch statement
-			basic_block_t* switch_stmt_entry = visit_switch_statement(values);
-
-			//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
-			//starting block's direct successor
-			if(starting_block == NULL){
-				starting_block = switch_stmt_entry;
-			} else {
-				//Otherwise this is a direct successor
-				add_successor(starting_block, switch_stmt_entry);
-			}
-
-			//We need to drill to the end
-			//Set this to be current
-			current_block = switch_stmt_entry;
-
-			//Once we're here the start is in current, we'll need to drill to the end
-			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
-				current_block = current_block->direct_successor;
-			}
+			emit_jump_stmt_code(current_block, current_node);
 
 		//These are 100% user generated,
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+		} else if(current_node->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
 			//If we find an assembly inline statement, the actuality of it is
 			//incredibly easy. All that we need to do is literally take the 
 			//user's statement and insert it into the code
@@ -2310,9 +2306,10 @@ static basic_block_t* visit_statement(values_package_t* values){
 			}
 
 			//Let the helper handle
-			emit_asm_inline_stmt(current_block, ast_cursor);
+			emit_asm_inline_stmt(current_block, current_node);
+
 		//Handle a nop statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IDLE_STMT){
+		} else if(current_node->CLASS == AST_NODE_CLASS_IDLE_STMT){
 			//Do we need a new block?
 			if(starting_block == NULL){
 				starting_block = basic_block_alloc();
@@ -2331,11 +2328,11 @@ static basic_block_t* visit_statement(values_package_t* values){
 			}
 			
 			//Also emit the simplified machine code
-			emit_expr_code(current_block, ast_cursor);
+			emit_expr_code(current_block, current_node);
 		}
 
 		//Advance to the next child
-		ast_cursor = ast_cursor->next_sibling;
+		current_node = current_node->next_sibling;
 	}
 
 	//We always return the starting block
