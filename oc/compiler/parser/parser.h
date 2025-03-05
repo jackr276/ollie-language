@@ -65,6 +65,8 @@ struct front_end_results_package_t{
 	u_int16_t num_warnings;
 	//The number of lines processed
 	u_int32_t lines_processed;
+	//Did we find a main function
+	u_int8_t found_main_function;
 };
 
 

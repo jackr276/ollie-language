@@ -32,8 +32,6 @@ typedef struct generic_ast_node_t generic_ast_node_t;
 typedef struct func_def_ast_node_t func_def_ast_node_t;
 //A parameter list node
 typedef struct param_list_ast_node_t param_list_ast_node_t;
-//An identifier node
-typedef struct identifier_ast_node_t identifier_ast_node_t;
 //A constant node. Can represent any of the four kinds of constant
 typedef struct constant_ast_node_t constant_ast_node_t;
 //A type name node
@@ -139,6 +137,8 @@ struct generic_ast_node_t{
 	Token binary_operator;
 	//Store a unary operator(if one exists)
 	Token unary_operator;
+	//Store an ident if we have one
+	char identifier[MAX_IDENT_LENGTH];
 	//Is this assignable?
 	u_int8_t is_assignable;
 	//Is this a deferred node?
@@ -165,12 +165,6 @@ struct param_list_ast_node_t{
 	u_int8_t num_params;
 };
 
-
-//Holds information about a variable identifier that's been seen
-struct identifier_ast_node_t{
-	//Holds the lexeme of the identifer: max size 500 bytes(may change)
-	char identifier[MAX_IDENT_LENGTH];
-};
 
 //Holds information about a constant
 struct constant_ast_node_t{

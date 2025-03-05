@@ -2420,14 +2420,18 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Grab a cursor to the switch statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 
+	//Create our priority queue
+	priority_queue_t pqueue = priority_queue_alloc();
+
 	//The very first thing should be an expression telling us what to switch on
-	//TODO COME BACK HERE
-	
-	//Get to the next statement
+	//There should be some kind of expression here
+	emit_expr_code(starting_block, case_stmt_cursor);
+
+	//Get to the next statement. This is the first actual switch
+	//statement
 	case_stmt_cursor = case_stmt_cursor->next_sibling;
 
-	//Whatever the current statement that we're on
-	basic_block_t* current_statement;
+	basic_block_t* stmt;
 
 	//The values package that we have
 	values_package_t passing_values = *values;
@@ -2440,28 +2444,28 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		//Handle a case statement
 		if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CASE_STMT){
 			//Visit our case stmt here
-			current_statement = visit_case_statement(&passing_values);
+			stmt = visit_case_statement(&passing_values);
+
+
+
 
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
 			//Visit the default statement
-			current_statement = visit_default_statement(&passing_values);
+			stmt = visit_default_statement(&passing_values);
 
 		//Otherwise we fail out here
 		} else {
 			print_cfg_message(PARSE_ERROR, "Switch statements are only allowed \"case\" and \"default\" statements", case_stmt_cursor->line_number);
 		}
 
-		//We are going to insert these into a priority queue. For our purposes, a default statement
-		//will have a priority of INT_MAX, so that it is always at the end
-		
-
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
 	}
-
-
 	
+	//Destroy once done
+	priority_queue_dealloc(&pqueue);
+
 	//Give back the starting block
 	return starting_block;
 }

@@ -173,8 +173,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		//An identifier of any kind
 		case AST_NODE_CLASS_IDENTIFIER:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(identifier_ast_node_t));
-			node->inner_node_size = sizeof(identifier_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_IDENTIFIER;
 			break;
 
