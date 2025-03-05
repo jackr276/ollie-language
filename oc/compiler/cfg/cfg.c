@@ -9,6 +9,8 @@
 */
 
 #include "cfg.h"
+//For switch statement ordering
+#include "../queue/priority_queue.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,7 +41,11 @@ typedef struct {
 	basic_block_t* loop_stmt_start;
 	//For break statements
 	basic_block_t* loop_stmt_end;
+	//For break statements as well
+	basic_block_t* switch_statement_end;
+	//For congruety in if-statements
 	basic_block_t* if_stmt_end_block;
+	//For any time we need to do for-loop operations
 	basic_block_t* for_loop_update_block;
 } values_package_t;
 
@@ -1818,6 +1824,529 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 
 /**
+ * This statement block acts as a multiplexing rule. It will go through and make
+ * appropriate calls based no what kind of statement that we have
+ *
+ * Since this is largely intended for case and default statements, we assume that
+ * the statements in here are chained together as siblings with the initial node
+ */
+static basic_block_t* visit_statement(values_package_t* values){
+	//The global starting block
+	basic_block_t* starting_block = NULL;
+	//The current block
+	basic_block_t* current_block = starting_block;
+
+	//Grab the initial node
+	generic_ast_node_t* current_node = values->initial_node;
+	
+	//Roll through the entire subtree
+	while(current_node != NULL){
+		//We've found a declaration statement
+		if(current_node->CLASS == AST_NODE_CLASS_DECL_STMT){
+			values_package_t values;
+			values.initial_node = current_node;
+
+			//We'll visit the block here
+			basic_block_t* decl_block = visit_declaration_statement(&values);
+
+			//If the start block is null, then this is the start block. Otherwise, we merge it in
+			if(starting_block == NULL){
+				starting_block = decl_block;
+				current_block = decl_block;
+			//Just merge with current
+			} else {
+				current_block = merge_blocks(current_block, decl_block); 
+			}
+
+		//We've found a let statement
+		} else if(current_node->CLASS == AST_NODE_CLASS_LET_STMT){
+			values_package_t values;
+			values.initial_node = current_node;
+
+			//We'll visit the block here
+			basic_block_t* let_block = visit_let_statement(&values);
+
+			//If the start block is null, then this is the start block. Otherwise, we merge it in
+			if(starting_block == NULL){
+				starting_block = let_block;
+				current_block = let_block;
+			//Just merge with current
+			} else {
+				current_block = merge_blocks(current_block, let_block); 
+			}
+
+		//If we have a return statement -- SPECIAL CASE HERE
+		} else if (current_node->CLASS == AST_NODE_CLASS_RET_STMT){
+			//If for whatever reason the block is null, we'll create it
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//Emit the return statement, let the sub rule handle
+			emit_ret_stmt(current_block, current_node);
+
+			//The current block will now be marked as a return statement
+			current_block->is_return_stmt = 1;
+
+			//The current block's direct and only successor is the function exit block
+			add_successor(current_block, values->function_end_block);
+
+			//If there is anything after this statement, it is UNREACHABLE
+			if(current_node->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after return statement", current_node->next_sibling->line_number);
+				(*num_warnings_ref)++;
+			}
+
+			//We're completely done here
+			return starting_block;
+
+		//We've found an if-statement
+		} else if(current_node->CLASS == AST_NODE_CLASS_IF_STMT){
+			//Create the end block here for pointer reasons
+			basic_block_t* if_end_block = basic_block_alloc();
+
+			//Create the values package
+			values_package_t if_stmt_values;
+			if_stmt_values.initial_node = current_node;
+			if_stmt_values.function_end_block = values->function_end_block;
+			if_stmt_values.for_loop_update_block = values->for_loop_update_block;
+			if_stmt_values.if_stmt_end_block = if_end_block;
+			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
+			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
+			if_stmt_values.switch_statement_end = values->switch_statement_end;
+
+			//We'll now enter the if statement
+			basic_block_t* if_stmt_start = visit_if_statement(&if_stmt_values);
+			
+			//Once we have the if statement start, we'll add it in as a successor
+			if(starting_block == NULL){
+				starting_block = if_stmt_start;
+				current_block = if_stmt_start;
+			} else {
+				//Add this in as the current block
+				current_block = merge_blocks(current_block, if_stmt_start);
+			}
+
+			//Now we'll find the end of the if statement block
+			//So long as we haven't hit the end and it isn't a return statement
+			while (current_block->direct_successor != NULL && current_block->is_return_stmt == 0
+				  && current_block->is_cont_stmt == 0){
+				current_block = current_block->direct_successor;
+			}
+			
+			/*
+			 * DEVELOPER USE MESSAGE
+			 */
+			if(current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0 && current_block != if_end_block){
+				printf("END BLOCK REFERENCE LOST");
+			}
+
+			//If it is a return statement, that means that this if statement returns through every path. We'll leave 
+			//if this is the case
+			if(current_block->is_return_stmt == 1){
+				//Throw a warning if this happens
+				if(current_node->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after if-else block that returns through every control path", current_node->line_number);
+					(*num_warnings_ref)++;
+				}
+				//Give it back
+				return starting_block;
+			}
+
+			//If it's a continue statement, that means that this if statement continues through every path. We'll leave if this
+			//is the case
+			if(current_block->is_cont_stmt == 1){
+				//Throw a warning if this happens
+				if(current_node->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after if-else block that continues through every control path", current_node->line_number);
+					(*num_warnings_ref)++;
+				}
+
+				//Give it back
+				return starting_block;
+			}
+		
+		//Handle a while statement
+		} else if(current_node->CLASS == AST_NODE_CLASS_WHILE_STMT){
+			//Create the values here
+			values_package_t while_stmt_values;
+			while_stmt_values.initial_node = current_node;
+			while_stmt_values.for_loop_update_block = values->for_loop_update_block;
+			while_stmt_values.loop_stmt_start = NULL;
+			while_stmt_values.loop_stmt_end = NULL;
+			while_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
+			while_stmt_values.function_end_block = values->function_end_block;
+			while_stmt_values.switch_statement_end = values->switch_statement_end;
+
+			//Visit the while statement
+			basic_block_t* while_stmt_entry_block = visit_while_statement(&while_stmt_values);
+
+			//We'll now add it in
+			if(starting_block == NULL){
+				starting_block = while_stmt_entry_block;
+				current_block = starting_block;
+			//We never merge while statements -- it will always be a successor
+			} else {
+				//Add as a successor
+				add_successor(current_block, while_stmt_entry_block);
+			}
+
+			//Now we'll drill to the end here. This is easier than before, because the direct successor to
+			//the entry block of a while statement is always the end block
+			current_block = while_stmt_entry_block->direct_successor;
+	
+		//Handle a do-while statement
+		} else if(current_node->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
+			//Create the values package
+			values_package_t do_while_values;
+			do_while_values.initial_node = current_node;
+			do_while_values.function_end_block = values->function_end_block;
+			do_while_values.if_stmt_end_block = values->if_stmt_end_block;
+			do_while_values.loop_stmt_start = NULL;
+			do_while_values.loop_stmt_end = NULL;
+			do_while_values.for_loop_update_block = values->for_loop_update_block;
+			do_while_values.switch_statement_end = values->switch_statement_end;
+
+			//Visit the statement
+			basic_block_t* do_while_stmt_entry_block = visit_do_while_statement(&do_while_values);
+
+			//We'll now add it in
+			if(starting_block == NULL){
+				starting_block = do_while_stmt_entry_block;
+				current_block = starting_block;
+			//We never merge do-while's, they are strictly successors
+			} else {
+				add_successor(current_block, do_while_stmt_entry_block);
+			}
+
+			//Now we'll need to reach the end-point of this statement
+			current_block = do_while_stmt_entry_block;
+
+			//So long as we have successors and don't see returns
+			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0
+				  && current_block->is_cont_stmt == 0){
+				current_block = current_block->direct_successor;
+			}
+
+			//If we make it here and we had a return statement, we need to get out
+			if(current_block->is_return_stmt == 1){
+				//Everything beyond this point is unreachable, no point in going on
+				print_cfg_message(WARNING, "Unreachable code detected after block that returns in all control paths", current_node->next_sibling->line_number);
+				(*num_warnings_ref)++;
+				//Get out nowk
+				return starting_block;
+			}
+
+			//Otherwise, we're all set to go to the next iteration
+
+		//Handle a for statement
+		} else if(current_node->CLASS == AST_NODE_CLASS_FOR_STMT){
+			//Create the values package
+			values_package_t for_stmt_values;
+			for_stmt_values.initial_node = current_node;
+			for_stmt_values.function_end_block = values->function_end_block;
+			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
+			for_stmt_values.loop_stmt_start = NULL;
+			for_stmt_values.loop_stmt_end = NULL;
+			for_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
+			for_stmt_values.switch_statement_end = values->switch_statement_end;
+
+			//First visit the statement
+			basic_block_t* for_stmt_entry_block = visit_for_statement(&for_stmt_values);
+
+			//Now we'll add it in
+			if(starting_block == NULL){
+				starting_block = for_stmt_entry_block;
+				current_block = starting_block;
+			//We ALWAYS merge for statements into the current block
+			} else {
+				current_block = merge_blocks(current_block, for_stmt_entry_block);
+			}
+			
+			//Once we're here the start is in current
+			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
+				current_block = current_block->direct_successor;
+			}
+
+			//This should never happen, so if it does we have a problem
+			if(current_block->is_return_stmt == 1){
+				print_parse_message(PARSE_ERROR, "It should be impossible to have a for statement that returns in all control paths", current_node->line_number);
+				exit(0);
+			}
+
+			//But if we don't then this is the current node
+
+		//Handle a continue statement
+		} else if(current_node->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
+			//Let's first see if we're in a loop or not
+			if(values->loop_stmt_start == NULL){
+				print_cfg_message(PARSE_ERROR, "Continue statement was not found in a loop", current_node->line_number);
+				(*num_errors_ref)++;
+				return create_and_return_err();
+			}
+
+			//This could happen where we have nothing here
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//There are two options here. We could see a regular continue or a conditional
+			//continue. If the child is null, then it is a regular continue
+			if(current_node->first_child == NULL){
+				//Mark this for later
+				current_block->is_cont_stmt = 1;
+
+				//Let's see what kind of loop we're in
+				//NON for loop
+				if(values->for_loop_update_block == NULL){
+					//Otherwise we are in a loop, so this means that we need to point the continue statement to
+					//the loop entry block
+					add_successor(current_block, values->loop_stmt_start);
+					//We always jump to the start of the loop statement unconditionally
+					emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP);
+
+				//We are in a for loop
+				} else {
+					//Otherwise we are in a for loop, so we just need to point to the for loop update block
+					add_successor(current_block, values->for_loop_update_block);
+					//Emit a direct unconditional jump statement to it
+					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP);
+				}
+
+				//Further, anything after this is unreachable
+				if(current_node->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after continue statement", current_node->next_sibling->line_number);
+					(*num_warnings_ref)++;
+				}
+
+				//We're done here, so return the starting block. There is no 
+				//point in going on
+				return starting_block;
+
+			//Otherwise, we have a conditional continue here
+			} else {
+				//Emit the expression code into the current statement
+				expr_ret_package_t package = emit_expr_code(current_block, current_node->first_child);
+				//Decide the appropriate jump statement -- direct path here
+				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+
+				//Two divergent paths here -- whether or not we have a for loop
+				//Not a for loop
+				if(values->for_loop_update_block == NULL){
+					//Otherwise we are in a loop, so this means that we need to point the continue statement to
+					//the loop entry block
+					basic_block_t* successor = current_block->direct_successor;
+					//Add the successor in
+					add_successor(current_block, values->loop_stmt_start);
+					//Restore the direct successor
+					current_block->direct_successor = successor;
+					//We always jump to the start of the loop statement unconditionally
+					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type);
+
+				//We are in a for loop
+				} else {
+					//Otherwise we are in a for loop, so we just need to point to the for loop update block
+					basic_block_t* successor = current_block->direct_successor;
+					add_successor(current_block, values->for_loop_update_block);
+					//Restore the direct successor
+					current_block->direct_successor = successor;
+					//Emit a direct unconditional jump statement to it
+					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type);
+				}
+			}
+
+		//Hand le a break out statement
+		} else if(current_node->CLASS == AST_NODE_CLASS_BREAK_STMT){
+			//Let's first see if we're in a loop or not
+			if(values->loop_stmt_start == NULL && values->switch_statement_end == NULL){
+				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop or switch statement", current_node->line_number);
+				(*num_errors_ref)++;
+				return create_and_return_err();
+			}
+
+			//This could happen where we have nothing here
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//There are two options here: We could have a conditional break
+			//or a normal break. If there is no child node, we have a normal break
+			if(current_node->first_child == NULL){
+				//Mark this for later
+				current_block->is_break_stmt = 1;
+
+				//There are two options here
+				//Otherwise we need to break out of the loop
+				add_successor(current_block, values->loop_stmt_end);
+				//We will jump to it -- this is always an uncoditional jump
+				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+
+				//If we see anything after this, it is unreachable so throw a warning
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after break statement", ast_cursor->next_sibling->line_number);
+					(*num_errors_ref)++;
+				}
+
+				//For a regular break statement, this is it, so we just get out
+				//Give back the starting block
+				return starting_block;
+
+			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
+			} else {
+				//This block can jump right out of the loop
+				basic_block_t* successor = current_block->direct_successor;
+				add_successor(current_block, values->loop_stmt_end);
+				//Restore
+				current_block->direct_successor = successor;
+				
+				//However, this block is not an ending break statement, so we will not mark it
+
+				//First let's emit the conditional code
+				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child);
+
+				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+
+				//Emit our conditional jump now
+				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
+			}
+
+		//Handle a defer statement. Remember that a defer statment is one monolithic
+		//node with a bunch of sub-nodes underneath that are all handleable by "expr"
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DEFER_STMT){
+			//This really shouldn't happen, but it can't hurt
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//Grab a cursor here
+			generic_ast_node_t* defer_stmt_cursor = ast_cursor->first_child;
+
+			//Ollie lang uniquely allows the user to defer assembly statements. 
+			//This can be useful IF you know what you're doing when it comes to assembly.
+			//Since, if you defer assembly, that is the entire statement, we only
+			//need to worry about emitting it once
+			if(defer_stmt_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+				//Emit the inline assembly that we need here
+				emit_asm_inline_stmt(current_block, defer_stmt_cursor);
+
+			//Otherwise it's just a regular deferral
+			} else {
+				//Run through all of the children, emitting their respective
+				//expr codes
+				while(defer_stmt_cursor != NULL){
+					//Let the helper deal with it
+					emit_expr_code(current_block, defer_stmt_cursor);
+					//Move this up
+					defer_stmt_cursor = defer_stmt_cursor->next_sibling;
+				}			
+			}
+
+
+		//Handle a labeled statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LABEL_STMT){
+			//This really shouldn't happen, but it can't hurt
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+			
+			//We rely on the helper to do it for us
+			emit_label_stmt_code(current_block, ast_cursor);
+
+		//Handle a jump statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_JUMP_STMT){
+			//This really shouldn't happen, but it can't hurt
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//We rely on the helper to do it for us
+			emit_jump_stmt_code(current_block, ast_cursor);
+
+		//A very unique case exists in the switch statement. For a switch 
+		//statement, we leverage some very unique properties of the enumerable
+		//types that it uses
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_SWITCH_STMT){
+			//Set the initial node
+			values->initial_node = ast_cursor;
+
+			//Visit the switch statement
+			basic_block_t* switch_stmt_entry = visit_switch_statement(values);
+
+			//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
+			//starting block's direct successor
+			if(starting_block == NULL){
+				starting_block = switch_stmt_entry;
+			} else {
+				//Otherwise this is a direct successor
+				add_successor(starting_block, switch_stmt_entry);
+			}
+
+			//We need to drill to the end
+			//Set this to be current
+			current_block = switch_stmt_entry;
+
+			//Once we're here the start is in current, we'll need to drill to the end
+			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
+				current_block = current_block->direct_successor;
+			}
+
+		//These are 100% user generated,
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+			//If we find an assembly inline statement, the actuality of it is
+			//incredibly easy. All that we need to do is literally take the 
+			//user's statement and insert it into the code
+
+			//We'll need a new block here regardless
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//Let the helper handle
+			emit_asm_inline_stmt(current_block, ast_cursor);
+		//Handle a nop statement
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IDLE_STMT){
+			//Do we need a new block?
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+
+			//Let the helper handle -- doesn't even need the cursor
+			emit_idle_stmt(current_block);
+	
+		//This means that we have some kind of expression statement
+		} else {
+			//This could happen where we have nothing here
+			if(starting_block == NULL){
+				starting_block = basic_block_alloc();
+				current_block = starting_block;
+			}
+			
+			//Also emit the simplified machine code
+			emit_expr_code(current_block, ast_cursor);
+		}
+
+		//Advance to the next child
+		ast_cursor = ast_cursor->next_sibling;
+	}
+
+	//We always return the starting block
+	//It is possible that we have a completely NULL compound statement. This returns
+	//NULL in that event
+	return starting_block;
+}
+
+
+
+/**
  * Visit a default statement.  These statements are also handled like individual blocks that can 
  * be jumped to
  */
@@ -1842,6 +2371,9 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 static basic_block_t* visit_case_statement(values_package_t* values){
 	//We need to make the block first
 	basic_block_t* case_stmt = basic_block_alloc();
+
+	//The case statement should have some kind of constant value here, whether
+	//it's an enum value or regular const
 
 
 	//Give the block back
@@ -1896,23 +2428,36 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	
 	//Get to the next statement
 	case_stmt_cursor = case_stmt_cursor->next_sibling;
-	
+
+	//Whatever the current statement that we're on
+	basic_block_t* current_statement;
+
+	//The values package that we have
+	values_package_t passing_values = *values;
+	//Set the ending block here, that way any break statements
+	//know where to point
+	passing_values.switch_statement_end = ending_block;
 
 	//We'll also keep a reference to the curent block.
 	while(case_stmt_cursor != NULL){
 		//Handle a case statement
 		if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CASE_STMT){
+			//Visit our case stmt here
+			current_statement = visit_case_statement(&passing_values);
 
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
+			//Visit the default statement
+			current_statement = visit_default_statement(&passing_values);
 
 		//Otherwise we fail out here
 		} else {
 			print_cfg_message(PARSE_ERROR, "Switch statements are only allowed \"case\" and \"default\" statements", case_stmt_cursor->line_number);
 		}
 
-		//We are going to insert these into a priority queue
-
+		//We are going to insert these into a priority queue. For our purposes, a default statement
+		//will have a priority of INT_MAX, so that it is always at the end
+		
 
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
@@ -2390,7 +2935,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Set this to be current
 			current_block = switch_stmt_entry;
 
-			//Once we're here the start is in current
+			//Once we're here the start is in current, we'll need to drill to the end
 			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
 				current_block = current_block->direct_successor;
 			}

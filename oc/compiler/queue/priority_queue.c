@@ -74,7 +74,7 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
 	 * is less than the "smallest" index, it is our new smallest
 	 */
 	if(left_child_index < queue->next_index && 
-		queue->heap[left_child_index].priority < queue->heap[smallest_index].priority){
+		queue->heap[left_child_index].priority > queue->heap[smallest_index].priority){
 		smallest_index = left_child_index;
 	}
 
@@ -83,7 +83,7 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
 	 * is less than the "smallest" index, it is our new smallest
 	 */
 	if(right_child_index < queue->next_index && 
-		queue->heap[right_child_index].priority < queue->heap[smallest_index].priority){
+		queue->heap[right_child_index].priority > queue->heap[smallest_index].priority){
 		smallest_index = right_child_index;
 	}
 
@@ -134,7 +134,7 @@ insertion_status_t priority_queue_enqueue(priority_queue_t* queue, void *ptr, u_
 
 	//So long as we're in valid bounds and the child/parent are backwards
 	while(current_index > 0 && 
-		  queue->heap[get_parent_index(current_index)].priority > queue->heap[current_index].priority){
+		  queue->heap[get_parent_index(current_index)].priority < queue->heap[current_index].priority){
 		//Swap the values
 		swap(queue, get_parent_index(current_index), current_index);
 
