@@ -10,7 +10,7 @@ fn main() -> i32{
 	switch on(x){
 		case 1:
 		case 2:
-		case 3:
+		case -1:
 			{
 			x := x + 3;
 			break;

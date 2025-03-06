@@ -7233,7 +7233,7 @@ static generic_ast_node_t* case_statement(FILE* fl){
 	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT);
 	
 	//Let's now lookahead and see if we have a valid constant or not
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
 
 	//If we have some kind of identifier -- it must be an enum member
 	if(lookahead.tok == IDENT){
@@ -7304,6 +7304,33 @@ static generic_ast_node_t* case_statement(FILE* fl){
 			num_errors++;
 			//It's already an error, so we'll just give it back
 			return const_node;
+		}
+
+		//If we have an integer constant here, we need to make sure that it is not negative. Negative values
+		//would mess with the jump table logic. Ollie langauge does not support GCC-style "switch-to-if" conversions
+		//if the user does this
+
+		//Grab a reference to the constant node
+		constant_ast_node_t* const_inner_node = (constant_ast_node_t*)(const_node->node);
+
+		//If it's an int, make sure it isn't negative
+		if(const_inner_node->constant_type == INT_CONST || const_inner_node->constant_type == HEX_CONST){
+			//Fail case here
+			if(const_inner_node->int_val < 0){
+				print_parse_message(PARSE_ERROR, "Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
+				num_errors++;
+				//It's already an error, so we'll just give it back
+				return const_node;
+			}
+		//Same thing here as well
+		} else if(const_inner_node->constant_type == LONG_CONST){
+			//Fail case here
+			if(const_inner_node->long_val < 0){
+				print_parse_message(PARSE_ERROR, "Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
+				num_errors++;
+				//It's already an error, so we'll just give it back
+				return const_node;
+			}
 		}
 
 		//Otherwise we know that it is good, but is it the right type
