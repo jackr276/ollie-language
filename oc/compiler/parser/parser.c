@@ -7235,7 +7235,7 @@ static generic_ast_node_t* case_statement(FILE* fl){
 	//Let's now lookahead and see if we have a valid constant or not
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we have some kind of identifier -- it is probably an enum-member
+	//If we have some kind of identifier -- it must be an enum member
 	if(lookahead.tok == IDENT){
 		//Put it back
 		push_back_token(lookahead);
@@ -7283,8 +7283,11 @@ static generic_ast_node_t* case_statement(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-			//Otherwise if we make it here then all went well, so we'll add this in as a child node
-			add_child_node(case_stmt, enum_ident_node);
+		//Store this for later processing
+		enum_ident_node->variable = enum_record;
+
+		//Otherwise if we make it here then all went well, so we'll add this in as a child node
+		add_child_node(case_stmt, enum_ident_node);
 	
 		//Is the lookahead a constant?
 	} else if(lookahead.tok == INT_CONST || lookahead.tok == INT_CONST_FORCE_U || lookahead.tok == HEX_CONST

@@ -1830,7 +1830,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
  * Since this is largely intended for case and default statements, we assume that
  * the statements in here are chained together as siblings with the initial node
  */
-static basic_block_t* visit_statement(values_package_t* values){
+static basic_block_t* visit_statement_sequence(values_package_t* values){
 	//The global starting block
 	basic_block_t* starting_block = NULL;
 	//The current block
@@ -2355,6 +2355,8 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 	//Create it
 	basic_block_t* default_stmt_block = basic_block_alloc();
 
+	//There is 
+
 
 	//Give it back
 	return default_stmt_block;
@@ -2370,8 +2372,45 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 	basic_block_t* case_stmt = basic_block_alloc();
 
 	//The case statement should have some kind of constant value here, whether
-	//it's an enum value or regular const
+	//it's an enum value or regular const. All validation should have been
+	//done by the parser, so we're guaranteed to see something
+	//correct here
+	
+	//The first child is our enum value
+	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 
+	//If it's an identifier, it's guaranteed to be an enum member
+	if(case_stmt_cursor->CLASS == AST_NODE_CLASS_IDENTIFIER){
+		//Get the value of the enum member as the value
+		case_stmt->case_stmt_val = case_stmt_cursor->variable->enum_member_value;
+	} else {
+		//Otherwise it has to be a constant
+		constant_ast_node_t* const_node_ref = (constant_ast_node_t*)(case_stmt_cursor->node);
+
+		//We'll grab whatever value it is
+		if(const_node_ref->constant_type == INT_CONST || const_node_ref->constant_type == INT_CONST_FORCE_U){
+			case_stmt->case_stmt_val = const_node_ref->int_val;
+		} else if(const_node_ref->constant_type == LONG_CONST_FORCE_U || const_node_ref->constant_type == LONG_CONST){
+			case_stmt->case_stmt_val = const_node_ref->long_val;
+		} else if(const_node_ref->constant_type == CHAR_CONST){
+			case_stmt->case_stmt_val = const_node_ref->char_val;
+		//We know that it needs to be a hex const if we make it here
+		} else{
+			case_stmt->case_stmt_val = const_node_ref->int_val;
+		}
+	}
+	
+	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
+	//any/all statements that are below it
+	values_package_t statement_values = *values;
+	//Only difference here is the starting place
+	statement_values.initial_node = case_stmt_cursor->next_sibling;
+
+	//Let this take care of it
+	basic_block_t* statement_section_start = visit_statement_sequence(values);
+
+	//Once we get this back, we'll add it in to the main block
+	merge_blocks(case_stmt, statement_section_start);
 
 	//Give the block back
 	return case_stmt;

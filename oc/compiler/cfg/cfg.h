@@ -87,6 +87,8 @@ struct basic_block_t{
 	three_addr_var_t* active_vars[MAX_LIVE_VARS];
 	//The number of active vars
 	u_int16_t active_var_count;
+	//The case statement value -- usually blank
+	u_int32_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements

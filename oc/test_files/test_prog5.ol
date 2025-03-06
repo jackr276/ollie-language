@@ -85,18 +85,5 @@ fn main() -> i32{
 
 	let f:f32 := 23.2;
 
-	switch on(x){
-		case 1:
-		case 2:
-		case 3:
-			{
-			x := x + 3;
-			break;
-			}
-		default:
-			x := x + 3;
-
-	}
-
 	ret 0;
 }
