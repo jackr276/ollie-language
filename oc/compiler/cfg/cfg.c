@@ -2383,7 +2383,7 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 	if(case_stmt_cursor->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//Get the value of the enum member as the value
 		case_stmt->case_stmt_val = case_stmt_cursor->variable->enum_member_value;
-	} else {
+	} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CONSTANT){
 		//Otherwise it has to be a constant
 		constant_ast_node_t* const_node_ref = (constant_ast_node_t*)(case_stmt_cursor->node);
 
@@ -2398,6 +2398,10 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 		} else{
 			case_stmt->case_stmt_val = const_node_ref->int_val;
 		}
+	} else {
+		print_parse_message(PARSE_ERROR, "Case statement discovered without constant or enum value in it", case_stmt_cursor->line_number);
+		(*num_errors_ref)++;
+		return NULL;
 	}
 	
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
@@ -2477,6 +2481,8 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Set the ending block here, that way any break statements
 	//know where to point
 	passing_values.switch_statement_end = ending_block;
+	//Send this in as the initial value
+	passing_values.initial_node = case_stmt_cursor;
 
 	//We'll also keep a reference to the curent block.
 	while(case_stmt_cursor != NULL){

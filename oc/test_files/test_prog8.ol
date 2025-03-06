@@ -1,4 +1,4 @@
-#file test_prog8.ol;
+#file TEST_PROG_8;
 
 /**
  * For switch statement testing
