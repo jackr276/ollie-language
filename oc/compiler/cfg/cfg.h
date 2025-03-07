@@ -68,6 +68,10 @@ struct basic_block_t{
 	u_int8_t is_asm_stmt;
 	//Is it a break statement
 	u_int8_t is_break_stmt;
+	//Is it a switch statement
+	u_int8_t is_switch_stmt;
+	//Is it a case statement
+	u_int8_t is_case_stmt;
 	//Was this block visited by traverser?
 	u_int8_t visited;
 	//Is this block an exit block?

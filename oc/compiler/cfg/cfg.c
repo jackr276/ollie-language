@@ -91,6 +91,16 @@ typedef enum{
 	PRESERVE_ORIG_VAR,
 } temp_selection_t;
 
+
+/**
+ * TODO make this complete
+ */
+values_package_t pack_values(/* stuff in here */){
+	values_package_t values;
+	return values;
+}
+
+
 /**
  * Select the appropriate jump type to use. We can either use
  * inverse jumps or direct jumps
@@ -197,7 +207,8 @@ static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var)
 */
 static void pretty_print_block(basic_block_t* block){
 	//If this is empty, don't print anything
-	if(block->leader_statement == NULL){
+	//For now only, this probably won't stay
+	if(block->leader_statement == NULL && block->is_switch_stmt == 0 && block->is_case_stmt == 0){
 		return;
 	}
 
@@ -2361,9 +2372,9 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 
 	//Grab a cursor to our default statement
 	generic_ast_node_t* default_stmt_cursor = values->initial_node;
-	
 	//Create it
 	basic_block_t* default_stmt = basic_block_alloc();
+	default_stmt->is_case_stmt = 1;
 
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
@@ -2389,6 +2400,7 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 static basic_block_t* visit_case_statement(values_package_t* values){
 	//We need to make the block first
 	basic_block_t* case_stmt = basic_block_alloc();
+	case_stmt->is_case_stmt = 1;
 
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
@@ -2431,6 +2443,7 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 
 	//Let this take care of it
 	basic_block_t* statement_section_start = visit_statement_sequence(values);
+	if(statement_section_start == NULL) printf("THIS IS NULL");
 
 	//Once we get this back, we'll add it in to the main block
 	merge_blocks(case_stmt, statement_section_start);
@@ -2447,6 +2460,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//The starting block for the switch statement - we'll want this in a new
 	//block
 	basic_block_t* starting_block = basic_block_alloc();
+	starting_block->is_switch_stmt = 1;
 	//We also need to know the ending block here -- Knowing
 	//this is important for break statements
 	basic_block_t* ending_block = basic_block_alloc();

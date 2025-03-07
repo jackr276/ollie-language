@@ -75,6 +75,7 @@ static generic_ast_node_t* let_statement(FILE* fl);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
 static generic_ast_node_t* case_statement(FILE* fl);
 static generic_ast_node_t* default_statement(FILE* fl);
+static generic_ast_node_t* declare_statement(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 
@@ -7123,7 +7124,11 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 		push_back_token(lookahead);
 		//return whatever this gives us
 		return branch_statement(fl);
-
+	//Let statement
+	} else if(lookahead.tok == LET){
+		return let_statement(fl);
+	} else if(lookahead.tok == DECLARE){
+		return declare_statement(fl);
 	} else {
 		//Otherwise, this is some kind of expression statement. We'll put the token back and
 		//return that
