@@ -7309,9 +7309,11 @@ static generic_ast_node_t* case_statement(FILE* fl){
 		//Store this for later processing
 		enum_ident_node->variable = enum_record;
 
-		//Otherwise if we make it here then all went well, so we'll add this in as a child node
-		add_child_node(case_stmt, enum_ident_node);
-	
+		//Grab the value of this case statement
+		case_stmt->case_statement_value = enum_ident_node->variable->enum_member_value;
+
+		//We already have the value -- so this doesn't need to be a child node
+
 		//Is the lookahead a constant?
 	} else if(lookahead.tok == INT_CONST || lookahead.tok == INT_CONST_FORCE_U || lookahead.tok == HEX_CONST
 			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == LONG_CONST_FORCE_U){
@@ -7337,7 +7339,8 @@ static generic_ast_node_t* case_statement(FILE* fl){
 		constant_ast_node_t* const_inner_node = (constant_ast_node_t*)(const_node->node);
 
 		//If it's an int, make sure it isn't negative
-		if(const_inner_node->constant_type == INT_CONST || const_inner_node->constant_type == HEX_CONST){
+		if(const_inner_node->constant_type == INT_CONST || const_inner_node->constant_type == HEX_CONST
+		   || const_inner_node->constant_type == INT_CONST_FORCE_U){
 			//Fail case here
 			if(const_inner_node->int_val < 0){
 				print_parse_message(PARSE_ERROR, "Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
@@ -7345,8 +7348,12 @@ static generic_ast_node_t* case_statement(FILE* fl){
 				//It's already an error, so we'll just give it back
 				return const_node;
 			}
+			
+			//Assign the value here
+			case_stmt->case_statement_value = const_inner_node->int_val;
+
 		//Same thing here as well
-		} else if(const_inner_node->constant_type == LONG_CONST){
+		} else if(const_inner_node->constant_type == LONG_CONST || const_inner_node->constant_type == LONG_CONST_FORCE_U){
 			//Fail case here
 			if(const_inner_node->long_val < 0){
 				print_parse_message(PARSE_ERROR, "Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
@@ -7354,6 +7361,9 @@ static generic_ast_node_t* case_statement(FILE* fl){
 				//It's already an error, so we'll just give it back
 				return const_node;
 			}
+		} else if(const_inner_node->constant_type == CHAR_CONST){
+			//Just assign the char value here
+			case_stmt->case_statement_value = const_inner_node->char_val;
 		}
 
 		//Otherwise we know that it is good, but is it the right type
@@ -7369,8 +7379,7 @@ static generic_ast_node_t* case_statement(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//Now once we get down here, we know that the constant node worked, so we'll add it as the child
-		add_child_node(case_stmt, const_node);
+		//We already have the value -- so this doesn't need to be a child node
 
 	} else {
 		print_parse_message(PARSE_ERROR, "Enum member or constant required as argument to case statement", current_line);

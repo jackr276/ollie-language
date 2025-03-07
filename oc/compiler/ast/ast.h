@@ -143,6 +143,8 @@ struct generic_ast_node_t{
 	u_int8_t is_assignable;
 	//Is this a deferred node?
 	u_int8_t is_deferred;
+	//What is the value of this case statement
+	int64_t case_statement_value;
 	//What is the size of it's inner node
 	size_t inner_node_size;
 	//This is where we hold the actual node

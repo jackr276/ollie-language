@@ -12,18 +12,16 @@ fn main() -> i32{
 	declare mut x:i32*;
 	//We would've modified a here
 
-	x := &a;
 
-
-	/*
 	switch on(@tester()){
+		default:
+			declare x:i32;
 		case 2:
 			let a:i32 := 23;
 			idle;
 		case 4:
 			idle;
 	}
-	*/
 
 	ret 0;
 }

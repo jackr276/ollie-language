@@ -2408,38 +2408,15 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 	//correct here
 	
 	//The first child is our enum value
-	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
+	generic_ast_node_t* case_stmt_cursor = values->initial_node;
+	//Grab the value -- this should've already been done by the parser
+	case_stmt->case_stmt_val = case_stmt_cursor->case_statement_value;
 
-	//If it's an identifier, it's guaranteed to be an enum member
-	if(case_stmt_cursor->CLASS == AST_NODE_CLASS_IDENTIFIER){
-		//Get the value of the enum member as the value
-		case_stmt->case_stmt_val = case_stmt_cursor->variable->enum_member_value;
-	} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CONSTANT){
-		//Otherwise it has to be a constant
-		constant_ast_node_t* const_node_ref = (constant_ast_node_t*)(case_stmt_cursor->node);
-
-		//We'll grab whatever value it is
-		if(const_node_ref->constant_type == INT_CONST || const_node_ref->constant_type == INT_CONST_FORCE_U){
-			case_stmt->case_stmt_val = const_node_ref->int_val;
-		} else if(const_node_ref->constant_type == LONG_CONST_FORCE_U || const_node_ref->constant_type == LONG_CONST){
-			case_stmt->case_stmt_val = const_node_ref->long_val;
-		} else if(const_node_ref->constant_type == CHAR_CONST){
-			case_stmt->case_stmt_val = const_node_ref->char_val;
-		//We know that it needs to be a hex const if we make it here
-		} else{
-			case_stmt->case_stmt_val = const_node_ref->int_val;
-		}
-	} else {
-		print_parse_message(PARSE_ERROR, "Case statement discovered without constant or enum value in it", case_stmt_cursor->line_number);
-		(*num_errors_ref)++;
-		return NULL;
-	}
-	
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
 	values_package_t statement_values = *values;
 	//Only difference here is the starting place
-	statement_values.initial_node = case_stmt_cursor->next_sibling;
+	statement_values.initial_node = case_stmt_cursor->first_child;
 
 	//Let this take care of it
 	basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
@@ -2492,17 +2469,18 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		return starting_block;
 	}
 
-	//Grab a cursor to the switch statements
+	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 
-	//Create our priority queue
+	//Create our priority queue. This will be used for dynamically
+	//rearranging the case statements if they're out of order
 	priority_queue_t priority_queue = priority_queue_alloc();
 
 	//The very first thing should be an expression telling us what to switch on
 	//There should be some kind of expression here
 	emit_expr_code(starting_block, case_stmt_cursor);
 
-	//Get to the next statement. This is the first actual switch
+	//Get to the next statement. This is the first actual case 
 	//statement
 	case_stmt_cursor = case_stmt_cursor->next_sibling;
 
@@ -2512,13 +2490,13 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//The values package that we have
 	values_package_t passing_values = *values;
-	//Set the ending block here, that way any break statements
+	//Set the ending block here, so that any break statements
 	//know where to point
 	passing_values.switch_statement_end = ending_block;
 	//Send this in as the initial value
 	passing_values.initial_node = case_stmt_cursor;
 
-	//We'll also keep a reference to the curent block.
+	//So long as this isn't null
 	while(case_stmt_cursor != NULL){
 		//Handle a case statement
 		if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CASE_STMT){
@@ -2565,8 +2543,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		cursor = current_case_stmt_start;
 
 		//Now we need to drill down to the end
-		while(cursor->direct_successor != NULL && cursor->is_break_stmt == 0 && cursor->is_return_stmt == 0
-			  && cursor->is_cont_stmt == 0){
+		while(cursor->direct_successor != NULL && cursor->is_break_stmt == 0 && cursor->is_return_stmt == 0){
 			cursor = cursor->direct_successor;
 		}
 
@@ -2579,8 +2556,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//Now we need to drill down to the end
 	cursor = default_stmt_block;
-	while(cursor->direct_successor != NULL && cursor->is_break_stmt == 0 && cursor->is_return_stmt == 0
-		  && cursor->is_cont_stmt == 0){
+	while(cursor->direct_successor != NULL && cursor->is_break_stmt == 0 && cursor->is_return_stmt == 0){
 		cursor = cursor->direct_successor;
 	}
 
