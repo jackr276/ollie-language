@@ -2380,10 +2380,10 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 	//any/all statements that are below it
 	values_package_t statement_values = *values;
 	//Only difference here is the starting place
-	statement_values.initial_node = default_stmt_cursor->next_sibling;
+	statement_values.initial_node = default_stmt_cursor->first_child;
 
 	//Let this take care of it
-	basic_block_t* statement_section_start = visit_statement_sequence(values);
+	basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
 
 	//Once we get this back, we'll add it in to the main block
 	merge_blocks(default_stmt, statement_section_start);
@@ -2442,8 +2442,7 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 	statement_values.initial_node = case_stmt_cursor->next_sibling;
 
 	//Let this take care of it
-	basic_block_t* statement_section_start = visit_statement_sequence(values);
-	if(statement_section_start == NULL) printf("THIS IS NULL");
+	basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
 
 	//Once we get this back, we'll add it in to the main block
 	merge_blocks(case_stmt, statement_section_start);

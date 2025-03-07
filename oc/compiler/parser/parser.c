@@ -7089,6 +7089,10 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 	} else if(lookahead.tok == DEFER){
 		//This rule relies on the defer keyword already being consumed, so we won't put it back
 		return defer_statement(fl);
+	
+	//If we see this, we have an idle statement
+	} else if(lookahead.tok == IDLE){
+		return idle_statement(fl);
 
 	//While statement
 	} else if(lookahead.tok == WHILE){
@@ -7174,9 +7178,6 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	//Seed the search
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//The statement node
-	generic_ast_node_t* stmt;
-
 	//Now we need to go through and process the statement
 	while(lookahead.tok != CASE && lookahead.tok != R_CURLY){
 		//If for some reason it's another default statement, we have a duplicate
@@ -7191,7 +7192,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
 		push_back_token(lookahead);
 
 		//Handle whatever it is that we have in here
-		stmt = statement_in_block(fl);
+		generic_ast_node_t* stmt = statement_in_block(fl);
 
 		//If it's an error send it up
 		if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
