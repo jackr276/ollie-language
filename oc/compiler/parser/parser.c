@@ -857,6 +857,15 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
+	if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
+		if(expr->variable->is_mutable == 0 && left_hand_unary->variable->is_mutable == 1){
+			print_parse_message(PARSE_ERROR, "Mutable references to immutable variables are forbidden", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+	}
+
 	//Otherwise the overall type is the final type
 	asn_expr_node->inferred_type = final_type;
 
@@ -1679,6 +1688,13 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//Let's now check the & case
 		} else if (lookahead.tok == AND){
+			//Is there an attempt to take the address of a constant
+			if(cast_expr->CLASS == AST_NODE_CLASS_CONSTANT){
+				print_parse_message(PARSE_ERROR, "The address of a constant cannot be taken", parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
 			//Let's double check that we aren't taking the address of nothing
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_BASIC && cast_expr->inferred_type->basic_type->basic_type == VOID){
 				print_parse_message(PARSE_ERROR, "Type \"void\" cannot have it's address taken", parser_line_num);
@@ -1842,7 +1858,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		unary_node->inferred_type = return_type;
 		//Store the line number
 		unary_node->line_number = parser_line_num;
-
+		//Store the variable
+		unary_node->variable = cast_expr->variable;
 		//Is it assignable
 		unary_node->is_assignable = is_assignable;
 
@@ -7793,6 +7810,15 @@ static generic_ast_node_t* let_statement(FILE* fl){
 
 	generic_type_t* return_type = types_compatible(left_hand_type, right_hand_type);
 
+	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
+	if(expr_node->inferred_type->type_class == TYPE_CLASS_POINTER){
+		if(expr_node->variable->is_mutable == 0 && is_mutable == 1){
+			print_parse_message(PARSE_ERROR, "Mutable references to immutable variables are forbidden", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+	}
+
 	//Will be null if we have a failure
 	if(return_type == NULL){
 		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
@@ -7812,6 +7838,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	declared_var->is_mutable = is_mutable;
 	//Store the type
 	declared_var->type = type_spec_node->inferred_type;
+	//Is it mutable
+	declared_var->is_mutable = is_mutable;
 	//It was initialized
 	declared_var->initialized = 1;
 	//It was "letted" 

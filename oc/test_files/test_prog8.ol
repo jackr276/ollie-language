@@ -8,20 +8,22 @@ fn tester() -> i32{
  * For switch statement testing
  */
 fn main() -> i32{
+	let a:i32 := 23;
+	declare mut x:i32*;
+	//We would've modified a here
 
-	let mut x:i32 := -2U;
+	x := &a;
 
+
+	/*
 	switch on(@tester()){
 		case 2:
 			let a:i32 := 23;
 			idle;
 		case 4:
 			idle;
-		default:
-			{
-			x := x + 3;
-			}
 	}
+	*/
 
 	ret 0;
 }
