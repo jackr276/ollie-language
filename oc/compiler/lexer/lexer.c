@@ -29,7 +29,7 @@ typedef enum {
 	IN_STRING,
 	IN_MULTI_COMMENT,
 	IN_SINGLE_COMMENT
-} Lex_state;
+} lex_state;
 
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
@@ -232,7 +232,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 	}
 
 	//We begin in the start state
-	Lex_state current_state = IN_START;
+	lex_state current_state = IN_START;
 
 	//Whenever we're in start we're automatically at 0
 	token_char_count = 0;
@@ -240,7 +240,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 	char ch;
 	char ch2;
 	//Store the lexeme
-	char lexeme[1000];
+	char lexeme[MAX_TOKEN_LENGTH];
 
 	//The next index for the lexeme
 	char* lexeme_cursor = lexeme;
@@ -542,7 +542,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 						ch2 = get_next_char(fl);
 						if(ch2 >= '0' && ch2 <= '9'){
 							//Erase this now
-							memset(lexeme, 0, 1000);
+							memset(lexeme, 0, MAX_TOKEN_LENGTH);
 							//Reset the cursor
 							lexeme_cursor = lexeme;
 							//We are not in an int
@@ -621,7 +621,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 						//Say that we're in a string
 						current_state = IN_STRING;
 						//0 this out
-						memset(lexeme, 0, 1000);
+						memset(lexeme, 0, MAX_TOKEN_LENGTH);
 						//String literal pointer
 						lexeme_cursor = lexeme;
 						break;
@@ -629,7 +629,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 					//Beginning of a char const
 					case '\'':
 						//0 this out
-						memset(lexeme, 0, 1000);
+						memset(lexeme, 0, MAX_TOKEN_LENGTH);
 						//String literal pointer
 						lexeme_cursor = lexeme;
 
@@ -703,7 +703,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 						break;
 
 					default:
-						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#'){
+						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#' || ch == '_'){
 							//Erase this now
 							memset(lexeme, 0, MAX_TOKEN_LENGTH);
 							//Reset the cursor

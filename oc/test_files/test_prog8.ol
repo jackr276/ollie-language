@@ -12,6 +12,9 @@ fn main() -> i32{
 	declare mut x:i32*;
 	//We would've modified a here
 
+	for(let _:u32 := 0; _ < 23; _++) do{
+		a++;
+	}
 
 	switch on(@tester()){
 		case 2:
