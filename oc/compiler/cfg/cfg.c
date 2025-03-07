@@ -1056,6 +1056,14 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
 		target->direct_successor = successor;
 	}
 
+	//Is this thing already a successor? If so we won't add it
+	for(u_int16_t i = 0; i < target->num_successors; i++){
+		//It's fine, we don't need to add it
+		if(target->successors[i] == successor){
+			return;
+		}
+	}
+
 	//Otherwise we're set here
 	//Add this in
 	target->successors[target->num_successors] = successor;
@@ -2485,7 +2493,9 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//statement
 	case_stmt_cursor = case_stmt_cursor->next_sibling;
 
-	basic_block_t* stmt;
+	//Let's just keep a reference to the default statement block for later. This
+	//will allow us to avoid keeping it in the queue
+	basic_block_t* default_stmt_block;
 
 	//The values package that we have
 	values_package_t passing_values = *values;
@@ -2500,24 +2510,19 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		//Handle a case statement
 		if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CASE_STMT){
 			//Visit our case stmt here
-			stmt = visit_case_statement(&passing_values);
+			basic_block_t* stmt = visit_case_statement(&passing_values);
 
 			//We will now add this into the priority queue. It will be added
 			//into the overall chain later on. We use the actual case_stmt_value
 			//as the overall priority here
 			priority_queue_enqueue(&priority_queue, stmt, stmt->case_stmt_val);
 
-
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
 			//Visit the default statement
-			stmt = visit_default_statement(&passing_values);
+			default_stmt_block = visit_default_statement(&passing_values);
 
-			//Now we will add it into the priority queue, with a priority of -1. This ensures
-			//that it will be the very first thing on the priority queue, so that when we go
-			//to construct the overall CFG structure later, it will be the first thing that
-			//we grab
-			priority_queue_enqueue(&priority_queue, stmt, -1);
+			//Like mentioned above, this one is not going in the queue
 
 		//Otherwise we fail out here
 		} else {
@@ -2527,6 +2532,48 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
 	}
+
+	//Now that everything has been processed, we can go through and add the statements into the block one by one
+	//Grab a cursor for our currently active block
+	basic_block_t* cursor = starting_block;
+	basic_block_t* current_case_stmt_start;
+
+	//So long as the queue is not empty
+	while(priority_queue_is_empty(&priority_queue) == 0){
+		//Grab the reference to the current case statement
+		current_case_stmt_start = priority_queue_dequeue(&priority_queue);
+
+		//Now we need to add this into the list
+		add_successor(cursor, current_case_stmt_start);
+		//Ensure it's the direct successor
+		cursor->direct_successor = current_case_stmt_start;
+
+		//Update the reference
+		cursor = current_case_stmt_start;
+
+		//Now we need to drill down to the end
+		while(cursor->direct_successor != NULL && cursor->is_break_stmt == 0 && cursor->is_return_stmt == 0
+			  && cursor->is_cont_stmt == 0){
+			cursor = cursor->direct_successor;
+		}
+
+		//Now we're at the very end, so we can repeat
+	}
+
+	//Now that we're out of there, we can add the default statement in
+	add_successor(cursor, default_stmt_block);
+	cursor->direct_successor = default_stmt_block;
+
+	//Now we need to drill down to the end
+	cursor = default_stmt_block;
+	while(cursor->direct_successor != NULL && cursor->is_break_stmt == 0 && cursor->is_return_stmt == 0
+		  && cursor->is_cont_stmt == 0){
+		cursor = cursor->direct_successor;
+	}
+
+	//Once we're at the very end, we need to ensure that we point directly to the end block
+	add_successor(cursor, ending_block);
+	cursor->direct_successor = ending_block;
 	
 	//Destroy once done
 	priority_queue_dealloc(&priority_queue);
@@ -3002,7 +3049,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			current_block = switch_stmt_entry;
 
 			//Once we're here the start is in current, we'll need to drill to the end
-			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
+			while(current_block->direct_successor != NULL){
 				current_block = current_block->direct_successor;
 			}
 
