@@ -10,7 +10,6 @@
 
 #include "cfg.h"
 //For switch statement ordering
-#include "../queue/priority_queue.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2430,7 +2429,9 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 
 
 /**
- * Visit a switch statement
+ * Visit a switch statement. In Ollie's current implementation, 
+ * the values here will not be reordered at all. Instead, they
+ * will be put in the exact orientation that the user wants
  */
 static basic_block_t* visit_switch_statement(values_package_t* values){
 	//The starting block for the switch statement - we'll want this in a new
@@ -2449,16 +2450,6 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//We need a reference to this block ID too
 	u_int16_t jump_table_block_id = starting_block->block_id;
 
-	/**
-	 * Here's the plan: We will go through every single case statement
-	 * and the one default statement that we contain here, processing
-	 * them each time. We will make a note of the values that they
-	 * have for later on, and then after that fact we will create our
-	 * jump table. It is an expectation that users will enter in switch
-	 * statements out of order. This is unavoidable. To remedy this, we will
-	 * sort them ourselves. This will however destroy any fall through dependencies, 
-	 * so we will warn the user of this fact when we do
-	 */
 
 	//If this is empty, serious issue
 	if(values->initial_node == NULL){
@@ -2472,10 +2463,6 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 
-	//Create our priority queue. This will be used for dynamically
-	//rearranging the case statements if they're out of order
-	priority_queue_t priority_queue = priority_queue_alloc();
-
 	//The very first thing should be an expression telling us what to switch on
 	//There should be some kind of expression here
 	emit_expr_code(starting_block, case_stmt_cursor);
@@ -2483,10 +2470,6 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Get to the next statement. This is the first actual case 
 	//statement
 	case_stmt_cursor = case_stmt_cursor->next_sibling;
-
-	//Let's just keep a reference to the default statement block for later. This
-	//will allow us to avoid keeping it in the queue
-	basic_block_t* default_stmt_block;
 
 	//The values package that we have
 	values_package_t passing_values = *values;
@@ -2496,76 +2479,47 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Send this in as the initial value
 	passing_values.initial_node = case_stmt_cursor;
 
+	//Keep a reference to whatever the current switch statement block is
+	basic_block_t* current_block = starting_block;
+	
+	//The current block(case or default) that we're on
+	basic_block_t* case_block;
+
 	//So long as this isn't null
 	while(case_stmt_cursor != NULL){
 		//Handle a case statement
 		if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CASE_STMT){
 			//Visit our case stmt here
-			basic_block_t* stmt = visit_case_statement(&passing_values);
-
-			//We will now add this into the priority queue. It will be added
-			//into the overall chain later on. We use the actual case_stmt_value
-			//as the overall priority here
-			priority_queue_enqueue(&priority_queue, stmt, stmt->case_stmt_val);
+			case_block = visit_case_statement(&passing_values);
 
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
 			//Visit the default statement
-			default_stmt_block = visit_default_statement(&passing_values);
-
-			//Like mentioned above, this one is not going in the queue
+			case_block = visit_default_statement(&passing_values);
 
 		//Otherwise we fail out here
 		} else {
 			print_cfg_message(PARSE_ERROR, "Switch statements are only allowed \"case\" and \"default\" statements", case_stmt_cursor->line_number);
 		}
 
+		//Now we'll add this one into the overall structure
+		add_successor(current_block, case_block);
+		//Ensure that the current block points right here
+		current_block->direct_successor = case_block;
+
+		//Now we'll drill down to the bottom to prime the next pass
+		while(current_block->direct_successor != NULL && current_block->is_break_stmt == 0 && current_block->is_return_stmt == 0){
+			current_block = current_block->direct_successor;
+		}
+
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
 	}
 
-	//Now that everything has been processed, we can go through and add the statements into the block one by one
-	//Grab a cursor for our currently active block
-	basic_block_t* cursor = starting_block;
-	basic_block_t* current_case_stmt_start;
-
-	//So long as the queue is not empty
-	while(priority_queue_is_empty(&priority_queue) == 0){
-		//Grab the reference to the current case statement
-		current_case_stmt_start = priority_queue_dequeue(&priority_queue);
-
-		//Now we need to add this into the list
-		add_successor(cursor, current_case_stmt_start);
-		//Ensure it's the direct successor
-		cursor->direct_successor = current_case_stmt_start;
-
-		//Update the reference
-		cursor = current_case_stmt_start;
-
-		//Now we need to drill down to the end
-		while(cursor->direct_successor != NULL && cursor->is_break_stmt == 0 && cursor->is_return_stmt == 0){
-			cursor = cursor->direct_successor;
-		}
-
-		//Now we're at the very end, so we can repeat
-	}
-
-	//Now that we're out of there, we can add the default statement in
-	add_successor(cursor, default_stmt_block);
-	cursor->direct_successor = default_stmt_block;
-
-	//Now we need to drill down to the end
-	cursor = default_stmt_block;
-	while(cursor->direct_successor != NULL && cursor->is_break_stmt == 0 && cursor->is_return_stmt == 0){
-		cursor = cursor->direct_successor;
-	}
-
-	//Once we're at the very end, we need to ensure that we point directly to the end block
-	add_successor(cursor, ending_block);
-	cursor->direct_successor = ending_block;
-	
-	//Destroy once done
-	priority_queue_dealloc(&priority_queue);
+	//Once we escape here, we should have a reference to the end of the last case or default statement. We'll
+	//now ensure that this points directly to the switch statement ending block
+	add_successor(current_block, ending_block);
+	current_block->direct_successor = ending_block;
 
 	//Give back the starting block
 	return starting_block;
