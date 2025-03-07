@@ -2489,11 +2489,15 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	while(case_stmt_cursor != NULL){
 		//Handle a case statement
 		if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CASE_STMT){
+			//Update this
+			passing_values.initial_node = case_stmt_cursor;
 			//Visit our case stmt here
 			case_block = visit_case_statement(&passing_values);
 
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
+			//Update this
+			passing_values.initial_node = case_stmt_cursor;
 			//Visit the default statement
 			case_block = visit_default_statement(&passing_values);
 
