@@ -5,6 +5,7 @@
 */
 
 #include "priority_queue.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <sys/types.h>
@@ -74,7 +75,7 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
 	 * is less than the "smallest" index, it is our new smallest
 	 */
 	if(left_child_index < queue->next_index && 
-		queue->heap[left_child_index].priority > queue->heap[smallest_index].priority){
+		queue->heap[left_child_index].priority < queue->heap[smallest_index].priority){
 		smallest_index = left_child_index;
 	}
 
@@ -83,7 +84,7 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
 	 * is less than the "smallest" index, it is our new smallest
 	 */
 	if(right_child_index < queue->next_index && 
-		queue->heap[right_child_index].priority > queue->heap[smallest_index].priority){
+		queue->heap[right_child_index].priority < queue->heap[smallest_index].priority){
 		smallest_index = right_child_index;
 	}
 
@@ -107,10 +108,7 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
  * priority. This would confuse the system and would be a confusing edge case. As such, every
  * priority has 1 added to it, that way even if it is 0 passed in, it won't be in the system
  */
-insertion_status_t priority_queue_enqueue(priority_queue_t* queue, void *ptr, u_int16_t priority){
-	//Was it out of order or not?
-	insertion_status_t out_of_order = IN_ORDER_INSERT;
-
+void priority_queue_enqueue(priority_queue_t* queue, void *ptr, int64_t priority){
 	//Automatic resize if needed
 	if(queue->next_index == queue->maximum_size){
 		//Double it
@@ -134,18 +132,13 @@ insertion_status_t priority_queue_enqueue(priority_queue_t* queue, void *ptr, u_
 
 	//So long as we're in valid bounds and the child/parent are backwards
 	while(current_index > 0 && 
-		  queue->heap[get_parent_index(current_index)].priority < queue->heap[current_index].priority){
+		queue->heap[get_parent_index(current_index)].priority < queue->heap[current_index].priority){
 		//Swap the values
 		swap(queue, get_parent_index(current_index), current_index);
 
 		//Update this index to be it's parent
 		current_index = get_parent_index(current_index);
-
-		//And since we had to reorder, this was an out of order insertion
-		out_of_order = OUT_OF_ORDER_INSERT;
 	}
-
-	return out_of_order;
 }
 
 /**

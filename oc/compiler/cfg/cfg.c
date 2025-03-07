@@ -2342,7 +2342,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 }
 
 
-
 /**
  * Visit a default statement.  These statements are also handled like individual blocks that can 
  * be jumped to
@@ -2351,15 +2350,27 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 	//For a default statement, it performs very similarly to a case statement. 
 	//It will be handled slightly differently in the jump table, but we'll get to that 
 	//later on
+
+	//Grab a cursor to our default statement
+	generic_ast_node_t* default_stmt_cursor = values->initial_node;
 	
 	//Create it
-	basic_block_t* default_stmt_block = basic_block_alloc();
+	basic_block_t* default_stmt = basic_block_alloc();
 
-	//There is 
+	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
+	//any/all statements that are below it
+	values_package_t statement_values = *values;
+	//Only difference here is the starting place
+	statement_values.initial_node = default_stmt_cursor->next_sibling;
 
+	//Let this take care of it
+	basic_block_t* statement_section_start = visit_statement_sequence(values);
 
-	//Give it back
-	return default_stmt_block;
+	//Once we get this back, we'll add it in to the main block
+	merge_blocks(default_stmt, statement_section_start);
+
+	//Give the block back
+	return default_stmt;
 }
 
 
@@ -2464,7 +2475,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 
 	//Create our priority queue
-	priority_queue_t pqueue = priority_queue_alloc();
+	priority_queue_t priority_queue = priority_queue_alloc();
 
 	//The very first thing should be an expression telling us what to switch on
 	//There should be some kind of expression here
@@ -2491,13 +2502,22 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 			//Visit our case stmt here
 			stmt = visit_case_statement(&passing_values);
 
-
+			//We will now add this into the priority queue. It will be added
+			//into the overall chain later on. We use the actual case_stmt_value
+			//as the overall priority here
+			priority_queue_enqueue(&priority_queue, stmt, stmt->case_stmt_val);
 
 
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
 			//Visit the default statement
 			stmt = visit_default_statement(&passing_values);
+
+			//Now we will add it into the priority queue, with a priority of -1. This ensures
+			//that it will be the very first thing on the priority queue, so that when we go
+			//to construct the overall CFG structure later, it will be the first thing that
+			//we grab
+			priority_queue_enqueue(&priority_queue, stmt, -1);
 
 		//Otherwise we fail out here
 		} else {
@@ -2509,7 +2529,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	}
 	
 	//Destroy once done
-	priority_queue_dealloc(&pqueue);
+	priority_queue_dealloc(&priority_queue);
 
 	//Give back the starting block
 	return starting_block;

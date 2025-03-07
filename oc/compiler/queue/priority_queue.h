@@ -14,13 +14,6 @@ typedef struct priority_queue_t priority_queue_t;
 //The nodes in our priority queue
 typedef struct priority_queue_node_t priority_queue_node_t;
 
-/**
- * Did we need to reorder, or was it already in order
- */
-typedef enum{
-	OUT_OF_ORDER_INSERT,
-	IN_ORDER_INSERT,
-} insertion_status_t;
 
 /**
  * This struct will usually be passed by copy -- it contains a pointer 
@@ -41,7 +34,7 @@ struct priority_queue_t{
 */
 struct priority_queue_node_t{
 	//Our priority
-	u_int16_t priority;
+	int64_t priority;
 	//What is actually in here - usually an AST node,
 	//but this could be anything if needed
 	void* ptr;
@@ -56,7 +49,7 @@ priority_queue_t priority_queue_alloc();
  * Insert a node with a given priority into the priority queue. Return
  * an enum that dictates if we needed to reorder
 */
-insertion_status_t priority_queue_enqueue(priority_queue_t* queue, void* ptr, u_int16_t priority);
+void priority_queue_enqueue(priority_queue_t* queue, void* ptr, int64_t priority);
 
 /**
  * Dequeue from the priority queue
