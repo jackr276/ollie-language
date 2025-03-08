@@ -57,6 +57,14 @@ typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 //An AST node for assembly inline statements
 typedef struct asm_inline_stmt_ast_node_t asm_inline_stmt_ast_node_t;
 
+/**
+ * Is this an assignable variable?
+ */
+typedef enum{
+	NOT_ASSIGNABLE,
+	ASSIGNABLE
+} variable_assignability_t;
+
 //What type is in the AST node?
 typedef enum ast_node_class_t{
 	AST_NODE_CLASS_PROG,
@@ -140,7 +148,7 @@ struct generic_ast_node_t{
 	//Store an ident if we have one
 	char identifier[MAX_IDENT_LENGTH];
 	//Is this assignable?
-	u_int8_t is_assignable;
+	variable_assignability_t is_assignable;
 	//Is this a deferred node?
 	u_int8_t is_deferred;
 	//What is the value of this case statement

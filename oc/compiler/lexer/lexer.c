@@ -157,7 +157,7 @@ Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 	u_int16_t lexeme_index = 0;
 
 	//First pop off all of the tokens if there are any on the stack
-	while(lex_stack_is_empty(pushed_back_tokens) == 0){
+	while(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
 		//Pop whatever we have off
 		Lexer_item token = pop_token(pushed_back_tokens);
 		//Add it in here
@@ -209,7 +209,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 	}
 
 	//IF we have pushed back tokens, we need to return them first
-	if(lex_stack_is_empty(pushed_back_tokens) == 0){
+	if(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
 		//Just pop this and leave
 		return pop_token(pushed_back_tokens);
 	}

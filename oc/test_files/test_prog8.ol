@@ -12,6 +12,8 @@ fn main() -> i32{
 	declare mut x:i32*;
 	//We would've modified a here
 
+	//x := &a;
+
 	for(let _:u32 := 0; _ < 23; _++) do{
 		a++;
 	}

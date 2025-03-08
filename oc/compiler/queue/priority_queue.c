@@ -165,8 +165,12 @@ void* priority_queue_dequeue(priority_queue_t* queue){
 /**
  * Simply return if the next index is 0
  */
-u_int8_t priority_queue_is_empty(priority_queue_t* queue){
-	return queue->next_index == 0;
+priority_queue_status_t priority_queue_is_empty(priority_queue_t* queue){
+	if(queue->next_index == 0){
+		return PRIORITY_QUEUE_EMPTY;
+	} else {
+		return PRIORITY_QUEUE_NOT_EMPTY;
+	}
 }
 
 

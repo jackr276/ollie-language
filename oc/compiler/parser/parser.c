@@ -20,6 +20,14 @@
 #include "../stack/lexstack.h"
 #include "../queue/heap_queue.h"
 
+//For code clarity
+#define SUCCESS 1
+#define FAILURE 0
+
+//All error sizes are 1000 unless specified
+#define ERROR_SIZE 1500
+#define LARGE_ERROR_SIZE 2000
+
 //The function is reentrant
 //Variable and function symbol tables
 static function_symtab_t* function_symtab = NULL;
@@ -113,7 +121,7 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
  */
 static generic_ast_node_t* identifier(FILE* fl){
 	//In case of error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 
 	//Grab the next token
 	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -130,7 +138,7 @@ static generic_ast_node_t* identifier(FILE* fl){
 	//Create the identifier node
 	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER); //Add the identifier into the node itself
 	//Idents are assignable
-	ident_node->is_assignable = 1;
+	ident_node->is_assignable = ASSIGNABLE;
 	//Copy the string we got into it
 	strcpy(ident_node->identifier, lookahead.lexeme);
 	//Default identifier type is s_int32
@@ -151,7 +159,7 @@ static generic_ast_node_t* identifier(FILE* fl){
  */
 static generic_ast_node_t* label_identifier(FILE* fl){
 	//In case of error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 
 	//Grab the next token
 	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -355,7 +363,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
  */
 static generic_ast_node_t* function_call(FILE* fl){
 	//For generic error printing
-	char info[1500];
+	char info[ERROR_SIZE];
 	//The current line num
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -565,7 +573,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -625,7 +633,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//Store the variable that's associated
 		ident->variable = found;
 		//Idents are assignable
-		ident->is_assignable = 1;
+		ident->is_assignable = ASSIGNABLE;
 
 		//Give back the ident node
 		return ident;
@@ -722,7 +730,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  */
 static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Info array for error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -768,7 +776,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 
 	//If we didn't find an assignment operator, we just return the logical or expression
-	if(found_asn_op == 0){
+	if(found_asn_op == FAILURE){
 		return logical_or_expression(fl);
 	}
 
@@ -792,7 +800,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 	
 	//If it isn't assignable, we also fail
-	if(left_hand_unary->is_assignable == 0){
+	if(left_hand_unary->is_assignable == NOT_ASSIGNABLE){
 		print_parse_message(PARSE_ERROR, "Expression is not assignable", left_hand_unary->line_number);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -892,7 +900,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  */
 static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current_type){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -912,7 +920,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR);
 	//Is assignable
-	const_access_node->is_assignable = 1;
+	const_access_node->is_assignable = ASSIGNABLE;
 	//Add the line number
 	const_access_node->line_number = current_line;
 
@@ -1037,7 +1045,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
  */
 static generic_ast_node_t* array_accessor(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Freeze the current line
@@ -1125,7 +1133,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Freeze the current line number
@@ -1249,7 +1257,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		//This was assigned to
 		result->variable->assigned_to = 1;
 		//Assignable
-		postfix_expr_node->is_assignable = 1;
+		postfix_expr_node->is_assignable = ASSIGNABLE;
 		//And we'll give back what we had constructed so far
 		return postfix_expr_node;
 	}
@@ -1287,7 +1295,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	postfix_expr_node->variable = result->variable;
 
 	//Add the assignability in
-	postfix_expr_node->is_assignable = 0;
+	postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;
@@ -1468,11 +1476,11 @@ static void bitwise_not_constant_value(generic_ast_node_t* constant_node){
  */
 static generic_ast_node_t* unary_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Is this assignable
-	u_int8_t is_assignable = 1;
+	variable_assignability_t is_assignable = ASSIGNABLE;
 	//For folding cases
 	Token unary_op_tok = BLANK;
 
@@ -1485,7 +1493,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//size here
 	if(lookahead.tok == TYPESIZE){
 		//Not assignable
-		is_assignable = 0;
+		is_assignable = NOT_ASSIGNABLE;
 		//We must then see left parenthesis
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -1559,7 +1567,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 	} else if(lookahead.tok == SIZEOF){
 		//Not assignable
-		is_assignable = 0;
+		is_assignable = NOT_ASSIGNABLE;
 		//We must then see left parenthesis
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -1684,7 +1692,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			}
 
 			//This is assignable
-			is_assignable = 1;
+			is_assignable = ASSIGNABLE;
 
 		//Let's now check the & case
 		} else if (lookahead.tok == AND){
@@ -1719,7 +1727,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			}
 
 			//This is not assignable
-			is_assignable = 0;
+			is_assignable = NOT_ASSIGNABLE;
 
 		//Logical not(!) works on all basic types(minus void) and pointers
 		} else if(lookahead.tok == L_NOT){
@@ -1743,7 +1751,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			return_type = lookup_type(type_symtab, "u8")->type;
 			
 			//This is not assignable
-			is_assignable = 0;
+			is_assignable = NOT_ASSIGNABLE;
 		
 		//Bitwise not works on integers only
 		} else if(lookahead.tok == B_NOT){
@@ -1768,7 +1776,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			return_type = cast_expr->inferred_type;
 
 			//This is not assignable
-			is_assignable = 0;
+			is_assignable = NOT_ASSIGNABLE;
 
 		//Positive and negative sign works on integers and floats, but nothing else
 		} else if(lookahead.tok == MINUS){
@@ -1792,7 +1800,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			return_type = cast_expr->inferred_type;
 
 			//This is not assignable
-			is_assignable = 0;
+			is_assignable = NOT_ASSIGNABLE;
 
 		//preincrement and predecrement work on everything besides complex types
 		} else if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUSMINUS){
@@ -1822,7 +1830,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			}
 
 			//This is not assignable
-			is_assignable = 0;
+			is_assignable = NOT_ASSIGNABLE;
 		}
 
 		//If we have a special "fold" case here, i.e. we have something
@@ -1908,7 +1916,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
  */
 static generic_ast_node_t* cast_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 
@@ -2033,7 +2041,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
  */
 static generic_ast_node_t* multiplicative_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2370,7 +2378,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
  */
 static generic_ast_node_t* additive_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2761,7 +2769,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
  */
 static generic_ast_node_t* shift_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2889,7 +2897,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
  */
 static generic_ast_node_t* relational_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3007,7 +3015,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
  */
 static generic_ast_node_t* equality_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3127,7 +3135,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
  */
 static generic_ast_node_t* and_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3247,7 +3255,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
  */
 static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3367,7 +3375,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
  */
 static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3488,7 +3496,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
  */
 static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3613,7 +3621,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
  */
 static generic_ast_node_t* logical_or_expression(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3736,7 +3744,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  */
 static generic_ast_node_t* construct_member(FILE* fl){
 	//The error printing string
-	char info[1000];
+	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 
@@ -3942,7 +3950,7 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
  */
 static u_int8_t construct_definer(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Freeze the line num
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
@@ -3964,7 +3972,7 @@ static u_int8_t construct_definer(FILE* fl){
 		num_errors++;
 		//Destroy the node
 		//Fail out
-		return 1;
+		return FAILURE;
 	}
 
 	//Otherwise, we'll now add this identifier into the type name
@@ -3984,7 +3992,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_type_name(found);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Now we are required to see a curly brace
@@ -3995,7 +4003,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Otherwise we'll push onto the stack for later matching
@@ -4008,7 +4016,7 @@ static u_int8_t construct_definer(FILE* fl){
 	if(mem_list->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid construct member list given in construct definition", parser_line_num);
 		//We'll destroy it first
-		return 0;
+		return FAILURE;
 	}
 
 	//Otherwise we got past the list, and now we need to see a closing curly
@@ -4019,7 +4027,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Closing curly brace required after member list", parser_line_num);
 		num_errors++;
 		//Fail out here
-		return 0;
+		return FAILURE;
 	}
 	
 	//Check for unamtched curlies
@@ -4027,7 +4035,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
 		num_errors++;
 		//Fail out here
-		return 0;
+		return FAILURE;
 	}
 	
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
@@ -4043,7 +4051,7 @@ static u_int8_t construct_definer(FILE* fl){
 		//Sanity check
 		if(cursor->CLASS != AST_NODE_CLASS_CONSTRUCT_MEMBER){
 			print_parse_message(PARSE_ERROR, "Fatal internal parse error. Found non-construct member in member list", parser_line_num);
-			return 0;
+			return FAILURE;
 		}
 
 		//Pick out the variable record
@@ -4072,7 +4080,7 @@ static u_int8_t construct_definer(FILE* fl){
 
 	//We're out of here, just return the node that we made
 	if(lookahead.tok == SEMICOLON){
-		return 1;
+		return SUCCESS;
 	}
 	
 	//Otherwise, if this is correct, we should've seen the as keyword
@@ -4080,7 +4088,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition", parser_line_num);
 		num_errors++;
 		//Make an error and get out of here
-		return 1;
+		return FAILURE;
 	}
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
@@ -4092,7 +4100,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
-		return 0;
+		return FAILURE;
 	}
 
 	//Let's grab the actual name out
@@ -4108,7 +4116,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Check that it isn't some duplicated function name
@@ -4122,7 +4130,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_function_name(found_func);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -4136,7 +4144,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_variable_name(found_var);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -4150,7 +4158,7 @@ static u_int8_t construct_definer(FILE* fl){
 		print_type_name(found_type);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Now we'll make the actual record for the aliased type
@@ -4160,7 +4168,7 @@ static u_int8_t construct_definer(FILE* fl){
 	insert_type(type_symtab, create_type_record(aliased_type));
 
 	//Succeeded so
-	return 1;
+	return SUCCESS;
 }
 
 
@@ -4173,7 +4181,7 @@ static u_int8_t construct_definer(FILE* fl){
  */
 static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 
 	//We really just need to see a valid identifier here
 	generic_ast_node_t* ident = identifier(fl);
@@ -4326,7 +4334,7 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
  */
 static u_int8_t enum_definer(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -4347,7 +4355,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid name given to enum definition", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
-		return 0;
+		return FAILURE;
 	}
 
 	//Now if we get here we know that we found a valid ident, so we'll add it to the name
@@ -4366,7 +4374,7 @@ static u_int8_t enum_definer(FILE* fl){
 		//Print out the actual type too
 		print_type_name(found_type);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Now that we know we don't have a duplicate, we can now start looking for the enum list
@@ -4378,7 +4386,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Left curly expected before enumerator list", parser_line_num);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Push onto the stack for grouping
@@ -4391,7 +4399,7 @@ static u_int8_t enum_definer(FILE* fl){
 	if(member_list->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid enumeration member list given in enum definition", current_line);
 		//Destroy the member list
-		return 0;
+		return FAILURE;
 	}
 
 	//Now that we get down here the only thing left syntatically is to check for the closing curly
@@ -4402,7 +4410,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enum member list", parser_line_num);
 		num_errors++;
 		//Destroy the member list
-		return 0;
+		return FAILURE;
 	}
 
 	//We must also see matching ones here
@@ -4410,7 +4418,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected in enum defintion", parser_line_num);
 		num_errors++;
 		//Destroy the member list
-		return 0;
+		return FAILURE;
 	}
 
 	//Now that we know everything here has worked, we can finally create the enum type
@@ -4425,7 +4433,7 @@ static u_int8_t enum_definer(FILE* fl){
 		//Sanity check here, this should be of type enum member
 		if(cursor->CLASS != AST_NODE_CLASS_ENUM_MEMBER){
 			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Found non-member node in member list for enum", parser_line_num);
-			return 0;
+			return FAILURE;
 		}
 
 		//Otherwise we're fine
@@ -4460,7 +4468,7 @@ static u_int8_t enum_definer(FILE* fl){
 	//This means that we're out, so just give back the root node
 	if(lookahead.tok == SEMICOLON){
 		//We're done
-		return 1;
+		return SUCCESS;
 	}
 
 	//Otherwise, it is a requirement that we see the as keyword, so if we don't we're in trouble
@@ -4468,7 +4476,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after enum definition", parser_line_num);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
@@ -4480,7 +4488,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
-		return 0;
+		return FAILURE;
 	}
 
 	//Extract the alias name
@@ -4496,7 +4504,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after enum definition",  parser_line_num);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Check that it isn't some duplicated function name
@@ -4510,7 +4518,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_function_name(found_func);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -4524,7 +4532,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_variable_name(found_var);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -4538,7 +4546,7 @@ static u_int8_t enum_definer(FILE* fl){
 		print_type_name(found_type);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Now we'll make the actual record for the aliased type
@@ -4547,8 +4555,7 @@ static u_int8_t enum_definer(FILE* fl){
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
 
-	//Return success
-	return 1;
+	return SUCCESS;
 }
 
 
@@ -4669,7 +4676,7 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
  */
 static generic_ast_node_t* type_name(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//A temporary holder for the type name
@@ -5016,8 +5023,8 @@ static generic_ast_node_t* type_specifier(FILE* fl){
  * BNF Rule: <parameter-declaration> ::= {mut}? <identifier> : <type-specifier>
  */
 static generic_ast_node_t* parameter_declaration(FILE* fl){
-	//For any needed error printing
-	char info[2000];
+	//For any needed error printing -- need more size
+	char info[ERROR_SIZE + 500];
 	//Is it mutable?
 	u_int8_t is_mut = 0;
 	//Lookahead token
@@ -5293,8 +5300,8 @@ static generic_ast_node_t* expression_statement(FILE* fl){
  * <labeled-statement> ::= <label-identifier> : 
  */
 static generic_ast_node_t* labeled_statement(FILE* fl){
-	//For error printing
-	char info[2000];
+	//For error printing -- need more
+	char info[ERROR_SIZE + 500];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -5389,7 +5396,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
  */
 static generic_ast_node_t* if_statement(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
@@ -5949,7 +5956,7 @@ static generic_ast_node_t* branch_statement(FILE* fl){
  */
 static generic_ast_node_t* switch_statement(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -6177,7 +6184,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  */
 static generic_ast_node_t* while_statement(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Freeze the line number
@@ -6288,7 +6295,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
  */
 static generic_ast_node_t* do_while_statement(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -6714,7 +6721,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 			u_int8_t status = definition(fl);
 
 			//If we fail here we'll throw an error
-			if(status == 0){
+			if(status == FAILURE){
 				//Return an error node
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 			}
@@ -6783,8 +6790,6 @@ static generic_ast_node_t* compound_statement(FILE* fl){
  * BNF Rule: <assembly-statement> ::= #asm{{assembly-statement}+};
  */
 static generic_ast_node_t* assembly_inline_statement(FILE* fl){
-	//For error printing
-	char info[1000];
 	//The next token
 	Lexer_item lookahead;
 
@@ -7242,7 +7247,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
  */
 static generic_ast_node_t* case_statement(FILE* fl){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
@@ -7443,7 +7448,7 @@ static generic_ast_node_t* case_statement(FILE* fl){
  */
 static generic_ast_node_t* declare_statement(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[LARGE_ERROR_SIZE];
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -7496,7 +7501,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
@@ -7609,7 +7614,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	//The line_number
 	declared_var->line_number = current_line;
 	//Store what module this was defined in
-	strncpy(declared_var->module_defined_in, current_file_token, 100);
+	strncpy(declared_var->module_defined_in, current_file_token, MAX_IDENT_LENGTH);
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -7635,7 +7640,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
  */
 static generic_ast_node_t* let_statement(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[LARGE_ERROR_SIZE];
 	//The line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -7688,7 +7693,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
 		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
@@ -7856,7 +7861,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	//Save the line num
 	declared_var->line_number = current_line;
 	//Insert what module this came from
-	strncpy(declared_var->module_defined_in, current_file_token, 100);
+	strncpy(declared_var->module_defined_in, current_file_token, MAX_IDENT_LENGTH);
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
@@ -7884,7 +7889,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
  */
 static u_int8_t alias_statement(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[LARGE_ERROR_SIZE];
 	//Store the ident name locally
 	char ident_name[MAX_TYPE_NAME_LENGTH];
 	//Our lookahead token
@@ -7897,9 +7902,8 @@ static u_int8_t alias_statement(FILE* fl){
 	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given to alias statement", parser_line_num);
 		num_errors++;
-		//Free it
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Let's grab this now
@@ -7915,7 +7919,7 @@ static u_int8_t alias_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, "As keyword expected in alias statement", parser_line_num);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Otherwise we've made it, so now we need to see a valid identifier
@@ -7925,9 +7929,7 @@ static u_int8_t alias_statement(FILE* fl){
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
 		num_errors++;
-		//Free the ident node
-		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Array bounds checking real quick
@@ -7935,7 +7937,7 @@ static u_int8_t alias_statement(FILE* fl){
 		sprintf(info, "Type names may only be at most 200 characters long, was given: %s", (ident_node->identifier));
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Let's extract the name
@@ -7951,7 +7953,7 @@ static u_int8_t alias_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of alias statement",  parser_line_num);
 		num_errors++;
 		//Fail out here
-		return 0;
+		return FAILURE;
 	}
 
 	//Check that it isn't some duplicated function name
@@ -7965,7 +7967,7 @@ static u_int8_t alias_statement(FILE* fl){
 		print_function_name(found_func);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -7979,7 +7981,7 @@ static u_int8_t alias_statement(FILE* fl){
 		print_variable_name(found_var);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -7993,7 +7995,7 @@ static u_int8_t alias_statement(FILE* fl){
 		print_type_name(found_type);
 		num_errors++;
 		//Fail out
-		return 0;
+		return FAILURE;
 	}
 
 	//If we get here, we know that it actually worked, so we can create the alias
@@ -8006,7 +8008,7 @@ static u_int8_t alias_statement(FILE* fl){
 	insert_type(type_symtab, aliased_record);
 
 	//We succeeded so
-	return 1;
+	return SUCCESS;
 }
 
 
@@ -8035,7 +8037,7 @@ static u_int8_t definition(FILE* fl){
 		} else {
 			print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
 			num_errors++;
-			return 0;
+			return FAILURE;
 		}
 
 	} else if(lookahead.tok == ALIAS){
@@ -8044,7 +8046,7 @@ static u_int8_t definition(FILE* fl){
 	} else {
 		print_parse_message(PARSE_ERROR, "Definition expected define or alias keywords, found neither", parser_line_num);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 }
 
@@ -8059,7 +8061,7 @@ static u_int8_t definition(FILE* fl){
  */
 static generic_ast_node_t* declaration(FILE* fl){
 	//For error printing
-	char info[2000];
+	char info[LARGE_ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -8157,7 +8159,7 @@ static void insert_all_deferred_statements(generic_ast_node_t* compound_stmt){
 	enqueue(queue, compound_stmt);
 	
 	//So long as we have nodes to search
-	while(queue_is_empty(queue) == 0){
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
 		//Dequeue from the front
 		current_node = dequeue(queue);
 
@@ -8198,12 +8200,12 @@ static void insert_all_deferred_statements(generic_ast_node_t* compound_stmt){
  */
 static int8_t check_jump_labels(symtab_function_record_t* func_record){
 	//For error printing
-	char info[1000];
+	char info[ERROR_SIZE];
 	//Grab a reference to our current jump statement
 	generic_ast_node_t* current_jump_statement;
 
 	//So long as there are jump statements in the queue
-	while(queue_is_empty(current_function_jump_statements) == 0){
+	while(queue_is_empty(current_function_jump_statements) == HEAP_QUEUE_NOT_EMPTY){
 		//Grab the jump statement
 		current_jump_statement = dequeue(current_function_jump_statements);
 
@@ -8222,14 +8224,14 @@ static int8_t check_jump_labels(symtab_function_record_t* func_record){
 			sprintf(info, "Attempt to jump to nonexistent label \"%s\".", name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Fail out
-			return -1;
+			return FAILURE;
 		}
 
 		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
 		if(strcmp(current_function->func_name, label->function_declared_in->func_name) != 0){
 			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			return -1;
+			return FAILURE;
 		}
 
 		//Otherwise it worked, so we'll add this as the function's jumping to label
@@ -8237,7 +8239,7 @@ static int8_t check_jump_labels(symtab_function_record_t* func_record){
 	}
 
 	//If we get here then they all worked
-	return 0;
+	return SUCCESS;
 }
 
 
@@ -8253,7 +8255,7 @@ static int8_t check_jump_labels(symtab_function_record_t* func_record){
  */
 static generic_ast_node_t* function_definition(FILE* fl){
 	//This will be used for error printing
-	char info[2000];
+	char info[LARGE_ERROR_SIZE];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -8399,7 +8401,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//By default, this function has never been called
 		function_record->called = 0;
 		//Copy the module it was defined in
-		strncpy(function_record->module_defined_in, current_file_token, 100);
+		strncpy(function_record->module_defined_in, current_file_token, MAX_IDENT_LENGTH);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -8700,7 +8702,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		insert_all_deferred_statements(compound_stmt_node);
 		
 		//We now need to check and see if our jump statements are actually valid
-		if(check_jump_labels(function_record) == -1){
+		if(check_jump_labels(function_record) == FAILURE){
 			//If this fails, we fail out here too
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
@@ -8744,7 +8746,7 @@ static u_int8_t replace_statement(FILE* fl){
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to replace statement", parser_line_num);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 	
 	//Now that we have the ident, we need to make sure that it's not a duplicate
@@ -8756,7 +8758,7 @@ static u_int8_t replace_statement(FILE* fl){
 		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
@@ -8771,7 +8773,7 @@ static u_int8_t replace_statement(FILE* fl){
 		//Also print out the function declaration
 		print_function_name(found_func);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -8784,7 +8786,7 @@ static u_int8_t replace_statement(FILE* fl){
 		//Also print out the original declaration
 		print_type_name(found_type);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -8797,7 +8799,7 @@ static u_int8_t replace_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Let's see if we've already named a constant this
@@ -8810,7 +8812,7 @@ static u_int8_t replace_statement(FILE* fl){
 		//Also print out the original declaration
 		print_constant_name(found_const);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//We now need to see the with keyword
@@ -8820,7 +8822,7 @@ static u_int8_t replace_statement(FILE* fl){
 	if(lookahead.tok != WITH){
 		print_parse_message(PARSE_ERROR, "With keyword required in replace statement", parser_line_num);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Otherwise it worked, so now we need to see a constant of some kind
@@ -8829,7 +8831,7 @@ static u_int8_t replace_statement(FILE* fl){
 	//If this fails, then we are done
 	if(constant_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		//Just return 0, printing already happened
-		return 0;
+		return FAILURE;
 	}
 
 	//One last thing, we need to see a semicolon
@@ -8839,7 +8841,7 @@ static u_int8_t replace_statement(FILE* fl){
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon required after replace statement", parser_line_num);
 		num_errors++;
-		return 0;
+		return FAILURE;
 	}
 
 	//Now we're ready for assembly and insertion
@@ -8849,13 +8851,13 @@ static u_int8_t replace_statement(FILE* fl){
 	created_const->constant_node = constant_node;
 	created_const->line_number = parser_line_num;
 	//Store what module this was defined in
-	strncpy(created_const->module_defined_in, current_file_token, 100);
+	strncpy(created_const->module_defined_in, current_file_token, MAX_IDENT_LENGTH);
 
 	//Insert the record into the symtab
 	insert_constant(constant_symtab, created_const);
 
 	//And we're all set, return success(1)
-	return 1;
+	return SUCCESS;
 }
 
 
@@ -8901,7 +8903,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 		u_int8_t status = definition(fl);
 
 		//If it's bad, we'll return an error node
-		if(status == 0){
+		if(status == FAILURE){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
@@ -8914,7 +8916,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 		u_int8_t status = replace_statement(fl);
 
 		//If it's bad, we'll return an error node
-		if(status == 0){
+		if(status == FAILURE){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 

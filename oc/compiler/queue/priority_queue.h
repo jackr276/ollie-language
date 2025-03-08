@@ -14,6 +14,14 @@ typedef struct priority_queue_t priority_queue_t;
 //The nodes in our priority queue
 typedef struct priority_queue_node_t priority_queue_node_t;
 
+/**
+ * The priority queue's emptiness status
+ */
+typedef enum{
+	PRIORITY_QUEUE_EMPTY,
+	PRIORITY_QUEUE_NOT_EMPTY
+} priority_queue_status_t;
+
 
 /**
  * This struct will usually be passed by copy -- it contains a pointer 
@@ -59,7 +67,7 @@ void* priority_queue_dequeue(priority_queue_t* queue);
 /**
  * Is the priority queue empty?
 */
-u_int8_t priority_queue_is_empty(priority_queue_t* queue);
+priority_queue_status_t priority_queue_is_empty(priority_queue_t* queue);
 
 /**
  * Deallocate the memory of the priority queue

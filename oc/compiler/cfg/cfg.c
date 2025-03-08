@@ -953,7 +953,7 @@ static void emit_blocks_dfs(cfg_t* cfg){
 	push(stack, cfg->root);
 
 	//So long as the stack is not empty
-	while(is_empty(stack) == 0){
+	while(is_empty(stack) == HEAP_STACK_NOT_EMPTY){
 		//Grab the current one off of the stack
 		block_cursor = pop(stack);
 
@@ -1185,7 +1185,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 	push(stack, entry_block);
 
 	//So long as the stack is not empty
-	while(is_empty(stack) == 0){
+	while(is_empty(stack) == HEAP_STACK_NOT_EMPTY){
 		//Grab the current one off of the stack
 		block_cursor = pop(stack);
 
@@ -3125,7 +3125,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//Once we get here, we'll now add in any deferred statements to the function ending block
 	
 	//So long as they aren't empty
-	while(is_empty(deferred_stmts) == 0){
+	while(is_empty(deferred_stmts) == HEAP_STACK_NOT_EMPTY){
 		//Add them in one by one
 		add_statement(function_ending_block, pop(deferred_stmts));
 	}

@@ -118,7 +118,7 @@ static front_end_results_package_t compile(char* fname){
 		results.num_errors = 1;
 		results.lines_processed = 0;
 		//Failed here
-		results.success = 0;
+		results.result_type = PARSER_RESULT_FAILURE;
 		//Give it back
 		return results;
 	}
@@ -131,7 +131,7 @@ static front_end_results_package_t compile(char* fname){
 		results.num_errors = 1;
 		results.lines_processed = 0;
 		//Failed here
-		results.success = 0;
+		results.result_type = PARSER_RESULT_FAILURE;
 		//Give it back
 		return results;
 	}
@@ -273,14 +273,14 @@ int main(int argc, char** argv){
 		printf("%s\n", info);
 		printf("=======================================================================\n\n");
 		//Failure here
-		results.success = 0;
+		results.result_type = PARSER_RESULT_FAILURE;
 	} else {
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", results.lines_processed);
 		printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
 		printf("=======================================================================\n\n");
 		//If we get here we know that we succeeded
-		results.success = 1;
+		results.result_type = PARSER_RESULT_SUCCESS;
 	}
 
 	printf("==========================================================================================\n\n");

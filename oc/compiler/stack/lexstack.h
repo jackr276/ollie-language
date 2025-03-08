@@ -17,6 +17,14 @@
 typedef struct lex_node_t lex_node_t;
 
 /**
+ * The current status of the lexer stack
+ */
+typedef enum{
+	LEX_STACK_EMPTY,
+	LEX_STACK_NOT_EMPTY
+} lex_stack_status_t;
+
+/**
  * Nodes for our stack
  */
 struct lex_node_t {
@@ -48,7 +56,7 @@ void push_token(lex_stack_t* stack, Lexer_item l);
 /**
  * Is the stack empty or not
  */
-u_int8_t lex_stack_is_empty(lex_stack_t* lex_stack);
+lex_stack_status_t lex_stack_is_empty(lex_stack_t* lex_stack);
 
 /**
  * Remove the top value of the stack
