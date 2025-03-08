@@ -38,10 +38,15 @@ function_symtab_t* function_symtab_alloc(){
  */
 variable_symtab_t* variable_symtab_alloc(){
 	variable_symtab_t* symtab = (variable_symtab_t*)calloc(1, sizeof(variable_symtab_t));
+	//We also need to allocate the sheafs array
+	symtab->sheafs = calloc(MAX_SHEAFS, sizeof(symtab_variable_sheaf_t));
+
 	symtab->current_lexical_scope = 0;
 	//Nothing has been initialized yet
 	symtab->current = NULL;
-	symtab->next_index = 0;
+	//Initialize these too
+	symtab->num_sheafs = 0;
+	symtab->max_sheafs = MAX_SHEAFS;
 
 	return symtab;
 }
@@ -52,9 +57,15 @@ variable_symtab_t* variable_symtab_alloc(){
  */
 type_symtab_t* type_symtab_alloc(){
 	type_symtab_t* symtab = (type_symtab_t*)calloc(1, sizeof(type_symtab_t));
-	symtab->next_index = 0;
+	//We also need to allocate the sheafs here
+	symtab->sheafs = calloc(MAX_SHEAFS, sizeof(symtab_type_sheaf_t));
+
 	symtab->current_lexical_scope = 0;
 	symtab->current = NULL;
+
+	//Initialize these too
+	symtab->num_sheafs = 0;
+	symtab->max_sheafs = MAX_SHEAFS;
 
 	return symtab;
 }
@@ -75,10 +86,20 @@ constants_symtab_t* constants_symtab_alloc(){
  * adding it in
 */
 void initialize_variable_scope(variable_symtab_t* symtab){
+	//Sheaf dynamic resize if needed
+	if(symtab->num_sheafs == symtab->max_sheafs){
+		//Double the amount
+		symtab->max_sheafs *= 2;
+
+		//Reallocate the sheafs array
+		symtab->sheafs = realloc(symtab->sheafs, symtab->max_sheafs * sizeof(symtab_variable_sheaf_t));
+	}
+
 	symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
+
 	//Store it in here for later
-	symtab->sheafs[symtab->next_index] = current;
-	symtab->next_index++;
+	symtab->sheafs[symtab->num_sheafs] = current;
+	symtab->num_sheafs++;
 
 	//Increment(down the chain)
 	symtab->current_lexical_scope++;
@@ -100,10 +121,19 @@ void initialize_variable_scope(variable_symtab_t* symtab){
  * adding it in
 */
 void initialize_type_scope(type_symtab_t* symtab){
+	//Sheaf dynamic resize if needed
+	if(symtab->num_sheafs == symtab->max_sheafs){
+		//Double the amount
+		symtab->max_sheafs *= 2;
+
+		//Reallocate the sheafs array
+		symtab->sheafs = realloc(symtab->sheafs, symtab->max_sheafs * sizeof(symtab_type_sheaf_t));
+	}
+
 	symtab_type_sheaf_t* current = (symtab_type_sheaf_t*)calloc(1, sizeof(symtab_type_sheaf_t));
 	//Store it in here for later
-	symtab->sheafs[symtab->next_index] = current;
-	symtab->next_index++;
+	symtab->sheafs[symtab->num_sheafs] = current;
+	symtab->num_sheafs++;
 
 	//Increment(down the chain)
 	symtab->current_lexical_scope++;
@@ -586,7 +616,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 	symtab_variable_record_t* records_cursor;
 
 	//So long as the cursor is not null
-	for(u_int16_t i = 0; i < symtab->next_index; i++){
+	for(u_int16_t i = 0; i < symtab->num_sheafs; i++){
 		//Grab the current sheaf
 		cursor = symtab->sheafs[i];
 
@@ -1007,7 +1037,7 @@ void variable_symtab_dealloc(variable_symtab_t* symtab){
 	symtab_variable_record_t* temp;
 
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < symtab->next_index; i++){
+	for	(u_int16_t i = 0; i < symtab->num_sheafs; i++){
 		cursor = symtab->sheafs[i];
 
 		//Now we'll free all non-null records
@@ -1024,6 +1054,9 @@ void variable_symtab_dealloc(variable_symtab_t* symtab){
 		//Free the sheaf
 		free(cursor);
 	}
+	
+	//Free the sheaf array
+	free(symtab->sheafs);
 
 	//Finally free the symtab itself
 	free(symtab);
@@ -1039,7 +1072,7 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 	symtab_type_record_t* temp;
 
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < symtab->next_index; i++){
+	for	(u_int16_t i = 0; i < symtab->num_sheafs; i++){
 		cursor = symtab->sheafs[i];
 
 		//Now we'll free all non-null records
@@ -1058,6 +1091,9 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 		//Free the sheaf
 		free(cursor);
 	}
+
+	//Free the sheaf array
+	free(symtab->sheafs);
 
 	//Finally free the symtab itself
 	free(symtab);

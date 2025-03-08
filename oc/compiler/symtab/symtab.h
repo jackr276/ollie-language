@@ -18,8 +18,8 @@
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
 #define KEYSPACE 997
-//We figure that 200 separate lexical-levels is enough
-#define MAX_SHEAFS 200
+//By default we have 100 sheafs. Sheafs are dynamically resizable however
+#define MAX_SHEAFS 50
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
 
@@ -228,12 +228,15 @@ struct symtab_type_sheaf_t{
  * This struct represents the overall collection of the sheafs of symtabs
  */
 struct variable_symtab_t{
-	//The next index that we'll insert into
-	u_int16_t next_index;
-
 	//A global storage array for all symtab "sheaths"
-	symtab_variable_sheaf_t* sheafs[MAX_SHEAFS];
+	symtab_variable_sheaf_t** sheafs;
+	
+	//The number of sheafs that we currently have
+	u_int16_t num_sheafs;
 
+	//The current maximum number of sheafs
+	u_int16_t max_sheafs;
+	
 	//The current symtab sheaf
 	symtab_variable_sheaf_t* current;
 
@@ -246,11 +249,14 @@ struct variable_symtab_t{
  * This struct represents the overall collection of the sheafs of symtabs
  */
 struct type_symtab_t{
-	//The next index that we'll insert into
-	u_int16_t next_index;
-
 	//A global storage array for all symtab "sheaths"
-	symtab_type_sheaf_t* sheafs[MAX_SHEAFS];
+	symtab_type_sheaf_t** sheafs;
+	
+	//The number of sheafs that we currently have
+	u_int16_t num_sheafs;
+
+	//The current maximum number of sheafs
+	u_int16_t max_sheafs;
 
 	//The current symtab sheaf
 	symtab_type_sheaf_t* current;
