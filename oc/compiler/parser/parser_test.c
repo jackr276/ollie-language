@@ -5,6 +5,7 @@
 #include "parser.h"
 #include <stdio.h>
 #include <sys/types.h>
+#include "../ast/ast.h"
 
 
 /**
@@ -26,7 +27,8 @@ int main(int argc, char** argv){
 			printf("COULD NOT OPEN FILE %s\n", argv[i]);
 		}
 
-		parse(fl, "Sample");
+		front_end_results_package_t results = parse(fl, "Sample");
+		ast_dealloc();
 
 		fclose(fl);
 	}

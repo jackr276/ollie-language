@@ -20,6 +20,8 @@
 #define KEYSPACE 9999 
 //We figure that 200 separate lexical-levels is enough
 #define MAX_SHEAFS 200
+//The maximum number of function paramaters
+#define MAX_FUNCTION_PARAMS 6
 
 //A variable symtab
 typedef struct variable_symtab_t variable_symtab_t;
@@ -76,9 +78,9 @@ struct symtab_function_record_t{
 	//The entrance CFG block to the function. There is always only one entrance
 	void* entrance_block;
 	//The name that we are storing. This is used to derive the hash
-	char func_name[100];
+	char func_name[MAX_IDENT_LENGTH];
 	//The module it was defined in
-	char module_defined_in[100];
+	char module_defined_in[MAX_IDENT_LENGTH];
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
@@ -90,7 +92,7 @@ struct symtab_function_record_t{
 	//Number of parameters
 	u_int8_t number_of_params;
 	//The parameters
-	parameter_t func_params[6];
+	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
 	//What's the return type?
@@ -112,9 +114,9 @@ struct symtab_function_record_t{
  */
 struct symtab_variable_record_t{
 	//Variable name
-	char var_name[100];
+	char var_name[MAX_IDENT_LENGTH];
 	//The module it was defined in
-	char module_defined_in[100];
+	char module_defined_in[MAX_IDENT_LENGTH];
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it
@@ -186,9 +188,9 @@ struct symtab_constant_record_t{
 	//Line number
 	u_int16_t line_number;
 	//The name
-	char name[100];
+	char name[MAX_IDENT_LENGTH];
 	//The module it was defined in
-	char module_defined_in[100];
+	char module_defined_in[MAX_IDENT_LENGTH];
 	//We'll link directly to the constant node here
 	void* constant_node;
 	//For linked list functionality

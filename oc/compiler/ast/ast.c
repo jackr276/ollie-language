@@ -117,21 +117,15 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		//The function specifier AST node
 		case AST_NODE_CLASS_FUNC_DEF:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(func_def_ast_node_t));
-			node->inner_node_size = sizeof(func_def_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_FUNC_DEF;
 			break;
 
 		//The function specifier AST node
 		case AST_NODE_CLASS_PARAM_LIST:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(param_list_ast_node_t));
-			node->inner_node_size = sizeof(param_list_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_PARAM_LIST;
-
-			//Initialize this here, although in theory calloc should've
-			((param_list_ast_node_t*)(node->node))->num_params = 0;
-
 			break;
 
 		//The parameter declaration node
@@ -158,8 +152,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		//The type address specifier node
 		case AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(type_address_specifier_ast_node_t));
-			node->inner_node_size = sizeof(type_address_specifier_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER;
 			break;
 		
@@ -201,8 +194,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		//Function call node
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(function_call_ast_node_t));
-			node->inner_node_size = sizeof(function_call_ast_node_t);
+			node->inner_node_size = 0;
 			node->CLASS = AST_NODE_CLASS_FUNCTION_CALL;
 			break;
 

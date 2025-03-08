@@ -413,7 +413,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL);
 
 	//Store the function record in the node
-	((function_call_ast_node_t*)(function_call_node->node))->func_record = function_record;
+	function_call_node->func_record = function_record;
 
 	//We'll also add in that the current function has called this one
 	call_function(current_function->call_graph_node, function_record->call_graph_node);
@@ -4581,7 +4581,7 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
 	//Very easy to handle this, we'll just construct the node and give it back
 	if(lookahead.tok == STAR){
 		//This is an address specifier
-		((type_address_specifier_ast_node_t*)(type_addr_node->node))->address_type = ADDRESS_SPECIFIER_ADDRESS;
+		type_addr_node->address_type = ADDRESS_SPECIFIER_ADDRESS;
 		//And we're done, just give it back
 		return type_addr_node;
 	}
@@ -4637,7 +4637,7 @@ static generic_ast_node_t* type_address_specifier(FILE* fl){
 	
 	//Once we get here, we know that everything is syntactically valid. We'll now build and return our node
 	//Declare what kind of node this is
-	((type_address_specifier_ast_node_t*)(type_addr_node)->node)->address_type = ADDRESS_SPECIFIER_ARRAY;
+	type_addr_node->address_type = ADDRESS_SPECIFIER_ARRAY;
 	//Since it's an array, it will have a child that is the constant node
 	add_child_node(type_addr_node, constant_node);
 	//Store the line number
@@ -4935,7 +4935,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 		//are only aggregate types
 		
 		//If it's a pointer type
-		if(((type_address_specifier_ast_node_t*)(address_specifier->node))->address_type == ADDRESS_SPECIFIER_ADDRESS){
+		if(address_specifier->address_type == ADDRESS_SPECIFIER_ADDRESS){
 			//Let's create the pointer type. This pointer type will point to the current type
 			generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num);
 
@@ -5178,7 +5178,7 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 	//Let's now create the parameter list node
 	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST);
 	//Initially no params
-	((param_list_ast_node_t*)(param_list_node->node))->num_params = 0;
+	param_list_node->num_params = 0;
 
 	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
 	//done here and we'll just return an empty list
@@ -5219,7 +5219,7 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 		add_child_node(param_list_node, param_decl);
 
 		//Otherwise it was valid, so we've seen one more parameter
-		(((param_list_ast_node_t*)(param_list_node->node))->num_params)++;
+		param_list_node->num_params++;
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8392,7 +8392,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
 		function_record = create_function_record(function_name, storage_class);
 		//Associate this with the function node
-		((func_def_ast_node_t*)(function_node->node))->func_record = function_record;
+		function_node->func_record = function_record;
 		//Set first thing
 		function_record->number_of_params = 0;
 		function_record->line_number = current_line;

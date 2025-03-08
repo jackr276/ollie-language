@@ -28,18 +28,10 @@
 
 //A generic AST node can be any AST node
 typedef struct generic_ast_node_t generic_ast_node_t;
-//A function definition AST node
-typedef struct func_def_ast_node_t func_def_ast_node_t;
-//A parameter list node
-typedef struct param_list_ast_node_t param_list_ast_node_t;
 //A constant node. Can represent any of the four kinds of constant
 typedef struct constant_ast_node_t constant_ast_node_t;
 //A type name node
 typedef struct type_name_ast_node_t type_name_ast_node_t;
-//Type address specifier node
-typedef struct type_address_specifier_ast_node_t type_address_specifier_ast_node_t;
-//The function call node
-typedef struct function_call_ast_node_t function_call_ast_node_t;
 //A struct accessor node
 typedef struct construct_accessor_ast_node_t construct_accessor_ast_node_t;
 //A construct member list node
@@ -151,6 +143,10 @@ struct generic_ast_node_t{
 	variable_assignability_t is_assignable;
 	//Is this a deferred node?
 	u_int8_t is_deferred;
+	//The number of parameters
+	u_int8_t num_params;
+	//The type address specifier - for types
+	address_specifier_type_t address_type;
 	//What is the value of this case statement
 	int64_t case_statement_value;
 	//What is the size of it's inner node
@@ -159,20 +155,9 @@ struct generic_ast_node_t{
 	void* node;
 	//What variable do we have?
 	symtab_variable_record_t* variable;
-};
-
-
-//Represents a top level function definition
-struct func_def_ast_node_t{
-	//The symtable function record that is created in parallel
+	//The symtab function record
 	symtab_function_record_t* func_record;
-};
 
-//Holds references to our parameter list
-struct param_list_ast_node_t{
-	//Hold how many params that we actually have
-	//This is all we really care about here
-	u_int8_t num_params;
 };
 
 
@@ -196,18 +181,6 @@ struct type_name_ast_node_t{
 	symtab_type_record_t* type_record;
 };
 
-
-//Hold the address specifier
-struct type_address_specifier_ast_node_t{
-	//Is it an address or array?
-	address_specifier_type_t address_type;
-};
-
-//The function node call
-struct function_call_ast_node_t{
-	//Store the function record
-	symtab_function_record_t* func_record;
-};
 
 //The construct accessor node
 struct construct_accessor_ast_node_t{

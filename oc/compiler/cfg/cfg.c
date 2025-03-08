@@ -865,7 +865,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
  */
 static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Grab this out first
-	symtab_function_record_t* func_record = ((function_call_ast_node_t*)(function_call_node->node))->func_record;
+	symtab_function_record_t* func_record = function_call_node->func_record;
 
 	//May be NULL or not based on what we have as the return type
 	three_addr_var_t* assignee = NULL;
@@ -1168,7 +1168,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 
 	//If the function returns void, there is no need for any reachability analysis, it will return when 
 	//the function runs off anyway
-	if(strcmp(((func_def_ast_node_t*)(function_node->node))->func_record->return_type->type_name, "void") == 0){
+	if(strcmp(function_node->func_record->return_type->type_name, "void") == 0){
 		return;
 	}
 
@@ -1223,7 +1223,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 	//Once we escape our while loop, we can actually see what the analysis said
 	if(dead_ends > 0){
 		//Extract the function name
-		char* func_name = ((func_def_ast_node_t*)(function_node->node))->func_record->func_name;
+		char* func_name = function_node->func_record->func_name;
 		sprintf(info, "Non-void function \"%s\" does not return a value in all control paths", func_name);
 		print_cfg_message(WARNING, info, function_node->line_number);
 		(*num_warnings_ref)+=dead_ends;
@@ -3065,7 +3065,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	function_ending_block->is_exit_block = 1;
 
 	//Grab the function record
-	symtab_function_record_t* func_record = ((func_def_ast_node_t*)(function_node->node))->func_record;
+	symtab_function_record_t* func_record = function_node->func_record;
 	//Store this in the entry block
 	function_starting_block->func_record = func_record;
 
@@ -3096,7 +3096,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 		add_successor(function_starting_block, function_ending_block);
 		
 		//We'll also throw a warning
-		sprintf(info, "Function \"%s\" was given no body", ((func_def_ast_node_t*)(function_node->node))->func_record->func_name);
+		sprintf(info, "Function \"%s\" was given no body", function_node->func_record->func_name);
 		print_cfg_message(WARNING, info, func_cursor->line_number);
 		//One more warning
 		(*num_warnings_ref)++;
