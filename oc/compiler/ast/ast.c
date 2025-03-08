@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 //The very first created node
@@ -43,6 +44,14 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 			//Copy over the entirety of the inlined assembly
 			strcpy(duplicated_asm->asm_line_statements, old_asm->asm_line_statements);
 		}
+	}
+
+	//If it's an ident, we'll need to duplicate that
+	if(node->CLASS == AST_NODE_CLASS_IDENTIFIER){
+		//Allocate this
+		duplicated->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
+		//Copy the string over
+		memcpy(duplicated->identifier, node->identifier, MAX_IDENT_LENGTH);
 	}
 
 	//We don't want to hold onto any of these old references here
@@ -167,6 +176,8 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		case AST_NODE_CLASS_IDENTIFIER:
 			//Just allocate the proper size and set the class
 			node->inner_node_size = 0;
+			//Allocate the inner ident
+			node->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
 			node->CLASS = AST_NODE_CLASS_IDENTIFIER;
 			break;
 
@@ -453,6 +464,11 @@ void ast_dealloc(){
 
 			//No matter what, we always free this
 			free(temp->node);
+		}
+
+		//Free this if needed
+		if(temp->CLASS == AST_NODE_CLASS_IDENTIFIER){
+			free(temp->identifier);
 		}
 
 		//Destroy temp here

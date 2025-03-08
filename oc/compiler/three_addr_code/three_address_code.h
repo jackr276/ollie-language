@@ -118,7 +118,7 @@ struct three_addr_const_t{
 	Token const_type;
 	//And we hold everything relevant about the constant
 	long long_const;
-	char str_const[500];
+	char str_const[MAX_TOKEN_LENGTH];
 	char char_const;
 	float float_const;
 	int int_const;
@@ -154,7 +154,7 @@ struct three_addr_code_stmt_t{
 	//The variable record
 	symtab_variable_record_t* var_record;
 	//The list of temp variable parameters at most 6
-	three_addr_var_t* params[6];
+	three_addr_var_t* params[MAX_FUNCTION_PARAMS];
 	//Very special case, only for inlined assembly
 	char* inlined_assembly;
 	//TODO may add more

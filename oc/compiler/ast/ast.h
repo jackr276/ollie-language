@@ -138,7 +138,7 @@ struct generic_ast_node_t{
 	//Store a unary operator(if one exists)
 	Token unary_operator;
 	//Store an ident if we have one
-	char identifier[MAX_IDENT_LENGTH];
+	char* identifier;
 	//Is this assignable?
 	variable_assignability_t is_assignable;
 	//Is this a deferred node?
