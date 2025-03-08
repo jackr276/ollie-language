@@ -32,20 +32,6 @@ typedef struct generic_ast_node_t generic_ast_node_t;
 typedef struct constant_ast_node_t constant_ast_node_t;
 //A type name node
 typedef struct type_name_ast_node_t type_name_ast_node_t;
-//A struct accessor node
-typedef struct construct_accessor_ast_node_t construct_accessor_ast_node_t;
-//A construct member list node
-typedef struct construct_member_list_ast_node_t construct_member_list_ast_node_t;
-//A construct member node
-typedef struct construct_member_ast_node_t construct_member_ast_node_t;
-//An enumarated list node
-typedef struct enum_member_list_ast_node_t enum_member_list_ast_node_t;
-//An enumerated member node
-typedef struct enum_member_ast_node_t enum_member_ast_node_t;
-//An AST node for if statements
-typedef struct if_stmt_ast_node_t if_stmt_ast_node_t;
-//An AST node for alias statements
-typedef struct alias_stmt_ast_node_t alias_stmt_ast_node_t;
 //An AST node for assembly inline statements
 typedef struct asm_inline_stmt_ast_node_t asm_inline_stmt_ast_node_t;
 
@@ -137,6 +123,8 @@ struct generic_ast_node_t{
 	Token binary_operator;
 	//Store a unary operator(if one exists)
 	Token unary_operator;
+	//Construct accessor token
+	Token construct_accessor_tok;
 	//Store an ident if we have one
 	char* identifier;
 	//Is this assignable?
@@ -145,21 +133,29 @@ struct generic_ast_node_t{
 	u_int8_t is_deferred;
 	//The number of parameters
 	u_int8_t num_params;
+	//Number of members - used for enums and constructs
+	u_int16_t num_members;
 	//The type address specifier - for types
 	address_specifier_type_t address_type;
 	//What is the value of this case statement
 	int64_t case_statement_value;
-	//What is the size of it's inner node
-	size_t inner_node_size;
 	//This is where we hold the actual node
 	void* node;
 	//What variable do we have?
 	symtab_variable_record_t* variable;
 	//The symtab function record
 	symtab_function_record_t* func_record;
-
+	//Holds the name of the type as a string
+	char* type_name;
+	//The type record that we have
+	symtab_type_record_t* type_record;
 };
 
+
+/**
+ * The following are special cases. In these cases, the generic(void* node)
+ * is used to grab these so-called inner-nodes
+ */
 
 //Holds information about a constant
 struct constant_ast_node_t{
@@ -173,50 +169,6 @@ struct constant_ast_node_t{
 	char string_val[MAX_TOKEN_LENGTH];
 };
 
-//Simply holds a name that we get for a type
-struct type_name_ast_node_t{
-	//Holds the name of the type as a string
-	char type_name[MAX_TYPE_NAME_LENGTH];
-	//The type record that we have
-	symtab_type_record_t* type_record;
-};
-
-
-//The construct accessor node
-struct construct_accessor_ast_node_t{
-	//The token that we saw(either : or =>)
-	Token tok;
-};
-
-//The construct member list node
-struct construct_member_list_ast_node_t{
-	//We'll just keep a count of how many members
-	u_int8_t num_members;
-};
-
-//The construct member node itself
-struct construct_member_ast_node_t{
-	//Keep a reference to the variable record
-	symtab_variable_record_t* member_var;
-};
-
-//The enum list node for the definition
-struct enum_member_list_ast_node_t{
-	//Holds the number of members
-	u_int8_t num_members;
-};
-
-//The enum member node
-struct enum_member_ast_node_t{
-	//Hold the associate symtable record
-	symtab_variable_record_t* member_var;
-};
-
-//An alias stmt
-struct alias_stmt_ast_node_t{
-	//Hold the alias that we made
-	symtab_type_record_t* alias;
-};
 
 //An assembly inline statement
 struct asm_inline_stmt_ast_node_t{

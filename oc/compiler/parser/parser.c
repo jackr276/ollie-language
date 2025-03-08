@@ -925,7 +925,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 	const_access_node->line_number = current_line;
 
 	//Put the token in to show what we have
-	((construct_accessor_ast_node_t*)(const_access_node->node))->tok = lookahead.tok;
+	const_access_node->construct_accessor_tok = lookahead.tok;
 
 	//Grab a convenient reference to the type that we're working with
 	generic_type_t* working_type = dealias_type(*current_type);
@@ -3854,7 +3854,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	//We can now also construct the entire subtree
 	generic_ast_node_t* member_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_MEMBER);
 	//Store the variable record here
-	((construct_member_ast_node_t*)(member_node->node))->member_var = member_record;
+	member_node->variable = member_record;
 
 	//The second child will be the ident node
 	add_child_node(member_node, ident);
@@ -4055,7 +4055,7 @@ static u_int8_t construct_definer(FILE* fl){
 		}
 
 		//Pick out the variable record
-		symtab_variable_record_t* var = ((construct_member_ast_node_t*)(cursor->node))->member_var;
+		symtab_variable_record_t* var = cursor->variable;
 
 		//We'll now add this into the parameter list
 		construct_type->construct_type->members[construct_type->construct_type->num_members] = var;
@@ -4257,7 +4257,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
 	//Finally, we'll construct the node that holds this item and send it out
 	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER);
 	//Store the record in this for ease of access/modification
-	((enum_member_ast_node_t*)(enum_member->node))->member_var = enum_record;
+	enum_member->variable = enum_record;
 	//Add the identifier as the child of this node
 	add_child_node(enum_member, ident);
 
@@ -4438,7 +4438,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 		//Otherwise we're fine
 		//We'll now extract the symtab record that this node holds onto
-		symtab_variable_record_t* variable_rec = ((enum_member_ast_node_t*)(cursor->node))->member_var;
+		symtab_variable_record_t* variable_rec = cursor->variable;
 
 		//Associate the type here as well
 		variable_rec->type = enum_type;
@@ -4694,7 +4694,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == FLOAT64 || lookahead.tok == CHAR){
 
 		//Copy the lexeme into the node, no need for intermediaries here
-		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, lookahead.lexeme);
+		strcpy(type_name_node->type_name, lookahead.lexeme);
 
 		//We will now grab this record from the symtable to make our life easier
 		symtab_type_record_t* record = lookup_type(type_symtab, lookahead.lexeme);
@@ -4707,7 +4707,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 		}
 
 		//Link this record in with the actual node
-		((type_name_ast_node_t*)(type_name_node->node))->type_record = record;
+		type_name_node->type_record = record;
 
 		//This one is now all set to send up. We will not store any children if this is the case
 		return type_name_node;
@@ -4751,9 +4751,9 @@ static generic_ast_node_t* type_name(FILE* fl){
 		}
 
 		//Otherwise we were able to find the record, so we'll add in to the node
-		((type_name_ast_node_t*)(type_name_node->node))->type_record = record;
+		type_name_node->type_record = record;
 		//Copy the name over here for convenience later
-		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, type_name);
+		strcpy(type_name_node->type_name, type_name);
 
 		//We can also add in the type ident as a child node of the type name node
 		add_child_node(type_name_node, type_ident);
@@ -4800,9 +4800,9 @@ static generic_ast_node_t* type_name(FILE* fl){
 		}
 
 		//Otherwise we were able to find the record, so we'll add in to the node
-		((type_name_ast_node_t*)(type_name_node->node))->type_record = record;
+		type_name_node->type_record = record;
 		//Copy the name over here for convenience later
-		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, type_name);
+		strcpy(type_name_node->type_name, type_name);
 
 		//We can also add in the type ident as a child node of the type name node
 		add_child_node(type_name_node, type_ident);
@@ -4855,9 +4855,9 @@ static generic_ast_node_t* type_name(FILE* fl){
 		symtab_type_record_t* true_type = lookup_type(type_symtab, dealiased_type->type_name);
 
 		//Otherwise if we get here we were able to find it, so we're good to move on
-		((type_name_ast_node_t*)(type_name_node->node))->type_record = true_type;
+		type_name_node->type_record = true_type;
 		//Copy the name over here for convenience later
-		strcpy(((type_name_ast_node_t*)(type_name_node->node))->type_name, dealiased_type->type_name);
+		strcpy(type_name_node->type_name, dealiased_type->type_name);
 		//We can also add in the type ident as a child node of the type name node
 		add_child_node(type_name_node, type_ident);
 		//Store the line number
@@ -4906,7 +4906,7 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 
 	//Now once we make it here, we know that we have a name that actually exists in the symtab
 	//The current type record is what we will eventually point our node to
-	symtab_type_record_t* current_type_record = ((type_name_ast_node_t*)(name_node->node))->type_record;
+	symtab_type_record_t* current_type_record = name_node->type_record;
 	
 	//Let's see where we go from here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

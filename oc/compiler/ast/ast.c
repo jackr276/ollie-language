@@ -27,23 +27,28 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 	//We will perform a deep copy here
 	memcpy(duplicated, node, sizeof(generic_ast_node_t));
 
-	//Now we must also copy the entire node
-	if(node->inner_node_size != 0){
-		duplicated->node = calloc(1, node->inner_node_size);
-		memcpy(duplicated->node, node->node, node->inner_node_size);
+	//Special case for assembly nodes
+	if(node->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+		//Allocate the inner node
+		duplicated->node = calloc(1, sizeof(AST_NODE_CLASS_ASM_INLINE_STMT));
+		//Grab a reference for convenience
+		asm_inline_stmt_ast_node_t* duplicated_asm = (asm_inline_stmt_ast_node_t*)(duplicated->node);
+		asm_inline_stmt_ast_node_t* old_asm = (asm_inline_stmt_ast_node_t*)(node->node);
+		duplicated_asm->asm_line_statements = calloc(sizeof(char), old_asm->max_length);
+		duplicated_asm->max_length = old_asm->max_length;
+		duplicated_asm->length = old_asm->length;
 
-		//Double special case for assembly nodes
-		if(node->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-			//Grab a reference for convenience
-			asm_inline_stmt_ast_node_t* duplicated_asm = (asm_inline_stmt_ast_node_t*)(duplicated->node);
-			asm_inline_stmt_ast_node_t* old_asm = (asm_inline_stmt_ast_node_t*)(node->node);
-			duplicated_asm->asm_line_statements = calloc(sizeof(char), old_asm->max_length);
-			duplicated_asm->max_length = old_asm->max_length;
-			duplicated_asm->length = old_asm->length;
+		//Copy over the entirety of the inlined assembly
+		strcpy(duplicated_asm->asm_line_statements, old_asm->asm_line_statements);
+	}
 
-			//Copy over the entirety of the inlined assembly
-			strcpy(duplicated_asm->asm_line_statements, old_asm->asm_line_statements);
-		}
+	//Special case as well for constant nodes
+	if(node->CLASS == AST_NODE_CLASS_CONSTANT){
+		//Allocate the constant node
+		duplicated->node = calloc(1, sizeof(constant_ast_node_t));
+
+		//And then we'll copy the two onto eachother
+		memcpy(duplicated->node, node->node, sizeof(constant_ast_node_t));
 	}
 
 	//If it's an ident, we'll need to duplicate that
@@ -52,6 +57,14 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 		duplicated->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
 		//Copy the string over
 		memcpy(duplicated->identifier, node->identifier, MAX_IDENT_LENGTH);
+	}
+	
+	//If it's a type name, we'll need to duplicate as well
+	if(node->CLASS == AST_NODE_CLASS_TYPE_NAME){
+		//Allocate this
+		duplicated->type_name = calloc(MAX_TYPE_NAME_LENGTH, sizeof(char));
+		//Copy the string over
+		memcpy(duplicated->type_name, node->type_name, MAX_TYPE_NAME_LENGTH);
 	}
 
 	//We don't want to hold onto any of these old references here
@@ -94,314 +107,30 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 		current_ast_node->next_created_ast_node = node;
 		current_ast_node = node;
 	}
-
-	switch (CLASS) {
-		//The starting node of the entire AST
-		case AST_NODE_CLASS_PROG:
-			//Has no inner node size
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_PROG;
-			break;
-
-		//The for-loop condition AST node
-		case AST_NODE_CLASS_FOR_LOOP_CONDITION:
-			//Has no inner node size
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_FOR_LOOP_CONDITION;
-			break;
-
-		case AST_NODE_CLASS_DEFER_STMT:
-			//Has no inner size
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_DEFER_STMT;
-			break;
-
-		//The parameter elaboration node, only for type system
-		case AST_NODE_CLASS_ELABORATIVE_PARAM:
-			//Just stuff the class in here
-			node->CLASS = AST_NODE_CLASS_ELABORATIVE_PARAM;
-			node->inner_node_size = 0;
-			break;
-
-		//The function specifier AST node
-		case AST_NODE_CLASS_FUNC_DEF:
-			//Just allocate the proper size and set the class
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_FUNC_DEF;
-			break;
-
-		//The function specifier AST node
-		case AST_NODE_CLASS_PARAM_LIST:
-			//Just allocate the proper size and set the class
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_PARAM_LIST;
-			break;
-
-		//The parameter declaration node
-		case AST_NODE_CLASS_PARAM_DECL:
-			//No inner node size
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_PARAM_DECL;
-			break;
-
-		//The type specifier node
-		case AST_NODE_CLASS_TYPE_SPECIFIER:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_TYPE_SPECIFIER;
-			break;
-
-		//The type name node
-		case AST_NODE_CLASS_TYPE_NAME:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(type_name_ast_node_t));
-			node->inner_node_size = sizeof(type_name_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_TYPE_NAME;
-			break;
-
-		//The type address specifier node
-		case AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER:
-			//Just allocate the proper size and set the class
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER;
-			break;
-		
-		//An idle statement
-		case AST_NODE_CLASS_IDLE_STMT:
-			//No inner node size
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_IDLE_STMT;
-			break;
-
-		//An identifier of any kind
-		case AST_NODE_CLASS_IDENTIFIER:
-			//Just allocate the proper size and set the class
-			node->inner_node_size = 0;
-			//Allocate the inner ident
-			node->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
-			node->CLASS = AST_NODE_CLASS_IDENTIFIER;
-			break;
-
-		//Constant case
-		case AST_NODE_CLASS_CONSTANT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(constant_ast_node_t));
-			node->inner_node_size = sizeof(constant_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_CONSTANT;
-			break;
-
-		//Assignment expression node
-		case AST_NODE_CLASS_ASNMNT_EXPR:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_ASNMNT_EXPR;
-			break;
-
-		//Binary expression node
-		case AST_NODE_CLASS_BINARY_EXPR:
-			//Just allocate the proper size and set the class
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_BINARY_EXPR;
-			break;
-
-		//Function call node
-		case AST_NODE_CLASS_FUNCTION_CALL:
-			//Just allocate the proper size and set the class
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_FUNCTION_CALL;
-			break;
-
-		//Unary expression node
-		case AST_NODE_CLASS_UNARY_EXPR:
-			//Just allocate the proper size and set the class
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_UNARY_EXPR;
-			break;
-
-		//Unary operator node
-		case AST_NODE_CLASS_UNARY_OPERATOR:
-			//No inner node 
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_UNARY_OPERATOR;
-			break;
-
-		//Construct accessor node
-		case AST_NODE_CLASS_CONSTRUCT_ACCESSOR:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(construct_accessor_ast_node_t));
-			node->inner_node_size = sizeof(construct_accessor_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_CONSTRUCT_ACCESSOR;
-			break;
-
-		//Array accessor AST node
-		case AST_NODE_CLASS_ARRAY_ACCESSOR:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_ARRAY_ACCESSOR;
-			break;
-
-		//Postfix expression AST node
-		case AST_NODE_CLASS_POSTFIX_EXPR:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_POSTFIX_EXPR;
-			break;
-
-		//Construct member list ast node
-		case AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(construct_member_list_ast_node_t));
-			node->inner_node_size = sizeof(construct_member_list_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST;
-			break;
-
-		//Construct member ast node
-		case AST_NODE_CLASS_CONSTRUCT_MEMBER:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(construct_member_ast_node_t));
-			node->inner_node_size = sizeof(construct_member_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_CONSTRUCT_MEMBER;
-			break;
-
-		//Enum list ast node
-		case AST_NODE_CLASS_ENUM_MEMBER_LIST:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(enum_member_list_ast_node_t));
-			node->inner_node_size = sizeof(enum_member_list_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_ENUM_MEMBER_LIST;
-			break;
-
-		//Enum list member node
-		case AST_NODE_CLASS_ENUM_MEMBER:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(enum_member_ast_node_t));
-			node->inner_node_size = sizeof(enum_member_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_ENUM_MEMBER;
-			break;
-
-		//Case stmt node
-		case AST_NODE_CLASS_CASE_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_CASE_STMT;
-			break;
-
-		//Default statement node
-		case AST_NODE_CLASS_DEFAULT_STMT:
-			//No inner node size
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_DEFAULT_STMT;
-			break;
-			
-		//Label statement node
-		case AST_NODE_CLASS_LABEL_STMT:
-			//No inner node size
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_LABEL_STMT;
-			break;
-
-		//If statement node
-		case AST_NODE_CLASS_IF_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_IF_STMT;
-			break;
-
-		//Jump statement node
-		case AST_NODE_CLASS_JUMP_STMT:
-			//No inner node size
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_JUMP_STMT;
-			break;
-
-		//Break statement node
-		case AST_NODE_CLASS_BREAK_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_BREAK_STMT;
-			break;
-
-		//Continue statement node
-		case AST_NODE_CLASS_CONTINUE_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_CONTINUE_STMT;
-			break;
-
-		//Ret statement node
-		case AST_NODE_CLASS_RET_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_RET_STMT;
-			break;
-
-		//Switch statement node
-		case AST_NODE_CLASS_SWITCH_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_SWITCH_STMT;
-			break;
-
-		//While statement node
-		case AST_NODE_CLASS_WHILE_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_WHILE_STMT;
-			break;
-
-		//Do-while statement node
-		case AST_NODE_CLASS_DO_WHILE_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_DO_WHILE_STMT;
-			break;
-
-		//For statement node
-		case AST_NODE_CLASS_FOR_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_FOR_STMT;
-			break;
-
-		//A compound statement node
-		case AST_NODE_CLASS_COMPOUND_STMT:
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_COMPOUND_STMT;
-			break;
-
-		//A declare statement node
-		case AST_NODE_CLASS_DECL_STMT:
-			//Set the size to be 0
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_DECL_STMT;
-			break;
-
-		//A let statement node
-		case AST_NODE_CLASS_LET_STMT:
-			//Set the size to be 0
-			node->inner_node_size = 0;
-			node->CLASS = AST_NODE_CLASS_LET_STMT;
-			break;
-		
-		//An assembly inline statement
-		case AST_NODE_CLASS_ASM_INLINE_STMT:
-			//Allocate the inner node with the proper size
-			node->node = calloc(1, sizeof(asm_inline_stmt_ast_node_t));
-			node->inner_node_size = sizeof(asm_inline_stmt_ast_node_t);
-			//We need to allocate the inside string as well
-			((asm_inline_stmt_ast_node_t*)(node->node))->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
-			((asm_inline_stmt_ast_node_t*)(node->node))->length = 0;
-			((asm_inline_stmt_ast_node_t*)(node->node))->max_length = DEFAULT_ASM_INLINE_SIZE;
-			node->CLASS = AST_NODE_CLASS_ASM_INLINE_STMT;
-			break;
-
-		//An alias statement node
-		case AST_NODE_CLASS_ALIAS_STMT:
-			//Just allocate the proper size and set the class
-			node->node = calloc(1, sizeof(alias_stmt_ast_node_t));
-			node->inner_node_size = sizeof(alias_stmt_ast_node_t);
-			node->CLASS = AST_NODE_CLASS_ALIAS_STMT;
-			break;
-
-		//Generic error node
-		case AST_NODE_CLASS_ERR_NODE:
-			//Just assign that it is an error and get out
-			node->CLASS = AST_NODE_CLASS_ERR_NODE;
-			node->inner_node_size = 0;
-			break;
-
-		default:
-			printf("YOU DID NOT IMPLEMENT THIS ONE\n");
-			return NULL;
+	//Assign the class
+	node->CLASS = CLASS;
+	
+	/**
+	 * Handle the various special cases that we have here
+	 */
+	//Assembly nodes make use of the external pointer
+	if(CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+		//Allocate the inner node with the proper size
+		node->node = calloc(1, sizeof(asm_inline_stmt_ast_node_t));
+		//We need to allocate the inside string as well
+		((asm_inline_stmt_ast_node_t*)(node->node))->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
+		((asm_inline_stmt_ast_node_t*)(node->node))->length = 0;
+		((asm_inline_stmt_ast_node_t*)(node->node))->max_length = DEFAULT_ASM_INLINE_SIZE;
+	
+	//Constant nodes also make use of the external pointer
+	} else if(CLASS == AST_NODE_CLASS_CONSTANT){
+		node->node = calloc(1, sizeof(constant_ast_node_t));
+	//Type and ident nodes make use of the internal string pointers
+	} else if(CLASS == AST_NODE_CLASS_TYPE_NAME){
+		node->type_name = calloc(MAX_TYPE_NAME_LENGTH, sizeof(char));
+	} else if(CLASS == AST_NODE_CLASS_IDENTIFIER){
+		node->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
 	}
-
 
 	return node;
 }
@@ -461,7 +190,6 @@ void ast_dealloc(){
 				//Deallocate this string in here
 				free(((asm_inline_stmt_ast_node_t*)(temp->node))->asm_line_statements);
 			}
-
 			//No matter what, we always free this
 			free(temp->node);
 		}
@@ -469,6 +197,9 @@ void ast_dealloc(){
 		//Free this if needed
 		if(temp->CLASS == AST_NODE_CLASS_IDENTIFIER){
 			free(temp->identifier);
+		}
+		if(temp->CLASS == AST_NODE_CLASS_TYPE_NAME){
+			free(temp->type_name);
 		}
 
 		//Destroy temp here
