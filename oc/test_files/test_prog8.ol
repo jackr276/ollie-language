@@ -1,6 +1,6 @@
 #file TEST_PROG_8;
 
-fn tester() -> i32{
+fn tester(i:u32) -> i32{
 	ret 1;
 }
 
@@ -15,14 +15,18 @@ fn main() -> i32{
 	//x := &a;
 
 	for(let _:u32 := 0; _ < 23; _++) do{
-		a++;
+		@tester(a--);
 	}
 
-	switch on(@tester()){
+	//TODO THIS MUST BE FIXED-- added in to make the code work
+	idle;
+
+	switch on(@tester(a)){
 		case 2:
 			let a:i32 := 23;
 			idle;
 		case 4:
+			a++;
 			idle;
 		default:
 			idle;

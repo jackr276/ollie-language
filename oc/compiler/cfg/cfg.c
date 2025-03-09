@@ -664,7 +664,10 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			
 			//Save the current variable into this new temporary one. This is what allows
 			//us to achieve the "Increment/decrement after use" effect
-			emit_assn_stmt_three_addr_code(temp_var, current_var);
+			three_addr_code_stmt_t* assignment =  emit_assn_stmt_three_addr_code(temp_var, current_var);
+
+			//Ensure that we add this into the block
+			add_statement(basic_block, assignment);
 
 			//We'll now perform the actual operation
 			if(cursor->unary_operator == PLUSPLUS){
