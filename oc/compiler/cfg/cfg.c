@@ -488,7 +488,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
  */
 static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee){
 	//Create the code
-	three_addr_code_stmt_t* dec_code = emit_inc_stmt_three_addr_code(decrementee);
+	three_addr_code_stmt_t* dec_code = emit_dec_stmt_three_addr_code(decrementee);
 
 	//Add it into the block
 	add_statement(basic_block, dec_code);
@@ -634,17 +634,59 @@ static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, gene
  * that we could see(array access, decrement/increment, etc)
  */
 static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, temp_selection_t use_temp, side_type_t side){
-		//The very first child should be some kind of prefix expression
-		generic_ast_node_t* cursor = postfix_parent->first_child;
+	//The very first child should be some kind of prefix expression
+	generic_ast_node_t* cursor = postfix_parent->first_child;
 
+	//In theory the first child should always be some kind of postfix expression. As such, we'll first call that helper
+	//to get what we need
+	three_addr_var_t* current_var = emit_primary_expr_code(basic_block, cursor, use_temp, side);
+
+	//Let's now advance to the next child. We will keep advancing until we hit the very end,
+	//or we hit some kind of terminal node
+	cursor = cursor->next_sibling;
+	while(cursor != NULL){
 		/**
 		 * There are several things that could happen in a postfix expression, two of them
 		 * being the post increment and postdecrement. These are unique operations in that they occur after
 		 * user. So for example: my_arr[i++] := 23; would have i increment after it was used as the index.
 		 * To achieve this, the variable that we return will always be a temp variable containing the 
 		 * pre-operation result of i. Then i will be incremented itself. The same goes for decrementing
+		 *
+		 * TODO ARRAY ACCESS
 		 */
 
+		//We have post-increment or decrement here. This
+		if(cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
+			//We either have a postincrement or postdecrement here. Either way,
+			//we'll need to first save the current variable
+			//Declare a temporary here
+			three_addr_var_t* temp_var = emit_temp_var(current_var->type);
+			
+			//Save the current variable into this new temporary one. This is what allows
+			//us to achieve the "Increment/decrement after use" effect
+			emit_assn_stmt_three_addr_code(temp_var, current_var);
+
+			//We'll now perform the actual operation
+			if(cursor->unary_operator == PLUSPLUS){
+				//Use the helper for this
+				emit_inc_code(basic_block, current_var);
+			//Otherwise we know that it has to be minusminus
+			} else {
+				//Use the helper here as well
+				emit_dec_code(basic_block, current_var);
+			}
+
+			//We are officially done. What we actually give back here
+			//is not the current var, but whatever temp was assigned to it
+			return temp_var;
+		}
+
+		//Advance the pointer up here
+		cursor = cursor->next_sibling;
+	}
+
+	//TODO NOT FULLY DONE
+	return current_var;
 }
 
 /**
