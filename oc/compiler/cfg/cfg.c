@@ -604,6 +604,50 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
 
 
 /**
+ * Emit the abstract machine code for a primary expression. Remember that a primary
+ * expression could be an identifier, a constant, a function call, or a nested expression
+ * tree
+ */
+static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, temp_selection_t use_temp, side_type_t side){
+	if(primary_parent->CLASS == AST_NODE_CLASS_IDENTIFIER){
+		//If it's an identifier, emit this and leave
+		 return emit_ident_expr_code(basic_block, primary_parent, use_temp, side);
+	//If it's a constant, emit this and leave
+	} else if(primary_parent->CLASS == AST_NODE_CLASS_CONSTANT){
+		return emit_constant_code(basic_block, primary_parent);
+	} else if(primary_parent->CLASS == AST_NODE_CLASS_BINARY_EXPR){
+		return emit_binary_op_expr_code(basic_block, primary_parent).assignee;
+	//Handle a function call
+	} else if(primary_parent->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
+		return emit_function_call_code(basic_block, primary_parent);
+	} else {
+		//Throw some error here, really this should never occur
+		print_parse_message(PARSE_ERROR, "Did not find identifier, constant, expression or function call in primary expression", primary_parent->line_number);
+		(*num_errors_ref)++;
+		exit(0);
+	}
+}
+
+
+/**
+ * Emit the abstract machine code for the various different kinds of postfix expressions
+ * that we could see(array access, decrement/increment, etc)
+ */
+static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, temp_selection_t use_temp, side_type_t side){
+		//The very first child should be some kind of prefix expression
+		generic_ast_node_t* cursor = postfix_parent->first_child;
+
+		/**
+		 * There are several things that could happen in a postfix expression, two of them
+		 * being the post increment and postdecrement. These are unique operations in that they occur after
+		 * user. So for example: my_arr[i++] := 23; would have i increment after it was used as the index.
+		 * To achieve this, the variable that we return will always be a temp variable containing the 
+		 * pre-operation result of i. Then i will be incremented itself. The same goes for decrementing
+		 */
+
+}
+
+/**
  * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
@@ -622,6 +666,8 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 
 	//This could be a postfix expression
 	if(first_child->CLASS == AST_NODE_CLASS_POSTFIX_EXPR){
+		//We will leverage the helper here
+		return emit_postfix_expr_code(basic_block, first_child, use_temp, side);
 		
 	//If we have some kind of unary operator here
 	} else if(first_child->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
@@ -688,23 +734,9 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 
 		//FOR NOW ONLY
 		return assignee;
-
-	//OR it could be a primary expression, which has a whole host of options
-	} else if(first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
-		//If it's an identifier, emit this and leave
-		 return emit_ident_expr_code(basic_block, first_child, use_temp, side);
-	//If it's a constant, emit this and leave
-	} else if(first_child->CLASS == AST_NODE_CLASS_CONSTANT){
-		return emit_constant_code(basic_block, first_child);
-	} else if(first_child->CLASS == AST_NODE_CLASS_BINARY_EXPR){
-		return emit_binary_op_expr_code(basic_block, first_child).assignee;
-	//Handle a function call
-	} else if(first_child->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
-		return emit_function_call_code(basic_block, first_child);
+	} else {
+		return emit_primary_expr_code(basic_block, first_child, use_temp, side);
 	}
-
-	//FOR NOW
-	return NULL;
 }
 
 
