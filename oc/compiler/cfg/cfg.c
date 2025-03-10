@@ -682,6 +682,25 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//We are officially done. What we actually give back here
 			//is not the current var, but whatever temp was assigned to it
 			return temp_var;
+		//Otherwise we have some kind of array access here
+		} else if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
+			//Let's find the logical or expression that we have here. It should
+			//be the first child of this node
+			three_addr_var_t* internal_temp = emit_binary_op_expr_code(basic_block, cursor->first_child).assignee;
+
+			//Now we'll need the current variable type to know the base address and the size
+			//This should be guaranteed to be a pointer or array
+
+
+
+		//Fail out here, not yet implemented
+		} else if(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR){
+			print_parse_message(PARSE_ERROR, "THIS HAS NOT BEEN IMPLEMENTED", cursor->line_number);
+			exit(0);
+		//We have hit something unknown here
+		} else {
+			print_parse_message(PARSE_ERROR, "THIS HAS NOT BEEN IMPLEMENTED", cursor->line_number);
+			exit(0);
 		}
 
 		//Advance the pointer up here
