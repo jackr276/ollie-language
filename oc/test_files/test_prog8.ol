@@ -40,6 +40,7 @@ fn main() -> i32{
 		case 2:
 			let a:i32 := 23;
 			idle;
+			//break;
 		case 4:
 			a++;
 			idle;

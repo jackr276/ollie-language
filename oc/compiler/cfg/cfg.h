@@ -28,6 +28,33 @@ typedef struct cfg_statement_holder_t cfg_statement_holder_t;
 
 
 /**
+ * A general block type that is used for readability. It is
+ * important to note that block type is not always used. Instead,
+ * it is used to mark important blocks like break statements, return statements,
+ * etc, that would have an impact on control flow
+ */
+typedef enum {
+	BLOCK_TERM_TYPE_NORMAL, //THe block ends normally, no indirection of any kind
+	BLOCK_TERM_TYPE_BREAK, //Ends in a break statement
+	BLOCK_TERM_TYPE_CONTINUE, //Ends in a continue statement
+	BLOCK_TERM_TYPE_RET, //The block ends in a return statement
+} block_terminal_type_t;
+
+
+/**
+ * What is the general type of the block. Again most
+ * blocks are normal, but there are exceptions
+ */
+typedef enum{
+	BLOCK_TYPE_NORMAL, //Normal block
+	BLOCK_TYPE_SWITCH, //The whole block is a switch statement
+	BLOCK_TYPE_ASM, //Very special case -- entire block is dedicated to asm inline
+	BLOCK_TYPE_CASE, //Case statement -- it also encapsulates default(just a special kind of case)
+} block_type_t;
+
+
+
+/**
  * We have a basic CFG structure that holds these references to making freeing
  */
 struct cfg_t{
@@ -40,6 +67,7 @@ struct cfg_t{
 	//The currently last attached block
 	basic_block_t* last_attached;
 };
+
 
 /**
  * Define: a basic block is a sequence of consecutive 
@@ -60,8 +88,10 @@ struct basic_block_t{
 	symtab_function_record_t* func_record;
 	//Is this block ok to merge?
 	u_int8_t good_to_merge;
-	//Is it a return statement
-	u_int8_t is_return_stmt;
+	//What is the general classification of this block
+	block_type_t block_type;
+	//How does the block terminate? This is important for CFG drilling
+	block_terminal_type_t block_terminal_type;
 	//Is it a continue statement?
 	u_int8_t is_cont_stmt;
 	//Is it an assembly statement

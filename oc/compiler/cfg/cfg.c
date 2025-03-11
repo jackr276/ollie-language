@@ -1060,6 +1060,10 @@ static basic_block_t* basic_block_alloc(){
 	//Put the block ID in
 	created->block_id = increment_and_get();
 
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	created->block_type = BLOCK_TYPE_NORMAL;
+
 	//Attach this to the memory management structure
 	created->next_created = cfg_ref->last_attached;
 	cfg_ref->last_attached = created;
@@ -1277,8 +1281,9 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//Also make note of any direct succession
 	a->direct_successor = b->direct_successor;
 	a->is_exit_block = b->is_exit_block;
-	//If we're merging return statements
-	a->is_return_stmt = b->is_return_stmt;
+	//Copy over the block type and terminal type
+	a->block_type = b->block_type;
+	a->block_terminal_type = b->block_terminal_type;
 
 	//IMPORTANT--wipe b's statements out
 	b->leader_statement = NULL;
@@ -1332,7 +1337,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			 */
 			//If the direct successor is the exit, but it's not a return statement
 			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->is_exit_block == 1
-			  && block_cursor->is_return_stmt == 0){
+			  && block_cursor->block_terminal_type != BLOCK_TERM_TYPE_RET ){
 				//One more dead end
 				dead_ends++;
 				//Go to the next iteration
@@ -1340,7 +1345,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			}
 
 			//If it is a return statement none of its children are relevant
-			if(block_cursor->is_return_stmt == 1){
+			if(block_cursor->block_terminal_type == BLOCK_TERM_TYPE_RET){
 				continue;
 			}
 		}
@@ -1492,13 +1497,13 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	basic_block_t* compound_stmt_end = compound_stmt_start;
 
 	//So long as we don't see the end or a return
-	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0
+	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET 
 		  && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
 	//Once we get here, if it is a return statement, that means that we always return
-	if(compound_stmt_end->is_return_stmt == 1){
+	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
 		//We should warn here
 		print_cfg_message(WARNING, "For loop internal returns through every control block, will only execute once", for_stmt_node->line_number);
 		(*num_warnings_ref)++;
@@ -1562,13 +1567,13 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	basic_block_t* compound_stmt_end = do_while_stmt_entry_block;
 
 	//So long as we don't see NULL or return
-	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0
+	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET
 		  && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
 	//Once we get here, if it's a return statement, everything below is unreachable
-	if(compound_stmt_end->is_return_stmt == 1){
+	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
 		print_cfg_message(WARNING, "Do-while returns through all internal control paths. All following code is unreachable", do_while_stmt_node->line_number);
 		(*num_warnings_ref)++;
 		//Just return the block here
@@ -1661,14 +1666,14 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	basic_block_t* compound_stmt_end = compound_stmt_start;
 
 	//So long as it isn't null or return
-	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->is_return_stmt == 0
+	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET
 		   && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0) {
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 	
 	//If we make it to the end and this ending statement is a return, that means that we always return
 	//Throw a warning
-	if(compound_stmt_end->is_return_stmt == 1){
+	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
 		//It is only an error though -- the user is allowed to do this
 		print_cfg_message(WARNING, "While loop body returns in all control paths. It will only execute at most once", while_stmt_node->line_number);
 		(*num_warnings_ref)++;
@@ -1760,13 +1765,13 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* if_compound_stmt_end = if_compound_stmt_entry;
 
 		//Once we've visited, we'll need to drill to the end of this compound statement
-		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->is_return_stmt == 0
+		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET 
 			 && if_compound_stmt_end->is_cont_stmt == 0 && if_compound_stmt_end->is_break_stmt == 0){
 			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
 		}
 
 		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
-		returns_through_main_path = if_compound_stmt_end->is_return_stmt;
+		returns_through_main_path = if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
 		//Mark this too
 		continues_through_main_path = if_compound_stmt_end->is_cont_stmt;
 		//And this one
@@ -1845,13 +1850,13 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* else_compound_stmt_end = else_compound_stmt_entry;
 
 		//Once we've visited, we'll need to drill to the end of this compound statement
-		while(else_compound_stmt_end->direct_successor != NULL && else_compound_stmt_end->is_return_stmt == 0
+		while(else_compound_stmt_end->direct_successor != NULL && else_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET
 			  && else_compound_stmt_end->is_cont_stmt == 0){
 			else_compound_stmt_end = else_compound_stmt_end->direct_successor;
 		}
 
 		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
-		returns_through_second_path = else_compound_stmt_end->is_return_stmt;
+		returns_through_second_path = else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
 		//Mark this too
 		continues_through_second_path = else_compound_stmt_end->is_cont_stmt;
 		//Mark this here as well
@@ -1920,14 +1925,14 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* else_if_end = else_if_entry;
 
 		//We'll drill down to the end -- so long as we don't hit the end block and we don't hit a return statement
-		while(else_if_end->direct_successor != NULL && else_if_end->is_return_stmt == 0
+		while(else_if_end->direct_successor != NULL && else_if_end->block_terminal_type != BLOCK_TERM_TYPE_RET 
 			 && else_if_end->is_cont_stmt == 0){
 			//Keep track of the immediate predecessor
 			else_if_end = else_if_end->direct_successor;
 		}
 
 		//Once we get here, we either have an end block or a return statement
-		returns_through_second_path = else_if_end->is_return_stmt;
+		returns_through_second_path = else_if_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
 		//Mark this too
 		continues_through_second_path = else_if_end->is_cont_stmt;
 		//And mark this
@@ -2038,7 +2043,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			emit_ret_stmt(current_block, current_node);
 
 			//The current block will now be marked as a return statement
-			current_block->is_return_stmt = 1;
+			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
 
 			//The current block's direct and only successor is the function exit block
 			add_successor(current_block, values->function_end_block);
@@ -2081,7 +2086,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 			//Now we'll find the end of the if statement block
 			//So long as we haven't hit the end and it isn't a return statement
-			while (current_block->direct_successor != NULL && current_block->is_return_stmt == 0
+			while (current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET 
 				  && current_block->is_cont_stmt == 0){
 				current_block = current_block->direct_successor;
 			}
@@ -2089,13 +2094,13 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			/*
 			 * DEVELOPER USE MESSAGE
 			 */
-			if(current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0 && current_block != if_end_block){
+			if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->is_cont_stmt == 0 && current_block != if_end_block){
 				printf("END BLOCK REFERENCE LOST");
 			}
 
 			//If it is a return statement, that means that this if statement returns through every path. We'll leave 
 			//if this is the case
-			if(current_block->is_return_stmt == 1){
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
 				//Throw a warning if this happens
 				if(current_node->next_sibling != NULL){
 					print_cfg_message(WARNING, "Unreachable code detected after if-else block that returns through every control path", current_node->line_number);
@@ -2175,13 +2180,13 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			current_block = do_while_stmt_entry_block;
 
 			//So long as we have successors and don't see returns
-			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET 
 				  && current_block->is_cont_stmt == 0){
 				current_block = current_block->direct_successor;
 			}
 
 			//If we make it here and we had a return statement, we need to get out
-			if(current_block->is_return_stmt == 1){
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
 				//Everything beyond this point is unreachable, no point in going on
 				print_cfg_message(WARNING, "Unreachable code detected after block that returns in all control paths", current_node->next_sibling->line_number);
 				(*num_warnings_ref)++;
@@ -2216,12 +2221,12 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 			
 			//Once we're here the start is in current
-			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->is_cont_stmt == 0){
 				current_block = current_block->direct_successor;
 			}
 
 			//This should never happen, so if it does we have a problem
-			if(current_block->is_return_stmt == 1){
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
 				print_parse_message(PARSE_ERROR, "It should be impossible to have a for statement that returns in all control paths", current_node->line_number);
 				exit(0);
 			}
@@ -2645,7 +2650,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		current_block->direct_successor = case_block;
 
 		//Now we'll drill down to the bottom to prime the next pass
-		while(current_block->direct_successor != NULL && current_block->is_break_stmt == 0 && current_block->is_return_stmt == 0){
+		while(current_block->direct_successor != NULL && current_block->is_break_stmt == 0 && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
 			current_block = current_block->direct_successor;
 		}
 
@@ -2729,7 +2734,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			emit_ret_stmt(current_block, ast_cursor);
 
 			//The current block will now be marked as a return statement
-			current_block->is_return_stmt = 1;
+			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
 
 			//The current block's direct and only successor is the function exit block
 			add_successor(current_block, values->function_end_block);
@@ -2771,7 +2776,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Now we'll find the end of the if statement block
 			//So long as we haven't hit the end and it isn't a return statement
-			while (current_block->direct_successor != NULL && current_block->is_return_stmt == 0
+			while (current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET 
 				  && current_block->is_cont_stmt == 0){
 				current_block = current_block->direct_successor;
 			}
@@ -2779,13 +2784,13 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			/*
 			 * DEVELOPER USE MESSAGE
 			 */
-			if(current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0 && current_block != if_end_block){
+			if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->is_cont_stmt == 0 && current_block != if_end_block){
 				printf("END BLOCK REFERENCE LOST");
 			}
 
 			//If it is a return statement, that means that this if statement returns through every path. We'll leave 
 			//if this is the case
-			if(current_block->is_return_stmt == 1){
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
 				//Throw a warning if this happens
 				if(ast_cursor->next_sibling != NULL){
 					print_cfg_message(WARNING, "Unreachable code detected after if-else block that returns through every control path", ast_cursor->line_number);
@@ -2863,13 +2868,13 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			current_block = do_while_stmt_entry_block;
 
 			//So long as we have successors and don't see returns
-			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET 
 				  && current_block->is_cont_stmt == 0){
 				current_block = current_block->direct_successor;
 			}
 
 			//If we make it here and we had a return statement, we need to get out
-			if(current_block->is_return_stmt == 1){
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
 				//Everything beyond this point is unreachable, no point in going on
 				print_cfg_message(WARNING, "Unreachable code detected after block that returns in all control paths", ast_cursor->next_sibling->line_number);
 				(*num_warnings_ref)++;
@@ -2903,12 +2908,12 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 			
 			//Once we're here the start is in current
-			while(current_block->direct_successor != NULL && current_block->is_return_stmt == 0 && current_block->is_cont_stmt == 0){
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->is_cont_stmt == 0){
 				current_block = current_block->direct_successor;
 			}
 
 			//This should never happen, so if it does we have a problem
-			if(current_block->is_return_stmt == 1){
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
 				print_parse_message(PARSE_ERROR, "It should be impossible to have a for statement that returns in all control paths", ast_cursor->line_number);
 				exit(0);
 			}
