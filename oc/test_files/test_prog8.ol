@@ -8,6 +8,7 @@ fn tester(i:u32) -> i32{
  * For switch statement testing
  */
 fn main() -> i32{
+	
 	let a:i32 := 23;
 	declare x:i32*;
 	//We would've modified a here
@@ -28,12 +29,14 @@ fn main() -> i32{
 	for(let _:u32 := 0; _ < 23; _++) do{
 		@tester(a--);
 	}
+	
 
 
 	//TODO THIS MUST BE FIXED-- added in to make the code work
 	idle;
 
-	switch on(@tester(a)){
+	
+	switch on(@tester(3)){
 		case 2:
 			let a:i32 := 23;
 			idle;
@@ -43,6 +46,7 @@ fn main() -> i32{
 		default:
 			idle;
 	}
+
 
 	ret 0;
 }

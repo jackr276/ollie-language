@@ -105,6 +105,25 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	return emitted_var;
 }
 
+/**
+ * Emit a statement that is in LEA form
+ */
+three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
+	//First we allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Now we'll make our populations
+	stmt->CLASS = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op2 = op2;
+	stmt->lea_multiplicator = type_size;
+	//This is an address, so it must be a quad word
+	assignee->variable_size = QUAD_WORD;
+
+	//And now we give it back
+	return stmt;
+}
 
 /**
  * Emit a copy of this statement
@@ -440,6 +459,13 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	} else if(stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
 		//Just print a nop
 		printf("nop\n");
+	//If we have a lea statement, we will print it out in plain algebraic form here
+	} else if(stmt->CLASS == THREE_ADDR_CODE_LEA_STMT){
+		//Var name comes first
+		printf("%s <-", stmt->assignee->var_name);
+
+		//It always is of the form: op1 + op2*type_size
+		printf(" %s + %s * %ld\n", stmt->op1->var_name, stmt->op2->var_name, stmt->lea_multiplicator);
 	}
 }
 

@@ -287,6 +287,25 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 
 
 /**
+ * Emit a statement that fits the definition of a lea statement. This usually takes the
+ * form of address computations
+ */
+static three_addr_var_t* emit_lea_stmt(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type){
+	//We need a new temp var for the assignee
+	three_addr_var_t* assignee = emit_temp_var(base_type);
+
+	//Now we leverage the helper to emit this
+	three_addr_code_stmt_t* stmt = emit_lea_stmt_three_addr_code(assignee, base_addr, offset, base_type->type_size);
+
+	//Now add the statement into the block
+	add_statement(basic_block, stmt);
+
+	//And give back the assignee
+	return assignee;
+}
+
+
+/**
  * Directly emit the assembly nop instruction
  */
 static void emit_idle_stmt(basic_block_t* basic_block){
@@ -686,20 +705,36 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 		} else if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//Let's find the logical or expression that we have here. It should
 			//be the first child of this node
-			three_addr_var_t* internal_temp = emit_binary_op_expr_code(basic_block, cursor->first_child).assignee;
+			three_addr_var_t* offset = emit_binary_op_expr_code(basic_block, cursor->first_child).assignee;
 
 			//Now we'll need the current variable type to know the base address and the size
-			//This should be guaranteed to be a pointer or array
+			//This should be guaranteed to be a pointer or array. Current var is either
+			//an array or pointer type. We'll need to extract the base type here
 
+			generic_type_t* base_type;
 
+			//We can either have an array or pointer, extract either or accordingly
+			if(current_var->type->type_class == TYPE_CLASS_ARRAY){
+				base_type = current_var->type->array_type->member_type;
+			} else {
+				base_type = current_var->type->pointer_type->points_to;
+			}
 
+			/**
+			 * The formula for array subscript is: base_address + type_size * subscript
+			 *
+			 * This can be done using a lea instruction, so we will emit that directly
+			 */
+			three_addr_var_t* address = emit_lea_stmt(basic_block, current_var, offset, base_type);
+			address->indirection_level = 1;
+		
 		//Fail out here, not yet implemented
 		} else if(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR){
 			print_parse_message(PARSE_ERROR, "THIS HAS NOT BEEN IMPLEMENTED", cursor->line_number);
 			exit(0);
 		//We have hit something unknown here
 		} else {
-			print_parse_message(PARSE_ERROR, "THIS HAS NOT BEEN IMPLEMENTED", cursor->line_number);
+			print_parse_message(PARSE_ERROR, "UNKOWN EXPRESSION TYPE DETECTED", cursor->line_number);
 			exit(0);
 		}
 

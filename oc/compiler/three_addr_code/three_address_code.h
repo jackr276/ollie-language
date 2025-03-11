@@ -40,6 +40,17 @@ typedef enum{
 
 
 /**
+ * What kind of word length do we have -- used for instructions
+ */
+typedef enum{
+	WORD,
+	DOUBLE_WORD,
+	LONG_WORD,
+	QUAD_WORD,
+} variable_size_t;
+
+
+/**
  * What kind of three address code statement do we have?
  */
 typedef enum{
@@ -78,7 +89,9 @@ typedef enum{
 	//SPECIAL CASE - assembly inline statement
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
 	//Another special case - a switch statement
-	THREE_ADDR_CODE_SWITHC_STMT,
+	THREE_ADDR_CODE_SWITCH_STMT,
+	//A "Load effective address(lea)" instruction
+	THREE_ADDR_CODE_LEA_STMT
 } three_addr_code_stmt_class_t;
 
 /**
@@ -98,6 +111,8 @@ struct three_addr_var_t{
 	u_int8_t is_constant;
 	//What is the indirection level
 	u_int8_t indirection_level;
+	//What is the size of this variable
+	variable_size_t variable_size;
 	//Store the type info for faster access
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
@@ -141,6 +156,8 @@ struct three_addr_code_stmt_t{
 	three_addr_var_t* op2;
 	three_addr_var_t* assignee;
 	three_addr_code_stmt_class_t CLASS;
+	//The LEA addition
+	u_int64_t lea_multiplicator;
 	//The actual operator, stored as a token for size requirements
 	Token op;
 	//If we have a jump statement, where we're jumping to
@@ -187,6 +204,11 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
  * Emit an int constant in a very direct way
  */
 three_addr_const_t* emit_int_constant_direct(int int_const);
+
+/**
+ * Emit a statement that is in LEA form
+ */
+three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit a statement using three vars and a binary operator
