@@ -726,7 +726,9 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			 * This can be done using a lea instruction, so we will emit that directly
 			 */
 			three_addr_var_t* address = emit_lea_stmt(basic_block, current_var, offset, base_type);
-			address->indirection_level = 1;
+
+			//Now to actually access this address, we need to emit the memory access
+			return emit_mem_code(basic_block, address);
 		
 		//Fail out here, not yet implemented
 		} else if(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR){
