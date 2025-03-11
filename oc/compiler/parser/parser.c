@@ -1192,8 +1192,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 			//Put the token back
 			push_back_token(lookahead);
 
-			//Before we go on, let's see what we have as the current type here
-			if(current_type->type_class != TYPE_CLASS_ARRAY){
+			//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
+			if(current_type->type_class != TYPE_CLASS_ARRAY && current_type->type_class != TYPE_CLASS_POINTER){
 				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Print it out
@@ -1217,8 +1217,13 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 			//node
 			add_child_node(postfix_expr_node, array_acc);
 
-			//Based on this, the current type is whatever this array contains
-			current_type = dealias_type(current_type->array_type->member_type);
+			//Based on this, the current type is whatever this array contains. We'll also use this for size determinations
+			if(current_type->type_class == TYPE_CLASS_ARRAY){
+				current_type = dealias_type(current_type->array_type->member_type);
+			} else {
+				//Otherwise we know that it must be a pointer
+				current_type = dealias_type(current_type->pointer_type->points_to);
+			}
 
 		//Otherwise we have a construct accessor
 		} else {
