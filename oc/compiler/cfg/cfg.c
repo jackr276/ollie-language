@@ -207,12 +207,12 @@ static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var)
 static void pretty_print_block(basic_block_t* block){
 	//If this is empty, don't print anything
 	//For now only, this probably won't stay
-	if(block->leader_statement == NULL && block->is_switch_stmt == 0 && block->is_case_stmt == 0){
+	if(block->leader_statement == NULL && block->block_type != BLOCK_TYPE_CASE){
 		return;
 	}
 
 	//Print the block's ID or the function name
-	if(block->is_func_entry == 1){
+	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		printf("%s:\n", block->func_record->func_name);
 	} else {
 		printf(".L%d:\n", block->block_id);
@@ -1497,8 +1497,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	basic_block_t* compound_stmt_end = compound_stmt_start;
 
 	//So long as we don't see the end or a return
-	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET 
-		  && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0){
+	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
@@ -1567,8 +1566,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	basic_block_t* compound_stmt_end = do_while_stmt_entry_block;
 
 	//So long as we don't see NULL or return
-	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET
-		  && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0){
+	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
@@ -1666,8 +1664,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	basic_block_t* compound_stmt_end = compound_stmt_start;
 
 	//So long as it isn't null or return
-	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET
-		   && compound_stmt_end->is_cont_stmt == 0 && compound_stmt_end->is_break_stmt == 0) {
+	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 	
@@ -1765,17 +1762,16 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* if_compound_stmt_end = if_compound_stmt_entry;
 
 		//Once we've visited, we'll need to drill to the end of this compound statement
-		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET 
-			 && if_compound_stmt_end->is_cont_stmt == 0 && if_compound_stmt_end->is_break_stmt == 0){
+		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
 		}
 
 		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
 		returns_through_main_path = if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
 		//Mark this too
-		continues_through_main_path = if_compound_stmt_end->is_cont_stmt;
+		continues_through_main_path = if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE;
 		//And this one
-		breaks_through_main_path = if_compound_stmt_end->is_break_stmt;
+		breaks_through_main_path = if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
 
 		//If it doesn't return through the main path, the successor is the end node
 		if(returns_through_main_path == 0){
@@ -1850,17 +1846,16 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* else_compound_stmt_end = else_compound_stmt_entry;
 
 		//Once we've visited, we'll need to drill to the end of this compound statement
-		while(else_compound_stmt_end->direct_successor != NULL && else_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET
-			  && else_compound_stmt_end->is_cont_stmt == 0){
+		while(else_compound_stmt_end->direct_successor != NULL && else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 			else_compound_stmt_end = else_compound_stmt_end->direct_successor;
 		}
 
 		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
 		returns_through_second_path = else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
 		//Mark this too
-		continues_through_second_path = else_compound_stmt_end->is_cont_stmt;
+		continues_through_second_path = else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE;
 		//Mark this here as well
-		breaks_through_second_path = else_compound_stmt_end->is_break_stmt;
+		breaks_through_second_path = else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
 
 		//If it isn't a return statement, then it's successor is the entry block
 		if(returns_through_second_path == 0){
@@ -1925,8 +1920,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* else_if_end = else_if_entry;
 
 		//We'll drill down to the end -- so long as we don't hit the end block and we don't hit a return statement
-		while(else_if_end->direct_successor != NULL && else_if_end->block_terminal_type != BLOCK_TERM_TYPE_RET 
-			 && else_if_end->is_cont_stmt == 0){
+		while(else_if_end->direct_successor != NULL && else_if_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 			//Keep track of the immediate predecessor
 			else_if_end = else_if_end->direct_successor;
 		}
@@ -1934,9 +1928,9 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//Once we get here, we either have an end block or a return statement
 		returns_through_second_path = else_if_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
 		//Mark this too
-		continues_through_second_path = else_if_end->is_cont_stmt;
+		continues_through_second_path = else_if_end->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE;
 		//And mark this
-		breaks_through_second_path = else_if_end->is_break_stmt;
+		breaks_through_second_path = else_if_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
 
 		//If it doesnt return through the second path, then the end better be the original end
 		if(returns_through_second_path == 0 && else_if_end != values->if_stmt_end_block){
@@ -2086,15 +2080,14 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 			//Now we'll find the end of the if statement block
 			//So long as we haven't hit the end and it isn't a return statement
-			while (current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET 
-				  && current_block->is_cont_stmt == 0){
+			while (current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 				current_block = current_block->direct_successor;
 			}
 			
 			/*
 			 * DEVELOPER USE MESSAGE
 			 */
-			if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->is_cont_stmt == 0 && current_block != if_end_block){
+			if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->block_terminal_type != BLOCK_TERM_TYPE_CONTINUE && current_block != if_end_block){
 				printf("END BLOCK REFERENCE LOST");
 			}
 
@@ -2112,7 +2105,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 			//If it's a continue statement, that means that this if statement continues through every path. We'll leave if this
 			//is the case
-			if(current_block->is_cont_stmt == 1){
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE){
 				//Throw a warning if this happens
 				if(current_node->next_sibling != NULL){
 					print_cfg_message(WARNING, "Unreachable code detected after if-else block that continues through every control path", current_node->line_number);
@@ -2180,8 +2173,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			current_block = do_while_stmt_entry_block;
 
 			//So long as we have successors and don't see returns
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET 
-				  && current_block->is_cont_stmt == 0){
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 				current_block = current_block->direct_successor;
 			}
 
@@ -2221,7 +2213,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 			
 			//Once we're here the start is in current
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->is_cont_stmt == 0){
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 				current_block = current_block->direct_successor;
 			}
 
@@ -2252,7 +2244,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//continue. If the child is null, then it is a regular continue
 			if(current_node->first_child == NULL){
 				//Mark this for later
-				current_block->is_cont_stmt = 1;
+				current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
 
 				//Let's see what kind of loop we're in
 				//NON for loop
@@ -2332,7 +2324,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//or a normal break. If there is no child node, we have a normal break
 			if(current_node->first_child == NULL){
 				//Mark this for later
-				current_block->is_break_stmt = 1;
+				current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 
 				//There are two options here. If we're in a loop, that takes precedence. If we're in
 				//a switch statement, then that takes precedence
@@ -2511,7 +2503,8 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 	generic_ast_node_t* default_stmt_cursor = values->initial_node;
 	//Create it
 	basic_block_t* default_stmt = basic_block_alloc();
-	default_stmt->is_case_stmt = 1;
+	//Treated as case statements
+	default_stmt->block_type = BLOCK_TYPE_CASE;
 
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
@@ -2537,7 +2530,7 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 static basic_block_t* visit_case_statement(values_package_t* values){
 	//We need to make the block first
 	basic_block_t* case_stmt = basic_block_alloc();
-	case_stmt->is_case_stmt = 1;
+	case_stmt->block_type = BLOCK_TYPE_CASE;
 
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
@@ -2575,7 +2568,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//The starting block for the switch statement - we'll want this in a new
 	//block
 	basic_block_t* starting_block = basic_block_alloc();
-	starting_block->is_switch_stmt = 1;
+	starting_block->block_type = BLOCK_TYPE_SWITCH;
 	//We also need to know the ending block here -- Knowing
 	//this is important for break statements
 	basic_block_t* ending_block = basic_block_alloc();
@@ -2650,7 +2643,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		current_block->direct_successor = case_block;
 
 		//Now we'll drill down to the bottom to prime the next pass
-		while(current_block->direct_successor != NULL && current_block->is_break_stmt == 0 && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
+		while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 			current_block = current_block->direct_successor;
 		}
 
@@ -2776,15 +2769,14 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Now we'll find the end of the if statement block
 			//So long as we haven't hit the end and it isn't a return statement
-			while (current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET 
-				  && current_block->is_cont_stmt == 0){
+			while (current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 				current_block = current_block->direct_successor;
 			}
 			
 			/*
 			 * DEVELOPER USE MESSAGE
 			 */
-			if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->is_cont_stmt == 0 && current_block != if_end_block){
+			if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->block_terminal_type != BLOCK_TERM_TYPE_CONTINUE && current_block != if_end_block){
 				printf("END BLOCK REFERENCE LOST");
 			}
 
@@ -2802,7 +2794,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//If it's a continue statement, that means that this if statement continues through every path. We'll leave if this
 			//is the case
-			if(current_block->is_cont_stmt == 1){
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE){
 				//Throw a warning if this happens
 				if(ast_cursor->next_sibling != NULL){
 					print_cfg_message(WARNING, "Unreachable code detected after if-else block that continues through every control path", ast_cursor->line_number);
@@ -2868,8 +2860,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			current_block = do_while_stmt_entry_block;
 
 			//So long as we have successors and don't see returns
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET 
-				  && current_block->is_cont_stmt == 0){
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE){ 
 				current_block = current_block->direct_successor;
 			}
 
@@ -2908,7 +2899,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 			
 			//Once we're here the start is in current
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->is_cont_stmt == 0){
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 				current_block = current_block->direct_successor;
 			}
 
@@ -2939,7 +2930,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//continue. If the child is null, then it is a regular continue
 			if(ast_cursor->first_child == NULL){
 				//Mark this for later
-				current_block->is_cont_stmt = 1;
+				current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
 
 				//Let's see what kind of loop we're in
 				//NON for loop
@@ -3019,7 +3010,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//or a normal break. If there is no child node, we have a normal break
 			if(ast_cursor->first_child == NULL){
 				//Mark this for later
-				current_block->is_break_stmt = 1;
+				current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 				//Otherwise we need to break out of the loop
 				add_successor(current_block, values->loop_stmt_end);
 				//We will jump to it -- this is always an uncoditional jump
@@ -3196,7 +3187,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc();
 	//Mark that this is a starting block
-	function_starting_block->is_func_entry = 1;
+	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
 	//The ending block
 	basic_block_t* function_ending_block = basic_block_alloc();
 	//We very clearly mark this as an ending block

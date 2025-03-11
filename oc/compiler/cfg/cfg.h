@@ -50,6 +50,7 @@ typedef enum{
 	BLOCK_TYPE_SWITCH, //The whole block is a switch statement
 	BLOCK_TYPE_ASM, //Very special case -- entire block is dedicated to asm inline
 	BLOCK_TYPE_CASE, //Case statement -- it also encapsulates default(just a special kind of case)
+	BLOCK_TYPE_FUNC_ENTRY, //Block is a function entry
 } block_type_t;
 
 
@@ -80,8 +81,6 @@ struct cfg_t{
 struct basic_block_t{
 	//An integer ID
 	int32_t block_id;
-	//Is this a function entry block?
-	u_int8_t is_func_entry;
 	//Does this block ever contain an assignment?
 	u_int8_t contains_assignment;
 	//The function record -- we need to store this for printing
@@ -92,16 +91,6 @@ struct basic_block_t{
 	block_type_t block_type;
 	//How does the block terminate? This is important for CFG drilling
 	block_terminal_type_t block_terminal_type;
-	//Is it a continue statement?
-	u_int8_t is_cont_stmt;
-	//Is it an assembly statement
-	u_int8_t is_asm_stmt;
-	//Is it a break statement
-	u_int8_t is_break_stmt;
-	//Is it a switch statement
-	u_int8_t is_switch_stmt;
-	//Is it a case statement
-	u_int8_t is_case_stmt;
 	//Was this block visited by traverser?
 	u_int8_t visited;
 	//Is this block an exit block?
