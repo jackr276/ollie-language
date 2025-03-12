@@ -103,6 +103,8 @@ struct basic_block_t{
 	//For convenience here. This is the successor that we use to
 	//"drill" to the bottom
 	basic_block_t* direct_successor;
+	//If we have a case block, what does it break to?
+	basic_block_t* case_block_breaks_to;
 	//Hold onto the number of both that we have
 	u_int8_t num_predecessors;
 	u_int8_t num_successors;

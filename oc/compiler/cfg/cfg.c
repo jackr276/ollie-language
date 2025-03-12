@@ -1337,7 +1337,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			 */
 			//If the direct successor is the exit, but it's not a return statement
 			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->is_exit_block == 1
-			  && block_cursor->block_terminal_type != BLOCK_TERM_TYPE_RET ){
+			  && block_cursor->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//One more dead end
 				dead_ends++;
 				//Go to the next iteration
@@ -2335,8 +2335,8 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
 				//We must've seen a switch statement then
 				} else {
-					//Break out of the switch statement
-					add_successor(current_block, values->switch_statement_end);
+					//Save this for later on
+					current_block->case_block_breaks_to = values->switch_statement_end;
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jmp_stmt(current_block, values->switch_statement_end, JUMP_TYPE_JMP);
 				}
@@ -2639,6 +2639,12 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 		//Now we'll add this one into the overall structure
 		add_successor(current_block, case_block);
+
+		//We'll also add in what it breaks to, if anything. This MUST come last
+		if(case_block->case_block_breaks_to != NULL){
+			add_successor(current_block, case_block->case_block_breaks_to);
+		}
+
 		//Ensure that the current block points right here
 		current_block->direct_successor = case_block;
 
