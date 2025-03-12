@@ -29,11 +29,10 @@ fn main() -> i32{
 		case 4:
 			a++;
 			idle;
-			break;
 		default:
 			idle;
 			break;
 	}
 
-	ret 0;
+	//ret 0;
 }

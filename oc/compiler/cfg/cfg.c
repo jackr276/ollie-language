@@ -15,6 +15,10 @@
 #include <string.h>
 #include <sys/types.h>
 
+//For magic number removal
+#define TRUE 1
+#define FALSE 0
+
 
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
@@ -1333,7 +1337,12 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			block_cursor->visited = 1;
 
 			/**
-			 * Now we can perform our checks. 
+			 * Now we can perform our checks. If we find a block that:
+			 * 	a.) Has a direct successor
+			 * 	b.) That direct successor POINTS to a function ending block
+			 * 	c.) It is NOT a return statement
+			 *
+			 * Then we have a function that does not return in all paths
 			 */
 			//If the direct successor is the exit, but it's not a return statement
 			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->is_exit_block == 1
@@ -1349,6 +1358,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 				continue;
 			}
 		}
+
 		//We'll now add in all of the childen
 		for(u_int8_t i = 0; i < block_cursor->num_successors; i++){
 			//If we haven't seen it yet, add it to the list
@@ -1364,7 +1374,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		char* func_name = function_node->func_record->func_name;
 		sprintf(info, "Non-void function \"%s\" does not return a value in all control paths", func_name);
 		print_cfg_message(WARNING, info, function_node->line_number);
-		(*num_warnings_ref)+=dead_ends;
+		(*num_warnings_ref) += dead_ends;
 	}
 
 	//Destroy the stack once we're done
@@ -3123,7 +3133,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				starting_block = switch_stmt_entry;
 			} else {
 				//Otherwise this is a direct successor
-				add_successor(starting_block, switch_stmt_entry);
+				add_successor(current_block, switch_stmt_entry);
 			}
 
 			//We need to drill to the end
@@ -3251,11 +3261,9 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	}
 
 	//Once we hit the end, if this isn't an exit block, we'll make it one
-	if(compound_stmt_cursor->is_exit_block == 0){
-		//We'll add this in as the ending block
-		add_successor(compound_stmt_cursor, function_ending_block);
-		compound_stmt_cursor->direct_successor = function_ending_block;
-	}
+	//We'll add this in as the ending block
+	add_successor(compound_stmt_cursor, function_ending_block);
+	compound_stmt_cursor->direct_successor = function_ending_block;
 
 	//Once we get here, we'll now add in any deferred statements to the function ending block
 	
