@@ -453,7 +453,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 	//Just give back the name
 	if(use_temp == PRESERVE_ORIG_VAR || side == SIDE_TYPE_RIGHT){
 		//If it's an enum constant
-		if(ident_node->variable->is_enumeration_member == 1){
+		if(ident_node->variable->is_enumeration_member == TRUE){
 			return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), lookup_type(type_symtab, "u32")->type);
 		}
 
@@ -1332,9 +1332,9 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		block_cursor = pop(stack);
 
 		//If this wasn't visited
-		if(block_cursor->visited == 0){
+		if(block_cursor->visited == FALSE){
 			//Mark this one as seen
-			block_cursor->visited = 1;
+			block_cursor->visited = TRUE;
 
 			/**
 			 * Now we can perform our checks. If we find a block that:
@@ -1345,7 +1345,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			 * Then we have a function that does not return in all paths
 			 */
 			//If the direct successor is the exit, but it's not a return statement
-			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->is_exit_block == 1
+			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->is_exit_block == TRUE
 			  && block_cursor->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//One more dead end
 				dead_ends++;
@@ -1362,7 +1362,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		//We'll now add in all of the childen
 		for(u_int8_t i = 0; i < block_cursor->num_successors; i++){
 			//If we haven't seen it yet, add it to the list
-			if(block_cursor->successors[i]->visited == 0){
+			if(block_cursor->successors[i]->visited == FALSE){
 				push(stack, block_cursor->successors[i]);
 			}
 		}
@@ -1719,17 +1719,17 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	basic_block_t* entry_block = basic_block_alloc();
 	
 	//Mark if we have a return statement
-	u_int8_t returns_through_main_path = 0;
+	u_int8_t returns_through_main_path = FALSE;
 	//Mark if we have a continue statement
-	u_int8_t continues_through_main_path = 0;
+	u_int8_t continues_through_main_path = FALSE;
 	//Mark if we return through an else path
-	u_int8_t returns_through_second_path = 0;
+	u_int8_t returns_through_second_path = FALSE;
 	//Mark if we have a continue statement
-	u_int8_t continues_through_second_path = 0;
+	u_int8_t continues_through_second_path = FALSE;
 	//Mark if we have a break statement
-	u_int8_t breaks_through_main_path = 0;
+	u_int8_t breaks_through_main_path = FALSE;
 	//Mark if we break through else
-	u_int8_t breaks_through_second_path = 0;
+	u_int8_t breaks_through_second_path = FALSE;
 
 	//Let's grab a cursor to walk the tree
 	generic_ast_node_t* cursor = values->initial_node->first_child;
@@ -1784,7 +1784,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		breaks_through_main_path = if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
 
 		//If it doesn't return through the main path, the successor is the end node
-		if(returns_through_main_path == 0){
+		if(returns_through_main_path == FALSE){
 			add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 			//Ensure is direct successor
 			if_compound_stmt_end->direct_successor = values->if_stmt_end_block;
@@ -1868,7 +1868,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		breaks_through_second_path = else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
 
 		//If it isn't a return statement, then it's successor is the entry block
-		if(returns_through_second_path == 0){
+		if(returns_through_second_path == FALSE){
 			add_successor(else_compound_stmt_end, values->if_stmt_end_block);
 			//Ensure is direct successor
 			else_compound_stmt_end->direct_successor = values->if_stmt_end_block;
@@ -1882,19 +1882,19 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 0 && continues_through_main_path == 0 && breaks_through_second_path == 0){
+		if(returns_through_main_path == FALSE && continues_through_main_path == FALSE && breaks_through_second_path == FALSE){
 			//The direct successor is the main path
 			entry_block->direct_successor = if_compound_stmt_entry;
 		//We favor this one if not
-		} else if(returns_through_second_path == 0 && continues_through_second_path == 0 && breaks_through_second_path == 0){
+		} else if(returns_through_second_path == FALSE && continues_through_second_path == FALSE && breaks_through_second_path == FALSE){
 			entry_block->direct_successor = else_compound_stmt_entry;
-		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
+		} else if(returns_through_main_path == TRUE && returns_through_second_path == FALSE){
 			//The direct successor is the else path
 			entry_block->direct_successor = else_compound_stmt_entry;
-		} else if(continues_through_main_path == 1 && breaks_through_second_path == 1){
+		} else if(continues_through_main_path == TRUE && breaks_through_second_path == TRUE){
 			//The direct successor is the else path
 			entry_block->direct_successor = else_compound_stmt_entry;
-		} else if(breaks_through_main_path == 1 && continues_through_second_path == 1){
+		} else if(breaks_through_main_path == TRUE && continues_through_second_path == TRUE){
 			//The direct successor is the main path 
 			entry_block->direct_successor = if_compound_stmt_entry;
 		} else {
@@ -1943,7 +1943,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		breaks_through_second_path = else_if_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
 
 		//If it doesnt return through the second path, then the end better be the original end
-		if(returns_through_second_path == 0 && else_if_end != values->if_stmt_end_block){
+		if(returns_through_second_path == FALSE && else_if_end != values->if_stmt_end_block){
 			printf("DOES NOT TRACK END BLOCK\n");
 		}
 
@@ -1953,18 +1953,18 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
 		 * 	3.) If both don't return, we default to the "if" clause
 		 */
-		if(returns_through_main_path == 0 && continues_through_main_path == 0 && breaks_through_main_path == 0){
+		if(returns_through_main_path == FALSE && continues_through_main_path == FALSE && breaks_through_main_path == FALSE){
 			//The direct successor is the main path
 			entry_block->direct_successor = if_compound_stmt_entry;
-		} else if(continues_through_second_path == 0 && returns_through_second_path == 0 && breaks_through_second_path == 0){
+		} else if(continues_through_second_path == FALSE && returns_through_second_path == FALSE && breaks_through_second_path == FALSE){
 			entry_block->direct_successor = else_if_entry;
-		} else if(returns_through_main_path == 1 && returns_through_second_path == 0){
+		} else if(returns_through_main_path == TRUE && returns_through_second_path == FALSE){
 			//The direct successor is the else path
 			entry_block->direct_successor = else_if_entry;
-		} else if(continues_through_main_path == 1 && breaks_through_second_path == 1){
+		} else if(continues_through_main_path == TRUE && breaks_through_second_path == TRUE){
 			//The direct successor is the else path
 			entry_block->direct_successor = else_if_entry;
-		} else if(breaks_through_main_path == 1 && continues_through_second_path == 1){
+		} else if(breaks_through_main_path == TRUE && continues_through_second_path == TRUE){
 			//The direct successor is the main path 
 			entry_block->direct_successor = if_compound_stmt_entry;
 		} else {
@@ -3340,7 +3340,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			current_block = function_block;
 
 			//So long as we don't see the exit statement, we keep going
-			while(current_block->is_exit_block == 0){
+			while(current_block->is_exit_block == FALSE){
 				//Always follow the path of the direct successor
 				current_block = current_block->direct_successor;
 			}
