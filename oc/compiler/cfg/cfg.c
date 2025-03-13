@@ -2355,7 +2355,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				}
 			}
 
-		//Hand le a break out statement
+		//Handle a break out statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_BREAK_STMT){
 			//Let's first see if we're in a loop or not
 			if(values->loop_stmt_start == NULL && values->switch_statement_end == NULL){
@@ -2423,18 +2423,14 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 				//We must've seen a switch statement then
 				} else {
-					//TODO FIX ME
-					//This block can jump right out of the loop
-					basic_block_t* successor = current_block->direct_successor;
-					add_successor(current_block, values->loop_stmt_end);
-					//Restore
-					current_block->direct_successor = successor;
+					//We'll save this in for later
+					current_block->case_block_breaks_to = values->switch_statement_end;
 
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
 
 					//Emit our conditional jump now
-					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);			
+					emit_jmp_stmt(current_block, values->switch_statement_end, jump_type);			
 				}
 			}
 
@@ -3095,22 +3091,35 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 			} else {
-				//This block can jump right out of the loop
-				basic_block_t* successor = current_block->direct_successor;
-				add_successor(current_block, values->loop_stmt_end);
-				//Restore
-				current_block->direct_successor = successor;
-				
-				//However, this block is not an ending break statement, so we will not mark it
-
 				//First let's emit the conditional code
 				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child);
 
-				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+				//There are two options here. If we're in a loop, that takes precedence. If we're in
+				//a switch statement, then that takes precedence
+				if(values->loop_stmt_start != NULL){
+					//This block can jump right out of the loop
+					basic_block_t* successor = current_block->direct_successor;
+					add_successor(current_block, values->loop_stmt_end);
+					//Restore
+					current_block->direct_successor = successor;
 
-				//Emit our conditional jump now
-				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
+					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+
+					//Emit our conditional jump now
+					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);			
+
+				//We must've seen a switch statement then
+				} else {
+					//We'll save this in for later
+					current_block->case_block_breaks_to = values->switch_statement_end;
+
+					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+
+					//Emit our conditional jump now
+					emit_jmp_stmt(current_block, values->switch_statement_end, jump_type);			
+				}
 			}
 
 		//Handle a defer statement. Remember that a defer statment is one monolithic

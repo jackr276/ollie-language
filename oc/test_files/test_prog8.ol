@@ -27,14 +27,13 @@ fn main() -> i32{
 			{
 				let a:i32 := 23;
 				idle;
-				break;
+				break when(a == 3);
 			}
 		case 4:
 			a++;
 			idle;
 		default:
 			idle;
-			break;
 	}
 
 	ret 0;
