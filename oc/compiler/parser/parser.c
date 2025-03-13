@@ -6688,6 +6688,9 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 
 	//Now if we make it here, we're safe to create the actual node
 	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
+	//Store the line number here
+	compound_stmt_node->line_number = parser_line_num;
+
 	//Begin a new lexical scope for types and variables
 	initialize_type_scope(type_symtab);
 	initialize_variable_scope(variable_symtab);
@@ -6974,8 +6977,12 @@ static generic_ast_node_t* idle_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//Create and populate the node
+	generic_ast_node_t* idle_statement = ast_node_alloc(AST_NODE_CLASS_IDLE_STMT);
+	idle_statement->line_number = parser_line_num;
+
 	//We'll create and return an idle statement
-	return ast_node_alloc(AST_NODE_CLASS_IDLE_STMT);
+	return idle_statement;
 }
 
 

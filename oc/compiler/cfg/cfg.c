@@ -3144,6 +3144,38 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			while(current_block->direct_successor != NULL){
 				current_block = current_block->direct_successor;
 			}
+			
+		//We could also have a compound statement inside of here as well
+		} else if(ast_cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+			//Prime this here
+			values->initial_node = ast_cursor;
+
+			//We'll simply recall this function and let it handle it
+			basic_block_t* compound_stmt_entry_block = visit_compound_statement(values);
+
+			//Add in everything appropriately here
+			if(starting_block == NULL){
+				starting_block = compound_stmt_entry_block;
+			} else {
+				//TODO MAY OR MAY NOT KEEP
+				add_successor(current_block, compound_stmt_entry_block);
+			}
+
+			//We need to drill to the end
+			//Set this to be current
+			current_block = compound_stmt_entry_block;
+
+			//Once we're here the start is in current, we'll need to drill to the end
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
+				current_block = current_block->direct_successor;
+			}
+
+			//If we did hit a return block here and there are nodes after this one in the chain, then we have
+			//unreachable code
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET && ast_cursor->next_sibling != NULL){
+				print_parse_message(WARNING, "Unreachable code detected after ret statement", ast_cursor->next_sibling->line_number);
+
+			}
 
 		//These are 100% user generated,
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){

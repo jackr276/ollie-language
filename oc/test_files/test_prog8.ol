@@ -11,10 +11,11 @@ fn main() -> i32{
 	
 	let a:i32 := 23;
 
-	for(let _:u32 := 0; _ < 23; _++) do{
-		@tester(a--);
-	}
+
 	
+	{
+	 let a:i32 := 42;
+	}
 
 
 	//TODO THIS MUST BE FIXED-- added in to make the code work
@@ -23,9 +24,11 @@ fn main() -> i32{
 	
 	switch on(@tester(3)){
 		case 2:
+			{
 			let a:i32 := 23;
 			idle;
 			break;
+			}
 		case 4:
 			a++;
 			idle;
@@ -34,5 +37,5 @@ fn main() -> i32{
 			break;
 	}
 
-	//ret 0;
+	ret 0;
 }
