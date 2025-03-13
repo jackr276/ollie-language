@@ -212,7 +212,7 @@ static void pretty_print_block(basic_block_t* block){
 	//If this is empty, don't print anything
 	//For now only, this probably won't stay
 	if(block->leader_statement == NULL && block->block_type != BLOCK_TYPE_CASE){
-		return;
+	//	return;
 	}
 
 	//Print the block's ID or the function name
@@ -530,17 +530,9 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 	three_addr_var_t* indirect_var = emit_var_copy(assignee);
 
 	//Increment the indirection
-	indirect_var->indirection_level = assignee->indirection_level++;
+	indirect_var->indirection_level++;
 	//Temp or not same deal
 	indirect_var->is_temporary = assignee->is_temporary;
-	
-	//We'll wrap with parens
-	char indirect_var_name[115];
-
-	sprintf(indirect_var_name, "(%s)", indirect_var->var_name);
-
-	//Now we'll overwrite the old name
-	strcpy(indirect_var->var_name, indirect_var_name);
 
 	//And get out
 	return indirect_var;

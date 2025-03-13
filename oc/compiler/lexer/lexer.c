@@ -222,8 +222,6 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 
 	//Have we seen hexadecimal?
 	u_int8_t seen_hex = 0;
-	//Are we forcing to unsigned
-	u_int8_t forced_to_unsigned = 0;
 
 	//If we're at the start -- added to avoid overcounts
 	if(ftell(fl) == 0){

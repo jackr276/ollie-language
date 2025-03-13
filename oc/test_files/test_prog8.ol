@@ -13,9 +13,12 @@ fn main() -> i32{
 
 
 	
-	{
-	 let a:i32 := 42;
-	}
+ 	declare arr:i32[32][3];
+
+	arr[1][2] := 23;
+
+	let b:i32 := arr[3][3];
+
 
 
 	//TODO THIS MUST BE FIXED-- added in to make the code work

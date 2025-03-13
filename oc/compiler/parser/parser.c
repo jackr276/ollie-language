@@ -8166,14 +8166,8 @@ static void insert_all_deferred_statements(generic_ast_node_t* compound_stmt){
 	if(deferred_stmts_node->first_child == NULL){
 		return;
 	}
-
-	//Otherwise there actually were some deferred statements
-	//Let's first create the linked list that we need to insert deferred statments
-	generic_ast_node_t* deferred_stmts_head = NULL;
-
 	//Now we have finally constructed our linked list and made appropriate references. We now need to
 	//find every return statement and insert these before it. We will do this in a BFS(level order) fashion
-	
 	//We'll need a queue for this
 	heap_queue_t* queue = heap_queue_alloc();
 	//Our current node

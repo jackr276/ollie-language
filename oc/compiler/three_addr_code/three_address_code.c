@@ -72,14 +72,11 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u
 	//We'll increment the current generation
 	if(assignment == 1){
 		(var->current_generation)++;
+		//Store this for printing
+		emitted_var->ssa_generation_level = var->current_generation;
 	}
 
-	//Finally we'll get the name printed
-	if(is_label == 0){
-		sprintf(emitted_var->var_name, "%s%d", var->var_name, var->current_generation);
-	} else {
-		sprintf(emitted_var->var_name, "%s", var->var_name);
-	}
+	sprintf(emitted_var->var_name, "%s", var->var_name);
 
 	//And we're all done
 	return emitted_var;
@@ -94,8 +91,7 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
 	//Copy the memory
-	//memcpy(emitted_var, var, sizeof(three_addr_var_t));
-	memmove(emitted_var, var, sizeof(three_addr_var_t));
+	memcpy(emitted_var, var, sizeof(three_addr_var_t));
 	
 	//Attach it for memory management
 	emitted_var->next_created = emitted_vars;
@@ -175,6 +171,32 @@ three_addr_code_stmt_t* emit_idle_statement_three_addr_code(){
 
 
 /**
+ * Print a variable in name only. There are no spaces around the variable, and there
+ * will be no newline inserted at all. This is meant solely for the use of the "print_three_addr_code_stmt"
+ * and nothing more. This function is also designed to take into account the indirection aspected as well
+ */
+void print_variable(three_addr_var_t* variable){
+	//We will first print out any and all indirection("(") opening parens
+	for(u_int16_t i = 0; i < variable->indirection_level; i++){
+		printf("(");
+	}
+	
+	//Print the variables declared name out -- along with it's SSA generation
+	printf("%s", variable->var_name);
+
+	//If and only if it isn't a temporary variable, we print the SSA generation level
+	if(variable->is_temporary == 0){
+		printf("%d", variable->ssa_generation_level);
+	}
+
+	//Lastly we print out the remaining indirection characters
+	for(u_int16_t i = 0; i < variable->indirection_level; i++){
+		printf(")");
+	}
+}
+
+
+/**
  * Pretty print a three address code statement
  *
 */
@@ -243,9 +265,20 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 				exit(1);
 		}
 
-		//Once we have our op in string form, we can print the whole thing out
-		printf("%s <- %s %s %s\n", stmt->assignee->var_name, stmt->op1->var_name, op, stmt->op2->var_name);
-	
+		//This one comes first
+		print_variable(stmt->assignee);
+
+		//Then the arrow
+		printf(" <- ");
+
+		//Now we'll do op1, token, op2
+		print_variable(stmt->op1);
+		printf(" %s ", op);
+		print_variable(stmt->op2);
+
+		//And end it out here
+		printf("\n");
+
 	//If we have a bin op with const
 	} else if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//What is our op?
@@ -309,8 +342,15 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 				exit(1);
 		}
 
-		//Print out
-		printf("%s <- %s %s ", stmt->assignee->var_name, stmt->op1->var_name, op);
+		//This one comes first
+		print_variable(stmt->assignee);
+
+		//Then the arrow
+		printf(" <- ");
+
+		//Now we'll do op1, token, op2
+		print_variable(stmt->op1);
+		printf(" %s ", op);
 
 		//Grab our const for convenience
 		three_addr_const_t* constant = stmt->op1_const;
@@ -331,10 +371,14 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//If we have a regular const assignment
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 		//We'll print out the left and right ones here
-		printf("%s <- %s\n", stmt->assignee->var_name, stmt->op1->var_name);
+		print_variable(stmt->assignee);
+		printf(" <- ");
+		print_variable(stmt->op1);
+		printf("\n");
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//First print out the assignee
-		printf("%s <- ", stmt->assignee->var_name);
+		print_variable(stmt->assignee);
+		printf(" <- ");
 
 		//Grab our const for convenience
 		three_addr_const_t* constant = stmt->op1_const;
@@ -407,7 +451,9 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
 		//First we'll print out the assignment, if one exists
 		if(stmt->assignee != NULL){
-			printf("%s <- ", stmt->assignee->var_name);
+			//Print the variable and assop out
+			print_variable(stmt->assignee);
+			printf(" <- ");
 		}
 
 		//No matter what, we'll need to see the "call" keyword, followed
@@ -432,11 +478,18 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	} else if (stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//TODO MAY OR MAY NOT NEED
 	} else if (stmt->CLASS == THREE_ADDR_CODE_INC_STMT){
-		printf("inc %s\n", stmt->assignee->var_name);
+		printf("inc ");
+		print_variable(stmt->assignee);
+		printf("\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_DEC_STMT){
-		printf("dec %s\n", stmt->assignee->var_name);
+		printf("dec ");
+		print_variable(stmt->assignee);
+		printf("\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_BITWISE_NOT_STMT){
-		printf("%s <- not %s\n", stmt->assignee->var_name, stmt->op1->var_name);
+		print_variable(stmt->assignee);
+		printf(" <- not ");
+		print_variable(stmt->op1);
+		printf("\n");
 	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
 		printf("%s <- neg %s\n", stmt->assignee->var_name, stmt->op1->var_name);
 	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
@@ -448,9 +501,10 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		printf("%s <- %s\n", stmt->assignee->var_name, stmt->assignee->var_name);
 	//For a label statement, we need to trim off the $ that it has
 	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
-		//Let's print it out
+		//Let's print it out. This is an instance where we will not use the print var
 		printf("%s:\n", stmt->assignee->var_name + 1);
 	} else if(stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
+		//This is an instance where we will not use the print var
 		printf("jmp %s\n", stmt->assignee->var_name + 1);
 	//Display an assembly inline statement
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
@@ -462,10 +516,20 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//If we have a lea statement, we will print it out in plain algebraic form here
 	} else if(stmt->CLASS == THREE_ADDR_CODE_LEA_STMT){
 		//Var name comes first
-		printf("%s <-", stmt->assignee->var_name);
+		print_variable(stmt->assignee);
 
-		//It always is of the form: op1 + op2*type_size
-		printf(" %s + %s * %ld\n", stmt->op1->var_name, stmt->op2->var_name, stmt->lea_multiplicator);
+		//Print the assignment operator
+		printf(" <- ");
+
+		//Now print out the rest in order
+		print_variable(stmt->op1);
+		//Then we have a plus
+		printf(" + ");
+		//Then we have the third one, times some multiplier
+		print_variable(stmt->op2);
+
+		//And the finishing sequence
+		printf(" * %ld\n", stmt->lea_multiplicator);
 	}
 }
 

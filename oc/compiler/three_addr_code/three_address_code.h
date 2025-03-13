@@ -110,7 +110,9 @@ struct three_addr_var_t{
 	//Is this a constant?
 	u_int8_t is_constant;
 	//What is the indirection level
-	u_int8_t indirection_level;
+	u_int16_t indirection_level;
+	//What is the SSA generation level
+	u_int16_t ssa_generation_level;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//Store the type info for faster access
