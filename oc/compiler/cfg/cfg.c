@@ -2061,6 +2061,46 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//We're completely done here
 			return starting_block;
 
+		//We could also have a compound statement inside of here as well
+		} else if(current_node->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+			printf("HERE\n");
+			//Prime this here
+			values_package_t compound_stmt_values;
+			compound_stmt_values.initial_node = current_node;
+			compound_stmt_values.function_end_block = values->function_end_block;
+			compound_stmt_values.for_loop_update_block = values->for_loop_update_block;
+			compound_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
+			compound_stmt_values.loop_stmt_start = values->loop_stmt_start;
+			compound_stmt_values.loop_stmt_end = values->loop_stmt_end;
+			compound_stmt_values.switch_statement_end = values->switch_statement_end;
+
+			//We'll simply recall this function and let it handle it
+			basic_block_t* compound_stmt_entry_block = visit_compound_statement(&compound_stmt_values);
+
+			//Add in everything appropriately here
+			if(starting_block == NULL){
+				starting_block = compound_stmt_entry_block;
+			} else {
+				//TODO MAY OR MAY NOT KEEP
+				add_successor(current_block, compound_stmt_entry_block);
+			}
+
+			//We need to drill to the end
+			//Set this to be current
+			current_block = compound_stmt_entry_block;
+
+			//Once we're here the start is in current, we'll need to drill to the end
+			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
+				current_block = current_block->direct_successor;
+			}
+
+			//If we did hit a return block here and there are nodes after this one in the chain, then we have
+			//unreachable code
+			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET && current_node->next_sibling != NULL){
+				print_parse_message(WARNING, "Unreachable code detected after ret statement", current_node->next_sibling->line_number);
+
+			}
+
 		//We've found an if-statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_IF_STMT){
 			//Create the end block here for pointer reasons
@@ -2383,6 +2423,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 				//We must've seen a switch statement then
 				} else {
+					//TODO FIX ME
 					//This block can jump right out of the loop
 					basic_block_t* successor = current_block->direct_successor;
 					add_successor(current_block, values->loop_stmt_end);
@@ -3009,9 +3050,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 		//Hand le a break out statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_BREAK_STMT){
-			//Let's first see if we're in a loop or not
-			if(values->loop_stmt_start == NULL){
-				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop", ast_cursor->line_number);
+			//Let's first see if we're in a loop or switch statement or not
+			if(values->loop_stmt_start == NULL && values->switch_statement_end == NULL){
+				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop or switch statement", ast_cursor->line_number);
 				(*num_errors_ref)++;
 				return create_and_return_err();
 			}
@@ -3027,10 +3068,20 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			if(ast_cursor->first_child == NULL){
 				//Mark this for later
 				current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
-				//Otherwise we need to break out of the loop
-				add_successor(current_block, values->loop_stmt_end);
-				//We will jump to it -- this is always an uncoditional jump
-				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+
+				//Loops always take precedence over switching, so we'll break out of that if it isn't null
+				if(values->loop_stmt_end != NULL){
+					//Otherwise we need to break out of the loop
+					add_successor(current_block, values->loop_stmt_end);
+					//We will jump to it -- this is always an uncoditional jump
+					emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+				} else {
+					//Save this for later on. We won't add it in now to preserve the
+					//order of block chaining
+					current_block->case_block_breaks_to = values->switch_statement_end;
+					//We will jump to it -- this is always an uncoditional jump
+					emit_jmp_stmt(current_block, values->switch_statement_end, JUMP_TYPE_JMP);
+				}
 
 				//If we see anything after this, it is unreachable so throw a warning
 				if(ast_cursor->next_sibling != NULL){
