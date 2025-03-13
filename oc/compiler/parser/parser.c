@@ -7420,6 +7420,9 @@ static generic_ast_node_t* case_statement(FILE* fl){
 	//"case", "default" or "}"(indicates end of switch statement)
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//We have already seen a break for this case statement
+	u_int8_t seen_break = FALSE;
+
 	//So long as we don't have the aforementioned keywords
 	while(lookahead.tok != CASE && lookahead.tok != DEFAULT && lookahead.tok != R_CURLY){
 		//Put it back
@@ -7431,6 +7434,19 @@ static generic_ast_node_t* case_statement(FILE* fl){
 		//If this fails, we error out
 		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 			return stmt_node;
+		}
+
+		//If we have a break statement, we want to make sure that we only have one of these
+		if(stmt_node->CLASS == AST_NODE_CLASS_BREAK_STMT){
+			//Check here for violations
+			if(seen_break == TRUE){
+				print_parse_message(PARSE_ERROR, "More than one \"break\" or \"break when\" statements inside of case statement", stmt_node->line_number);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//We've definitely seen one now
+			seen_break = TRUE;
 		}
 
 		//Otherwise we add this in as a child under the case statement umbrella

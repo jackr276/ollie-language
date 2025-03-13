@@ -24,16 +24,24 @@ fn main() -> i32{
 	
 	switch on(@tester(3)){
 		case 2:
-			{
-				let a:i32 := 23;
-				idle;
-				break when(a == 3);
+			//Test this out
+			for(let _:i32 := 0; _ < 32; _++) do{
+				@tester(_);
+				break when (_ == 3);
 			}
+
+			let a:i32 := 23;
+			idle;
+
+			break when(a == 3);
+
 		case 4:
 			a++;
 			idle;
+			break;
 		default:
 			idle;
+			break;
 	}
 
 	ret 0;
