@@ -1443,7 +1443,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//Unconditional jump to condition block
 	emit_jmp_stmt(for_stmt_update_block, condition_block, JUMP_TYPE_JMP);
 
-
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
 	
@@ -3059,10 +3058,18 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 				//Loops always take precedence over switching, so we'll break out of that if it isn't null
 				if(values->loop_stmt_end != NULL){
-					//Otherwise we need to break out of the loop
-					add_successor(current_block, values->loop_stmt_end);
-					//We will jump to it -- this is always an uncoditional jump
-					emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+					//Special case for for loops
+					if(values->for_loop_update_block != NULL){
+						//In this special case, we don't want to add this as a direct successor
+						//We will jump to it -- this is always an uncoditional jump
+						emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+					} else {
+						//Otherwise we need to break out of the loop
+						add_successor(current_block, values->loop_stmt_end);
+						//We will jump to it -- this is always an uncoditional jump
+						emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
+					}
+
 				} else {
 					//Save this for later on. We won't add it in now to preserve the
 					//order of block chaining
@@ -3083,23 +3090,29 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 			} else {
+				//Mark this for later again
+				current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
+
 				//First let's emit the conditional code
 				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child);
 
 				//There are two options here. If we're in a loop, that takes precedence. If we're in
 				//a switch statement, then that takes precedence
 				if(values->loop_stmt_start != NULL){
-					//This block can jump right out of the loop
-					basic_block_t* successor = current_block->direct_successor;
-					add_successor(current_block, values->loop_stmt_end);
-					//Restore
-					current_block->direct_successor = successor;
-
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
 
-					//Emit our conditional jump now
-					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);			
+					//Special case for for loops
+					if(values->for_loop_update_block != NULL){
+						//In this special case, we don't want to add anything as a direct successor
+						//We will jump to it -- this is always an uncoditional jump
+						emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
+					} else {
+						//Otherwise we need to break out of the loop
+						add_successor(current_block, values->loop_stmt_end);
+						//We will jump to it -- this is always an uncoditional jump
+						emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
+					}
 
 				//We must've seen a switch statement then
 				} else {
