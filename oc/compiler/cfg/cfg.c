@@ -407,15 +407,6 @@ static void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block,
 
 
 /**
- * Emit an unconditional jump statement to a label as opposed to a block ID. This is used for
- * when the user wishes to jump directly
- */
-static void emit_jmp_stmt_direct(basic_block_t* basic_block, generic_ast_node_t* jump_node){
-
-}
-
-
-/**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node){
@@ -667,7 +658,6 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 		 * To achieve this, the variable that we return will always be a temp variable containing the 
 		 * pre-operation result of i. Then i will be incremented itself. The same goes for decrementing
 		 *
-		 * TODO ARRAY ACCESS
 		 */
 
 		//We have post-increment or decrement here. This
@@ -724,8 +714,18 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			three_addr_var_t* address = emit_lea_stmt(basic_block, current_var, offset, base_type);
 
 			//Now to actually access this address, we need to emit the memory access
-			return emit_mem_code(basic_block, address);
-		
+			current_var = emit_mem_code(basic_block, address);
+
+			//Do we need to do more memoery work? We can tell if the array accessor node is next
+			if(cursor->next_sibling != NULL && cursor->next_sibling->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
+				//We will perform the deref here, as we can't do it in the lea 
+				three_addr_code_stmt_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
+				add_statement(basic_block, deref_stmt);
+
+				//Update the current bar too
+				current_var = deref_stmt->assignee;
+			}
+	
 		//Fail out here, not yet implemented
 		} else if(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR){
 			print_parse_message(PARSE_ERROR, "THIS HAS NOT BEEN IMPLEMENTED", cursor->line_number);
@@ -740,7 +740,6 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 		cursor = cursor->next_sibling;
 	}
 
-	//TODO NOT FULLY DONE
 	return current_var;
 }
 
@@ -1278,7 +1277,9 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->direct_successor = b->direct_successor;
 	a->is_exit_block = b->is_exit_block;
 	//Copy over the block type and terminal type
-	a->block_type = b->block_type;
+	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		a->block_type = b->block_type;
+	}
 	a->block_terminal_type = b->block_terminal_type;
 
 	//IMPORTANT--wipe b's statements out
@@ -2000,6 +2001,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//We'll visit the block here
 			basic_block_t* decl_block = visit_declaration_statement(&values);
 
+			/*
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
 				starting_block = decl_block;
@@ -2008,6 +2010,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			} else {
 				current_block = merge_blocks(current_block, decl_block); 
 			}
+			*/
 
 		//We've found a let statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_LET_STMT){
@@ -2733,6 +2736,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We'll visit the block here
 			basic_block_t* decl_block = visit_declaration_statement(&values);
 
+			/*
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
 				starting_block = decl_block;
@@ -2741,6 +2745,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			} else {
 				current_block = merge_blocks(current_block, decl_block); 
 			}
+			*/
 
 		//We've found a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
@@ -3437,8 +3442,6 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//If the start block is null, this becomes the start block
 			if(start_block == NULL){
 				start_block = function_block;
-			} else if(current_block_is_empty == TRUE){
-				merge_blocks(current_block, function_block);
 			//Otherwise, we'll add this as a successor to the current block
 			} else {
 				add_successor(current_block, function_block);
