@@ -36,6 +36,7 @@ type_symtab_t* type_symtab;
 //The CFG that we're working with
 cfg_t* cfg_ref;
 
+
 //A package of values that each visit function uses
 typedef struct {
 	//The initial node
@@ -74,9 +75,11 @@ static basic_block_t* visit_case_statement(values_package_t* values);
 static basic_block_t* visit_default_statement(values_package_t* values);
 static basic_block_t* visit_switch_statement(values_package_t* values);
 
+
 //Return a three address code variable
 static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
+
 
 //An enum for jump types
 typedef enum{
@@ -84,11 +87,13 @@ typedef enum{
 	JUMP_CATEGORY_NORMAL,
 } jump_category_t;
 
+
 //A type for which side we're on
 typedef enum{
 	SIDE_TYPE_LEFT,
 	SIDE_TYPE_RIGHT,
 } side_type_t;
+
 
 //An enum for temp variable selection
 typedef enum{
@@ -1071,7 +1076,9 @@ static basic_block_t* basic_block_alloc(){
 
 	//Our sane defaults here - normal termination and normal type
 	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
+
 	//Usually these are, in special cases they aren't
 	created->good_to_merge = TRUE;
 
@@ -1665,6 +1672,9 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	basic_block_t* while_statement_entry_block = basic_block_alloc();
 	//And create our exit block
 	basic_block_t* while_statement_end_block = basic_block_alloc();
+	//We will specifically mark the end block here as an ending block
+	while_statement_end_block->block_type = BLOCK_TYPE_WHILE_END;
+
 	//Grab this for convenience
 	generic_ast_node_t* while_stmt_node = values->initial_node;
 
@@ -1700,9 +1710,16 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		//For the user to see
 		print_cfg_message(WARNING, "While loop has empty body, has no effect", while_stmt_node->line_number);
 		(*num_warnings_ref)++;
+
+		//We do still need to have our successor be the ending block
+		add_successor(while_statement_entry_block, while_statement_end_block);
+		//It is our direct successor
+		while_statement_entry_block->direct_successor = while_statement_end_block;
+
 		//We'll just return now
 		return while_statement_entry_block;
 	}
+
 
 	//We'll now determine what kind of jump statement that we have here. We want to jump to the exit if
 	//we're bad, so we'll do an inverse jump
@@ -1712,10 +1729,8 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//Otherwise it isn't null, so we can add it as a successor
 	add_successor(while_statement_entry_block, compound_stmt_start);
-	//The direct successor to the entry block is the end block
-	add_successor(while_statement_entry_block, while_statement_end_block);
-	//Just to be sure
-	while_statement_entry_block->direct_successor = while_statement_end_block;
+	//The successor to the entry block is the starting block
+	while_statement_entry_block->direct_successor = compound_stmt_start;
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
@@ -1733,8 +1748,12 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		(*num_warnings_ref)++;
 	}
 
-	//No matter what, the successor to this statement is the top of the loop
+	//A successor to the end block is the block at the top of the loop
 	add_successor(compound_stmt_end, while_statement_entry_block);
+	//His direct successor is the end block
+	add_successor(compound_stmt_end, while_statement_end_block);
+	//Set this to make sure
+	compound_stmt_end->direct_successor = while_statement_end_block;
 
 	//The compound statement end will jump right back up to the entry block
 	emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP);
@@ -2239,9 +2258,13 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				add_successor(current_block, while_stmt_entry_block);
 			}
 
-			//Now we'll drill to the end here. This is easier than before, because the direct successor to
-			//the entry block of a while statement is always the end block
-			current_block = while_stmt_entry_block->direct_successor;
+			//Set the current block here
+			current_block = while_stmt_entry_block;
+
+			//Drill down to the very end
+			while(current_block->block_type != BLOCK_TYPE_WHILE_END){
+				current_block = current_block->direct_successor;
+			}
 	
 		//Handle a do-while statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
@@ -2932,9 +2955,13 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				add_successor(current_block, while_stmt_entry_block);
 			}
 
-			//Now we'll drill to the end here. This is easier than before, because the direct successor to
-			//the entry block of a while statement is always the end block
-			current_block = while_stmt_entry_block->direct_successor;
+			//Let's now drill to the bottom
+			current_block = while_stmt_entry_block;
+
+			//So long as we don't see the end
+			while(current_block->block_type != BLOCK_TYPE_WHILE_END){
+				current_block = current_block->direct_successor;
+			}
 	
 		//Handle a do-while statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){

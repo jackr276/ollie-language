@@ -34,10 +34,13 @@ fn main() -> i32{
 	*/
 
 
-	do{
-		//break when (a == 32);
-		a--;
-	} while(a > 32);
+	while (a > 32) do{
+		@tester(a);
+		if( a == 32) then{
+			break;
+		} 
+		a++;
+	}
 
 	let a_temp:i32 := 1;
 
