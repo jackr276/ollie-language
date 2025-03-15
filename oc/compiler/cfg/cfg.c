@@ -1170,6 +1170,24 @@ static void emit_blocks_bfs(cfg_t* cfg){
 	}
 }
 
+/**
+ * Print out the whole program in order by using the direct successor
+ */
+static void emit_blocks_direct_successor(cfg_t* cfg){
+	//Grab a cursor
+	basic_block_t* cursor = cfg->root;
+
+	//So long as we have something to print, we print
+	while(cursor != NULL){
+		if(cursor->visited != 5){
+			print_block_three_addr_code(cursor);
+		}
+
+		cursor->visited = 5;
+
+		cursor = cursor->direct_successor;
+	}
+}
 
 /**
  * Deallocate a basic block
@@ -1454,7 +1472,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
 
 	//We will always see 3 nodes here to start out with, of the type for_loop_cond_ast_node_t. These
-	//nodes contain an "is_blank" field that will alert us if this is just a placeholder. The first 2 parts of a for
+	//nodes contain an "is_blank" field that will alert us if this is just a placeholder. 
 
 	//If the very first one is not blank
 	if(ast_cursor->first_child != NULL){
@@ -1503,6 +1521,9 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//This node will always jump right back to the start
 	add_successor(for_stmt_update_block, condition_block);
+	//The direct successor of the update block is the exit block
+	for_stmt_update_block->direct_successor = for_stmt_exit_block;
+	
 	//Unconditional jump to condition block
 	emit_jmp_stmt(for_stmt_update_block, condition_block, JUMP_TYPE_JMP);
 
@@ -1519,7 +1540,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//Create a copy of our values here
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													    values->function_end_block, //Function end block
-													 	condition_block, //Loop statement start
+													 	condition_block, //Loop statement start -- for loops start at their condition
 													 	for_stmt_exit_block, //Exit block of loop
 													 	NULL,
 													 	NULL, 
@@ -1544,9 +1565,9 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//This will always be a successor to the conditional statement
 	add_successor(condition_block, compound_stmt_start);
 	//The condition block also has another direct successor, the exit block
-	add_successor(condition_block, for_stmt_exit_block);
-	//Ensure it is the direct successor
-	condition_block->direct_successor = for_stmt_exit_block;
+	//add_successor(condition_block, for_stmt_exit_block);
+	//The direct successor of the condition block is the compound statement start
+	condition_block->direct_successor = compound_stmt_start;
 
 	//We'll use our inverse jumping("jump out") strategy here
 	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE);
@@ -1567,14 +1588,17 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		//We should warn here
 		print_cfg_message(WARNING, "For loop internal returns through every control block, will only execute once", for_stmt_node->line_number);
 		(*num_warnings_ref)++;
-		//There's nothing to add here, we just return
-		return for_stmt_entry_block;
 	}
 
 	//The successor to the end block is the update block
 	add_successor(compound_stmt_end, for_stmt_update_block);
+	//The direct successor is the update block
+	compound_stmt_end->direct_successor = for_stmt_update_block;
 	//We also need an uncoditional jump right to the update block
 	emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP);
+
+	add_successor(for_stmt_update_block, for_stmt_exit_block);
+	for_stmt_update_block->direct_successor = for_stmt_exit_block;
 
 	//Give back the entry block
 	return for_stmt_entry_block;
@@ -1944,14 +1968,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//Once we visit this, we'll navigate to the end
 		basic_block_t* else_if_end = else_if_entry;
 
-		//We'll drill down to the end -- so long as we don't hit the end block and we don't hit a return statement
-		//while(else_if_end->direct_successor != NULL && else_if_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-			//Keep track of the immediate predecessor
-		//	else_if_end = else_if_end->direct_successor;
-		//}
-
 		//In theory, the if block already has an end appropriately made, so we don't need to do anything here
-
 		return entry_block;
 	
 	//Some weird error here
@@ -2112,43 +2129,11 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 
 			//Now we'll find the end of the if statement block
-			//So long as we haven't hit the end and it isn't a return statement
+			//Compare the end addresses -- as long as we don't hit we're fine
 			while(current_block->block_type != BLOCK_TYPE_IF_STMT_END){
 				current_block = current_block->direct_successor;
 			}
-			
-			/*
-			 * DEVELOPER USE MESSAGE
-			 */
-			if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->block_terminal_type != BLOCK_TERM_TYPE_CONTINUE && current_block != if_end_block){
-				printf("END BLOCK REFERENCE LOST");
-			}
 
-			//If it is a return statement, that means that this if statement returns through every path. We'll leave 
-			//if this is the case
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
-				//Throw a warning if this happens
-				if(current_node->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after if-else block that returns through every control path", current_node->line_number);
-					(*num_warnings_ref)++;
-				}
-				//Give it back
-				return starting_block;
-			}
-
-			//If it's a continue statement, that means that this if statement continues through every path. We'll leave if this
-			//is the case
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE){
-				//Throw a warning if this happens
-				if(current_node->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after if-else block that continues through every control path", current_node->line_number);
-					(*num_warnings_ref)++;
-				}
-
-				//Give it back
-				return starting_block;
-			}
-		
 		//Handle a while statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_WHILE_STMT){
 			//Create the values here
@@ -2250,17 +2235,9 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 			
 			//Once we're here the start is in current
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+			while(current_block->block_type != BLOCK_TYPE_FOR_STMT_END){
 				current_block = current_block->direct_successor;
 			}
-
-			//This should never happen, so if it does we have a problem
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
-				print_parse_message(PARSE_ERROR, "It should be impossible to have a for statement that returns in all control paths", current_node->line_number);
-				exit(0);
-			}
-
-			//But if we don't then this is the current node
 
 		//Handle a continue statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
@@ -2729,17 +2706,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We'll visit the block here
 			basic_block_t* decl_block = visit_declaration_statement(&values);
 
-			/*
-			//If the start block is null, then this is the start block. Otherwise, we merge it in
-			if(starting_block == NULL){
-				starting_block = decl_block;
-				current_block = decl_block;
-			//Just merge with current
-			} else {
-				current_block = merge_blocks(current_block, decl_block); 
-			}
-			*/
-
 		//We've found a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
 			values_package_t values;
@@ -2787,6 +2753,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IF_STMT){
 			//Create the end block here for pointer reasons
 			basic_block_t* if_end_block = basic_block_alloc();
+			//Explicitly mark this as an if end block
+			if_end_block->block_type = BLOCK_TYPE_IF_STMT_END;
 
 			//Create the values package
 			values_package_t if_stmt_values;
@@ -2811,42 +2779,10 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Now we'll find the end of the if statement block
 			//So long as we haven't hit the end and it isn't a return statement
-			while (current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+			while(current_block->block_type != BLOCK_TYPE_IF_STMT_END){
 				current_block = current_block->direct_successor;
 			}
-			
-			/*
-			 * DEVELOPER USE MESSAGE
-			 */
-			if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET && current_block->block_terminal_type != BLOCK_TERM_TYPE_CONTINUE && current_block != if_end_block){
-				printf("END BLOCK REFERENCE LOST");
-			}
 
-			//If it is a return statement, that means that this if statement returns through every path. We'll leave 
-			//if this is the case
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
-				//Throw a warning if this happens
-				if(ast_cursor->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after if-else block that returns through every control path", ast_cursor->line_number);
-					(*num_warnings_ref)++;
-				}
-				//Give it back
-				return starting_block;
-			}
-
-			//If it's a continue statement, that means that this if statement continues through every path. We'll leave if this
-			//is the case
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE){
-				//Throw a warning if this happens
-				if(ast_cursor->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after if-else block that continues through every control path", ast_cursor->line_number);
-					(*num_warnings_ref)++;
-				}
-
-				//Give it back
-				return starting_block;
-			}
-		
 		//Handle a while statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
 			//Create the values here
@@ -2945,14 +2881,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 			
 			//Once we're here the start is in current
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+			while(current_block->block_type != BLOCK_TYPE_FOR_STMT_END){
 				current_block = current_block->direct_successor;
-			}
-
-			//This should never happen, so if it does we have a problem
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
-				print_parse_message(PARSE_ERROR, "It should be impossible to have a for statement that returns in all control paths", ast_cursor->line_number);
-				exit(0);
 			}
 
 			//But if we don't then this is the current node
@@ -3576,6 +3506,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//FOR PRINTING
 	emit_blocks_bfs(cfg);
 	//emit_blocks_dfs(cfg);
+	//emit_blocks_direct_successor(cfg);
 	
 	//Give back the reference
 	return cfg;
