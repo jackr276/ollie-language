@@ -208,11 +208,11 @@ static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var)
 /**
  * Print a block our for reading
 */
-static void pretty_print_block(basic_block_t* block){
+static void print_block_three_addr_code(basic_block_t* block){
 	//If this is empty, don't print anything
 	//For now only, this probably won't stay
 	if(block->leader_statement == NULL && block->block_type != BLOCK_TYPE_CASE){
-	//	return;
+		//return;
 	}
 
 	//Print the block's ID or the function name
@@ -1095,7 +1095,7 @@ static void emit_blocks_dfs(cfg_t* cfg){
 			//Mark this one as seen
 			block_cursor->visited = 2;
 
-			pretty_print_block(block_cursor);
+			print_block_three_addr_code(block_cursor);
 		}
 
 		//We'll now add in all of the childen
@@ -2867,7 +2867,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			if(starting_block == NULL){
 				starting_block = while_stmt_entry_block;
 				current_block = starting_block;
-			//We never merge while statements -- it will always be a successor
+			//We never merge these
 			} else {
 				//Add as a successor
 				add_successor(current_block, while_stmt_entry_block);
@@ -2954,6 +2954,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 
 			//But if we don't then this is the current node
+			//This current node is the for statement exit block. It will always be ok to merge this node
+			current_block->good_to_merge = TRUE;
 
 		//Handle a continue statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
@@ -3196,6 +3198,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//starting block's direct successor
 			if(starting_block == NULL){
 				starting_block = switch_stmt_entry;
+			} else if(current_block->good_to_merge == TRUE){
+				//Merge them if we can
+				merge_blocks(current_block, switch_stmt_entry);
 			} else {
 				//Otherwise this is a direct successor
 				add_successor(current_block, switch_stmt_entry);
@@ -3304,7 +3309,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//The ending block
 	basic_block_t* function_ending_block = basic_block_alloc();
 	//We very clearly mark this as an ending block
-	function_ending_block->is_exit_block = 1;
+	function_ending_block->is_exit_block = TRUE;
 
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
@@ -3370,6 +3375,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 		add_statement(function_ending_block, pop(deferred_stmts));
 	}
 
+	//Now we'll analyze the reachability of the function
 	perform_function_reachability_analysis(function_node, function_starting_block);
 
 	//We always return the start block
@@ -3418,6 +3424,9 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 	//A prog node can decay into a function definition, a let statement or otherwise
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
 
+	//Is the current block empty
+	u_int8_t current_block_is_empty = FALSE;
+
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
 		//Process a function statement
@@ -3428,6 +3437,8 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//If the start block is null, this becomes the start block
 			if(start_block == NULL){
 				start_block = function_block;
+			} else if(current_block_is_empty == TRUE){
+				merge_blocks(current_block, function_block);
 			//Otherwise, we'll add this as a successor to the current block
 			} else {
 				add_successor(current_block, function_block);
@@ -3440,6 +3451,13 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			while(current_block->is_exit_block == FALSE){
 				//Always follow the path of the direct successor
 				current_block = current_block->direct_successor;
+			}
+
+			//If the current block is empty, we're going to merge it later on
+			if(current_block->leader_statement == NULL){
+				current_block_is_empty = TRUE;
+			} else {
+				current_block_is_empty = FALSE;
 			}
 
 			//Finally once we get down here, we have our proper current block
@@ -3461,6 +3479,9 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 				current_block =	merge_blocks(current_block, let_block); 
 			}
 
+			//These are not empty
+			current_block_is_empty = FALSE;
+
 		//Visit a declaration statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
 			values_package_t values;
@@ -3477,6 +3498,9 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			} else {
 				current_block = merge_blocks(current_block, decl_block); 
 			}
+
+			//Not empty here either
+			current_block_is_empty = FALSE;
 
 		//Some weird error here
 		} else {
