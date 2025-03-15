@@ -1444,6 +1444,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	basic_block_t* for_stmt_entry_block = basic_block_alloc();
 	//Create our exit block
 	basic_block_t* for_stmt_exit_block = basic_block_alloc();
+	//We will explicitly declare that this is an exit here
+	for_stmt_exit_block->block_type = BLOCK_TYPE_FOR_STMT_END;
 	
 	//Grab the reference to the for statement node
 	generic_ast_node_t* for_stmt_node = values->initial_node;
@@ -1783,24 +1785,11 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 static basic_block_t* visit_if_statement(values_package_t* values){
 	//We always have an entry block here -- the end block is made for us
 	basic_block_t* entry_block = basic_block_alloc();
-	
-	//Mark if we have a return statement
-	u_int8_t returns_through_main_path = FALSE;
-	//Mark if we have a continue statement
-	u_int8_t continues_through_main_path = FALSE;
-	//Mark if we return through an else path
-	u_int8_t returns_through_second_path = FALSE;
-	//Mark if we have a continue statement
-	u_int8_t continues_through_second_path = FALSE;
-	//Mark if we have a break statement
-	u_int8_t breaks_through_main_path = FALSE;
-	//Mark if we break through else
-	u_int8_t breaks_through_second_path = FALSE;
 
 	//Let's grab a cursor to walk the tree
 	generic_ast_node_t* cursor = values->initial_node->first_child;
 
-	//Add it into the start block
+	//Add whatever our conditional is into the starting block
 	expr_ret_package_t package = emit_expr_code(entry_block, cursor);
 
 	//No we'll move one step beyond, the next node must be a compound statement
@@ -1808,7 +1797,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 	//If it isn't, that's an issue
 	if(cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		print_cfg_message(PARSE_ERROR, "Expected compound statement in if node", cursor->line_number);
+		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error: Expected compound statement in if node", cursor->line_number);
 		exit(1);
 	}
 
@@ -1824,36 +1813,30 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	//Now that we know it is, we'll invoke the compound statement rule
 	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
 
-	//If this is null, whole thing fails
+	//The ending block of the compound statement
+	basic_block_t* if_compound_stmt_end;
+
+	//If this is null, it's fine, but we should throw a warning
 	if(if_compound_stmt_entry == NULL){
 		print_cfg_message(WARNING, "Empty if clause in if-statement", cursor->line_number);
 		(*num_warnings_ref)++;
+		//No direct successor here as of yet
+		//We'll set the end ot be the entrance
+		if_compound_stmt_end = entry_block;
+
+	//We expect this to be the most likely option
 	} else {
 		//Add the if statement node in as a direct successor
 		add_successor(entry_block, if_compound_stmt_entry);
-		//Add as direct successor
+		//Add as direct successor. We want this to pass through the entry block
 		entry_block->direct_successor = if_compound_stmt_entry;
 
 		//Now we'll find the end of this statement
-		basic_block_t* if_compound_stmt_end = if_compound_stmt_entry;
+		if_compound_stmt_end = if_compound_stmt_entry;
 
 		//Once we've visited, we'll need to drill to the end of this compound statement
 		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
-		}
-
-		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
-		returns_through_main_path = if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
-		//Mark this too
-		continues_through_main_path = if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE;
-		//And this one
-		breaks_through_main_path = if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
-
-		//If it doesn't return through the main path, the successor is the end node
-		if(returns_through_main_path == FALSE){
-			add_successor(if_compound_stmt_end, values->if_stmt_end_block);
-			//Ensure is direct successor
-			if_compound_stmt_end->direct_successor = values->if_stmt_end_block;
 		}
 
 		//The successor to the if-stmt end path is the if statement end block
@@ -1863,9 +1846,9 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	//This is the end if we have a lone "if"
 	if(cursor->next_sibling == NULL){
 		//If this is the case, the end block is a direct successor
-		add_successor(entry_block, values->if_stmt_end_block);
-		//Ensure is direct successor
-		entry_block->direct_successor = values->if_stmt_end_block;
+		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
+		//Ensure that we have a direct path to the end
+		if_compound_stmt_end->direct_successor = values->if_stmt_end_block;
 
 		/**
 		 * The "if" path is always our direct path, we only need to jump to the else, so we jump
@@ -1902,21 +1885,19 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			print_cfg_message(WARNING, "Empty else clause in if-else statement", cursor->line_number);
 			(*num_warnings_ref)++;
 
-			//The entry block's direct successor is the end statement
-			entry_block->direct_successor = values->if_stmt_end_block;
-
 			//Just get out if this happens
 			return entry_block;
 		}
 
 		//Otherwise, we'll add this in as a successor
 		add_successor(entry_block, else_compound_stmt_entry);
+		//However, we want this to be the direct successor of the end of the if compound statement
+		if_compound_stmt_end->direct_successor = else_compound_stmt_entry;
+
 		//Let's determine the appropriate jump statement
 		jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 		//Add in our "jump to else" clause
 		emit_jmp_stmt(entry_block, else_compound_stmt_entry, jump_type);
-
-		//Add in a jump statement to get to here
 
 		//Now we'll find the end of this statement
 		basic_block_t* else_compound_stmt_end = else_compound_stmt_entry;
@@ -1926,47 +1907,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			else_compound_stmt_end = else_compound_stmt_end->direct_successor;
 		}
 
-		//Once we get here, we either have an end block or a return statement. Which one we have will influence decisions
-		returns_through_second_path = else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
-		//Mark this too
-		continues_through_second_path = else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE;
-		//Mark this here as well
-		breaks_through_second_path = else_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
-
-		//If it isn't a return statement, then it's successor is the entry block
-		if(returns_through_second_path == FALSE){
-			add_successor(else_compound_stmt_end, values->if_stmt_end_block);
-			//Ensure is direct successor
-			else_compound_stmt_end->direct_successor = values->if_stmt_end_block;
-			//Add in our jump to end here
-			emit_jmp_stmt(else_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
-		}
-
-		/**
-		 * Rules for a direct successor
-		 * 	1.) If both statements are return statements, the entire thing is a return statement
-		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
-		 * 	3.) If both don't return, we default to the "if" clause
-		 */
-		if(returns_through_main_path == FALSE && continues_through_main_path == FALSE && breaks_through_second_path == FALSE){
-			//The direct successor is the main path
-			entry_block->direct_successor = if_compound_stmt_entry;
-		//We favor this one if not
-		} else if(returns_through_second_path == FALSE && continues_through_second_path == FALSE && breaks_through_second_path == FALSE){
-			entry_block->direct_successor = else_compound_stmt_entry;
-		} else if(returns_through_main_path == TRUE && returns_through_second_path == FALSE){
-			//The direct successor is the else path
-			entry_block->direct_successor = else_compound_stmt_entry;
-		} else if(continues_through_main_path == TRUE && breaks_through_second_path == TRUE){
-			//The direct successor is the else path
-			entry_block->direct_successor = else_compound_stmt_entry;
-		} else if(breaks_through_main_path == TRUE && continues_through_second_path == TRUE){
-			//The direct successor is the main path 
-			entry_block->direct_successor = if_compound_stmt_entry;
-		} else {
-			//If there's anything else, we default to the first path
-			entry_block->direct_successor = if_compound_stmt_entry;
-		}
+		//The successor to this block is the ending block
+		add_successor(else_compound_stmt_end, values->if_stmt_end_block);
+		//Ensure is direct successor
+		else_compound_stmt_end->direct_successor = values->if_stmt_end_block;
+		//Add in our jump to end here
+		emit_jmp_stmt(else_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
 
 		//We're done here, send it back
 		return entry_block;
@@ -1987,6 +1933,9 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Add this as a successor to the entrant
 		add_successor(entry_block, else_if_entry);
+		//However, we want this to be a direct successor to the if end block
+		if_compound_stmt_end->direct_successor = else_if_entry;
+
 		//Let's determine the appropriate jump statement
 		jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 		//Emit our jump to else if here
@@ -1996,47 +1945,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* else_if_end = else_if_entry;
 
 		//We'll drill down to the end -- so long as we don't hit the end block and we don't hit a return statement
-		while(else_if_end->direct_successor != NULL && else_if_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+		//while(else_if_end->direct_successor != NULL && else_if_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 			//Keep track of the immediate predecessor
-			else_if_end = else_if_end->direct_successor;
-		}
+		//	else_if_end = else_if_end->direct_successor;
+		//}
 
-		//Once we get here, we either have an end block or a return statement
-		returns_through_second_path = else_if_end->block_terminal_type == BLOCK_TERM_TYPE_RET;
-		//Mark this too
-		continues_through_second_path = else_if_end->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE;
-		//And mark this
-		breaks_through_second_path = else_if_end->block_terminal_type == BLOCK_TERM_TYPE_BREAK;
-
-		//If it doesnt return through the second path, then the end better be the original end
-		if(returns_through_second_path == FALSE && else_if_end != values->if_stmt_end_block){
-			printf("DOES NOT TRACK END BLOCK\n");
-		}
-
-		/**
-		 * Rules for a direct successor
-		 * 	1.) If both statements are return statements, the entire thing is a return statement
-		 * 	2.) If one or the other does not return, we flow through the one that does NOT return
-		 * 	3.) If both don't return, we default to the "if" clause
-		 */
-		if(returns_through_main_path == FALSE && continues_through_main_path == FALSE && breaks_through_main_path == FALSE){
-			//The direct successor is the main path
-			entry_block->direct_successor = if_compound_stmt_entry;
-		} else if(continues_through_second_path == FALSE && returns_through_second_path == FALSE && breaks_through_second_path == FALSE){
-			entry_block->direct_successor = else_if_entry;
-		} else if(returns_through_main_path == TRUE && returns_through_second_path == FALSE){
-			//The direct successor is the else path
-			entry_block->direct_successor = else_if_entry;
-		} else if(continues_through_main_path == TRUE && breaks_through_second_path == TRUE){
-			//The direct successor is the else path
-			entry_block->direct_successor = else_if_entry;
-		} else if(breaks_through_main_path == TRUE && continues_through_second_path == TRUE){
-			//The direct successor is the main path 
-			entry_block->direct_successor = if_compound_stmt_entry;
-		} else {
-			//If there's anything else, we default to the first path
-			entry_block->direct_successor = if_compound_stmt_entry;
-		}
+		//In theory, the if block already has an end appropriately made, so we don't need to do anything here
 
 		return entry_block;
 	
@@ -2174,6 +2088,8 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 		} else if(current_node->CLASS == AST_NODE_CLASS_IF_STMT){
 			//Create the end block here for pointer reasons
 			basic_block_t* if_end_block = basic_block_alloc();
+			//We will explicitly denote that this is an if statement ending block
+			if_end_block->block_type = BLOCK_TYPE_IF_STMT_END;
 
 			values_package_t if_stmt_values = pack_values(current_node, //Initial Node
 														values->function_end_block, //Function end block
@@ -2197,7 +2113,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 			//Now we'll find the end of the if statement block
 			//So long as we haven't hit the end and it isn't a return statement
-			while (current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+			while(current_block->block_type != BLOCK_TYPE_IF_STMT_END){
 				current_block = current_block->direct_successor;
 			}
 			

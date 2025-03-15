@@ -11,38 +11,11 @@ fn main() -> i32{
 	
 	let a:i32 := 23;
 
-
-	
- 	declare arr:i32[32][3];
-
-	arr[1][2] := 23;
-
-	let b:i32 := arr[3][2];
-
-
-	/*
-	//Test this out
-	for(let _:i32 := 0; _ < 32; _++) do{
-		@tester(_);
-		break when(_ == 3);
-	}
-
-	for(let _:i32 := 0; _ < 32; _++) do{
-		@tester(_);
-		break when(_ == 3);
-	}
-	*/
-
-
-	while (a > 32) do{
-		@tester(a);
-		if( a == 32) then{
-			break;
-		} 
+	if(a == 32) then{
 		a++;
+	} else if(a == 33) then{
+		a--;
 	}
-
-	let a_temp:i32 := 1;
 
 	ret 0;
 }
