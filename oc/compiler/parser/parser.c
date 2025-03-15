@@ -725,7 +725,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  * a reference to the subtree created by it
  *
  * BNF Rule: <assignment-expression> ::= <logical-or-expression> 
- * 									   | asn <unary-expression> := <logical-or-expression>
+ * 									   | <unary-expression> := <logical-or-expression>
  *
  */
 static generic_ast_node_t* assignment_expression(FILE* fl){
@@ -833,6 +833,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Fail case here
 	if(lookahead.tok != COLONEQ){
 		sprintf(info, "Expected := symbol in assignment expression, instead got %s", lookahead.lexeme);
+		printf("%d", lookahead.tok);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		//Return a special kind of error node
