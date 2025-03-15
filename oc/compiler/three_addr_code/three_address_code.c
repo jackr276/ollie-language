@@ -398,11 +398,11 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//Print out a return statement
 	} else if(stmt->CLASS == THREE_ADDR_CODE_RET_STMT){
 		//Use asm keyword here, getting close to machine code
-		printf("ret");
+		printf("ret ");
 
 		//If it has a returned variable
 		if(stmt->op1 != NULL){
-			printf(" %s", stmt->op1->var_name);
+			print_variable(stmt->op1);
 		}
 		
 		//No matter what, print a newline
@@ -491,14 +491,28 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		print_variable(stmt->op1);
 		printf("\n");
 	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
-		printf("%s <- neg %s\n", stmt->assignee->var_name, stmt->op1->var_name);
+		print_variable(stmt->assignee);
+		printf(" <- neg ");
+		print_variable(stmt->op1);
+		printf("\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
+		print_variable(stmt->assignee);
 		//First we use the test command
-		printf("%s <- test %s, %s\n", stmt->assignee->var_name, stmt->op1->var_name, stmt->op1->var_name);
+		printf(" <- test ");
+		print_variable(stmt->op1);
+		printf(", ");
+		print_variable(stmt->op1);
+		printf("\n");
 		//Then we "set if equal"(sete) the assigned
-		printf("sete %s\n", stmt->assignee->var_name);
+		printf("sete ");
+		print_variable(stmt->assignee);
+		printf("\n");
 		//Then we move it into itself for flag setting purposes
-		printf("%s <- %s\n", stmt->assignee->var_name, stmt->assignee->var_name);
+		print_variable(stmt->assignee);
+		printf(" <- ");
+		print_variable(stmt->assignee);
+		printf("\n");
+
 	//For a label statement, we need to trim off the $ that it has
 	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
 		//Let's print it out. This is an instance where we will not use the print var
