@@ -1519,6 +1519,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		emit_expr_code(for_stmt_update_block, ast_cursor->first_child);
 	}
 
+	//This is the first and foremost successor
+	add_successor(for_stmt_update_block, for_stmt_exit_block);
 	//This node will always jump right back to the start
 	add_successor(for_stmt_update_block, condition_block);
 	//The direct successor of the update block is the exit block
@@ -1597,9 +1599,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//We also need an uncoditional jump right to the update block
 	emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP);
 
-	add_successor(for_stmt_update_block, for_stmt_exit_block);
-	for_stmt_update_block->direct_successor = for_stmt_exit_block;
-
 	//Give back the entry block
 	return for_stmt_entry_block;
 }
@@ -1614,6 +1613,8 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	basic_block_t* do_while_stmt_entry_block = basic_block_alloc();
 	//The true ending block
 	basic_block_t* do_while_stmt_exit_block = basic_block_alloc();
+	//We will explicitly mark that this is an exit block
+	do_while_stmt_exit_block->block_type = BLOCK_TYPE_DO_WHILE_END;
 
 	//Grab the initial node
 	generic_ast_node_t* do_while_stmt_node = values->initial_node;
@@ -1664,20 +1665,19 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 		return do_while_stmt_entry_block;
 	}
 
-	//Add this in to the ending block
+	//Add the conditional check into the end here
 	expr_ret_package_t package = emit_expr_code(compound_stmt_end, ast_cursor->next_sibling);
-
-	//Mark this as the end of a do while
-	do_while_stmt_exit_block->block_type = BLOCK_TYPE_DO_WHILE_END;
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
 	add_successor(compound_stmt_end, do_while_stmt_exit_block);
+
 	//Make sure it's the direct successor
 	compound_stmt_end->direct_successor = do_while_stmt_exit_block;
 
-	//It's other successor though is the loop entry
+	//It's other successor though is the loop entry. This is for flow analysis
 	add_successor(compound_stmt_end, do_while_stmt_entry_block);
+
 	//Discern the jump type here--This is a direct jump
 	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 		
@@ -2195,7 +2195,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			current_block = do_while_stmt_entry_block;
 
 			//So long as we have successors and don't see returns
-			while(current_block->direct_successor != NULL && current_block->block_type != BLOCK_TYPE_DO_WHILE_END && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			while(current_block->direct_successor != NULL && current_block->block_type != BLOCK_TYPE_DO_WHILE_END){
 				current_block = current_block->direct_successor;
 			}
 
