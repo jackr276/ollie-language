@@ -20,6 +20,7 @@ fn main() -> i32{
 	let b:i32 := arr[3][2];
 
 
+	/*
 	//Test this out
 	for(let _:i32 := 0; _ < 32; _++) do{
 		@tester(_);
@@ -30,12 +31,15 @@ fn main() -> i32{
 		@tester(_);
 		break when(_ == 3);
 	}
+	*/
 
 
-	while(a < 32) do{
+	do{
+		//break when (a == 32);
 		a--;
-		break when(@tester(a) == 32);
-	}
+	} while(a > 32);
+
+	let a_temp:i32 := 1;
 
 	ret 0;
 }

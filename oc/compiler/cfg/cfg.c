@@ -10,10 +10,12 @@
 
 #include "cfg.h"
 //For switch statement ordering
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "../queue/heap_queue.h"
 
 //For magic number removal
 #define TRUE 1
@@ -96,10 +98,22 @@ typedef enum{
 
 
 /**
- * TODO make this complete
+ * This is a very simple helper function that will pack values for us. This is done to avoid repeated code
  */
-values_package_t pack_values(/* stuff in here */){
+static values_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* function_end_block, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* switch_statement_end, basic_block_t* if_statement_end_block, basic_block_t* for_loop_update_block){
+	//Allocate it
 	values_package_t values;
+
+	//Pack with all of our values
+	values.initial_node = initial_node;
+	values.function_end_block = function_end_block;
+	values.loop_stmt_start = loop_stmt_start;
+	values.loop_stmt_end = loop_stmt_end;
+	values.switch_statement_end = switch_statement_end;
+	values.if_stmt_end_block = if_statement_end_block;
+	values.for_loop_update_block = for_loop_update_block;
+
+	//And give the copy back
 	return values;
 }
 
@@ -1058,6 +1072,8 @@ static basic_block_t* basic_block_alloc(){
 	//Our sane defaults here - normal termination and normal type
 	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
 	created->block_type = BLOCK_TYPE_NORMAL;
+	//Usually these are, in special cases they aren't
+	created->good_to_merge = TRUE;
 
 	//Attach this to the memory management structure
 	created->next_created = cfg_ref->last_attached;
@@ -1108,6 +1124,43 @@ static void emit_blocks_dfs(cfg_t* cfg){
 
 	//Deallocate our stack once done
 	heap_stack_dealloc(stack);
+}
+
+
+/**
+ * Print out the whole program in order. Done using an iterative
+ * bfs
+ */
+static void emit_blocks_bfs(cfg_t* cfg){
+	//We'll need a queue for our BFS
+	heap_queue_t* queue = heap_queue_alloc();
+	
+	//Enqueue the very first node
+	enqueue(queue, cfg->root);
+
+	//For holding our blocks
+	basic_block_t* block;
+
+	//So long as the queue isn't empty
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		//Pop off of the queue
+		block = dequeue(queue);
+
+		//If this wasn't visited, we'll print
+		if(block->visited != 3){
+			print_block_three_addr_code(block);	
+		}
+
+		//Now we'll mark this as visited
+		block->visited = 3;
+
+		//And finally we'll add all of these onto the queue
+		for(u_int16_t i = 0; i < block->num_successors; i++){
+			if(block->successors[i]->visited != 3){
+				enqueue(queue, block->successors[i]);
+			}
+		}
+	}
 }
 
 
@@ -1582,6 +1635,9 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//Add this in to the ending block
 	expr_ret_package_t package = emit_expr_code(compound_stmt_end, ast_cursor->next_sibling);
+
+	//Mark this as the end of a do while
+	do_while_stmt_exit_block->block_type = BLOCK_TYPE_DO_WHILE_END;
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -2217,7 +2273,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			current_block = do_while_stmt_entry_block;
 
 			//So long as we have successors and don't see returns
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+			while(current_block->direct_successor != NULL && current_block->block_type != BLOCK_TYPE_DO_WHILE_END){
 				current_block = current_block->direct_successor;
 			}
 
@@ -2402,7 +2458,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 				//There are two options here. If we're in a loop, that takes precedence. If we're in
 				//a switch statement, then that takes precedence
-				if(values->loop_stmt_start != NULL){
+				if(values->loop_stmt_end != NULL){
 					//This block can jump right out of the loop
 					basic_block_t* successor = current_block->direct_successor;
 					add_successor(current_block, values->loop_stmt_end);
@@ -2908,8 +2964,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Now we'll need to reach the end-point of this statement
 			current_block = do_while_stmt_entry_block;
 
-			//So long as we have successors and don't see returns
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_CONTINUE){ 
+			//As long as we aren't at the very end
+			while(current_block->direct_successor != NULL && current_block->block_type != BLOCK_TYPE_DO_WHILE_END){
 				current_block = current_block->direct_successor;
 			}
 
@@ -3565,7 +3621,8 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	variable_symtab_dealloc(temp_vars);
 
 	//FOR PRINTING
-	emit_blocks_dfs(cfg);
+	emit_blocks_bfs(cfg);
+	//emit_blocks_dfs(cfg);
 	
 	//Give back the reference
 	return cfg;

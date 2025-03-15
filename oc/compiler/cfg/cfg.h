@@ -51,6 +51,10 @@ typedef enum{
 	BLOCK_TYPE_ASM, //Very special case -- entire block is dedicated to asm inline
 	BLOCK_TYPE_CASE, //Case statement -- it also encapsulates default(just a special kind of case)
 	BLOCK_TYPE_FUNC_ENTRY, //Block is a function entry
+	BLOCK_TYPE_DO_WHILE_END, //End of a do-while
+	BLOCK_TYPE_IF_STMT_END, //End of an if-statement
+	BLOCK_TYPE_WHILE_END, //End of a while statement
+	BLOCK_TYPE_FOR_STMT_END, //End of a for statement
 } block_type_t;
 
 
