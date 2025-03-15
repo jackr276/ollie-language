@@ -33,7 +33,7 @@ fn test_func() -> i32 {
 		i++;
 		@test_func();
 
-		ret i;
+		//ret i;
 	} while (i < 232);
 
 	let sample:u32 := 2232;

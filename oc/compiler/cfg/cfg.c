@@ -10,7 +10,6 @@
 
 #include "cfg.h"
 //For switch statement ordering
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +40,7 @@ cfg_t* cfg_ref;
 typedef struct {
 	//The initial node
 	generic_ast_node_t* initial_node;
+	//The ending block of the function
 	basic_block_t* function_end_block;
 	//For continue statements
 	basic_block_t* loop_stmt_start;
@@ -1508,16 +1508,13 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	}
 	
 	//Create a copy of our values here
-	values_package_t compound_stmt_values;
-	compound_stmt_values.initial_node = ast_cursor;
-	//The loop starts at the condition block
-	compound_stmt_values.loop_stmt_start = condition_block;
-	//Store the end block
-	compound_stmt_values.function_end_block = values->function_end_block;
-	//Store the update block here -- may or may not be NULL
-	compound_stmt_values.for_loop_update_block = for_stmt_update_block;
-	//Store this as well
-	compound_stmt_values.loop_stmt_end = for_stmt_exit_block;
+	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
+													    values->function_end_block, //Function end block
+													 	condition_block, //Loop statement start
+													 	for_stmt_exit_block, //Exit block of loop
+													 	NULL,
+													 	NULL, 
+													 	for_stmt_update_block); //For loop update block
 
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
@@ -1597,13 +1594,14 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 		exit(0);
 	}
 
-	//Create and populate all needed values
-	values_package_t compound_stmt_values;
-	compound_stmt_values.initial_node = ast_cursor;
-	compound_stmt_values.function_end_block = values->function_end_block;
-	compound_stmt_values.loop_stmt_start = do_while_stmt_entry_block;
-	compound_stmt_values.loop_stmt_end = do_while_stmt_exit_block;
-	compound_stmt_values.for_loop_update_block = NULL;
+	//Create a copy of our values here
+	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
+													    values->function_end_block, //Function end block
+													 	do_while_stmt_entry_block, //Loop statement start
+													 	do_while_stmt_exit_block, //Exit block of loop
+													 	NULL, //Switch statement end
+													 	NULL, //If statement end
+													 	NULL); //For loop update block
 
 	//We go right into the compound statement here
 	basic_block_t* do_while_compound_stmt_entry = visit_compound_statement(&compound_stmt_values);
@@ -1685,13 +1683,14 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		exit(0);
 	}
 
-	//Create a values package to send in
-	values_package_t compound_stmt_values;
-	compound_stmt_values.initial_node = ast_cursor;
-	compound_stmt_values.function_end_block = values->function_end_block;
-	compound_stmt_values.loop_stmt_start = while_statement_entry_block;
-	compound_stmt_values.for_loop_update_block = NULL;
-	compound_stmt_values.loop_stmt_end = while_statement_end_block;
+	//Create a copy of our values here
+	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
+													    values->function_end_block, //Function end block
+													 	while_statement_entry_block, //Loop statement start
+													 	while_statement_end_block, //Exit block of loop
+													 	NULL, //Switch statement end
+													 	NULL, //If statement end
+													 	NULL); //For loop update block
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
@@ -1794,14 +1793,14 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		exit(1);
 	}
 
-	//Create and send in a values package
-	values_package_t if_compound_stmt_values;
-	if_compound_stmt_values.initial_node = cursor;
-	if_compound_stmt_values.function_end_block = values->function_end_block;
-	if_compound_stmt_values.loop_stmt_start = values->loop_stmt_start;
-	if_compound_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
-	if_compound_stmt_values.for_loop_update_block = values->for_loop_update_block;
-	if_compound_stmt_values.loop_stmt_end = values->loop_stmt_end;
+	//Create a copy of our values here
+	values_package_t if_compound_stmt_values = pack_values(cursor, //Initial Node
+													    values->function_end_block, //Function end block
+													 	values->loop_stmt_start, //Loop statement start
+													 	values->loop_stmt_end, //Exit block of loop
+													 	values->switch_statement_end, //Switch statement end
+													 	values->if_stmt_end_block, //If statement end
+													 	values->for_loop_update_block); //For loop update block
 
 	//Now that we know it is, we'll invoke the compound statement rule
 	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
@@ -1867,14 +1866,14 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	
 	//If we have a compound statement, we'll handle it as an "else" clause
 	if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
-		//Create the values package 
-		values_package_t else_values_package;
-		else_values_package.initial_node = cursor;
-		else_values_package.function_end_block = values->function_end_block;
-		else_values_package.loop_stmt_start = values->loop_stmt_start;
-		else_values_package.if_stmt_end_block = values->if_stmt_end_block;
-		else_values_package.for_loop_update_block = values->for_loop_update_block;
-		else_values_package.loop_stmt_end = values->loop_stmt_end;
+		//Create a copy of our values here
+		values_package_t else_values_package = pack_values(cursor, //Initial Node
+													    values->function_end_block, //Function end block
+													 	values->loop_stmt_start, //Loop statement start
+													 	values->loop_stmt_end, //Exit block of loop
+													 	values->switch_statement_end, //Switch statement end
+													 	values->if_stmt_end_block, //If statement end
+													 	values->for_loop_update_block); //For loop update block
 
 		//Visit the else statement
 		basic_block_t* else_compound_stmt_entry = visit_compound_statement(&else_values_package);
@@ -1955,14 +1954,14 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	
 	//Otherwise we have an "else if" clause 
 	} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
-		//Create the hours package
-		values_package_t else_if_values_package;
-		else_if_values_package.initial_node = cursor;
-		else_if_values_package.if_stmt_end_block = values->if_stmt_end_block;
-		else_if_values_package.loop_stmt_start = values->loop_stmt_start;
-		else_if_values_package.for_loop_update_block = values->for_loop_update_block;
-		else_if_values_package.function_end_block = values->function_end_block;
-		else_if_values_package.loop_stmt_end = values->loop_stmt_end;
+		//Create a copy of our values here
+		values_package_t else_if_values_package = pack_values(cursor, //Initial Node
+													    values->function_end_block, //Function end block
+													 	values->loop_stmt_start, //Loop statement start
+													 	values->loop_stmt_end, //Exit block of loop
+													 	values->switch_statement_end, //Switch statement end
+													 	values->if_stmt_end_block, //If statement end
+													 	values->for_loop_update_block); //For loop update block
 
 		//Visit the if statment, this one is not a parent
 		basic_block_t* else_if_entry = visit_if_statement(&else_if_values_package);
@@ -2051,30 +2050,33 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 	while(current_node != NULL){
 		//We've found a declaration statement
 		if(current_node->CLASS == AST_NODE_CLASS_DECL_STMT){
-			values_package_t values;
-			values.initial_node = current_node;
-
+			//Create our values package
+			values_package_t decl_values = pack_values(current_node, //Initial Node
+														NULL, //Function end block
+													 	NULL, //Loop statement start
+													 	NULL, //Exit block of loop
+													 	NULL, //Switch statement end
+													 	NULL, //If statement end
+													 	NULL); //For loop update block
 			//We'll visit the block here
-			basic_block_t* decl_block = visit_declaration_statement(&values);
+			basic_block_t* decl_block = visit_declaration_statement(&decl_values);
 
-			/*
-			//If the start block is null, then this is the start block. Otherwise, we merge it in
-			if(starting_block == NULL){
-				starting_block = decl_block;
-				current_block = decl_block;
-			//Just merge with current
-			} else {
-				current_block = merge_blocks(current_block, decl_block); 
-			}
-			*/
+			//There is nothing to merge here
 
 		//We've found a let statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_LET_STMT){
-			values_package_t values;
-			values.initial_node = current_node;
+			//Create our values package
+			values_package_t let_values = pack_values(current_node, //Initial Node
+														NULL, //Function end block
+													 	NULL, //Loop statement start
+													 	NULL, //Exit block of loop
+													 	NULL, //Switch statement end
+													 	NULL, //If statement end
+													 	NULL); //For loop update block
+
 
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(&values);
+			basic_block_t* let_block = visit_let_statement(&let_values);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
@@ -2113,17 +2115,15 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 		//We could also have a compound statement inside of here as well
 		} else if(current_node->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
-			printf("HERE\n");
-			//Prime this here
-			values_package_t compound_stmt_values;
-			compound_stmt_values.initial_node = current_node;
-			compound_stmt_values.function_end_block = values->function_end_block;
-			compound_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			compound_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
-			compound_stmt_values.loop_stmt_start = values->loop_stmt_start;
-			compound_stmt_values.loop_stmt_end = values->loop_stmt_end;
-			compound_stmt_values.switch_statement_end = values->switch_statement_end;
-
+			//Pack up all of our values
+			values_package_t compound_stmt_values = pack_values(current_node, //Initial Node
+														values->function_end_block, //Function end block
+													 	values->loop_stmt_start, //Loop statement start
+													 	values->loop_stmt_end, //Exit block of loop
+													 	values->switch_statement_end, //Switch statement end
+													 	values->if_stmt_end_block, //If statement end
+													 	values->for_loop_update_block); //For loop update block
+			
 			//We'll simply recall this function and let it handle it
 			basic_block_t* compound_stmt_entry_block = visit_compound_statement(&compound_stmt_values);
 
@@ -2156,16 +2156,14 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Create the end block here for pointer reasons
 			basic_block_t* if_end_block = basic_block_alloc();
 
-			//Create the values package
-			values_package_t if_stmt_values;
-			if_stmt_values.initial_node = current_node;
-			if_stmt_values.function_end_block = values->function_end_block;
-			if_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			if_stmt_values.if_stmt_end_block = if_end_block;
-			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
-			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
-			if_stmt_values.switch_statement_end = values->switch_statement_end;
-
+			values_package_t if_stmt_values = pack_values(current_node, //Initial Node
+														values->function_end_block, //Function end block
+													 	values->loop_stmt_start, //Loop statement start
+													 	values->loop_stmt_end, //Exit block of loop
+													 	values->switch_statement_end, //Switch statement end
+														if_end_block, //If statement end
+													 	values->for_loop_update_block); //For loop update block
+			
 			//We'll now enter the if statement
 			basic_block_t* if_stmt_start = visit_if_statement(&if_stmt_values);
 			
@@ -2273,7 +2271,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			current_block = do_while_stmt_entry_block;
 
 			//So long as we have successors and don't see returns
-			while(current_block->direct_successor != NULL && current_block->block_type != BLOCK_TYPE_DO_WHILE_END){
+			while(current_block->direct_successor != NULL && current_block->block_type != BLOCK_TYPE_DO_WHILE_END && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				current_block = current_block->direct_successor;
 			}
 
@@ -3386,14 +3384,14 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 		exit(0);
 	}
 
-	//Create our values package
-	values_package_t compound_stmt_values;
-	compound_stmt_values.initial_node = func_cursor;
-	compound_stmt_values.function_end_block = function_ending_block;
-	compound_stmt_values.loop_stmt_start = NULL;
-	compound_stmt_values.if_stmt_end_block = NULL;
-	compound_stmt_values.for_loop_update_block = NULL;
-	compound_stmt_values.loop_stmt_end = NULL;
+	//Package the values up
+	values_package_t compound_stmt_values = pack_values(func_cursor, //Initial Node
+											    	function_ending_block, //Function end block
+											 		NULL, //Loop statement start
+											 		NULL, //Exit block of loop
+											 		NULL, //Switch statement end
+											 		NULL, //If statement end
+											 		NULL); //For loop update block
 
 	//Once we get here, we know that func cursor is the compound statement that we want
 	basic_block_t* compound_stmt_block = visit_compound_statement(&compound_stmt_values);
@@ -3523,8 +3521,14 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 
 		//Process a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
-			values_package_t values;
-			values.initial_node = ast_cursor;
+			//Package the values up
+			values_package_t values = pack_values(ast_cursor, //Initial Node
+											    NULL, //Function end block
+											 	NULL, //Loop statement start
+											 	NULL, //Exit block of loop
+											 	NULL, //Switch statement end
+											 	NULL, //If statement end
+											 	NULL); //For loop update block
 
 			//We'll visit the block here
 			basic_block_t* let_block = visit_let_statement(&values);
@@ -3543,8 +3547,14 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 
 		//Visit a declaration statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
-			values_package_t values;
-			values.initial_node = ast_cursor;
+			//Package the values up
+			values_package_t values = pack_values(ast_cursor, //Initial Node
+											    NULL, //Function end block
+											 	NULL, //Loop statement start
+											 	NULL, //Exit block of loop
+											 	NULL, //Switch statement end
+											 	NULL, //If statement end
+											 	NULL); //For loop update block
 
 			//We'll visit the block here
 			basic_block_t* decl_block = visit_declaration_statement(&values);
