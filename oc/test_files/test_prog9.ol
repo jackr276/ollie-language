@@ -9,40 +9,55 @@ fn tester(i:u32) -> i32{
  */
 fn main() -> i32{
 	
-	let a:i32 := 23;
-
+	let mut a:i32 := 23;
 
 	
- 	declare arr:i32[32][3];
-
-	arr[1][2] := 23;
-
-	let b:i32 := arr[3][2];
-
-
-	/*
-	//Test this out
-	for(let _:i32 := 0; _ < 32; _++) do{
-		@tester(_);
-		break when(_ == 3);
+	
+	while(@tester(a) != 1) do{
+	if(a == 32) then{
+		if(a > 32) then{
+			let i:i32 := 3222;
+		} else if(a == -3) then{
+			let i:i32 := -2322;
+		}
+	} else if(a==3222) then{
+		if(a > 45) then{
+			let i:i32 := 3222;
+		} else {
+			let i:i32 := -2322;
+		}
 	}
-
-	for(let _:i32 := 0; _ < 32; _++) do{
-		@tester(_);
-		break when(_ == 3);
+	}
+	
+	
+	/*
+	while(@tester(a) != 1) do{
+		a := a + 333;
+		ret a;
 	}
 	*/
+	
+	
 
-
-	while (a > 32) do{
-		@tester(a);
-		if( a == 32) then{
-			break;
-		} 
-		a++;
+	/*
+	for(let i:u32 := 0; i < 3333; ++i) do{
+		@tester(i);
 	}
+	*/
+	
 
-	let a_temp:i32 := 1;
+	
+	let i:char := 'a';
+
+	
+	if(i < 'A') then{
+		ret -3333;
+	} else if(i == 'A') then{
+		ret -1;
+	}
+	
+	
+	
 
 	ret 0;
 }
