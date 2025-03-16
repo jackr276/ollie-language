@@ -71,12 +71,6 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u
 	emitted_var->type = var->type;
 	//And store the symtab record
 	emitted_var->linked_var = var;
-	
-	//We'll increment the current generation
-	if(assignment == 1){
-		//We store this for later on
-		(var->current_generation)++;
-	}
 
 	//Store this for printing, regardless of what happened
 	emitted_var->ssa_generation_level = var->current_generation;
@@ -180,9 +174,10 @@ three_addr_code_stmt_t* emit_idle_statement_three_addr_code(){
  * will be no newline inserted at all. This is meant solely for the use of the "print_three_addr_code_stmt"
  * and nothing more. This function is also designed to take into account the indirection aspected as well
  */
-void print_variable(three_addr_var_t* variable){
+void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
+	//If we have a block header, we will NOT print out any indirection info
 	//We will first print out any and all indirection("(") opening parens
-	for(u_int16_t i = 0; i < variable->indirection_level; i++){
+	for(u_int16_t i = 0; mode != PRINTING_VAR_BLOCK_HEADER && i < variable->indirection_level; i++){
 		printf("(");
 	}
 	
@@ -195,7 +190,7 @@ void print_variable(three_addr_var_t* variable){
 	}
 
 	//Lastly we print out the remaining indirection characters
-	for(u_int16_t i = 0; i < variable->indirection_level; i++){
+	for(u_int16_t i = 0; mode != PRINTING_VAR_BLOCK_HEADER && i < variable->indirection_level; i++){
 		printf(")");
 	}
 }
@@ -271,15 +266,15 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		}
 
 		//This one comes first
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 
 		//Then the arrow
 		printf(" <- ");
 
 		//Now we'll do op1, token, op2
-		print_variable(stmt->op1);
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf(" %s ", op);
-		print_variable(stmt->op2);
+		print_variable(stmt->op2, PRINTING_VAR_INLINE);
 
 		//And end it out here
 		printf("\n");
@@ -348,13 +343,13 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		}
 
 		//This one comes first
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 
 		//Then the arrow
 		printf(" <- ");
 
 		//Now we'll do op1, token, op2
-		print_variable(stmt->op1);
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf(" %s ", op);
 
 		//Grab our const for convenience
@@ -376,13 +371,13 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//If we have a regular const assignment
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 		//We'll print out the left and right ones here
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf(" <- ");
-		print_variable(stmt->op1);
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//First print out the assignee
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf(" <- ");
 
 		//Grab our const for convenience
@@ -407,7 +402,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 
 		//If it has a returned variable
 		if(stmt->op1 != NULL){
-			print_variable(stmt->op1);
+			print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		}
 		
 		//No matter what, print a newline
@@ -457,7 +452,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		//First we'll print out the assignment, if one exists
 		if(stmt->assignee != NULL){
 			//Print the variable and assop out
-			print_variable(stmt->assignee);
+			print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 			printf(" <- ");
 		}
 
@@ -484,38 +479,38 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		//TODO MAY OR MAY NOT NEED
 	} else if (stmt->CLASS == THREE_ADDR_CODE_INC_STMT){
 		printf("inc ");
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf("\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_DEC_STMT){
 		printf("dec ");
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf("\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_BITWISE_NOT_STMT){
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf(" <- not ");
-		print_variable(stmt->op1);
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
 	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf(" <- neg ");
-		print_variable(stmt->op1);
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		//First we use the test command
 		printf(" <- test ");
-		print_variable(stmt->op1);
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf(", ");
-		print_variable(stmt->op1);
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
 		//Then we "set if equal"(sete) the assigned
 		printf("sete ");
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf("\n");
 		//Then we move it into itself for flag setting purposes
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf(" <- ");
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 		printf("\n");
 
 	//For a label statement, we need to trim off the $ that it has
@@ -535,17 +530,17 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//If we have a lea statement, we will print it out in plain algebraic form here
 	} else if(stmt->CLASS == THREE_ADDR_CODE_LEA_STMT){
 		//Var name comes first
-		print_variable(stmt->assignee);
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 
 		//Print the assignment operator
 		printf(" <- ");
 
 		//Now print out the rest in order
-		print_variable(stmt->op1);
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		//Then we have a plus
 		printf(" + ");
 		//Then we have the third one, times some multiplier
-		print_variable(stmt->op2);
+		print_variable(stmt->op2, PRINTING_VAR_INLINE);
 
 		//And the finishing sequence
 		printf(" * %ld\n", stmt->lea_multiplicator);

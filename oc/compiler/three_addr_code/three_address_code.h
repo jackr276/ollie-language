@@ -51,6 +51,17 @@ typedef enum{
 
 
 /**
+ * For variable printing, where we're printing
+ * matters. The user must specify if it's
+ * block or inline mode
+ */
+typedef enum{
+	PRINTING_VAR_INLINE,
+	PRINTING_VAR_BLOCK_HEADER,
+} variable_printing_mode_t;
+
+
+/**
  * What kind of three address code statement do we have?
  */
 typedef enum{
@@ -299,6 +310,12 @@ three_addr_code_stmt_t* emit_idle_statement_three_addr_code();
  * Pretty print a three address code statement
 */
 void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt);
+
+/**
+ * Print a variable and everything about it. If the variable is in
+ * "Block header" mode, we won't print out any dereferencing info
+ */
+void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode);
 
 /**
  * Destroy a three address variable

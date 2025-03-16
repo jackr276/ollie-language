@@ -253,10 +253,32 @@ static void print_block_three_addr_code(basic_block_t* block){
 
 	//Print the block's ID or the function name
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		printf("%s:\n", block->func_record->func_name);
+		printf("%s", block->func_record->func_name);
 	} else {
-		printf(".L%d:\n", block->block_id);
+		printf(".L%d", block->block_id);
 	}
+
+	//Now, we will print all of the active variables that this block has
+	if(block->live_variable_count != 0){
+		printf("(");
+
+		//Run through all of the live variables and print them out
+		for(u_int16_t i = 0; i < block->live_variable_count; i++){
+			//Print it out
+			print_variable(block->live_variables[i], PRINTING_VAR_BLOCK_HEADER);
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->live_variable_count - 1){
+				printf(", ");
+			}
+		}
+
+		//Close it out here
+		printf(")");
+	}
+
+	//We always need the colon and newline
+	printf(":\n");
 
 	//Now grab a cursor and print out every statement that we 
 	//have
