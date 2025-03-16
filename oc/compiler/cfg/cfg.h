@@ -14,8 +14,8 @@
 #define MAX_SUCCESSORS 40
 #define MAX_PREDECESSORS 40
 #define INITIAL_STATEMENT_SIZE 2000
-//Probably way too high, but just being safe
-#define MAX_LIVE_VARS 300
+//This can always be reupped dynamically
+#define MAX_LIVE_VARS 5
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
@@ -113,9 +113,11 @@ struct basic_block_t{
 	u_int8_t num_predecessors;
 	u_int8_t num_successors;
 	//Keep track of all active(live) variables
-	three_addr_var_t* active_vars[MAX_LIVE_VARS];
+	three_addr_var_t** live_variables;
 	//The number of active vars
-	u_int16_t active_var_count;
+	u_int16_t live_variable_count;
+	//The current maximum number of live variables
+	u_int16_t max_live_variable_count;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)

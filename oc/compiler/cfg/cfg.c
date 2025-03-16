@@ -6,6 +6,14 @@
  * is a hybrid of abstract machine code and assembly. Some operations, like 
  * jump commands, are able to be deciphered at this stage, and as such we do
  * so in the OIR
+ *
+ *
+ * SSA code notes:
+ *
+ * - A "live" variable, in the context of a block, is one that is defined in that block.
+ *   We keep track of these here, and they are appended to the headers of the blocks for ease of understanding
+ *   to the programmer
+ *
 */
 
 #include "cfg.h"
@@ -211,16 +219,25 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * as live
  */
 static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var){
-	//Just check this for safety--for dev use only
-	if(basic_block->active_var_count == MAX_LIVE_VARS){
-		fprintf(stderr, "MAXIMUM VARIABLE COUNT EXCEEDED\n");
-		exit(0);
+	//If we haven't even allocated one of these yet, we will now
+	if(basic_block->live_variables == NULL){
+		//Let's allocate it with the default size for now
+		basic_block->live_variables = calloc(sizeof(three_addr_var_t*), MAX_LIVE_VARS);
+		//Set this for later on
+		basic_block->max_live_variable_count = MAX_LIVE_VARS;
+	//Otherwise, there is another case where we may have to readjust
+	} else if(basic_block->live_variable_count == basic_block->max_live_variable_count){
+		//We will double here, seems to be a good strategy
+		basic_block->max_live_variable_count *= 2;
+		//Realloc here
+		basic_block->live_variables = realloc(basic_block->live_variables, basic_block->max_live_variable_count * sizeof(three_addr_var_t*));
 	}
 
+	//Now that we've handled any case where we could run out of memory, we can do this here
 	//Add the given variable in
-	basic_block->active_vars[basic_block->active_var_count] = var;
+	basic_block->live_variables[basic_block->live_variable_count] = var;
 	//We've seen one more
-	(basic_block->active_var_count)++;
+	(basic_block->live_variable_count)++;
 }
 
 
@@ -305,6 +322,12 @@ static void add_statement(basic_block_t* target, three_addr_code_stmt_t* stateme
  *
  */
 static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_t* var_symtab){
+	//We'll run through the variable symtab, finding every single variable in it
+	
+	//For each sheaf in the symtab
+	for(u_int16_t i = 0; i < var_symtab->max_sheafs; i++){
+
+	}
 
 }
 
@@ -442,6 +465,8 @@ static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_
 
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
+ *
+ * No live variables can be generated from here, because everything that we use is a temp
  */
 static three_addr_var_t* emit_constant_code_direct(basic_block_t* basic_block, three_addr_const_t* constant, generic_type_t* inferred_type){
 	//We'll use the constant var feature here
@@ -470,7 +495,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		//Emit the variable
 		three_addr_var_t* var = emit_var(ident_node->variable, use_temp, 0);
 		
-		//Add it as a live variable to the block
+		//Add it as a live variable to the block, because we've used it
 		add_live_variable(basic_block, var);
 
 		//Give it back
@@ -1197,6 +1222,11 @@ static void basic_block_dealloc(basic_block_t* block){
 	if(block == NULL){
 		printf("ERROR: Attempt to deallocate a null block");
 		exit(1);
+	}
+
+	//Deallocate the live variable array
+	if(block->live_variables != NULL){
+		free(block->live_variables);
 	}
 
 	//Grab a statement cursor here

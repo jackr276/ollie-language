@@ -52,7 +52,10 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 
 
 /**
- * Dynamically allocate and create a non-temp var
+ * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
+ * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
+ * that they share is the overall variable that they're linked back to, which stores their type information,
+ * etc.
 */
 three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u_int8_t is_label){
 	//Let's first create the non-temp variable
@@ -71,10 +74,12 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u
 	
 	//We'll increment the current generation
 	if(assignment == 1){
+		//We store this for later on
 		(var->current_generation)++;
-		//Store this for printing
-		emitted_var->ssa_generation_level = var->current_generation;
 	}
+
+	//Store this for printing, regardless of what happened
+	emitted_var->ssa_generation_level = var->current_generation;
 
 	sprintf(emitted_var->var_name, "%s", var->var_name);
 

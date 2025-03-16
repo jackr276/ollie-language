@@ -219,6 +219,8 @@ symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T sto
 	strcpy(record->var_name, name);
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name);
+	//The current generation is always 1 at first
+	record->current_generation = 1;
 	//Store the storage class
 	record->storage_class = storage_class;
 

@@ -8,16 +8,14 @@ fn main() -> i32{
 	declare x:i32;
 	declare mut y:i32;
 
-	//y := 1;
-	//y := 2;
-	//x := y;
-
-	//Statically known use
-	if(x > 4) then {
+	if(x > 4) then{
 		y := x - 2;
 	} else {
 		y := x + 9;
 	}
+
+	//Phi function here
+	let w:i32 := x + y;
 
 	ret 0;
 }
