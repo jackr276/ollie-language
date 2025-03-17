@@ -673,6 +673,16 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
  * Emit a binary operation statement with a constant built in
  */
 static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant){
+	//If these variables are not temporary, then we have read from them
+	if(assignee->is_temporary == FALSE){
+		add_live_variable(basic_block, assignee);
+	}
+
+	//Add this one in too
+	if(op1->is_temporary == FALSE){
+		add_live_variable(basic_block, assignee);
+	}
+
 	//First let's create it
 	three_addr_code_stmt_t* stmt = emit_bin_op_with_const_three_addr_code(assignee, op1, op, constant);
 
@@ -697,6 +707,11 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
 		var = negated;
 	}
 
+	//If this isn't a temp var, we'll add it in as live
+	if(negated->is_temporary == FALSE){
+		add_live_variable(basic_block, negated);
+	}
+
 	//Now let's create it
 	three_addr_code_stmt_t* stmt = emit_neg_stmt_three_addr_code(var, negated);
 	
@@ -714,6 +729,11 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
 static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated){
 	//We ALWAYS use a temp var here
 	three_addr_code_stmt_t* stmt = emit_logical_not_stmt_three_addr_code(emit_temp_var(negated->type), negated);
+	
+	//If negated isn't temp, it also counts as a read
+	if(negated->is_temporary == FALSE){
+		add_live_variable(basic_block, negated);
+	}
 
 	//From here, we'll add the statement in
 	add_statement(basic_block, stmt);
@@ -784,6 +804,11 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//Save the current variable into this new temporary one. This is what allows
 			//us to achieve the "Increment/decrement after use" effect
 			three_addr_code_stmt_t* assignment =  emit_assn_stmt_three_addr_code(temp_var, current_var);
+
+			//This counts as a read relationship, so we'll need to add it in as live
+			if(current_var->is_temporary == FALSE){
+				add_live_variable(basic_block, current_var);
+			}
 
 			//Ensure that we add this into the block
 			add_statement(basic_block, assignment);
@@ -993,6 +1018,15 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 
 	//Emit the binary operator expression using our helper
 	three_addr_code_stmt_t* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp.assignee, binary_operator, right_hand_temp.assignee);
+
+	//If these are not temporary, they also count as live
+	if(left_hand_temp.assignee->is_temporary == FALSE){
+		add_live_variable(basic_block, left_hand_temp.assignee);
+	}
+
+	if(right_hand_temp.assignee->is_temporary == FALSE){
+		add_live_variable(basic_block, right_hand_temp.assignee);
+	}
 
 	//Add this statement to the block
 	add_statement(basic_block, bin_op_stmt);
@@ -1287,6 +1321,7 @@ static void emit_blocks_direct_successor(cfg_t* cfg){
 	}
 }
 
+
 /**
  * Deallocate a basic block
 */
@@ -1461,11 +1496,18 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
 		a->block_type = b->block_type;
 	}
+
 	a->block_terminal_type = b->block_terminal_type;
 
 	//IMPORTANT--wipe b's statements out
 	b->leader_statement = NULL;
 	b->exit_statement = NULL;
+
+	//We'll now need to ensure that all of the live variables in B are also in A
+	for(u_int16_t i = 0; i < b->live_variable_count; i++){
+		//Add these in one by one to A
+		add_live_variable(a, b->live_variables[i]);
+	}
 
 	//Give back the pointer to a
 	return a;

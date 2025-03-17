@@ -463,7 +463,9 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		//Now we can go through and print out all of our parameters here
 		for(u_int8_t i = 0; i < stmt->func_record->number_of_params; i++){
 			//Print this out here
-			printf("%s", stmt->params[i]->var_name);
+			if(stmt->params[i] != NULL){
+				print_variable(stmt->params[i], PRINTING_VAR_INLINE);
+			}
 
 			//If we need to, print out a comma
 			if(i != stmt->func_record->number_of_params - 1){
