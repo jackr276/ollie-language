@@ -143,6 +143,8 @@ struct symtab_variable_record_t{
 	u_int8_t is_construct_member;
 	//Is this a label?
 	u_int8_t is_label;
+	//Is this variable ever required, or considered live, by a basic block?
+	u_int8_t has_ever_been_live;
 	//If it is, we'll store the function as a reference
 	symtab_function_record_t* parent_function;
 	//What's the storage class?

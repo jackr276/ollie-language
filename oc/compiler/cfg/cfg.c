@@ -233,6 +233,15 @@ static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var)
 		basic_block->live_variables = realloc(basic_block->live_variables, basic_block->max_live_variable_count * sizeof(three_addr_var_t*));
 	}
 
+	//Check the entire thing for duplicates
+	for(u_int16_t i = 0; i < basic_block->live_variable_count; i++){
+		//These addresses matching means that we have a duplicate. This
+		//is perfectly fine, we just won't add it in
+		if(basic_block->live_variables[i] == var){
+			return;
+		}
+	}
+
 	//Now that we've handled any case where we could run out of memory, we can do this here
 	//Add the given variable in
 	basic_block->live_variables[basic_block->live_variable_count] = var;
@@ -362,6 +371,11 @@ static three_addr_var_t* emit_lea_stmt(basic_block_t* basic_block, three_addr_va
 	//We need a new temp var for the assignee
 	three_addr_var_t* assignee = emit_temp_var(base_type);
 
+	//If the base addr is not temporary, this counts as a read
+	if(base_addr->is_temporary == FALSE){
+		add_live_variable(basic_block, base_addr);
+	}
+
 	//Now we leverage the helper to emit this
 	three_addr_code_stmt_t* stmt = emit_lea_stmt_three_addr_code(assignee, base_addr, offset, base_type->type_size);
 
@@ -434,6 +448,9 @@ static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t*
 	//Emit the appropriate variable
 	three_addr_var_t* label_var = emit_var(label_node->variable, 0, 1);
 
+	//This is a special case here -- these don't really count as variables
+	//in the way that most do. As such, we will not add it in as live
+
 	//We'll just use the helper to emit this
 	three_addr_code_stmt_t* stmt = emit_label_stmt_three_addr_code(label_var);
 
@@ -449,6 +466,9 @@ static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* 
 	//Emit the appropriate variable
 	three_addr_var_t* label_var = emit_var(jump_statement->variable, 0, 1);
 
+	//This is a special case here -- these don't really count as variables
+	//in the way that most do. As such, we will not add it in as live
+	
 	//We'll just use the helper to do this
 	three_addr_code_stmt_t* stmt = emit_dir_jmp_stmt_three_addr_code(label_var);
 
@@ -516,6 +536,9 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 
 		//Emit the variable
 		three_addr_var_t* var = emit_var(ident_node->variable, use_temp, 0);
+
+		//This variable now is live
+		ident_node->variable->has_ever_been_live = TRUE;
 		
 		//Add it as a live variable to the block, because we've used it
 		add_live_variable(basic_block, var);
@@ -525,13 +548,18 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 
 	//We will do an on-the-fly conversion to a number
 	} else if(ident_node->inferred_type->type_class == TYPE_CLASS_ENUMERATED) {
+		//Look up the type
 		symtab_type_record_t* type_record = lookup_type(type_symtab, "u32");
 		generic_type_t* type = type_record->type;
+		//Just create a constant here with the enum
 		return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), type);
 
 	} else {
 		//First we'll create the non-temp var here
 		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, 0, 0);
+
+		//THis has been live
+		ident_node->variable->has_ever_been_live = TRUE;
 
 		//Add it into the block
 		add_live_variable(basic_block, non_temp_var);
@@ -555,6 +583,11 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 	//Create the code
 	three_addr_code_stmt_t* inc_code = emit_inc_stmt_three_addr_code(incrementee);
 
+	//This will count as live if we read from it
+	if(incrementee->is_temporary == FALSE){
+		add_live_variable(basic_block, incrementee);
+	}
+
 	//Add it into the block
 	add_statement(basic_block, inc_code);
 
@@ -569,6 +602,11 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee){
 	//Create the code
 	three_addr_code_stmt_t* dec_code = emit_dec_stmt_three_addr_code(decrementee);
+
+	//This will count as live if we read from it
+	if(decrementee->is_temporary == FALSE){
+		add_live_variable(basic_block, decrementee);
+	}
 
 	//Add it into the block
 	add_statement(basic_block, dec_code);
@@ -586,6 +624,11 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 	//Create a new variable with an indirection level
 	three_addr_var_t* indirect_var = emit_var_copy(assignee);
 
+	//This will count as live if we read from it
+	if(indirect_var->is_temporary == FALSE){
+		add_live_variable(basic_block, indirect_var);
+	}
+
 	//Increment the indirection
 	indirect_var->indirection_level++;
 	//Temp or not same deal
@@ -602,6 +645,11 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, temp_selection_t use_temp){
 	//First we'll create it here
 	three_addr_code_stmt_t* not_stmt = emit_not_stmt_three_addr_code(var);
+
+	//This is also a case where the variable is read from, so it counts as live
+	if(var->is_temporary == FALSE){
+		add_live_variable(basic_block, var);
+	}
 
 	//Now if we need to use a temp, we'll make one here
 	if(use_temp == USE_TEMP_VAR){
@@ -984,6 +1032,9 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 		//Create the variable associated with this
 	 	three_addr_var_t* left_hand_var = emit_var(var, 1, 0);
+
+		//Mark that this has been live
+		var->has_ever_been_live = TRUE;
 
 		//Add it in as a live variable
 		add_live_variable(basic_block, left_hand_var);
