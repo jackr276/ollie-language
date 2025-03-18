@@ -347,9 +347,15 @@ static void add_statement(basic_block_t* target, three_addr_code_stmt_t* stateme
  * To insert phi functions, we take the following approach:
  * 	For each variable
  * 		Find all basic blocks that define this variable
- * 		For each of these basic blocks
- * 			Find its dominance frontiers
- * 			Insert phi for each of the dominance frontiers
+ * 		For each of these basic blocks that contains the variable as live
+ * 			add it onto the "worklist"
+ *
+ * 		Then:
+ * 			While worklist is not empty
+ * 			Remove some node from the worklist
+ * 			for each dominance frontier d
+ * 				if it does not already have one of these
+ * 					Insert a phi function for v at d
  *
  */
 static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_t* var_symtab){

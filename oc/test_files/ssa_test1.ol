@@ -10,16 +10,14 @@ fn main() -> i32{
 	let mut z:i32 := 322;
 
 
-	
+	//Statically known use - the goal of SSA
 	if(x > 4) then{
 		y := x - 2;
-		z++;
 	} else {
 		y := x + 9;
 	}
-	
 
-	//Phi function here
+	//Phi function should be here
 	let w:i32 := x + y;
 
 	ret 0;

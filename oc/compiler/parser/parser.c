@@ -9126,10 +9126,8 @@ front_end_results_package_t parse(FILE* fl, char* file_token){
 	//the root being here
 	prog = program(fl);
 
-	//Finalize the scopes
-	//finalize_type_scope(type_symtab);
-	//finalize_variable_scope(variable_symtab);
-
+	//We won't finalize the scopes until the very end
+	
 	//Initialize our results package here
 	front_end_results_package_t results;
 
