@@ -237,7 +237,7 @@ static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var)
 	for(u_int16_t i = 0; i < basic_block->live_variable_count; i++){
 		//These addresses matching means that we have a duplicate. This
 		//is perfectly fine, we just won't add it in
-		if(basic_block->live_variables[i] == var){
+		if(basic_block->live_variables[i]->linked_var == var->linked_var){
 			return;
 		}
 	}
