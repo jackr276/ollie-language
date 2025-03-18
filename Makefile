@@ -12,6 +12,7 @@ AST_PATH = ./oc/compiler/ast
 CFG_PATH = ./oc/compiler/cfg
 PREPROC_PATH = ./oc/compiler/preprocessor
 DEPENDENCY_ANALYZER_PATH = ./oc/compiler/dependency_analyzer
+DYNAMIC_ARRAY_PATH = ./oc/compiler/dynamic_array
 THREE_ADDRESS_CODE_PATH = ./oc/compiler/three_addr_code
 QUEUE_PATH = ./oc/compiler/queue
 TEST_FILE_DIR = ./oc/test_files/

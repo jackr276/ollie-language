@@ -35,13 +35,22 @@ dynamic_array_t* dynamic_array_alloc();
 
 /**
  * Does the dynamic array contain this pointer?
+ * 
+ * RETURNS: the index if true, -1 if not
 */
-u_int8_t dynamic_array_contains(dynamic_array_t* array, void* ptr);
+int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr);
 
 
 /**
- * 
+ * Is the dynamic array is empty?
 */
+u_int8_t dynamic_array_is_empty(dynamic_array_t* array);
+
+
+/**
+ * Insert an element into the dynamic array
+ */
+void dynamic_array_insert(dynamic_array_t* array, void* ptr);
 
 
 /**
