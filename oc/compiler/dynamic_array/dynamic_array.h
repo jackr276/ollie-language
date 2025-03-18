@@ -7,9 +7,6 @@
 #define DYNAMIC_ARRAY_H
 #include <sys/types.h>
 
-//The default is 20 -- this can always be reupped
-#define DEFAULT_SIZE 20
-
 //The overall dynamic array structure
 typedef struct dynamic_array_t dynamic_array_t;
 
@@ -30,9 +27,29 @@ struct dynamic_array_t{
 };
 
 
+/**
+ * Initialize a dynamic array
+ */
+dynamic_array_t* dynamic_array_alloc();
 
 
+/**
+ * Does the dynamic array contain this pointer?
+*/
+u_int8_t dynamic_array_contains(dynamic_array_t* array, void* ptr);
 
 
+/**
+ * 
+*/
 
-#endif
+
+/**
+ * Deallocate an entire dynamic array. 
+ *
+ * NOTE: This will not touch/free any pointers in the array itself,
+ * just the overall structure
+*/
+void dynamic_array_dealloc(dynamic_array_t* array);
+
+#endif /* DYNAMIC_ARRAY_H */
