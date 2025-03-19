@@ -13,5 +13,5 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: make dynamic_array_test 
-      run: make dynamic_array_test 
+    - name: make array_test 
+      run: make array_test 

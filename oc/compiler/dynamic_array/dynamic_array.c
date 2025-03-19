@@ -129,15 +129,6 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
 	//We'll grab the element at this index first
 	void* deleted = array->internal_array[index];
 
-	//SPECIAL CASE-> we deleted the very last one
-	if(array->current_index - 1 == index){
-		//All we need to do here is back up the index and return
-		array->current_index--; 
-
-		//And give it back
-		return deleted;
-	}
-
 	//Now we'll run through everything from that index up until the end, 
 	//shifting left every time
 	for(u_int16_t i = index; i < array->current_index - 1; i++){
