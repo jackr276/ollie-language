@@ -95,6 +95,57 @@ void dynamic_array_insert(dynamic_array_t* array, void* ptr){
 
 
 /**
+ * Get an element at a specified index. Do not remove the element
+ */
+void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
+	//Return NULL here. It is the caller's responsibility
+	//to check this
+	if(array->current_index <= index){
+		return NULL;
+	}
+
+
+	//Otherwise we should be good to grab. Again we do not delete here
+	return array->internal_array[index];
+}
+
+
+/**
+ * Delete an element from a specified index. The element itself
+ * is returned, allowing this to be used as a search & delete function
+ * all in one
+ */
+void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
+	//Again if we can't do this, we won't disrupt the program. Just return NULL
+	if(array->current_index <= index){
+		return NULL;
+	}
+
+	//We'll grab the element at this index first
+	void* deleted = array->internal_array[index];
+
+	//SPECIAL CASE-> we deleted the very last one
+	if(array->current_index - 1 == index){
+		//All we need to do here is back up the index and return
+		array->current_index--; 
+
+		//And give it back
+		return deleted;
+	}
+
+	//Now we'll run through everything from that index up until the end, 
+	//shifting left every time
+	for(u_int16_t i = index; i < array->current_index - 1; i++){
+		//Shift left here
+		array->internal_array[i] = array->internal_array[i + 1];
+	}
+
+	//And once we've done that shifting, we're done so
+	return deleted;
+}
+
+
+/**
  * Deallocate an entire dynamic array
 */
 void dynamic_array_dealloc(dynamic_array_t* array){

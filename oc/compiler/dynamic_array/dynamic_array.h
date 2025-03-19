@@ -54,6 +54,19 @@ void dynamic_array_insert(dynamic_array_t* array, void* ptr);
 
 
 /**
+ * Get an element at a specified index. Do not remove the element
+ */
+void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index);
+
+
+/**
+ * Delete an element from the dynamic array at a given index. Returns
+ * the element at said index
+ */
+void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index);
+
+
+/**
  * Deallocate an entire dynamic array. 
  *
  * NOTE: This will not touch/free any pointers in the array itself,
