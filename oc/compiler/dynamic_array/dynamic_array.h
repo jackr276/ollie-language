@@ -48,9 +48,9 @@ u_int8_t dynamic_array_is_empty(dynamic_array_t* array);
 
 
 /**
- * Insert an element into the dynamic array
+ * Add an item into the dynamic array
  */
-void dynamic_array_insert(dynamic_array_t* array, void* ptr);
+void dynamic_array_add(dynamic_array_t* array, void* ptr);
 
 
 /**

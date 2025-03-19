@@ -71,9 +71,9 @@ u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
 
 
 /**
- * Insert an element into the dynamic array
+ * Add an element into the dynamic array
  */
-void dynamic_array_insert(dynamic_array_t* array, void* ptr){
+void dynamic_array_add(dynamic_array_t* array, void* ptr){
 	//Let's just double check here
 	if(ptr == NULL){
 		fprintf(stderr, "FATAL ERROR: Attempt to insert a null pointer into a dynamic array");
@@ -91,6 +91,10 @@ void dynamic_array_insert(dynamic_array_t* array, void* ptr){
 
 	//Now that we're all set, we can add our element in. Elements are always added in at the very end
 	array->internal_array[array->current_index] = ptr;
+
+	//Bump this up by 1
+	array->current_index++;
+
 	//And we're all set
 }
 
