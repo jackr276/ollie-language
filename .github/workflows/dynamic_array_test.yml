@@ -1,4 +1,4 @@
-name: Symbol table test
+name: Dynamic array test
 
 on:
   push:
