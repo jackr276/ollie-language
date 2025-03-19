@@ -48,6 +48,12 @@ heap_queue.o: $(QUEUE_PATH)/heap_queue.c
 heap_queued.o: $(QUEUE_PATH)/heap_queue.c
 	$(CC) $(CFLAGS) -g $(QUEUE_PATH)/heap_queue.c -o $(OUT)/heap_queued.o
 
+dynamic_array.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
+	$(CC) $(CFLAGS) $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT)/dynamic_array.o
+
+dynamic_arrayd.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
+	$(CC) $(CFLAGS) -g $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT)/dynamic_arrayd.o
+
 priority_queue.o: $(QUEUE_PATH)/priority_queue.c
 	$(CC) $(CFLAGS) $(QUEUE_PATH)/priority_queue.c -o $(OUT)/priority_queue.o
 
@@ -108,6 +114,18 @@ symtab_test.o: $(SYMTAB_PATH)/symtab_test.c
 symtab_testd.o: $(SYMTAB_PATH)/symtab_test.c
 	$(CC) -g $(CFLAGS) $(SYMTAB_PATH)/symtab_test.c -o $(OUT)/symtab_testd.o
 
+dynamic_array_test.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array_test.c
+	$(CC) $(CFLAGS) $(DYNAMIC_ARRAY_PATH)/dynamic_array_test.c -o $(OUT)/dynamic_array_test.o
+
+dynamic_array_testd.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array_test.c
+	$(CC) $(CFLAGS) -g $(DYNAMIC_ARRAY_PATH)/dynamic_array_test.c -o $(OUT)/dynamic_array_testd.o
+
+dynamic_array_test: dynamic_array_test.o dynamic_array.o
+	$(CC) -o $(OUT)/dynamic_array_test $(OUT)/dynamic_array_test.o $(OUT)/dynamic_array.o
+
+dynamic_array_testd: dynamic_array_testd.o dynamic_arrayd.o
+	$(CC) -o $(OUT)/dynamic_array_testd $(OUT)/dynamic_array_testd.o $(OUT)/dynamic_arrayd.o
+
 parser_test.o: $(PARSER_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(PARSER_PATH)/parser_test.c -o $(OUT)/parser_test.o
 
@@ -161,6 +179,9 @@ ptest: parser_test
 
 compiler_test: oc
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/oc
+
+array_test: dynamic_array_test
+	$(OUT)/dynamic_array_test
 
 clean:
 	rm -f ./oc/out/*
