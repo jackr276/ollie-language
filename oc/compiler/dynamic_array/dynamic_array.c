@@ -136,6 +136,9 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
 		array->internal_array[i] = array->internal_array[i + 1];
 	}
 
+	//We've seen one less of these now
+	array->current_index--;
+
 	//And once we've done that shifting, we're done so
 	return deleted;
 }

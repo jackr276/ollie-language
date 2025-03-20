@@ -21,11 +21,9 @@ int main(){
 
 	//We should ensure that this is empty
 	if(dynamic_array_is_empty(array) == FALSE){
-		fprintf(stderr, "Is empty check fails");
+		fprintf(stderr, "Is empty check fails\n");
 		exit(-1);
 	}
-
-
 	
 	//Fill it up with some junk - just a bunch of int pointers
 	for(int i = 0; i < 30000; i++){
@@ -39,8 +37,6 @@ int main(){
 		dynamic_array_add(array, int_ptr);
 	}
 	
-
-	
 	//Iterate over the entire thing
 	for(u_int16_t i = 0; i < 30000; i++){
 		//Grab it out here -- remember, a dynamic array returns a void*
@@ -48,7 +44,7 @@ int main(){
 
 		//If this is all correct here, it should match
 		if(grabbed != i){
-			fprintf(stderr, "Expected %d at index %d but got: %d", i, i, grabbed);
+			fprintf(stderr, "Expected %d at index %d but got: %d\n", i, i, grabbed);
 		}
 	}
 
@@ -58,12 +54,11 @@ int main(){
 	//Make sure it matches
 	//If this is all correct here, it should match
 	if(*deleted != 29999){
-		fprintf(stderr, "Expected %d at index %d but got: %d", 29999, 29999, *deleted);
+		fprintf(stderr, "Expected %d at index %d but got: %d\n", 29999, 29999, *deleted);
 	}
 
 	//And free it
 	free(deleted);
-	
 
 	//Now we'll do the exact same thing but with a deletion
 	for(u_int16_t i = 0; i < 29999; i++){
@@ -72,7 +67,7 @@ int main(){
 
 		//If this is all correct here, it should match
 		if(*grabbed != i){
-			fprintf(stderr, "Expected %d at index %d but got: %d", i, i, *grabbed);
+			fprintf(stderr, "Expected %d at index %d but got: %d\n", i, i, *grabbed);
 		}
 
 		//While we're here, we may as well free this one
@@ -81,11 +76,10 @@ int main(){
 
 	//So we now know that we can add
 	//We should ensure that this is not empty
-	if(dynamic_array_is_empty(array) == TRUE){
-		fprintf(stderr, "Is empty check fails");
+	if(dynamic_array_is_empty(array) == FALSE){
+		fprintf(stderr, "Is empty check fails\n");
 		exit(-1);
 	}
-	
 	
 	//Destroy it
 	dynamic_array_dealloc(array);
