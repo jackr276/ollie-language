@@ -259,7 +259,7 @@ static void print_block_three_addr_code(basic_block_t* block){
 	//If this is empty, don't print anything
 	//For now only, this probably won't stay
 	if(block->leader_statement == NULL && block->block_type != BLOCK_TYPE_CASE){
-		//return;
+		return;
 	}
 
 	//Print the block's ID or the function name
@@ -3559,7 +3559,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			current_block = function_block;
 
 			//So long as we don't see the exit statement, we keep going
-			while(current_block->is_exit_block == FALSE){
+			while(current_block->direct_successor->is_exit_block == FALSE){
 				//Always follow the path of the direct successor
 				current_block = current_block->direct_successor;
 			}

@@ -118,6 +118,12 @@ struct basic_block_t{
 	u_int16_t live_variable_count;
 	//The current maximum number of live variables
 	u_int16_t max_live_variable_count;
+	//Keep track of all variables that are assigned to
+	three_addr_var_t** assigned_variables;
+	//The number of assigned vars
+	u_int16_t assigned_variable_count;
+	//The current maximum number of assigned variables
+	u_int16_t max_assigned_variable_count;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)
