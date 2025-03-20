@@ -16,6 +16,7 @@
 #define INITIAL_STATEMENT_SIZE 2000
 //This can always be reupped dynamically
 #define MAX_LIVE_VARS 5
+#define MAX_ASSIGNED_VARS 5
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;

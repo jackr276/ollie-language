@@ -249,6 +249,46 @@ static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var)
 	basic_block->live_variables[basic_block->live_variable_count] = var;
 	//We've seen one more
 	(basic_block->live_variable_count)++;
+
+	//This variable has been live
+	var->linked_var->has_ever_been_live = 1;
+}
+
+
+/**
+ * A simple helper function that allows us to add an assigned-to variable into the block's
+ * header. It is important to note that only actual variables(not temp variables) count
+ * as live
+ */
+static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//If we haven't even allocated one of these yet, we will now
+	if(basic_block->assigned_variables == NULL){
+		//Let's allocate it with the default size for now
+		basic_block->assigned_variables = calloc(sizeof(three_addr_var_t*), MAX_ASSIGNED_VARS);
+		//Set this for later on
+		basic_block->max_live_variable_count = MAX_ASSIGNED_VARS;
+	//Otherwise, there is another case where we may have to readjust
+	} else if(basic_block->assigned_variable_count == basic_block->max_assigned_variable_count){
+		//We will double here, seems to be a good strategy
+		basic_block->max_assigned_variable_count *= 2;
+		//Realloc here
+		basic_block->assigned_variables = realloc(basic_block->assigned_variables, basic_block->max_assigned_variable_count * sizeof(three_addr_var_t*));
+	}
+
+	//Check the entire thing for duplicates
+	for(u_int16_t i = 0; i < basic_block->assigned_variable_count; i++){
+		//These addresses matching means that we have a duplicate. This
+		//is perfectly fine, we just won't add it in
+		if(basic_block->assigned_variables[i]->linked_var == var->linked_var){
+			return;
+		}
+	}
+
+	//Now that we've handled any case where we could run out of memory, we can do this here
+	//Add the given variable in
+	basic_block->assigned_variables[basic_block->assigned_variable_count] = var;
+	//We've seen one more
+	(basic_block->assigned_variable_count)++;
 }
 
 
@@ -290,6 +330,22 @@ static void print_block_three_addr_code(basic_block_t* block){
 
 	//We always need the colon and newline
 	printf(":\n");
+
+	//If we have some assigned variables, we will dislay those for debugging
+	if(block->assigned_variables != NULL){
+		printf("Assigned: (");
+
+		for(u_int16_t i = 0; i < block->assigned_variable_count; i++){
+			print_variable(block->assigned_variables[i], PRINTING_VAR_BLOCK_HEADER);
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->assigned_variable_count - 1){
+				printf(", ");
+			}
+		}
+		printf("):\n");
+	}
+
 
 	//Now grab a cursor and print out every statement that we 
 	//have
@@ -579,6 +635,12 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		//Add it as a live variable to the block, because we've used it
 		add_live_variable(basic_block, var);
 
+		//This variable has been assigned to, so we'll add that too
+		if(side == SIDE_TYPE_LEFT){
+			//We only do this if it's the LHS
+			add_assigned_variable(basic_block, var);
+		}
+
 		//Give it back
 		return var;
 
@@ -599,6 +661,9 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 
 		//Add it into the block
 		add_live_variable(basic_block, non_temp_var);
+
+		//This variable has been assigned to, so we'll add that too
+		add_assigned_variable(basic_block, non_temp_var);
 
 		//Let's first create the assignment statement
 		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), non_temp_var);
@@ -1109,6 +1174,9 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		//Add it in as a live variable
 		add_live_variable(basic_block, left_hand_var);
 
+		//This has been assigned to
+		add_assigned_variable(basic_block, left_hand_var);
+
 		//Now emit whatever binary expression code that we have
 		expr_ret_package_t package = emit_binary_op_expr_code(basic_block, expr_node->first_child);
 
@@ -1373,6 +1441,11 @@ static void basic_block_dealloc(basic_block_t* block){
 		free(block->live_variables);
 	}
 
+	//Deallocate the assigned variable array
+	if(block->assigned_variables != NULL){
+		free(block->assigned_variables);
+	}
+
 	//Grab a statement cursor here
 	three_addr_code_stmt_t* cursor = block->leader_statement;
 	//We'll need a temp block too
@@ -1543,6 +1616,12 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	for(u_int16_t i = 0; i < b->live_variable_count; i++){
 		//Add these in one by one to A
 		add_live_variable(a, b->live_variables[i]);
+	}
+
+	//Copy over all of the assigned variables too
+	for(u_int16_t i = 0; i < b->assigned_variable_count; i++){
+		//Add these in one by one
+		add_assigned_variable(a, b->assigned_variables[i]);
 	}
 
 	//Give back the pointer to a
