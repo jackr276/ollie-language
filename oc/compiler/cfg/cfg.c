@@ -23,6 +23,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../queue/heap_queue.h"
+//For worklist functionality
+#include "../dynamic_array/dynamic_array.h"
 
 //For magic number removal
 #define TRUE 1
@@ -360,12 +362,40 @@ static void add_statement(basic_block_t* target, three_addr_code_stmt_t* stateme
  */
 static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_t* var_symtab){
 	//We'll run through the variable symtab, finding every single variable in it
-	
-	//For each sheaf in the symtab
-	for(u_int16_t i = 0; i < var_symtab->max_sheafs; i++){
+	symtab_variable_sheaf_t* sheaf_cursor;
+	symtab_variable_record_t* record;
 
+	//We'll need a "worklist" here - just a dynamic array 
+	dynamic_array_t* worklist = dynamic_array_alloc();
+
+	
+	//------------------------------------------
+	// FIRST STEP: FOR EACH variable we have
+	//------------------------------------------
+	//Run through all of the sheafs
+	for	(u_int16_t i = 0; i < var_symtab->num_sheafs; i++){
+		sheaf_cursor = var_symtab->sheafs[i];
+
+		//Now we'll free all non-null records
+		for(u_int16_t j = 0; j < KEYSPACE; j++){
+			//Grab the record
+			record = sheaf_cursor->records[j];
+
+			//----------------------------------
+			// SECOND STEP: For each block that 
+			// defines said variable
+			//----------------------------------
+
+
+			//We could have chaining here, so run through just in case
+			while(record != NULL){
+				record = record->next;
+			}
+		}
 	}
 
+	//We're done with it, so now we can free
+	dynamic_array_dealloc(worklist);
 }
 
 
@@ -3653,6 +3683,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	
 	//Destroy the temp variable symtab
 	variable_symtab_dealloc(temp_vars);
+	
+	//Add all phi functions for SSA
+	insert_phi_functions(cfg->root, results.variable_symtab);
 
 	//FOR PRINTING
 	emit_blocks_bfs(cfg);
