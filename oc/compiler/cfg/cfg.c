@@ -266,7 +266,7 @@ static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* 
 		//Let's allocate it with the default size for now
 		basic_block->assigned_variables = calloc(sizeof(three_addr_var_t*), MAX_ASSIGNED_VARS);
 		//Set this for later on
-		basic_block->max_live_variable_count = MAX_ASSIGNED_VARS;
+		basic_block->max_assigned_variable_count = MAX_ASSIGNED_VARS;
 	//Otherwise, there is another case where we may have to readjust
 	} else if(basic_block->assigned_variable_count == basic_block->max_assigned_variable_count){
 		//We will double here, seems to be a good strategy
