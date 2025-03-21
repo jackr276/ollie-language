@@ -12,6 +12,7 @@
 #include "ast/ast.h"
 #include "parser/parser.h"
 #include "preprocessor/preprocessor.h"
+#include "stack/lexstack.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
 
