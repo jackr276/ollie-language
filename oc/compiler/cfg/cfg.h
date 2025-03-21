@@ -14,9 +14,7 @@
 #define MAX_SUCCESSORS 40
 #define MAX_PREDECESSORS 40
 #define INITIAL_STATEMENT_SIZE 2000
-//This can always be reupped dynamically
-#define MAX_LIVE_VARS 5
-#define MAX_ASSIGNED_VARS 5
+
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
@@ -125,6 +123,12 @@ struct basic_block_t{
 	u_int16_t assigned_variable_count;
 	//The current maximum number of assigned variables
 	u_int16_t max_assigned_variable_count;
+	//The blocks dominance frontier
+	basic_block_t** dominance_frontier;
+	//The next index in said dominance frontier
+	u_int16_t next_df_index;
+	//The max index in the dominance frontier
+	u_int16_t max_df_index;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)

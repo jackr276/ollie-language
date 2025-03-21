@@ -30,6 +30,10 @@
 #define TRUE 1
 #define FALSE 0
 
+//This can always be reupped dynamically
+#define MAX_LIVE_VARS 5
+#define MAX_ASSIGNED_VARS 5
+#define MAX_DF_BLOCKS 5
 
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
@@ -389,6 +393,32 @@ static void add_statement(basic_block_t* target, three_addr_code_stmt_t* stateme
 }
 
 
+/**
+ * Add a block to the dominance frontier of the first block
+ */
+static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t* df_block){
+	//If it's NULL, we'll need to allocate
+	if(block->dominance_frontier == NULL){
+		//Allocate it
+		block->dominance_frontier = calloc(MAX_DF_BLOCKS, sizeof(basic_block_t*));
+		//Set this value too for later
+		block->max_df_index = MAX_DF_BLOCKS;
+
+	//If these two are equal, we need to realloc
+	} else if(block->max_df_index == block->next_df_index){
+		//Double it
+		block->max_df_index *= 2;
+
+		//And reallocate the whole thing
+		block->dominance_frontier = realloc(block->dominance_frontier, sizeof(basic_block_t*) * block->max_df_index);
+	}
+
+	//Now we can add into it
+	block->dominance_frontier[block->next_df_index] = df_block;
+	//And increment this for the next go around
+	(block->next_df_index)++;
+}
+
 
 /**
  * Does the block assign this variable? We'll do a simple linear scan to find out
@@ -405,6 +435,18 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
 	//If we make it here, the block was empty or we found nothing
 	return FALSE;
 }
+
+
+/**
+ * Calculate the dominance frontiers of every block in the CFG
+ */
+static dynamic_array_t* calculate_dominance_frontiers(cfg_t* cfg){
+
+
+
+}
+
+
 
 
 /**

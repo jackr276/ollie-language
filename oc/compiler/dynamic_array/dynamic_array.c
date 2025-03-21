@@ -11,7 +11,7 @@
 #include <sys/types.h>
 
 //The default is 20 -- this can always be reupped
-#define DEFAULT_SIZE 20
+#define DEFAULT_SIZE 20 
 
 //Standard booleans here
 #define TRUE 1
