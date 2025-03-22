@@ -102,6 +102,13 @@ typedef enum{
 } jump_category_t;
 
 
+//Are we emitting the dominance frontier or not?
+typedef enum{
+	EMIT_DOMINANCE_FRONTIER,
+	DO_NOT_EMIT_DOMINANCE_FRONTIER
+} emit_dominance_frontier_selection_t;
+
+
 //A type for which side we're on
 typedef enum{
 	SIDE_TYPE_LEFT,
@@ -299,7 +306,7 @@ static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* 
 /**
  * Print a block our for reading
 */
-static void print_block_three_addr_code(basic_block_t* block){
+static void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
 	//If this is empty, don't print anything
 	//For now only, this probably won't stay
 	if(block->leader_statement == NULL && block->block_type != BLOCK_TYPE_CASE){
@@ -348,6 +355,31 @@ static void print_block_three_addr_code(basic_block_t* block){
 			}
 		}
 		printf("):\n");
+	}
+
+	//Print out the dominance frontier if we're in DEBUG mode
+	if(print_df == EMIT_DOMINANCE_FRONTIER){
+		printf("Dominance frontier: {");
+
+		//Run through and print them all out
+		for(u_int16_t i = 0; i < block->next_df_index; i++){
+			basic_block_t* printing_block = block->dominance_frontier[i];
+
+			//Print the block's ID or the function name
+			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", printing_block->func_record->func_name);
+			} else {
+				printf(".L%d", printing_block->block_id);
+			}
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->next_df_index - 1){
+				printf(", ");
+			}
+		}
+
+		//And close it out
+		printf("}\n");
 	}
 
 
@@ -471,14 +503,20 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  * such that C ≠ A, C ≠ B, A dom C, and C dom B
  */
 static basic_block_t* immediate_dominator(basic_block_t* B){
-	basic_block_t* immediate_dominator = NULL;
 	basic_block_t* A; 
 	basic_block_t* C;
 	u_int8_t A_is_IDOM;
 
+	//Print the block's ID or the function name
+	if(B->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		printf("%s: IDOM = ", B->func_record->func_name);
+	} else {
+		printf(".L%d: IDOM = ", B->block_id);
+	}
+
 	//Run through every node in B's dominator set
 	for(u_int16_t i = 0; i < B->next_df_index; i++){
-		//By default we assume A is 
+		//By default we assume A is an IDOM
 		A_is_IDOM = TRUE;
 
 		//A is our "candidate"
@@ -520,11 +558,19 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		if(A_is_IDOM == FALSE){
 			continue;
 		} else {
+			if(A->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s\n", A->func_record->func_name);
+			} else {
+				printf(".L%d\n", A->block_id);
+			}	
+
 			return A;
 		}
 	}
  
-	return immediate_dominator;
+	printf("NONE\n");
+
+	return NULL;
 }
 
 
@@ -560,24 +606,21 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 			continue;
 		}
 
-		//DEBUG
-		printf("Block with more than 1: .l%d has %d\n", block->block_id, block->num_predecessors);
-
 		//A cursor for traversing our predecessors
-		basic_block_t* cursor;
+		basic_block_t* predecessor;
 
 		//Now we run through every predecessor of the block
 		for(u_int8_t i = 0; i < block->num_predecessors; i++){
 			//Grab it out
-			cursor = block->predecessors[i];
+			predecessor = block->predecessors[i];
 
 			//While cursor is not the immediate dominator of block
-			while(cursor != immediate_dominator(block)){
-				//Add block to cursor's dominance frontier set
-				add_block_to_dominance_frontier(cursor, block);
+			while(predecessor != immediate_dominator(block)){
+				//Add block to predecessor's dominance frontier set
+				add_block_to_dominance_frontier(predecessor, block);
 				
 				//Cursor now becomes it's own immediate dominator
-				cursor = immediate_dominator(cursor);
+				predecessor = immediate_dominator(predecessor);
 			}
 		}
 
@@ -1552,7 +1595,7 @@ static basic_block_t* basic_block_alloc(){
  * Print out the whole program in order. This is done using an
  * iterative DFS
  */
-static void emit_blocks_dfs(cfg_t* cfg){
+static void emit_blocks_dfs(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
 	//We'll need a stack for our DFS
 	heap_stack_t* stack = heap_stack_alloc();
 
@@ -1575,7 +1618,7 @@ static void emit_blocks_dfs(cfg_t* cfg){
 			//Mark this one as seen
 			block_cursor->visited = 2;
 
-			print_block_three_addr_code(block_cursor);
+			print_block_three_addr_code(block_cursor, print_df);
 		}
 
 		//We'll now add in all of the childen
@@ -1596,7 +1639,7 @@ static void emit_blocks_dfs(cfg_t* cfg){
  * Print out the whole program in order. Done using an iterative
  * bfs
  */
-static void emit_blocks_bfs(cfg_t* cfg){
+static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
 	//We'll need a queue for our BFS
 	heap_queue_t* queue = heap_queue_alloc();
 	//To be enqueued dynamic array
@@ -1615,7 +1658,7 @@ static void emit_blocks_bfs(cfg_t* cfg){
 
 		//If this wasn't visited, we'll print
 		if(block->visited != 3){
-			print_block_three_addr_code(block);	
+			print_block_three_addr_code(block, print_df);	
 		}
 
 		//Now we'll mark this as visited
@@ -1650,14 +1693,14 @@ static void emit_blocks_bfs(cfg_t* cfg){
 /**
  * Print out the whole program in order by using the direct successor
  */
-static void emit_blocks_direct_successor(cfg_t* cfg){
+static void emit_blocks_direct_successor(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
 	//Grab a cursor
 	basic_block_t* cursor = cfg->root;
 
 	//So long as we have something to print, we print
 	while(cursor != NULL){
 		if(cursor->visited != 5){
-			print_block_three_addr_code(cursor);
+			print_block_three_addr_code(cursor, print_df);
 		}
 
 		cursor->visited = 5;
@@ -4019,7 +4062,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	insert_phi_functions(cfg, results.variable_symtab);
 
 	//FOR PRINTING
-	emit_blocks_bfs(cfg);
+	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
 	//emit_blocks_dfs(cfg);
 	//emit_blocks_direct_successor(cfg);
 	
