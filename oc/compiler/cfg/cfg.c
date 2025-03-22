@@ -429,6 +429,26 @@ static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t*
 
 
 /**
+ * Simple helper function to tell us whether or not a dominance frontier contains
+ * something
+ *
+ * In other words, is "df_block" in the dominance frontier of "block"
+ */
+static u_int8_t dominance_frontier_contains(basic_block_t* block, basic_block_t* df_block){
+	//Run through everything in here
+	for(u_int8_t i = 0; i < block->next_df_index; i++){
+		//We've found it
+		if(block->dominance_frontier[i] == df_block){
+			return TRUE;
+		}
+	}
+
+	//Otherwise we make it here and nothing was found
+	return FALSE;
+}
+
+
+/**
  * Does the block assign this variable? We'll do a simple linear scan to find out
  */
 static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
@@ -446,6 +466,69 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
 
 
 /**
+ * Grab the immediate dominator of the block
+ * A IDOM B if A SDOM B and there does not exist a node C 
+ * such that C ≠ A, C ≠ B, A dom C, and C dom B
+ */
+static basic_block_t* immediate_dominator(basic_block_t* B){
+	basic_block_t* immediate_dominator = NULL;
+	basic_block_t* A; 
+	basic_block_t* C;
+	u_int8_t A_is_IDOM;
+
+	//Run through every node in B's dominator set
+	for(u_int16_t i = 0; i < B->next_df_index; i++){
+		//By default we assume A is 
+		A_is_IDOM = TRUE;
+
+		//A is our "candidate"
+		A = B->dominance_frontier[i];
+
+		//If A == B, that means that A does NOT strictly dominate(SDOM)
+		//B, so it's disqualified
+		if(A == B){
+			continue;
+		}
+
+		//If we get here, we know that A SDOM B
+		//Now we must check, is there any "C" in the way.
+		//We can tell if this is the case by checking every other
+		//node in the dominance frontier of B, and seeing if that
+		//node is also dominated by A
+		
+		//For everything in B's dominator set
+		for(u_int16_t j = 0 ; j < B->next_df_index; j++){
+			//If it's aleady B or A, we're skipping
+			C = B->dominance_frontier[j];
+
+			//If this is the case, disqualified
+			if(C == B || C == A){
+				continue;
+			}
+
+			//We can now see that C dominates B. The true test now is
+			//if C is dominated by A. If that's the case, then we do NOT
+			//have an immediate dominator in A.
+			if(dominance_frontier_contains(C, A) == TRUE){
+				//A is disqualified, it's not an IDOM
+				A_is_IDOM = FALSE;
+				break;
+			}
+		}
+
+		//If we found some node inbetween, we need to go onto the next one
+		if(A_is_IDOM == FALSE){
+			continue;
+		} else {
+			return A;
+		}
+	}
+ 
+	return immediate_dominator;
+}
+
+
+/**
  * Calculate the dominance frontiers of every block in the CFG
  *
  * Standard dominance frontier algorithm:
@@ -453,12 +536,12 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  * 		if b has more than 1 predecessor(it is a join)
  * 			for all predecessors p of b
  * 				cursor = p
- * 					while cursor not in df of b
+ * 					while cursor is not IDOM(b)
  * 						add b to cursor DF set
- * 						cursor = df[cursor]
+ * 						cursor = IDOM(cursor)
  * 	
  */
-static dynamic_array_t* calculate_dominance_frontiers(cfg_t* cfg){
+static void calculate_dominance_frontiers(cfg_t* cfg){
 	//Our metastructure will come in handy here, we'll be able to run through 
 	//node by node and ensure that we've gotten everything
 	
@@ -488,9 +571,14 @@ static dynamic_array_t* calculate_dominance_frontiers(cfg_t* cfg){
 			//Grab it out
 			cursor = block->predecessors[i];
 
-
-			
-
+			//While cursor is not the immediate dominator of block
+			while(cursor != immediate_dominator(block)){
+				//Add block to cursor's dominance frontier set
+				add_block_to_dominance_frontier(cursor, block);
+				
+				//Cursor now becomes it's own immediate dominator
+				cursor = immediate_dominator(cursor);
+			}
 		}
 
 		//Advance the block up
@@ -1448,6 +1536,9 @@ static basic_block_t* basic_block_alloc(){
 
 	//Usually these are, in special cases they aren't
 	created->good_to_merge = TRUE;
+
+	//Every block is part of it's own dominance frontier
+	add_block_to_dominance_frontier(created, created);
 
 	//Attach this to the memory management structure
 	created->next_created = cfg_ref->last_attached;
