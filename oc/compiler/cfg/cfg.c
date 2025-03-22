@@ -538,6 +538,8 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  * Grab the immediate dominator of the block
  * A IDOM B if A SDOM B and there does not exist a node C 
  * such that C ≠ A, C ≠ B, A dom C, and C dom B
+ *
+ * THIS IS WRONG CURRENTLY
  */
 static basic_block_t* immediate_dominator(basic_block_t* B){
 	basic_block_t* A; 
@@ -553,7 +555,8 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 	}
 	*/
 
-	//Run through every node in B's dominator set
+	//For each node in B's Dominance Frontier set(we call this node A)
+	//These nodes are our candidates for immediate dominator
 	for(u_int16_t i = 0; i < B->next_df_index; i++){
 		//By default we assume A is an IDOM
 		A_is_IDOM = TRUE;
@@ -573,7 +576,9 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		//node in the dominance frontier of B, and seeing if that
 		//node is also dominated by A
 		
-		//For everything in B's dominator set
+		//For everything in B's dominator set that IS NOT A, we need
+		//to check if this is an intermediary. As in, does C get in-between
+		//A and B in the dominance chain
 		for(u_int16_t j = 0 ; j < B->next_df_index; j++){
 			//If it's aleady B or A, we're skipping
 			C = B->dominance_frontier[j];
@@ -586,6 +591,8 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 			//We can now see that C dominates B. The true test now is
 			//if C is dominated by A. If that's the case, then we do NOT
 			//have an immediate dominator in A.
+			//
+			//This would look like A -Doms> C -Doms> B, so A is not an immediate dominator
 			if(dominance_frontier_contains(C, A) == TRUE){
 				//A is disqualified, it's not an IDOM
 				A_is_IDOM = FALSE;
@@ -619,13 +626,15 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
  * Calculate the dominance frontiers of every block in the CFG
  *
  * Standard dominance frontier algorithm:
- * 	for all nodes b
- * 		if b has more than 1 predecessor(it is a join)
+ * 	for all nodes b in the CFG
+ * 		if b has less than 2 predecessors
+ * 			continue
+ * 		else
  * 			for all predecessors p of b
  * 				cursor = p
- * 					while cursor is not IDOM(b)
- * 						add b to cursor DF set
- * 						cursor = IDOM(cursor)
+ * 				while cursor is not IDOM(b)
+ * 					add b to cursor DF set
+ * 					cursor = IDOM(cursor)
  * 	
  */
 static void calculate_dominance_frontiers(cfg_t* cfg){
@@ -636,7 +645,7 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
 		//Grab this from the array
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
-
+		
 		//If we have less than 2 successors,the rest of 
 		//the search here is useless
 		if(block->num_predecessors < 2){
@@ -645,26 +654,24 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 		}
 
 		//A cursor for traversing our predecessors
-		basic_block_t* predecessor;
+		basic_block_t* cursor;
 
 		//Now we run through every predecessor of the block
 		for(u_int8_t i = 0; i < block->num_predecessors; i++){
 			//Grab it out
-			predecessor = block->predecessors[i];
+			cursor = block->predecessors[i];
 
 			//While cursor is not the immediate dominator of block
-			while(predecessor != immediate_dominator(block)){
+			while(cursor != immediate_dominator(block)){
 				//Add block to predecessor's dominance frontier set
-				add_block_to_dominance_frontier(predecessor, block);
+				add_block_to_dominance_frontier(cursor, block);
 				
 				//Cursor now becomes it's own immediate dominator
-				predecessor = immediate_dominator(predecessor);
+				cursor = immediate_dominator(cursor);
 			}
 		}
 	}
 }
-
-
 
 
 /**
@@ -1700,9 +1707,9 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			if(block->successors[i]->visited != 3){
 				if(block->successors[i]->block_terminal_type == BLOCK_TERM_TYPE_RET){
 					//Store this for later, we don't want it now
-					dynamic_array_add(to_be_enqueued, block->successors[i]);
+				//	dynamic_array_add(to_be_enqueued, block->successors[i]);
 					//Don't add it now
-					continue;
+				//	continue;
 				}
 
 				enqueue(queue, block->successors[i]);
@@ -2466,6 +2473,9 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	if(cursor->next_sibling == NULL){
 		//Ensure that we have a direct path to the end
 		if_compound_stmt_end->direct_successor = values->if_stmt_end_block;
+		//If this is the case, another successor of the entry block is
+		//the end block
+		add_successor(entry_block, values->if_stmt_end_block);
 
 		/**
 		 * The "if" path is always our direct path, we only need to jump to the else, so we jump
