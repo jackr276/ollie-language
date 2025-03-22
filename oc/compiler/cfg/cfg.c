@@ -342,6 +342,46 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	//We always need the colon and newline
 	printf(":\n");
 
+	printf("Predecessors: {");
+
+	for(u_int16_t i = 0; i < block->num_predecessors; i++){
+		basic_block_t* predecessor = block->predecessors[i];
+
+		//Print the block's ID or the function name
+		if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			printf("%s", predecessor->func_record->func_name);
+		} else {
+			printf(".L%d", predecessor->block_id);
+		}
+
+		if(i != block->num_predecessors - 1){
+			printf(", ");
+		}
+	}
+
+	printf("}\n");
+
+	printf("Successors: {");
+
+	for(u_int16_t i = 0; i < block->num_successors; i++){
+		basic_block_t* predecessor = block->successors[i];
+
+		//Print the block's ID or the function name
+		if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			printf("%s", predecessor->func_record->func_name);
+		} else {
+			printf(".L%d", predecessor->block_id);
+		}
+
+		if(i != block->num_successors - 1){
+			printf(", ");
+		}
+	}
+
+	printf("}\n");
+
+
+
 	//If we have some assigned variables, we will dislay those for debugging
 	if(block->assigned_variables != NULL){
 		printf("Assigned: (");
@@ -507,12 +547,14 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 	basic_block_t* C;
 	u_int8_t A_is_IDOM;
 
+	/*
 	//Print the block's ID or the function name
 	if(B->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		printf("%s: IDOM = ", B->func_record->func_name);
 	} else {
 		printf(".L%d: IDOM = ", B->block_id);
 	}
+	*/
 
 	//Run through every node in B's dominator set
 	for(u_int16_t i = 0; i < B->next_df_index; i++){
@@ -558,17 +600,19 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		if(A_is_IDOM == FALSE){
 			continue;
 		} else {
+			/*
 			if(A->block_type == BLOCK_TYPE_FUNC_ENTRY){
 				printf("%s\n", A->func_record->func_name);
 			} else {
 				printf(".L%d\n", A->block_id);
 			}	
+			*/
 
 			return A;
 		}
 	}
  
-	printf("NONE\n");
+	//printf("NONE\n");
 
 	return NULL;
 }
@@ -1882,18 +1926,19 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		(a->num_successors)++;
 	}
 
-	//Now for each predecessor that pointed to this old block, it will need to be updated to point
-	//to the new one instead
-	for(u_int8_t i = 0; i < b->num_predecessors; i++){
+	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
+	//This is now wrong though. So, for each successor of B, it will need
+	//to have A as predecessor
+	for(u_int8_t i = 0; i < b->num_successors; i++){
 		//Grab the block first
-		basic_block_t* predecessor_block = b->predecessors[i];
+		basic_block_t* successor_block = b->successors[i];
 
-		//Now for each of the successors here that equals b, we'll need to update it to say A
-		for(u_int8_t i = 0; i < predecessor_block->num_successors; i++){
-			//If this is the case
-			if(predecessor_block->successors[i] == predecessor_block){
+		//Now for each of the predecessors that equals b, it needs to now point to A
+		for(u_int8_t i = 0; i < successor_block->num_predecessors; i++){
+			//If it's pointing to b, it needs to be updated
+			if(successor_block->predecessors[i] == b){
 				//Update it to now be correct
-				predecessor_block->successors[i] = a;
+				successor_block->predecessors[i] = a;
 			}
 		}
 	}
@@ -3841,6 +3886,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	} else {
 		//Once we're done with the compound statement, we will merge it into the function
 		merge_blocks(function_starting_block, compound_stmt_block);
+		//add_successor(function_starting_block, compound_stmt_block);
 	}
 
 	//Let's see if we actually made it all the way through and found a return
