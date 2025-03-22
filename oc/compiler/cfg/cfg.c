@@ -545,15 +545,14 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 	basic_block_t* A; 
 	basic_block_t* C;
 	u_int8_t A_is_IDOM;
-
-	/*
+	
 	//Print the block's ID or the function name
 	if(B->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		printf("%s: IDOM = ", B->func_record->func_name);
 	} else {
 		printf(".L%d: IDOM = ", B->block_id);
 	}
-	*/
+	
 
 	//For each node in B's Dominance Frontier set(we call this node A)
 	//These nodes are our candidates for immediate dominator
@@ -561,7 +560,7 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		//By default we assume A is an IDOM
 		A_is_IDOM = TRUE;
 
-		//A is our "candidate"
+		//A is our "candidate" for possibly being an immediate dominator
 		A = B->dominance_frontier[i];
 
 		//If A == B, that means that A does NOT strictly dominate(SDOM)
@@ -579,7 +578,7 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		//For everything in B's dominator set that IS NOT A, we need
 		//to check if this is an intermediary. As in, does C get in-between
 		//A and B in the dominance chain
-		for(u_int16_t j = 0 ; j < B->next_df_index; j++){
+		for(u_int16_t j = 0; j < B->next_df_index; j++){
 			//If it's aleady B or A, we're skipping
 			C = B->dominance_frontier[j];
 
@@ -600,23 +599,21 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 			}
 		}
 
-		//If we found some node inbetween, we need to go onto the next one
-		if(A_is_IDOM == FALSE){
-			continue;
-		} else {
-			/*
+		//If we survived, then we're done here
+		if(A_is_IDOM == TRUE){
+			
 			if(A->block_type == BLOCK_TYPE_FUNC_ENTRY){
 				printf("%s\n", A->func_record->func_name);
 			} else {
 				printf(".L%d\n", A->block_id);
 			}	
-			*/
+			
 
 			return A;
 		}
 	}
  
-	//printf("NONE\n");
+	printf("NONE\n");
 
 	return NULL;
 }
@@ -645,7 +642,7 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
 		//Grab this from the array
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
-		
+
 		//If we have less than 2 successors,the rest of 
 		//the search here is useless
 		if(block->num_predecessors < 2){
@@ -663,10 +660,11 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != immediate_dominator(block)){
-				//Add block to predecessor's dominance frontier set
+				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
 				
-				//Cursor now becomes it's own immediate dominator
+				//Cursor now becomes it's own immediate dominator, and
+				//we crawl our way up the CFG
 				cursor = immediate_dominator(cursor);
 			}
 		}
