@@ -439,11 +439,39 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
 
 /**
  * Calculate the dominance frontiers of every block in the CFG
+ *
+ * Standard dominance frontier algorithm:
+ * 	for all nodes b
+ * 		if b has more than 1 predecessor(it is a join)
+ * 			for all predecessors p of b
+ * 				cursor = p
+ * 					while runner not in df of b
+ * 						add b to runners DF set
+ * 						runner = df[runner]
+ * 	
  */
 static dynamic_array_t* calculate_dominance_frontiers(cfg_t* cfg){
+	//Our metastructure will come in handy here, we'll be able to run through 
+	//node by node and ensure that we've gotten everything
+	
+	//Start off at the root
+	basic_block_t* block = cfg->last_attached;
+	
+	//Run through every block
+	while(block != NULL){
+		if(block->num_predecessors < 2){
+			//Advance the block up
+			block = block->next_created;
 
+			//Hop out here, there is no need to analyze further
+			continue;
+		}
 
+		printf("Block with more than 1: .l%d\n", block->block_id);
 
+		//Advance the block up
+		block = block->next_created;
+	}
 }
 
 
@@ -475,10 +503,14 @@ static dynamic_array_t* calculate_dominance_frontiers(cfg_t* cfg){
  * 					Insert a phi function for v at d
  *
  */
-static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_t* var_symtab){
+static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	//We'll run through the variable symtab, finding every single variable in it
 	symtab_variable_sheaf_t* sheaf_cursor;
 	symtab_variable_record_t* record;
+
+	//We need to calculate the dominance frontier of every single block before
+	//we go any further
+	calculate_dominance_frontiers(cfg);
 
 	//We'll need a "worklist" here - just a dynamic array 
 	dynamic_array_t* worklist = dynamic_array_alloc();
@@ -503,7 +535,7 @@ static void insert_phi_functions(basic_block_t* starting_block, variable_symtab_
 				// defines(assigns) said variable
 				//----------------------------------
 				//Define a cursor for iteration here
-				basic_block_t* block_cursor = cfg_ref->root;
+				basic_block_t* block_cursor = cfg->root;
 
 				//Just run through the entire thing
 				while(block_cursor != NULL){
@@ -3842,7 +3874,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	variable_symtab_dealloc(temp_vars);
 	
 	//Add all phi functions for SSA
-	insert_phi_functions(cfg->root, results.variable_symtab);
+	insert_phi_functions(cfg, results.variable_symtab);
 
 	//FOR PRINTING
 	emit_blocks_bfs(cfg);
