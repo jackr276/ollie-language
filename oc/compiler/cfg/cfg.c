@@ -1625,7 +1625,7 @@ static basic_block_t* basic_block_alloc(){
 	created->good_to_merge = TRUE;
 
 	//Every block is part of it's own dominance frontier
-	add_block_to_dominance_frontier(created, created);
+	//add_block_to_dominance_frontier(created, created);
 
 	//Attach this to the memory management structure
 	created->next_created = cfg_ref->last_attached;
