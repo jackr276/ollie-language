@@ -673,6 +673,22 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 
 /**
+ * Calculate the dominator sets for each and every node
+ *
+ * For each node in the nodeset:
+ * 	
+ *
+ */
+static void calculate_dominator_sets(cfg_t* cfg){
+	//Every node in the CFG has a dominator set that is set
+	//to be identical to the list of all nodes
+	
+
+}
+
+
+
+/**
  * if(x0 == 0){
  * 	asn x1 := 2;
  * } else {
@@ -702,6 +718,9 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	//We'll run through the variable symtab, finding every single variable in it
 	symtab_variable_sheaf_t* sheaf_cursor;
 	symtab_variable_record_t* record;
+
+	//We first need to calculate the dominator sets of every single node
+	calculate_dominator_sets(cfg);
 
 	//We need to calculate the dominance frontier of every single block before
 	//we go any further

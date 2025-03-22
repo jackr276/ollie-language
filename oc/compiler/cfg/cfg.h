@@ -130,6 +130,8 @@ struct basic_block_t{
 	u_int16_t next_df_index;
 	//The max index in the dominance frontier
 	u_int16_t max_df_index;
+	//The dynamic array for the dominator set
+	dynamic_array_t* dominator_set;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)

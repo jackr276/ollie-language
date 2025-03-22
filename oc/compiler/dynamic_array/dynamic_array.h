@@ -34,6 +34,11 @@ dynamic_array_t* dynamic_array_alloc();
 
 
 /**
+ * Create an exact clone of the dynamic array that we're given
+ */
+dynamic_array_t* clone_dynamic_array(dynamic_array_t* array);
+
+/**
  * Does the dynamic array contain this pointer?
  * 
  * RETURNS: the index if true, -1 if not

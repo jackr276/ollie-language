@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 //The default is 20 -- this can always be reupped
@@ -34,6 +35,28 @@ dynamic_array_t* dynamic_array_alloc(){
 	//Now we're all set
 	return array;
 } 
+
+
+/**
+ * Create an exact clone of the dynamic array that we're given
+ */
+dynamic_array_t* clone_dynamic_array(dynamic_array_t* array){
+	//First we create the overall structure
+	dynamic_array_t* cloned = calloc(1, sizeof(dynamic_array_t));
+
+	//Now we'll create the array for it - of the exact same size as the original
+	cloned->internal_array = calloc(array->current_max_size, sizeof(void*));
+
+	//Now we'll perform a memory copy
+	memcpy(cloned->internal_array, array->internal_array, array->current_max_size * sizeof(void*));
+	
+	//Finally copy over the rest of the information
+	cloned->current_index = array->current_index;
+	cloned->current_max_size = array->current_max_size;
+
+	//And return this pointer
+	return cloned;
+}
 
 
 /**
