@@ -303,7 +303,7 @@ static void print_block_three_addr_code(basic_block_t* block){
 	//If this is empty, don't print anything
 	//For now only, this probably won't stay
 	if(block->leader_statement == NULL && block->block_type != BLOCK_TYPE_CASE){
-		return;
+		//return;
 	}
 
 	//Print the block's ID or the function name
@@ -1708,6 +1708,22 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		(a->num_successors)++;
 	}
 
+	//Now for each predecessor that pointed to this old block, it will need to be updated to point
+	//to the new one instead
+	for(u_int8_t i = 0; i < b->num_predecessors; i++){
+		//Grab the block first
+		basic_block_t* predecessor_block = b->predecessors[i];
+
+		//Now for each of the successors here that equals b, we'll need to update it to say A
+		for(u_int8_t i = 0; i < predecessor_block->num_successors; i++){
+			//If this is the case
+			if(predecessor_block->successors[i] == predecessor_block){
+				//Update it to now be correct
+				predecessor_block->successors[i] = a;
+			}
+		}
+	}
+
 	//Also make note of any direct succession
 	a->direct_successor = b->direct_successor;
 	a->is_exit_block = b->is_exit_block;
@@ -2235,12 +2251,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jmp_stmt(if_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
+		//If this is the case, the end block is a direct successor
+		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 	}
 
 	//This is the end if we have a lone "if"
 	if(cursor->next_sibling == NULL){
-		//If this is the case, the end block is a direct successor
-		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 		//Ensure that we have a direct path to the end
 		if_compound_stmt_end->direct_successor = values->if_stmt_end_block;
 
@@ -2334,9 +2350,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 		//Emit our jump to else if here
 		emit_jmp_stmt(entry_block, else_if_entry, jump_type);
-	
-		//Once we visit this, we'll navigate to the end
-		basic_block_t* else_if_end = else_if_entry;
 
 		//In theory, the if block already has an end appropriately made, so we don't need to do anything here
 		return entry_block;
