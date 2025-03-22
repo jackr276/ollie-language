@@ -413,6 +413,14 @@ static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t*
 		block->dominance_frontier = realloc(block->dominance_frontier, sizeof(basic_block_t*) * block->max_df_index);
 	}
 
+	//Let's just check - is this already in there. If it is, we will not add it
+	for(u_int16_t i = 0; i < block->next_df_index; i++){
+		//This is not a problem at all, we just won't add it
+		if(block->dominance_frontier[i] == df_block){
+			return;
+		}
+	}
+
 	//Now we can add into it
 	block->dominance_frontier[block->next_df_index] = df_block;
 	//And increment this for the next go around
@@ -445,9 +453,9 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  * 		if b has more than 1 predecessor(it is a join)
  * 			for all predecessors p of b
  * 				cursor = p
- * 					while runner not in df of b
- * 						add b to runners DF set
- * 						runner = df[runner]
+ * 					while cursor not in df of b
+ * 						add b to cursor DF set
+ * 						cursor = df[cursor]
  * 	
  */
 static dynamic_array_t* calculate_dominance_frontiers(cfg_t* cfg){
@@ -459,15 +467,31 @@ static dynamic_array_t* calculate_dominance_frontiers(cfg_t* cfg){
 	
 	//Run through every block
 	while(block != NULL){
+		//If we have less than 2 successors, it is not possible
+		//to have a dominance frontier. As such, we exit when this
+		//happens
 		if(block->num_predecessors < 2){
 			//Advance the block up
 			block = block->next_created;
-
 			//Hop out here, there is no need to analyze further
 			continue;
 		}
 
-		printf("Block with more than 1: .l%d\n", block->block_id);
+		//DEBUG
+		printf("Block with more than 1: .l%d has %d\n", block->block_id, block->num_predecessors);
+
+		//A cursor for traversing our predecessors
+		basic_block_t* cursor;
+
+		//Now we run through every predecessor of the block
+		for(u_int8_t i = 0; i < block->num_predecessors; i++){
+			//Grab it out
+			cursor = block->predecessors[i];
+
+
+			
+
+		}
 
 		//Advance the block up
 		block = block->next_created;
@@ -1484,7 +1508,9 @@ static void emit_blocks_dfs(cfg_t* cfg){
 static void emit_blocks_bfs(cfg_t* cfg){
 	//We'll need a queue for our BFS
 	heap_queue_t* queue = heap_queue_alloc();
-	
+	//To be enqueued dynamic array
+	dynamic_array_t* to_be_enqueued = dynamic_array_alloc();
+
 	//Enqueue the very first node
 	enqueue(queue, cfg->root);
 
@@ -1507,13 +1533,27 @@ static void emit_blocks_bfs(cfg_t* cfg){
 		//And finally we'll add all of these onto the queue
 		for(u_int16_t i = 0; i < block->num_successors; i++){
 			if(block->successors[i]->visited != 3){
+				if(block->successors[i]->block_terminal_type == BLOCK_TERM_TYPE_RET){
+					//Store this for later, we don't want it now
+					dynamic_array_add(to_be_enqueued, block->successors[i]);
+					//Don't add it now
+					continue;
+				}
+
 				enqueue(queue, block->successors[i]);
+			}
+
+			//enqueue the ones that are terminal blocks at the very end
+			while(dynamic_array_is_empty(to_be_enqueued) == FALSE){
+				enqueue(queue, dynamic_array_delete_at(to_be_enqueued, 0));
 			}
 		}
 	}
 
 	//Destroy the heap queue when done
 	heap_queue_dealloc(queue);
+	//Destroy the dynamic array when done
+	dynamic_array_dealloc(to_be_enqueued);
 }
 
 /**
@@ -3678,8 +3718,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	}
 
 	//Once we hit the end, if this isn't an exit block, we'll make it one
-	//We'll add this in as the ending block
-	add_successor(compound_stmt_cursor, function_ending_block);
 	compound_stmt_cursor->direct_successor = function_ending_block;
 
 	//Once we get here, we'll now add in any deferred statements to the function ending block

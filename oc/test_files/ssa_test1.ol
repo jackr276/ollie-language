@@ -13,8 +13,10 @@ fn main() -> i32{
 	//Statically known use - the goal of SSA
 	if(x > 4) then{
 		y := x - 2;
-	} else {
+	} else if (x == 4) then {
 		y := x + 9;
+	} else {
+		y := x + 12;
 	}
 
 	//Phi function should be here
