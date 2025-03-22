@@ -9,6 +9,7 @@
 #include "../parser/parser.h"
 #include "../stack/heapstack.h"
 #include "../three_addr_code/three_address_code.h"
+#include "../dynamic_array/dynamic_array.h"
 
 //These may or may not change
 #define MAX_SUCCESSORS 40
@@ -68,8 +69,8 @@ struct cfg_t{
 	basic_block_t* root;
 	//The current block of the CFG
 	basic_block_t* current;
-	//The currently last attached block
-	basic_block_t* last_attached;
+	//All created blocks
+	dynamic_array_t* created_blocks;
 };
 
 
@@ -136,8 +137,6 @@ struct basic_block_t{
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
 	three_addr_code_stmt_t* leader_statement;
 	three_addr_code_stmt_t* exit_statement;
-	//The next created block
-	basic_block_t* next_created;
 };
 
 //Build the entire CFG from the AST. This function returns the CFG struct, which

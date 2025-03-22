@@ -23,8 +23,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../queue/heap_queue.h"
-//For worklist functionality
-#include "../dynamic_array/dynamic_array.h"
 
 //For magic number removal
 #define TRUE 1
@@ -49,7 +47,6 @@ variable_symtab_t* temp_vars;
 type_symtab_t* type_symtab;
 //The CFG that we're working with
 cfg_t* cfg_ref;
-
 
 //A package of values that each visit function uses
 typedef struct {
@@ -635,17 +632,14 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 	//Our metastructure will come in handy here, we'll be able to run through 
 	//node by node and ensure that we've gotten everything
 	
-	//Start off at the root
-	basic_block_t* block = cfg->last_attached;
-	
 	//Run through every block
-	while(block != NULL){
-		//If we have less than 2 successors, it is not possible
-		//to have a dominance frontier. As such, we exit when this
-		//happens
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		//Grab this from the array
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+
+		//If we have less than 2 successors,the rest of 
+		//the search here is useless
 		if(block->num_predecessors < 2){
-			//Advance the block up
-			block = block->next_created;
 			//Hop out here, there is no need to analyze further
 			continue;
 		}
@@ -667,9 +661,6 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 				predecessor = immediate_dominator(predecessor);
 			}
 		}
-
-		//Advance the block up
-		block = block->next_created;
 	}
 }
 
@@ -733,9 +724,8 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 				// SECOND STEP: For each block that 
 				// defines(assigns) said variable
 				//----------------------------------
-				//Define a cursor for iteration here
-				basic_block_t* block_cursor = cfg->root;
 
+				/*
 				//Just run through the entire thing
 				while(block_cursor != NULL){
 					//Does this block define(assign) our variable?
@@ -748,6 +738,7 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 					//Iterate over to the next one
 					block_cursor = block_cursor->next_created;
 				}
+				*/
 
 				//Advance to the next record in the chain
 				record = record->next;
@@ -1624,12 +1615,8 @@ static basic_block_t* basic_block_alloc(){
 	//Usually these are, in special cases they aren't
 	created->good_to_merge = TRUE;
 
-	//Every block is part of it's own dominance frontier
-	//add_block_to_dominance_frontier(created, created);
-
-	//Attach this to the memory management structure
-	created->next_created = cfg_ref->last_attached;
-	cfg_ref->last_attached = created;
+	//Add this into the dynamic array
+	dynamic_array_add(cfg_ref->created_blocks, created);
 
 	return created;
 }
@@ -1797,19 +1784,10 @@ static void basic_block_dealloc(basic_block_t* block){
  * Memory management code that allows us to deallocate the entire CFG
  */
 void dealloc_cfg(cfg_t* cfg){
-	//Hold a cursor here
-	basic_block_t* cursor = cfg->last_attached;
-	//Have a temp too
-	basic_block_t* temp;
-
-	//So long as there is stuff to free
-	while(cursor != NULL){
-		//Hold onto this
-		temp = cursor;
-		//Advance this one up
-		cursor = cursor->next_created;
-		//Destroy the block
-		basic_block_dealloc(temp);
+	//Run through all of the blocks here and delete them
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		//Use this to deallocate
+		basic_block_dealloc(dynamic_array_get_at(cfg->created_blocks, i));
 	}
 
 	//Destroy all variables
@@ -1968,6 +1946,16 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		//Add these in one by one
 		add_assigned_variable(a, b->assigned_variables[i]);
 	}
+
+	//Very last thing here, we need to be completely rid of B. It can
+	//no longer be in the dynamic array. As such, we'll have to remove it
+	u_int16_t index = dynamic_array_contains(cfg_ref->created_blocks, b);
+
+	//Now we'll delete at this index
+	dynamic_array_delete_at(cfg_ref->created_blocks, index);
+
+	//And finally we'll free B -- MEMORY LEAKS
+	free(b);
 
 	//Give back the pointer to a
 	return a;
@@ -4080,6 +4068,10 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
+
+	//Create the dynamic array
+	cfg->created_blocks = dynamic_array_alloc();
+
 	//Hold the cfg
 	cfg_ref = cfg;
 
