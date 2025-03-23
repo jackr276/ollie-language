@@ -24,10 +24,12 @@ fn main() -> i32{
 	//Phi function should be here
 	let w:i32 := x + y;
 
+	
 	/*
 	for(let i:u32 := 0; i <= 322; ++i) do{
 	}
 	*/
+	
 
 	ret 0;
 }

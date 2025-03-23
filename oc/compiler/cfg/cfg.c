@@ -419,6 +419,29 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("}\n");
 	}
 
+	printf("Dominator set: {");
+
+	//Run through and print them all out
+	for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
+		basic_block_t* printing_block = block->dominator_set->internal_array[i];
+
+		//Print the block's ID or the function name
+		if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			printf("%s", printing_block->func_record->func_name);
+		} else {
+			printf(".L%d", printing_block->block_id);
+		}
+
+		//If it isn't the very last one, we need a comma
+		if(i != block->dominator_set->current_index - 1){
+			printf(", ");
+		}
+	}
+
+	//And close it out
+	printf("}\n");
+
+
 
 	//Now grab a cursor and print out every statement that we 
 	//have
@@ -692,16 +715,10 @@ static u_int8_t dominator_sets_equal(dynamic_array_t* a, dynamic_array_t* b){
 		//Here's our pointer
 		void* a_ptr = a->internal_array[i];
 
-		//We must be able to find this pointer in b. If we can't it's no good
-		for(u_int16_t i = 0; i < b->current_index; i++){
-			//We made it - onto the next round
-			if(b->internal_array[i] == a_ptr){
-				continue;
-			}
+		//If the dynamic array contains a_ptr, we're good. Otherwise fail out
+		if(dynamic_array_contains(b, a_ptr) == -1){
+			return FALSE;
 		}
-
-		//If we make it down here that means that we did not find it - return false
-		return FALSE;
 	}
 
 	//If we survive til out here, they're the same
@@ -749,20 +766,70 @@ static void calculate_dominator_sets(cfg_t* cfg){
 		//We will add Y into it's own dominator set
 		dynamic_array_add(new, Y);
 
-		//Now add the intersection of the dominator sets of all predecessors
-		//of Y
-		for(u_int8_t i = 0; i < Y->num_predecessors; i++){
-			//Grab the dominator set of this one
-			dynamic_array_t* DOM_X = Y->predecessors[i]->dominator_set;	
+		//If Y has predecessors, we will find the intersection of
+		//their dominance frontiers
+		if(Y->num_predecessors != 0){
+			//Grab the very first one's DOM
+			dynamic_array_t* DOM_X = Y->predecessors[0]->dominator_set;
 
+			//Are we in the intersection of the dominator sets?
+			u_int8_t in_intersection;
+
+			//Now for everything in this dominator set
+			for(u_int16_t i = 0; i < DOM_X->current_index; i++){
+				//Grab the dominator out
+				basic_block_t* dominator = DOM_X->internal_array[i];
+
+				//By default we assume that it is in the intersection - we'll
+				//need to be proven wrong
+				in_intersection = TRUE;
+
+				/**
+			 	* We'll know if something is in the intersection if it is
+			 	* in all of the dominator sets of the predecessors of Y
+			 	*/
+				for(u_int8_t j = 0; j < Y->num_predecessors; j++){
+					//We already know it's in this one, skip over
+					if(i == j){
+						continue;
+					}
+
+					//Let's check for it in here. If we can't find it, we set the flag to false and bail out
+					if(dynamic_array_contains(Y->predecessors[j]->dominator_set, DOM_X) == -1){
+						in_intersection = FALSE;
+						break;
+					}
+				
+					//Otherwise we did find it, so we'll look at the next predecessor
+				}
+
+				//If we get here and it is in the intersection, we can add it in
+				if(in_intersection == TRUE){
+					//Add the dominator in
+					dynamic_array_add(new, dominator);
+				}
+			}
 		}
 
+		//Now we'll check - are these two dominator sets the same? If not, we'll need
+		//to update them
+		if(dominator_sets_equal(new, Y->dominator_set) == FALSE){
+			//Destroy the old one
+			dynamic_array_dealloc(Y->dominator_set);
 
+			//And replace it with the new
+			Y->dominator_set = new;
 
-		
-
+			//Now for every successor of Y, add it into the worklist
+			for(u_int8_t i = 0; i < Y->num_successors; i++){
+				dynamic_array_add(worklist, Y->successors[i]);
+			}
+		//Otherwise they are the same
+		} else {
+			//Destroy the dominator set that we just made
+			dynamic_array_dealloc(new);
+		}
 	}
-
 
 	//Destroy the worklist now that we're done with it
 	dynamic_array_dealloc(worklist);

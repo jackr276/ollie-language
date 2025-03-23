@@ -67,6 +67,11 @@ dynamic_array_t* clone_dynamic_array(dynamic_array_t* array){
  * sorting the array and binary searching
 */
 int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
+	//If it's null just return false
+	if(array == NULL || array->internal_array == NULL){
+		return FALSE;
+	}
+
 	//We'll run through the entire array, comparing pointer by pointer
 	for(u_int16_t i = 0; i < array->current_index; i++){
 		//If we find an exact memory address match return true
