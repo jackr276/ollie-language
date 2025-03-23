@@ -72,6 +72,12 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index);
 
 
 /**
+ * Remove an element from the back of the dynamic array - O(1) removal
+ */
+void* dynamic_array_delete_from_back(dynamic_array_t* array);
+
+
+/**
  * Deallocate an entire dynamic array. 
  *
  * NOTE: This will not touch/free any pointers in the array itself,

@@ -42,7 +42,7 @@ dynamic_array_t* dynamic_array_alloc(){
  */
 dynamic_array_t* clone_dynamic_array(dynamic_array_t* array){
 	//First we create the overall structure
-	dynamic_array_t* cloned = calloc(1, sizeof(dynamic_array_t));
+	dynamic_array_t* cloned = calloc(sizeof(dynamic_array_t), 1);
 
 	//Now we'll create the array for it - of the exact same size as the original
 	cloned->internal_array = calloc(array->current_max_size, sizeof(void*));
@@ -163,6 +163,26 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
 	(array->current_index)--;
 
 	//And once we've done that shifting, we're done so
+	return deleted;
+}
+
+
+/**
+ * Remove an element from the back of the dynamic array - O(1) removal
+ */
+void* dynamic_array_delete_from_back(dynamic_array_t* array){
+	//Already empty
+	if(array->current_index == 0){
+		return NULL;
+	}
+
+	//Grab off of the very end
+	void* deleted = array->internal_array[array->current_index - 1];
+
+	//Decrement the index
+	(array->current_index)--;
+
+	//Give back the pointer
 	return deleted;
 }
 

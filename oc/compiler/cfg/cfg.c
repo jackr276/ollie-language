@@ -673,17 +673,99 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 
 /**
+ * Compare dominator sets A and B. Returns true if they're the same, false if
+ * not
+ */
+static u_int8_t dominator_sets_equal(dynamic_array_t* a, dynamic_array_t* b){
+	//Easy case here - if either is NULL bail out
+	if(a == NULL || b == NULL){
+		return FALSE;
+	}
+
+	//Another easy check - if these are different it can't work
+	if(a->current_index != b->current_index){
+		return FALSE;
+	}
+
+	//Run through bit by bit here. If they're equal, everything in A must be in B
+	for(u_int16_t i = 0; i < a->current_index; i++){
+		//Here's our pointer
+		void* a_ptr = a->internal_array[i];
+
+		//We must be able to find this pointer in b. If we can't it's no good
+		for(u_int16_t i = 0; i < b->current_index; i++){
+			//We made it - onto the next round
+			if(b->internal_array[i] == a_ptr){
+				continue;
+			}
+		}
+
+		//If we make it down here that means that we did not find it - return false
+		return FALSE;
+	}
+
+	//If we survive til out here, they're the same
+	return TRUE;
+}
+
+
+/**
  * Calculate the dominator sets for each and every node
  *
  * For each node in the nodeset:
+ * 	dom(N) <- All nodes
  * 	
  *
  */
 static void calculate_dominator_sets(cfg_t* cfg){
+	//Initialize a "worklist" dynamic array
+	dynamic_array_t* worklist = dynamic_array_alloc();
+
 	//Every node in the CFG has a dominator set that is set
 	//to be identical to the list of all nodes
-	
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		//Grab this out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
 
+		//We will initialize the block's dominator set to be the entire set of nodes
+		block->dominator_set = clone_dynamic_array(cfg->created_blocks);
+	}
+
+	//Add the starting node(index 0) into the worklist as a seed
+	dynamic_array_add(worklist, dynamic_array_get_at(cfg->created_blocks, 0));
+	
+	//The new dominance frontier that we have each time
+	dynamic_array_t* new;
+
+	//So long as the worklist is not empty
+	while(dynamic_array_is_empty(worklist) == FALSE){
+		//Remove a node Y from the worklist(remove from back - most efficient{O(1)})
+		basic_block_t* Y = dynamic_array_delete_from_back(worklist);
+		
+		//Create the new dynamic array that will be used for the next
+		//dominator set
+		new = dynamic_array_alloc();
+
+		//We will add Y into it's own dominator set
+		dynamic_array_add(new, Y);
+
+		//Now add the intersection of the dominator sets of all predecessors
+		//of Y
+		for(u_int8_t i = 0; i < Y->num_predecessors; i++){
+			//Grab the dominator set of this one
+			dynamic_array_t* DOM_X = Y->predecessors[i]->dominator_set;	
+
+		}
+
+
+
+		
+
+	}
+
+
+	//Destroy the worklist now that we're done with it
+	dynamic_array_dealloc(worklist);
 }
 
 
