@@ -81,7 +81,7 @@ int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
 	}
 
 	//If we make it here, we found nothing so
-	return -1;
+	return NOT_FOUND;
 }
 
 

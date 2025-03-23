@@ -562,7 +562,6 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  * A IDOM B if A SDOM B and there does not exist a node C 
  * such that C ≠ A, C ≠ B, A dom C, and C dom B
  *
- * THIS IS WRONG CURRENTLY
  */
 static basic_block_t* immediate_dominator(basic_block_t* B){
 	basic_block_t* A; 
@@ -579,12 +578,12 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 	//For each node in B's Dominance Frontier set(we call this node A)
 	//These nodes are our candidates for immediate dominator
-	for(u_int16_t i = 0; i < B->next_df_index; i++){
+	for(u_int16_t i = 0; i < B->dominator_set->current_index; i++){
 		//By default we assume A is an IDOM
 		A_is_IDOM = TRUE;
 
 		//A is our "candidate" for possibly being an immediate dominator
-		A = B->dominance_frontier[i];
+		A = dynamic_array_get_at(B->dominator_set, i);
 
 		//If A == B, that means that A does NOT strictly dominate(SDOM)
 		//B, so it's disqualified
@@ -601,9 +600,14 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		//For everything in B's dominator set that IS NOT A, we need
 		//to check if this is an intermediary. As in, does C get in-between
 		//A and B in the dominance chain
-		for(u_int16_t j = 0; j < B->next_df_index; j++){
+		for(u_int16_t j = 0; j < B->dominator_set->current_index; j++){
+			//Skip this case
+			if(i == j){
+				continue;
+			}
+
 			//If it's aleady B or A, we're skipping
-			C = B->dominance_frontier[j];
+			C = dynamic_array_get_at(B->dominator_set, j);
 
 			//If this is the case, disqualified
 			if(C == B || C == A){
@@ -615,7 +619,7 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 			//have an immediate dominator in A.
 			//
 			//This would look like A -Doms> C -Doms> B, so A is not an immediate dominator
-			if(dominance_frontier_contains(C, A) == TRUE){
+			if(dynamic_array_contains(C->dominator_set, A) == TRUE){
 				//A is disqualified, it's not an IDOM
 				A_is_IDOM = FALSE;
 				break;
@@ -716,7 +720,7 @@ static u_int8_t dominator_sets_equal(dynamic_array_t* a, dynamic_array_t* b){
 		void* a_ptr = a->internal_array[i];
 
 		//If the dynamic array contains a_ptr, we're good. Otherwise fail out
-		if(dynamic_array_contains(b, a_ptr) == -1){
+		if(dynamic_array_contains(b, a_ptr) == NOT_FOUND){
 			return FALSE;
 		}
 	}
@@ -795,7 +799,7 @@ static void calculate_dominator_sets(cfg_t* cfg){
 					}
 
 					//Let's check for it in here. If we can't find it, we set the flag to false and bail out
-					if(dynamic_array_contains(Y->predecessors[j]->dominator_set, DOM_X) == -1){
+					if(dynamic_array_contains(Y->predecessors[j]->dominator_set, DOM_X) == NOT_FOUND){
 						in_intersection = FALSE;
 						break;
 					}
