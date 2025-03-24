@@ -17,7 +17,6 @@
 */
 
 #include "cfg.h"
-//For switch statement ordering
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -841,7 +840,7 @@ static void calculate_dominator_sets(cfg_t* cfg){
  * To insert phi functions, we take the following approach:
  * 	For each variable
  * 		Find all basic blocks that define this variable
- * 		For each of these basic blocks that contains the variable as live
+ * 		For each of these basic blocks that contains the variable as assigned to then 
  * 			add it onto the "worklist"
  *
  * 		Then:
@@ -856,6 +855,8 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	//We'll run through the variable symtab, finding every single variable in it
 	symtab_variable_sheaf_t* sheaf_cursor;
 	symtab_variable_record_t* record;
+	//A cursor that we can use
+	basic_block_t* block_cursor;
 
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
@@ -864,15 +865,12 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	//we go any further
 	calculate_dominance_frontiers(cfg);
 
-	//We'll need a "worklist" here - just a dynamic array 
-	dynamic_array_t* worklist = dynamic_array_alloc();
-	dynamic_array_t* has_been_on_worklist = dynamic_array_alloc();
-
 	//------------------------------------------
 	// FIRST STEP: FOR EACH variable we have
 	//------------------------------------------
 	//Run through all of the sheafs
 	for	(u_int16_t i = 0; i < var_symtab->num_sheafs; i++){
+		//Grab the current sheaf
 		sheaf_cursor = var_symtab->sheafs[i];
 
 		//Now we'll free all non-null records
@@ -880,37 +878,45 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 			//Grab the record
 			record = sheaf_cursor->records[j];
 
-			//We could have chaining here, so run through just in case
+			//Remember that symtab records can be chained in case
+			//of hash collisions, so we need to run through every
+			//variable like this
 			while(record != NULL){
 				//----------------------------------
 				// SECOND STEP: For each block that 
 				// defines(assigns) said variable
 				//----------------------------------
+				//We'll need a "worklist" here - just a dynamic array 
+				dynamic_array_t* worklist = dynamic_array_alloc();
 
-				/*
+				//We'll also need a dynamic array that contains everything relating
+				//to if we did or did not already put a phi function into this block
+				dynamic_array_t* already_has_phi_func = dynamic_array_alloc();
+
+
+				
 				//Just run through the entire thing
-				while(block_cursor != NULL){
+				for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+					//Grab the block out of here
+					block_cursor = dynamic_array_get_at(cfg->created_blocks, i);
+
 					//Does this block define(assign) our variable?
 					if(does_block_assign_variable(block_cursor, record) == TRUE){
 						//Then we add this block onto the "worklist"
 						dynamic_array_add(worklist, block_cursor);
-						dynamic_array_add(has_been_on_worklist, block_cursor);
 					}
-
-					//Iterate over to the next one
-					block_cursor = block_cursor->next_created;
 				}
-				*/
 
+				//Now that we're done with these, we'll remove them for
+				//the next round
+				dynamic_array_dealloc(worklist);
+				dynamic_array_dealloc(already_has_phi_func);
+			
 				//Advance to the next record in the chain
 				record = record->next;
 			}
 		}
 	}
-
-	//We're done with it, so now we can free
-	dynamic_array_dealloc(worklist);
-	dynamic_array_dealloc(has_been_on_worklist);
 }
 
 
