@@ -4,12 +4,21 @@
 
 #file SSA_TEST1;
 
-/**
-* Test function
+
+// Test function
 fn tester() -> i32 {
+	let mut x:u32 := 232;
+	defer x++;
+
+	if(x == 327) then {
+		ret x;
+	}
+
+	x := x + 33;
+
 	ret -1;
 }
-*/
+
 
 
 fn main() -> i32{
@@ -17,10 +26,13 @@ fn main() -> i32{
 	let mut y:i32 := 23;
 	let mut z:i32 := 322;
 
+	defer x - 3;
+	defer @tester();
 
 	//Statically known use - the goal of SSA
 	if(x > 4) then{
 		y := x - 2;
+		ret y;
 	} else if (x == 4) then {
 		y := x + 9;
 	} else {

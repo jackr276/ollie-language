@@ -38,8 +38,6 @@ static int32_t current_block_id = 0;
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
-//Keep a stack of deferred statements for each function
-heap_stack_t* deferred_stmts;
 //Keep a variable symtab of temporary variables
 variable_symtab_t* temp_vars;
 //Keep the type symtab up and running
@@ -4074,14 +4072,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//Once we hit the end, if this isn't an exit block, we'll make it one
 	compound_stmt_cursor->direct_successor = function_ending_block;
 
-	//Once we get here, we'll now add in any deferred statements to the function ending block
-	
-	//So long as they aren't empty
-	while(is_empty(deferred_stmts) == HEAP_STACK_NOT_EMPTY){
-		//Add them in one by one
-		add_statement(function_ending_block, pop(deferred_stmts));
-	}
-
 	//Now we'll analyze the reachability of the function
 	perform_function_reachability_analysis(function_node, function_starting_block);
 	
@@ -4280,9 +4270,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Add this in
 	type_symtab = results.type_symtab;
 
-	//Create the stack here
-	deferred_stmts = heap_stack_alloc();
-	
 	//Create the temp vars symtab
 	temp_vars = variable_symtab_alloc();
 
@@ -4313,9 +4300,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 		(*num_errors_ref)++;
 	}
 
-	//Destroy the deferred statements stack
-	heap_stack_dealloc(deferred_stmts);
-	
 	//Destroy the temp variable symtab
 	variable_symtab_dealloc(temp_vars);
 	
