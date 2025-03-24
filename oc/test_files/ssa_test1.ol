@@ -19,6 +19,7 @@ fn main() -> i32{
 
 
 	//Statically known use - the goal of SSA
+	/*
 	if(x > 4) then{
 		y := x - 2;
 	} else if (x == 4) then {
@@ -26,6 +27,7 @@ fn main() -> i32{
 	} else {
 		y := x + 12;
 	}
+	*/
 	
 	//Phi function should be here
 	let w:i32 := x + y;
@@ -33,8 +35,19 @@ fn main() -> i32{
 	
 	/*
 	for(let i:u32 := 0; i <= 322; ++i) do{
+		//declare w:i32;
+		//w := w + 3;
 	}
 	*/
+
+	while(w != x - y) do {
+		w++;
+	}
+
+	do {
+		w++;
+	} while (w != x - y);
+
 	
 
 	ret 0;

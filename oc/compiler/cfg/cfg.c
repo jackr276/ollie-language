@@ -2265,6 +2265,9 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		exit(0);
 	}
 
+	//We'll use our inverse jumping("jump out") strategy here. We'll need this jump for later
+	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE);
+
 	//Now move it along to the third condition
 	ast_cursor = ast_cursor->next_sibling;
 
@@ -2277,8 +2280,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		emit_expr_code(for_stmt_update_block, ast_cursor->first_child);
 	}
 
-	//This is the first and foremost successor
-	add_successor(for_stmt_update_block, for_stmt_exit_block);
 	//This node will always jump right back to the start
 	add_successor(for_stmt_update_block, condition_block);
 	//The direct successor of the update block is the exit block
@@ -2318,19 +2319,22 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		//We'll make sure that the start points to this block
 		add_successor(condition_block, for_stmt_update_block);
 
+		//And also make sure that the condition block can point to the
+		//exit
+		add_successor(condition_block, for_stmt_exit_block);
+
+		//Make the condition block jump to the exit
+		emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type);
+
 		//And we're done
 		return for_stmt_entry_block;
 	}
 
 	//This will always be a successor to the conditional statement
 	add_successor(condition_block, compound_stmt_start);
-	//The condition block also has another direct successor, the exit block
-	//add_successor(condition_block, for_stmt_exit_block);
+
 	//The direct successor of the condition block is the compound statement start
 	condition_block->direct_successor = compound_stmt_start;
-
-	//We'll use our inverse jumping("jump out") strategy here
-	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE);
 
 	//Make the condition block jump to the compound stmt start
 	emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type);
@@ -2356,6 +2360,10 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	compound_stmt_end->direct_successor = for_stmt_update_block;
 	//We also need an uncoditional jump right to the update block
 	emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP);
+
+	//We must also remember that the condition block can point to the ending block, because
+	//if the condition fails, we will be jumping here
+	add_successor(condition_block, for_stmt_exit_block);
 
 	//Give back the entry block
 	return for_stmt_entry_block;
