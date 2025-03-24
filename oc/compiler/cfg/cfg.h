@@ -51,6 +51,7 @@ typedef enum{
 	BLOCK_TYPE_ASM, //Very special case -- entire block is dedicated to asm inline
 	BLOCK_TYPE_CASE, //Case statement -- it also encapsulates default(just a special kind of case)
 	BLOCK_TYPE_FUNC_ENTRY, //Block is a function entry
+	BLOCK_TYPE_FUNC_EXIT, //Block is a function exit
 	BLOCK_TYPE_DO_WHILE_END, //End of a do-while
 	BLOCK_TYPE_IF_STMT_END, //End of an if-statement
 	BLOCK_TYPE_WHILE_END, //End of a while statement
@@ -97,11 +98,7 @@ struct basic_block_t{
 	block_terminal_type_t block_terminal_type;
 	//Was this block visited by traverser?
 	u_int8_t visited;
-	//Is this block an exit block?
-	u_int8_t is_exit_block;
-	//A basic block is a doubly-linked list node
-	//with a predecessor and a successor
-	//Edges represent where we can go on this graph
+	//Predecessors and successor edges
 	basic_block_t* predecessors[MAX_PREDECESSORS];
 	basic_block_t* successors[MAX_SUCCESSORS];
 	//For convenience here. This is the successor that we use to

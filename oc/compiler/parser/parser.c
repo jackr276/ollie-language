@@ -86,6 +86,7 @@ static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
+static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee);
 
 
 /**
@@ -5907,8 +5908,21 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//Add in the line number
 	return_stmt->line_number = parser_line_num;
-	//If we get here we're all good, just return the parent
-	return return_stmt;
+	
+	//If we have deferred statements
+	if(deferred_stmts_node != NULL){
+		//Then we'll duplicate
+		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node);
+
+		//This node will now come before the ret statement
+		deferred_stmts->next_sibling = return_stmt;
+
+		//We'll give this back instead
+		return deferred_stmts;
+	} else {
+		//If we get here we're all good, just return the parent
+		return return_stmt;
+	}
 }
 
 
@@ -6890,6 +6904,11 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 static generic_ast_node_t* defer_statement(FILE* fl){
 	//For searching
 	Lexer_item lookahead;
+
+	//Now if we see that this is NULL, we'll allocate here
+	if(deferred_stmts_node == NULL){
+		deferred_stmts_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT);
+	}
 
 	//Let's see what we have here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8153,70 +8172,6 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
 }
 
 
-
-/**
- * When we have deferred statements, we'll need to insert them right before a function returns.
- * Defer statements happen, in appearance only, to execute after the return statement. Anyone 
- * with a basic knowledge of assembly knows that such execution is impossible. Instead, in Ollie
- * lang, defer statements are simply reoriented to be the last statement that happens before a return
- * statement. Since functions can have many return statements, it makes sense to insert these right
- * before each return statement.
- */
-static void insert_all_deferred_statements(generic_ast_node_t* compound_stmt){
-	//If there is no first child, that means that this node is done for
-	if(deferred_stmts_node->first_child == NULL){
-		return;
-	}
-	//Now we have finally constructed our linked list and made appropriate references. We now need to
-	//find every return statement and insert these before it. We will do this in a BFS(level order) fashion
-	//We'll need a queue for this
-	heap_queue_t* queue = heap_queue_alloc();
-	//Our current node
-	generic_ast_node_t* current_node;
-	//Temporarily hold the ret stmt
-	generic_ast_node_t* ret_stmt_node;
-	//The child cursor
-	generic_ast_node_t* child_cursor;
-
-	//Let's see the BFS with our first node here
-	enqueue(queue, compound_stmt);
-	
-	//So long as we have nodes to search
-	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
-		//Dequeue from the front
-		current_node = dequeue(queue);
-
-		//If the current node's NEXT sibling is a ret statement, we take action
-		if(current_node->next_sibling != NULL 
-		   && current_node->next_sibling->CLASS == AST_NODE_CLASS_RET_STMT){
-			//Grab a reference to this, we're about to break it
-			ret_stmt_node = current_node->next_sibling;
-
-			//Just duplicate the whole thing
-			generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node);
-		
-			//After we've duplicated we can add in
-			current_node->next_sibling = deferred_stmts;
-			deferred_stmts->next_sibling = ret_stmt_node;
-		}
-
-		//Now we'll add in all of his children
-		child_cursor = current_node->first_child;
-
-		//We now need to add in every single child node
-		while(child_cursor != NULL){
-			//Enqueue
-		 	enqueue(queue, child_cursor);
-			//Advance it up
-			child_cursor = child_cursor->next_sibling;
-		}
-	}
-
-	//Destroy when done
-	heap_queue_dealloc(queue);
-}
-
-
 /**
  * We need to go through and check all of the jump statements that we have in the function. If any
  * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
@@ -8677,12 +8632,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return NULL;
 
 	} else {
+		//Put it back
 		push_back_token(lookahead);
-		//Call compound statement
 
-		//Let's allocate our deferred statments to hold any/all potential
-		//ones here
-		deferred_stmts_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT);
+		//Some housekeeping, if there were previously deferred statements, we want them out
+		deferred_stmts_node = NULL;
 
 		//We are finally required to see a valid compound statement
 		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
@@ -8712,17 +8666,28 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 			//Once we get here, we need to check and see if we have a ret stmt
 			if(cursor->CLASS != AST_NODE_CLASS_RET_STMT){
-				//If we don't have one, we'll manually add one
-				add_child_node(compound_stmt_node, ast_node_alloc(AST_NODE_CLASS_RET_STMT));
+				//Allocate a ret node - leave it blank
+				generic_ast_node_t* ret_node = ast_node_alloc(AST_NODE_CLASS_RET_STMT);
+
+				//We'll add in all of our deferred statements here too, if we have them
+				if(deferred_stmts_node != NULL){
+					//Make a clone of it
+					generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node);
+
+					//Link the ret node in
+					deferred_stmts->next_sibling = ret_node;
+
+					//Add this as the child to the compound stmt node
+					add_child_node(compound_stmt_node, deferred_stmts);
+				} else {
+					//No deferred statements here
+					add_child_node(compound_stmt_node, ast_node_alloc(AST_NODE_CLASS_RET_STMT));
+				}
 			}
-			//Otherwise we're fine
 		}
 
 		//If we get here we know that it worked, so we'll add it in as a child
 		add_child_node(function_node, compound_stmt_node);
-		
-		//Once here, we need to add in all deferred statements into the overall compound statement node
-		insert_all_deferred_statements(compound_stmt_node);
 		
 		//We now need to check and see if our jump statements are actually valid
 		if(check_jump_labels(function_record) == FAILURE){
@@ -8738,9 +8703,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Store the line number
 		function_node->line_number = current_line;
-
-		//Wipe this away, it will be freed by the deallocator
-		deferred_stmts_node = NULL;
 
 		//All good so we can get out
 		return function_node;

@@ -13,7 +13,6 @@
  * - A "live" variable, in the context of a block, is one that is defined in that block.
  *   We keep track of these here, and they are appended to the headers of the blocks for ease of understanding
  *   to the programmer
- *
 */
 
 #include "cfg.h"
@@ -2093,7 +2092,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//Also make note of any direct succession
 	a->direct_successor = b->direct_successor;
-	a->is_exit_block = b->is_exit_block;
 	//Copy over the block type and terminal type
 	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
 		a->block_type = b->block_type;
@@ -2179,7 +2177,7 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			 * Then we have a function that does not return in all paths
 			 */
 			//If the direct successor is the exit, but it's not a return statement
-			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->is_exit_block == TRUE
+			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->block_type == BLOCK_TYPE_FUNC_EXIT 
 			  && block_cursor->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//One more dead end
 				dead_ends++;
@@ -4012,7 +4010,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//The ending block
 	basic_block_t* function_ending_block = basic_block_alloc();
 	//We very clearly mark this as an ending block
-	function_ending_block->is_exit_block = TRUE;
+	function_ending_block->block_type = BLOCK_TYPE_FUNC_EXIT;
 
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
@@ -4146,6 +4144,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//(replace) the blocks here. This is a special kind of merge,
 			//so we won't need to use the merge_blocks() function
 			} else if(current_block->leader_statement == NULL){
+				printf("HERE\n");
 				//We really just want all of the blocks that reference
 				//the current block as a successor to now reference 
 				//the function block as a successor
@@ -4177,7 +4176,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			}
 
 			//So long as we don't see the exit statement, we keep going
-			while(current_block->direct_successor->is_exit_block == FALSE){
+			while(current_block->direct_successor->block_type != BLOCK_TYPE_FUNC_EXIT){
 				//Always follow the path of the direct successor
 				current_block = current_block->direct_successor;
 			}
