@@ -47,6 +47,8 @@ variable_symtab_t* temp_vars;
 type_symtab_t* type_symtab;
 //The CFG that we're working with
 cfg_t* cfg_ref;
+//Keep a reference to whatever function we are currently in
+symtab_function_record_t* current_function;
 
 //A package of values that each visit function uses
 typedef struct {
@@ -568,14 +570,6 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 	basic_block_t* C;
 	u_int8_t A_is_IDOM;
 	
-	//Print the block's ID or the function name
-	if(B->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		printf("%s: IDOM = ", B->func_record->func_name);
-	} else {
-		printf(".L%d: IDOM = ", B->block_id);
-	}
-	
-
 	//For each node in B's Dominance Frontier set(we call this node A)
 	//These nodes are our candidates for immediate dominator
 	for(u_int16_t i = 0; i < B->dominator_set->current_index; i++){
@@ -628,19 +622,9 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 		//If we survived, then we're done here
 		if(A_is_IDOM == TRUE){
-			
-			if(A->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s\n", A->func_record->func_name);
-			} else {
-				printf(".L%d\n", A->block_id);
-			}	
-			
-
 			return A;
 		}
 	}
- 
-	printf("NONE\n");
 
 	return NULL;
 }
@@ -828,6 +812,7 @@ static void calculate_dominator_sets(cfg_t* cfg){
 			for(u_int8_t i = 0; i < Y->num_successors; i++){
 				dynamic_array_add(worklist, Y->successors[i]);
 			}
+
 		//Otherwise they are the same
 		} else {
 			//Destroy the dominator set that we just made
@@ -1792,6 +1777,9 @@ static basic_block_t* basic_block_alloc(){
 	//Usually these are, in special cases they aren't
 	created->good_to_merge = TRUE;
 
+	//Let's add in what function this block came from
+	created->func_record = current_function;
+
 	//Add this into the dynamic array
 	dynamic_array_add(cfg_ref->created_blocks, created);
 
@@ -1877,9 +1865,9 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			if(block->successors[i]->visited != 3){
 				if(block->successors[i]->block_terminal_type == BLOCK_TERM_TYPE_RET){
 					//Store this for later, we don't want it now
-				//	dynamic_array_add(to_be_enqueued, block->successors[i]);
+					//dynamic_array_add(to_be_enqueued, block->successors[i]);
 					//Don't add it now
-				//	continue;
+					//continue;
 				}
 
 				enqueue(queue, block->successors[i]);
@@ -4015,6 +4003,9 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
+	//We will now store this as the current function
+	current_function = func_record;
+
 	//Store this in the entry block
 	function_starting_block->func_record = func_record;
 
@@ -4078,6 +4069,9 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//Now we'll analyze the reachability of the function
 	perform_function_reachability_analysis(function_node, function_starting_block);
+	
+	//Now that we're done, we will clear this current function parameter
+	current_function = NULL;
 
 	//We always return the start block
 	return function_starting_block;
@@ -4254,6 +4248,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Hold the cfg
 	cfg_ref = cfg;
+
+	//Set this to NULL initially
+	current_function = NULL;
 
 	//For dev use here
 	if(results.root->CLASS != AST_NODE_CLASS_PROG){
