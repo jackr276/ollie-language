@@ -759,6 +759,7 @@ static void calculate_dominator_sets(cfg_t* cfg){
 			//Grab the very first one's DOM
 			dynamic_array_t* DOM_X = Y->predecessors[0]->dominator_set;
 
+
 			//Are we in the intersection of the dominator sets?
 			u_int8_t in_intersection;
 
@@ -4146,13 +4147,44 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//If the start block is null, this becomes the start block
 			if(start_block == NULL){
 				start_block = function_block;
-			//Otherwise, we'll add this as a successor to the current block
-			} else {
-				add_successor(current_block, function_block);
-			}
 
-			//We now need to find where the end of the function block is to have that as our current reference
-			current_block = function_block;
+				//Assign separately here
+				current_block = start_block;
+
+			//Otherwise, we'll add this as a successor to the current block
+			//Is the current block completely empty? If it is, we'll just merge
+			//(replace) the blocks here. This is a special kind of merge,
+			//so we won't need to use the merge_blocks() function
+			} else if(current_block->leader_statement == NULL){
+				//We really just want all of the blocks that reference
+				//the current block as a successor to now reference 
+				//the function block as a successor
+				for(u_int16_t i = 0; i < current_block->num_predecessors; i++){
+					//Grab this predecessor
+					basic_block_t* pred_cursor = current_block->predecessors[i];
+					
+					//For all of the successors in this predecessor, if any of them
+					//match with "current_block", we will update them to point to
+					//function block
+					for(u_int16_t i = 0; i < pred_cursor->num_successors; i++){
+						//If we have a match
+						if(pred_cursor->successors[i] == current_block){
+							//Update
+							pred_cursor->successors[i] = function_block;
+						}
+					}
+				}
+
+				//Now we can delete the current block from the cfg
+
+
+			} else {
+				//Otherwise it isn't empty, so we'll have to reassign
+				add_successor(current_block, function_block);
+
+				//We now need to find where the end of the function block is to have that as our current reference
+				current_block = function_block;
+			}
 
 			//So long as we don't see the exit statement, we keep going
 			while(current_block->direct_successor->is_exit_block == FALSE){
