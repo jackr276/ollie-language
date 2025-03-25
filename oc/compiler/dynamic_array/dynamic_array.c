@@ -173,6 +173,27 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
 
 
 /**
+ * Delete the pointer itself from the dynamic array
+ *
+ * Will not complain if it cannot be found - it simply won't be deleted
+ */
+void dynamic_array_delete(dynamic_array_t* array, void* ptr){
+	//If this is NULL or empty we'll just return
+	if(ptr == NULL || array->current_index == 0){
+		return;
+	}
+
+	//Otherwise we'll need to grab this index
+	u_int16_t index = dynamic_array_contains(array, ptr);
+
+	//Now we'll use the index to delete
+	dynamic_array_delete_at(array, index);
+
+	//And we're done
+}
+
+
+/**
  * Remove an element from the back of the dynamic array - O(1) removal
  */
 void* dynamic_array_delete_from_back(dynamic_array_t* array){

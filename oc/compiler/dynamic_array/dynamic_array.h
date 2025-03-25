@@ -73,6 +73,12 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index);
  */
 void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index);
 
+/**
+ * Delete the pointer itself from the dynamic array
+ *
+ * Will not complain if it cannot be found - it simply won't be deleted
+ */
+void dynamic_array_delete(dynamic_array_t* array, void* ptr);
 
 /**
  * Remove an element from the back of the dynamic array - O(1) removal

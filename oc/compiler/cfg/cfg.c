@@ -4143,8 +4143,7 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//Is the current block completely empty? If it is, we'll just merge
 			//(replace) the blocks here. This is a special kind of merge,
 			//so we won't need to use the merge_blocks() function
-			} else if(current_block->leader_statement == NULL){
-				printf("HERE\n");
+			} else if(current_block->block_type == BLOCK_TYPE_FUNC_EXIT){
 				//We really just want all of the blocks that reference
 				//the current block as a successor to now reference 
 				//the function block as a successor
@@ -4160,13 +4159,19 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 						if(pred_cursor->successors[i] == current_block){
 							//Update
 							pred_cursor->successors[i] = function_block;
+							//Now the function block will have this as a predecessor
+							function_block->predecessors[function_block->num_predecessors] = pred_cursor;
+							//Increment this
+							(function_block->num_predecessors)++;
 						}
 					}
 				}
 
 				//Now we can delete the current block from the cfg
+				dynamic_array_delete(cfg_ref->created_blocks, current_block);
 
-
+				//And now we can reassign this current block to be the function block
+				current_block = function_block;
 			} else {
 				//Otherwise it isn't empty, so we'll have to reassign
 				add_successor(current_block, function_block);
@@ -4176,16 +4181,9 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			}
 
 			//So long as we don't see the exit statement, we keep going
-			while(current_block->direct_successor->block_type != BLOCK_TYPE_FUNC_EXIT){
+			while(current_block->block_type != BLOCK_TYPE_FUNC_EXIT){
 				//Always follow the path of the direct successor
 				current_block = current_block->direct_successor;
-			}
-
-			//If the current block is empty, we're going to merge it later on
-			if(current_block->leader_statement == NULL){
-				current_block_is_empty = TRUE;
-			} else {
-				current_block_is_empty = FALSE;
 			}
 
 			//Finally once we get down here, we have our proper current block
