@@ -2641,7 +2641,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jmp_stmt(if_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
-		//We'll add in our successor later for printing reasons
+		//If this is the case, the end block is a successor of the if_stmt end
+		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 	}
 
 	//This is the end if we have a lone "if"
@@ -2715,8 +2716,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//The successor to this block is the ending block
 		add_successor(else_compound_stmt_end, values->if_stmt_end_block);
-		//If this is the case, the end block is a successor of the if_stmt end
-		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 
 		//Ensure is direct successor
 		else_compound_stmt_end->direct_successor = values->if_stmt_end_block;
@@ -2742,9 +2741,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Add this as a successor to the entrant
 		add_successor(entry_block, else_if_entry);
-
-		//If this is the case, the end block is a successor of the if_stmt end
-		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 
 		//However, we want this to be a direct successor to the if end block. This
 		//is mainly for traversal reasons
