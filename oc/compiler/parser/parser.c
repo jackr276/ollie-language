@@ -8,7 +8,6 @@
  * to it from the lexer. The parser's goal is twofold. It will ensure that the structure of the program adheres to the rules of
  * the programming language, and it will translate the source code into an "Intermediate Representation(IR)" that can be given to 
  * the optimizer
- *
 */
 
 
@@ -738,7 +737,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	Lexer_item lookahead;
 
 	//Did we find the assignment op?
-	u_int8_t found_asn_op = 0;
+	u_int8_t found_asn_op = FALSE;
 
 	//Probably way too much, just to be safe
 	Lexer_item items[200];
@@ -748,8 +747,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//So long as we don't see a semicolon(end) or an assignment op
-	while(lookahead.tok != COLONEQ && lookahead.tok != SEMICOLON){
+	//So long as we don't see a semicolon(end) or an assignment op, or a left or right curly
+	while(lookahead.tok != COLONEQ && lookahead.tok != SEMICOLON && lookahead.tok != L_CURLY && lookahead.tok != R_CURLY){
 		//Put this onto the items we've seen
 		items[idx] = lookahead;
 		idx++;
@@ -758,12 +757,12 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Once we get here, lookahead is either a coloneq or a semicol
-	if(lookahead.tok == SEMICOLON){
-		found_asn_op = 0;
+	//Did we see the coloneq? If not, not an assingment operation
+	if(lookahead.tok == COLONEQ){
+		found_asn_op = TRUE;
 	} else {
-		//Otherwise we did find it
-		found_asn_op = 1;
+		//Otherwise we did not find it
+		found_asn_op = FALSE;
 	}
 
 	//First push back lookahead
@@ -777,7 +776,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 
 	//If we didn't find an assignment operator, we just return the logical or expression
-	if(found_asn_op == FAILURE){
+	if(found_asn_op == FALSE){
 		return logical_or_expression(fl);
 	}
 
@@ -1186,6 +1185,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	//Do any kind of dealiasing that we need to do
 	current_type = dealias_type(current_type);
 
+	//We assume it's assignable, that will only change if we have a basic type that is 
+	//post inc'd/dec'd
+	postfix_expr_node->is_assignable = ASSIGNABLE;
+
 	//Now we can see as many construct accessor and array accessors as we can take
 	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == ARROW_EQ){
 		//Let's see which rule it is
@@ -1263,8 +1266,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		postfix_expr_node->inferred_type = return_type;
 		//This was assigned to
 		result->variable->assigned_to = 1;
-		//Assignable
-		postfix_expr_node->is_assignable = ASSIGNABLE;
 		//And we'll give back what we had constructed so far
 		return postfix_expr_node;
 	}
@@ -1285,6 +1286,12 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//You cannot assign to a basic variable that is
+	//post-inc'd
+	if(return_type->type_class == TYPE_CLASS_BASIC){
+		postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
+	}
+
 	//Otherwise if we get here we know that we either have post inc or dec
 	//Create the unary operator node
 	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
@@ -1300,9 +1307,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 
 	//Carry through
 	postfix_expr_node->variable = result->variable;
-
-	//Add the assignability in
-	postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;
@@ -1836,8 +1840,13 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 				cast_expr->variable->assigned_to = 1;
 			}
 
-			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			//This is only not assignable if we have a basic variable
+			if(return_type->type_class == TYPE_CLASS_BASIC){
+				is_assignable = NOT_ASSIGNABLE;
+			} else {
+				//Otherwise it is assignable
+				is_assignable = ASSIGNABLE;
+			}
 		}
 
 		//If we have a special "fold" case here, i.e. we have something
