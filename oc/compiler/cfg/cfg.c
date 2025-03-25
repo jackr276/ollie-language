@@ -1866,20 +1866,27 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 		//And finally we'll add all of these onto the queue
 		for(u_int16_t i = 0; i < block->num_successors; i++){
+			//False by default
+			u_int8_t found_others = FALSE;
+
 			if(block->successors[i]->visited != 3){
-				if(block->successors[i]->block_terminal_type == BLOCK_TERM_TYPE_RET){
-					//Store this for later, we don't want it now
-					//dynamic_array_add(to_be_enqueued, block->successors[i]);
-					//Don't add it now
-					//continue;
+				//If this block has other predecessors who have not been visited, enqueue those
+				//first so that we can ensure that they are visited before this one
+				for(u_int16_t j = 0; j < block->successors[i]->num_predecessors; j++){
+					if(block->successors[i]->predecessors[j]->visited != 3){
+						found_others = TRUE;
+						//Add these into the queue first
+						enqueue(queue, block->successors[i]->predecessors[j]);
+					}
 				}
 
-				enqueue(queue, block->successors[i]);
-			}
-
-			//enqueue the ones that are terminal blocks at the very end
-			while(dynamic_array_is_empty(to_be_enqueued) == FALSE){
-				enqueue(queue, dynamic_array_delete_at(to_be_enqueued, 0));
+				//If we did find others, we'll hold off
+				//on putting this one in. We'll only put it
+				//in if we're sure that all of it's predecessors
+				//are now accounted for
+				if(found_others == FALSE){
+					enqueue(queue, block->successors[i]);
+				}
 			}
 		}
 	}
@@ -2634,8 +2641,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jmp_stmt(if_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
-		//If this is the case, the end block is a direct successor
-		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
+		//We'll add in our successor later for printing reasons
 	}
 
 	//This is the end if we have a lone "if"
@@ -2645,6 +2651,9 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//If this is the case, another successor of the entry block is
 		//the end block
 		add_successor(entry_block, values->if_stmt_end_block);
+		
+		//If this is the case, the end block is a direct successor
+		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
 
 		/**
 		 * The "if" path is always our direct path, we only need to jump to the else, so we jump
@@ -2685,7 +2694,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			return entry_block;
 		}
 
-		//Otherwise, we'll add this in as a successor
+		//Otherwise, we'll add this in as a successor, because the entry block can go to
+		//the end block
 		add_successor(entry_block, else_compound_stmt_entry);
 		//However, we want this to be the direct successor of the end of the if compound statement
 		if_compound_stmt_end->direct_successor = else_compound_stmt_entry;
@@ -2705,6 +2715,9 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//The successor to this block is the ending block
 		add_successor(else_compound_stmt_end, values->if_stmt_end_block);
+		//If this is the case, the end block is a successor of the if_stmt end
+		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
+
 		//Ensure is direct successor
 		else_compound_stmt_end->direct_successor = values->if_stmt_end_block;
 		//Add in our jump to end here
@@ -2729,7 +2742,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//Add this as a successor to the entrant
 		add_successor(entry_block, else_if_entry);
-		//However, we want this to be a direct successor to the if end block
+
+		//If this is the case, the end block is a successor of the if_stmt end
+		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
+
+		//However, we want this to be a direct successor to the if end block. This
+		//is mainly for traversal reasons
 		if_compound_stmt_end->direct_successor = else_if_entry;
 
 		//Let's determine the appropriate jump statement
@@ -2821,7 +2839,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
 
 			//The current block's direct and only successor is the function exit block
-			add_successor(current_block, values->function_end_block);
+			//add_successor(current_block, values->function_end_block);
 
 			//If there is anything after this statement, it is UNREACHABLE
 			if(current_node->next_sibling != NULL){
@@ -3507,7 +3525,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
 
 			//The current block's direct and only successor is the function exit block
-			add_successor(current_block, values->function_end_block);
+			//add_successor(current_block, values->function_end_block);
 
 			//If there is anything after this statement, it is UNREACHABLE
 			if(ast_cursor->next_sibling != NULL){
@@ -4070,6 +4088,8 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//Once we hit the end, if this isn't an exit block, we'll make it one
 	compound_stmt_cursor->direct_successor = function_ending_block;
 
+	add_successor(compound_stmt_cursor, function_ending_block);
+
 	//Now we'll analyze the reachability of the function
 	perform_function_reachability_analysis(function_node, function_starting_block);
 	
@@ -4305,7 +4325,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//FOR PRINTING
 	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
-	//emit_blocks_dfs(cfg);
+	//emit_blocks_dfs(cfg, EMIT_DOMINANCE_FRONTIER);
 	//emit_blocks_direct_successor(cfg);
 	
 	//Give back the reference
