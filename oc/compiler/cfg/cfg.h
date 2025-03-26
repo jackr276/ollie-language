@@ -11,9 +11,9 @@
 #include "../three_addr_code/three_address_code.h"
 #include "../dynamic_array/dynamic_array.h"
 
-//These may or may not change
-#define MAX_SUCCESSORS 40
-#define MAX_PREDECESSORS 40
+//The default numbers of predecessors and successors
+#define DEFAULT_PREDECESSORS 2
+#define DEFAULT_SUCCESSORS 2 
 #define INITIAL_STATEMENT_SIZE 2000
 
 
@@ -99,17 +99,23 @@ struct basic_block_t{
 	block_terminal_type_t block_terminal_type;
 	//Was this block visited by traverser?
 	u_int8_t visited;
-	//Predecessors and successor edges
-	basic_block_t* predecessors[MAX_PREDECESSORS];
-	basic_block_t* successors[MAX_SUCCESSORS];
+	//Predecessor nodes
+	basic_block_t** predecessors;
+	//The number that we have
+	u_int16_t num_predecessors;
+	//The current maximum number
+	u_int16_t max_predecessors;
+	//Successor nodes
+	basic_block_t** successors;
+	//The number that we have
+	u_int16_t num_successors; 
+	//The current maximum number
+	u_int16_t max_successors;
 	//For convenience here. This is the successor that we use to
 	//"drill" to the bottom
 	basic_block_t* direct_successor;
 	//If we have a case block, what does it break to?
 	basic_block_t* case_block_breaks_to;
-	//Hold onto the number of both that we have
-	u_int8_t num_predecessors;
-	u_int8_t num_successors;
 	//Keep track of all active(live) variables
 	three_addr_var_t** live_variables;
 	//The number of active vars

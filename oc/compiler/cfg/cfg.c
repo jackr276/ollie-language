@@ -1942,6 +1942,26 @@ static void basic_block_dealloc(basic_block_t* block){
 		free(block->assigned_variables);
 	}
 
+	//Deallocate the dominator set
+	if(block->dominator_set != NULL){
+		dynamic_array_dealloc(block->dominator_set);
+	}
+
+	//Deallocate the domninance frontier
+	if(block->dominance_frontier != NULL){
+		free(block->dominance_frontier);
+	}
+
+	//Deallocate the successors
+	if(block->successors != NULL){
+		free(block->successors);
+	}
+
+	//Deallocate the predecessors
+	if(block->predecessors != NULL){
+		free(block->predecessors);
+	}
+
 	//Grab a statement cursor here
 	three_addr_code_stmt_t* cursor = block->leader_statement;
 	//We'll need a temp block too
@@ -1995,17 +2015,128 @@ static basic_block_t* create_and_return_err(){
 
 
 /**
- * Add a successor to the target block
+ * Exclusively add a successor to target. The predecessors of successor will not be touched
+ */
+static void add_successor_only(basic_block_t* target, basic_block_t* successor){
+	//If this is null, we'll perform the initial allocation
+	if(target->successors == NULL){
+		//Allocate here
+		target->successors = calloc(DEFAULT_SUCCESSORS, sizeof(basic_block_t*));
+		//Ensure that we set this too
+		target->max_successors = DEFAULT_SUCCESSORS;
+	
+	//We could also run into a case where we have exceeded our current capacity
+	} else if(target->num_successors == target->max_successors){
+		//Double the current capacity
+		(target->max_successors) *= 2;
+
+		//Now we'll realloc 
+		target->successors = realloc(target->successors, target->max_successors * sizeof(basic_block_t*));
+
+		//And we should be set
+	}
+
+	//Is this thing already a successor? If so we won't add it
+	for(u_int16_t i = 0; i < target->num_successors; i++){
+		//It's fine, we don't need to add it
+		if(target->successors[i] == successor){
+			return;
+		}
+	}
+
+	//Otherwise we're set here
+	//Add this in
+	target->successors[target->num_successors] = successor;
+	//Increment how many we have
+	(target->num_successors)++;
+}
+
+
+/**
+ * Exclusively add a predecessor to target. Nothing with successors
+ * will be touched
+ */
+static void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
+	//If this is null, we'll perform the initial allocation
+	if(target->predecessors == NULL){
+		//Allocate here
+		target->predecessors = calloc(DEFAULT_PREDECESSORS, sizeof(basic_block_t*));
+		//Ensure that we set this too
+		target->max_predecessors = DEFAULT_PREDECESSORS;
+	
+	//We could also run into a case where we have exceeded our current capacity
+	} else if(target->num_predecessors == target->max_predecessors){
+		//Double the current capacity
+		(target->max_predecessors) *= 2;
+
+		//Now we'll realloc 
+		target->predecessors = realloc(target->predecessors, target->max_predecessors * sizeof(basic_block_t*));
+
+		//And we should be set
+	}
+
+	//Is this block already a predecessor? If so we won't add it
+	for(u_int16_t i = 0; i < target->num_predecessors; i++){
+		if(target->predecessors[i] == predecessor){
+			return;
+		}
+	}
+
+	//Otherwise we're set here
+	//Add this in
+	target->predecessors[target->num_predecessors] = predecessor;
+	//Increment how many we have
+	(target->num_predecessors)++;
+}
+
+
+/**
+ * Add a successor to the target block. This method is entirely comprehensive.
+ * Since "successor" comes after "target", "target" will be added as a predecessor
+ * of "successor". If you wish to ONLY add a successor or predecessor(very rare),
+ * then use the "only" methods
  */
 static void add_successor(basic_block_t* target, basic_block_t* successor){
-	//Let's check this
-	if(target->num_successors == MAX_SUCCESSORS){
-		//Internal error for the programmer
-		printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF SUCCESSORS");
-		exit(1);
+	//If this is null, we'll perform the initial allocation
+	if(target->successors == NULL){
+		//Allocate here
+		target->successors = calloc(DEFAULT_SUCCESSORS, sizeof(basic_block_t*));
+		//Ensure that we set this too
+		target->max_successors = DEFAULT_SUCCESSORS;
+	
+	//We could also run into a case where we have exceeded our current capacity
+	} else if(target->num_successors == target->max_successors){
+		//Double the current capacity
+		(target->max_successors) *= 2;
+
+		//Now we'll realloc 
+		target->successors = realloc(target->successors, target->max_successors * sizeof(basic_block_t*));
+
+		//And we should be set
+	}
+
+	//Now we'll do the exact same thing for the predecessors, but this
+	//will be in the successor block
+	//If this is null, we'll perform the initial allocation
+	if(successor->predecessors == NULL){
+		//Allocate here
+		successor->predecessors = calloc(DEFAULT_PREDECESSORS, sizeof(basic_block_t*));
+		//Ensure that we set this too
+		successor->max_predecessors = DEFAULT_PREDECESSORS;
+	
+	//We could also run into a case where we have exceeded our current capacity
+	} else if(successor->num_predecessors == successor->max_predecessors){
+		//Double the current capacity
+		(successor->max_predecessors) *= 2;
+
+		//Now we'll realloc 
+		successor->predecessors = realloc(successor->predecessors, successor->max_predecessors * sizeof(basic_block_t*));
+
+		//And we should be set
 	}
 
 	//If there are no successors here, add it in as the direct one
+	//TODO DEPRECATE ME
 	if(target->num_successors == 0){
 		target->direct_successor = successor;
 	}
@@ -2024,11 +2155,11 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
 	//Increment how many we have
 	(target->num_successors)++;
 
-	//Let's check this
-	if(successor->num_predecessors == MAX_PREDECESSORS){
-		//Internal error for the programmer
-		printf("CFG ERROR. YOU MUST INCREASE THE NUMBER OF PREDECESSORS");
-		exit(1);
+	//Is this block already a predecessor? If so we won't add it
+	for(u_int16_t i = 0; i < successor->num_predecessors; i++){
+		if(successor->predecessors[i] == target){
+			return;
+		}
 	}
 
 	//Otherwise we're set here
@@ -2056,10 +2187,9 @@ static basic_block_t* merge_back_empty_block(basic_block_t* a, basic_block_t* b)
 			if(pred_cursor->successors[i] == a){
 				//Update
 				pred_cursor->successors[i] = b;
-				//Now the function block will have this as a predecessor
-				b->predecessors[b->num_predecessors] = pred_cursor;
-				//Increment this
-				(b->num_predecessors)++;
+				
+				//Add this in as a predecessor exclusively
+				add_predecessor_only(b, pred_cursor);
 			}
 		}
 	}
@@ -2103,19 +2233,15 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
 	//Let's merge predecessors first
-	for(u_int8_t i = 0; i < b->num_predecessors; i++){
-		//Tie it in
-		a->predecessors[a->num_predecessors] = b->predecessors[i];
-		//Increment how many predecessors a has
-		(a->num_predecessors)++;
+	for(u_int16_t i = 0; i < b->num_predecessors; i++){
+		//Add b's predecessor as one to a
+		add_predecessor_only(a, b->predecessors[i]);
 	}
 
 	//Now merge successors
-	for(u_int8_t i = 0; i < b->num_successors; i++){
-		//Tie it in
-		a->successors[a->num_successors] = b->successors[i];
-		//Increment how many successors a has
-		(a->num_successors)++;
+	for(u_int16_t i = 0; i < b->num_successors; i++){
+		//Add b's successors to be a's successors
+		add_successor_only(a, b->successors[i]);
 	}
 
 	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
