@@ -1873,7 +1873,8 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 				//If this block has other predecessors who have not been visited, enqueue those
 				//first so that we can ensure that they are visited before this one
 				for(u_int16_t j = 0; j < block->successors[i]->num_predecessors; j++){
-					if(block->successors[i]->predecessors[j]->visited != 3){
+					if(block->successors[i]->predecessors[j]->visited != 3 
+					   && block->successors[i]->predecessors[j]->block_type != BLOCK_TYPE_FOR_STMT_UPDATE){
 						found_others = TRUE;
 						//Add these into the queue first
 						enqueue(queue, block->successors[i]->predecessors[j]);
@@ -2283,6 +2284,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//Create the update block
 	basic_block_t* for_stmt_update_block = basic_block_alloc();
+	for_stmt_update_block->block_type = BLOCK_TYPE_FOR_STMT_UPDATE;
 
 	//If the third one is not blank
 	if(ast_cursor->first_child != NULL){
@@ -3775,17 +3777,10 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 				//Loops always take precedence over switching, so we'll break out of that if it isn't null
 				if(values->loop_stmt_end != NULL){
-					//Special case for for loops
-					if(values->for_loop_update_block != NULL){
-						//In this special case, we don't want to add this as a direct successor
-						//We will jump to it -- this is always an uncoditional jump
-						emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
-					} else {
-						//Otherwise we need to break out of the loop
-						add_successor(current_block, values->loop_stmt_end);
-						//We will jump to it -- this is always an uncoditional jump
-						emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
-					}
+					//We'll need to break out of the loop
+					add_successor(current_block, values->loop_stmt_end);
+					//We will jump to it -- this is always an uncoditional jump
+					emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP);
 
 				} else {
 					//Save this for later on. We won't add it in now to preserve the
@@ -3819,17 +3814,11 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
 
-					//Special case for for loops
-					if(values->for_loop_update_block != NULL){
-						//In this special case, we don't want to add anything as a direct successor
-						//We will jump to it -- this is always an uncoditional jump
-						emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
-					} else {
-						//Otherwise we need to break out of the loop
-						add_successor(current_block, values->loop_stmt_end);
-						//We will jump to it -- this is always an uncoditional jump
-						emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
-					}
+					//Add a successor to the end
+					add_successor(current_block, values->loop_stmt_end);
+
+					//We will jump to it -- this jump is decided above
+					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type);
 
 				//We must've seen a switch statement then
 				} else {
@@ -4321,8 +4310,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//FOR PRINTING
 	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
-	//emit_blocks_dfs(cfg, EMIT_DOMINANCE_FRONTIER);
-	//emit_blocks_direct_successor(cfg);
 	
 	//Give back the reference
 	return cfg;

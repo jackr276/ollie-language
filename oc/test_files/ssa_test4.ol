@@ -11,6 +11,7 @@ fn main() -> i32{
 
 	for(let mut i:u32 := 3; i <= 323; ++i) do {
 		x := 3;
+		break when( x == 5);
 	}
 
 	ret 0;
