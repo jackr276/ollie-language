@@ -307,7 +307,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	if(block->leader_statement == NULL && block->block_type != BLOCK_TYPE_CASE){
 		//return;
 	}
-
 	//Print the block's ID or the function name
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		printf("%s", block->func_record->func_name);
@@ -438,6 +437,11 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//And close it out
 	printf("}\n");
+
+	if(block->block_type == BLOCK_TYPE_IF_STMT_END){
+		printf("If statement end block\n");
+	}
+
 
 
 
@@ -2032,6 +2036,39 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
 	successor->predecessors[successor->num_predecessors] = target;
 	//Increment how many we have
 	(successor->num_predecessors)++;
+}
+
+
+/**
+ * If the "a" block is completely empty, with NO statements at all in it,
+ * we will perform a mergeback by updating all references of A to point to B
+ */
+static basic_block_t* merge_back_empty_block(basic_block_t* a, basic_block_t* b){
+	//For everything that references the a block as a successor
+	for(u_int16_t i = 0; i < a->num_predecessors; i++){
+		//Grab this predecessor
+		basic_block_t* pred_cursor = a->predecessors[i];
+		//For all of the successors in this predecessor, if any of them
+		//match with "a", we will update them to point to
+		//function block
+		for(u_int16_t i = 0; i < pred_cursor->num_successors; i++){
+			//If we have a match
+			if(pred_cursor->successors[i] == a){
+				//Update
+				pred_cursor->successors[i] = b;
+				//Now the function block will have this as a predecessor
+				b->predecessors[b->num_predecessors] = pred_cursor;
+				//Increment this
+				(b->num_predecessors)++;
+			}
+		}
+	}
+
+	//Now we can delete the a block from the cfg
+	dynamic_array_delete(cfg_ref->created_blocks, a);
+
+	//Give back the b block
+	return b;
 }
 
 
@@ -4149,34 +4186,8 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//(replace) the blocks here. This is a special kind of merge,
 			//so we won't need to use the merge_blocks() function
 			} else if(current_block->block_type == BLOCK_TYPE_FUNC_EXIT){
-				//We really just want all of the blocks that reference
-				//the current block as a successor to now reference 
-				//the function block as a successor
-				for(u_int16_t i = 0; i < current_block->num_predecessors; i++){
-					//Grab this predecessor
-					basic_block_t* pred_cursor = current_block->predecessors[i];
-					
-					//For all of the successors in this predecessor, if any of them
-					//match with "current_block", we will update them to point to
-					//function block
-					for(u_int16_t i = 0; i < pred_cursor->num_successors; i++){
-						//If we have a match
-						if(pred_cursor->successors[i] == current_block){
-							//Update
-							pred_cursor->successors[i] = function_block;
-							//Now the function block will have this as a predecessor
-							function_block->predecessors[function_block->num_predecessors] = pred_cursor;
-							//Increment this
-							(function_block->num_predecessors)++;
-						}
-					}
-				}
-
-				//Now we can delete the current block from the cfg
-				dynamic_array_delete(cfg_ref->created_blocks, current_block);
-
-				//And now we can reassign this current block to be the function block
-				current_block = function_block;
+				//Merge the function block into the empty current block
+				current_block = merge_back_empty_block(current_block, function_block);
 			} else {
 				//Otherwise it isn't empty, so we'll have to reassign
 				add_successor(current_block, function_block);
