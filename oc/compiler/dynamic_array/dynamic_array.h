@@ -85,6 +85,12 @@ void dynamic_array_delete(dynamic_array_t* array, void* ptr);
  */
 void* dynamic_array_delete_from_back(dynamic_array_t* array);
 
+/**
+ * Are two dynamic arrays completely equal? A "deep equals" 
+ * will ensure that every single element in one array is also inside of the
+ * other, and that no elements in one array are different
+ */
+u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b);
 
 /**
  * Deallocate an entire dynamic array. 

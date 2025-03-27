@@ -684,37 +684,6 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 
 /**
- * Compare dominator sets A and B. Returns true if they're the same, false if
- * not
- */
-static u_int8_t dominator_sets_equal(dynamic_array_t* a, dynamic_array_t* b){
-	//Easy case here - if either is NULL bail out
-	if(a == NULL || b == NULL){
-		return FALSE;
-	}
-
-	//Another easy check - if these are different it can't work
-	if(a->current_index != b->current_index){
-		return FALSE;
-	}
-
-	//Run through bit by bit here. If they're equal, everything in A must be in B
-	for(u_int16_t i = 0; i < a->current_index; i++){
-		//Here's our pointer
-		void* a_ptr = a->internal_array[i];
-
-		//If the dynamic array contains a_ptr, we're good. Otherwise fail out
-		if(dynamic_array_contains(b, a_ptr) == NOT_FOUND){
-			return FALSE;
-		}
-	}
-
-	//If we survive til out here, they're the same
-	return TRUE;
-}
-
-
-/**
  * Calculate the dominator sets for each and every node
  *
  * For each node in the nodeset:
@@ -818,7 +787,7 @@ static void calculate_dominator_sets(cfg_t* cfg){
 
 		//Now we'll check - are these two dominator sets the same? If not, we'll need
 		//to update them
-		if(dominator_sets_equal(new, Y->dominator_set) == FALSE){
+		if(dynamic_arrays_equal(new, Y->dominator_set) == FALSE){
 			//Destroy the old one
 			dynamic_array_dealloc(Y->dominator_set);
 
