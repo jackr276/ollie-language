@@ -778,7 +778,13 @@ static void calculate_dominator_sets(cfg_t* cfg){
 				}
 
 				//If we get here and it is in the intersection, we can add it in
-				if(in_intersection == TRUE){
+				//IMPORTANT: we also don't want to add a block in if it's from another
+				//function. While other functions may appear on the page as one above
+				//the other, there is no guarantee that a function will be called in
+				//any particular order, or that it will be called at all. As such,
+				//we exclude dominators that have different function records attached to
+				//them
+				if(in_intersection == TRUE && dominator->func_record == Y->func_record){
 					//Add the dominator in
 					dynamic_array_add(new, dominator);
 				}
