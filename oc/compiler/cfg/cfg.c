@@ -719,7 +719,20 @@ static u_int8_t dominator_sets_equal(dynamic_array_t* a, dynamic_array_t* b){
  *
  * For each node in the nodeset:
  * 	dom(N) <- All nodes
- * 	
+ *	
+ * Worklist = {StartNode}
+ * while worklist is not empty
+ * 	Remove any node Y from Worklist
+ * 	New = {Y} U {X | X elem Pred(Y)}
+ *
+ * 	if new != dom 
+ * 		Dom(Y) = New
+ * 		For each successor X of Y
+ * 			add X to the worklist
+ *
+ * This algorithm repeats indefinitely UNTIL a stable solution
+ * is found(this is when new == DOM for every node, hence there's nowhere
+ * left to go)
  *
  */
 static void calculate_dominator_sets(cfg_t* cfg){
@@ -755,41 +768,44 @@ static void calculate_dominator_sets(cfg_t* cfg){
 		dynamic_array_add(new, Y);
 
 		//If Y has predecessors, we will find the intersection of
-		//their dominance frontiers
+		//their dominator sets
 		if(Y->num_predecessors != 0){
-			//Grab the very first one's DOM
-			dynamic_array_t* DOM_X = Y->predecessors[0]->dominator_set;
-
+			//Grab the very first predecessor's dominator set
+			dynamic_array_t* pred_dom_set = Y->predecessors[0]->dominator_set;
 
 			//Are we in the intersection of the dominator sets?
 			u_int8_t in_intersection;
 
-			//Now for everything in this dominator set
-			for(u_int16_t i = 0; i < DOM_X->current_index; i++){
+	   		//We will now search every item in this dominator set
+			for(u_int16_t i = 0; i < pred_dom_set->current_index; i++){
 				//Grab the dominator out
-				basic_block_t* dominator = DOM_X->internal_array[i];
+				basic_block_t* dominator = dynamic_array_get_at(pred_dom_set, i);
 
-				//By default we assume that it is in the intersection - we'll
-				//need to be proven wrong
+				//By default we assume that this given dominator is in the set. If it
+				//isn't we'll set it appropriately
 				in_intersection = TRUE;
 
 				/**
-			 	* We'll know if something is in the intersection if it is
-			 	* in all of the dominator sets of the predecessors of Y
+				 * An item is in the intersection if and only if it is contained 
+				 * in all of the dominator sets of the predecessors of Y
 			 	*/
-				for(u_int8_t j = 0; j < Y->num_predecessors; j++){
-					//We already know it's in this one, skip over
-					if(i == j){
-						continue;
-					}
+				//We'll start at 1 here - we've already accounted for 0
+				for(u_int8_t j = 1; j < Y->num_predecessors; j++){
+					//Grab our other predecessor
+					basic_block_t* other_predecessor = Y->predecessors[j];
+
+					//Now we will go over this predecessor's dominator set, and see if "dominator"
+					//is also contained within it
 
 					//Let's check for it in here. If we can't find it, we set the flag to false and bail out
-					if(dynamic_array_contains(Y->predecessors[j]->dominator_set, DOM_X) == NOT_FOUND){
+					if(dynamic_array_contains(other_predecessor->dominator_set, dominator) == NOT_FOUND){
 						in_intersection = FALSE;
 						break;
 					}
 				
-					//Otherwise we did find it, so we'll look at the next predecessor
+					//Otherwise we did find it, so we'll look at the next predecessor, and see if it is also
+					//in there. If we get to the end and "in_intersection" is true, then we know that we've
+					//found this one dominator in every single set
 				}
 
 				//If we get here and it is in the intersection, we can add it in
