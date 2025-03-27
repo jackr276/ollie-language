@@ -842,6 +842,73 @@ static void calculate_dominator_sets(cfg_t* cfg){
 }
 
 
+/**
+ * Calculate the "live_in" and "live_out" sets for each basic block
+ *
+ * General algorithm
+ *
+ * for each block n
+ * 	live_out[n] = {}
+ * 	live_in[n] = {}
+ *
+ * for each block n in reverse order
+ * 	in'[n] = in[n]
+ * 	out'[n] = out[n]
+ * 	in[n] = use[n] U (out[n] - def[n])
+ * 	out[n] = {}U{x|x is an element of in[S] where S is a successor of n}
+ *
+ * NOTE: The algorithm converges very fast when the CFG is done in reverse order.
+ * As such, we'll go back to front here
+ *
+ */
+static void calculate_liveness_sets(cfg_t* cfg){
+	//We will first initialize every "in" and "out" set
+	//in each block to be empty
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+
+		//Set both LIVE_IN and LIVE_OUT to be empty
+		block->live_in = dynamic_array_alloc();
+		block->live_out = dynamic_array_alloc();
+	}
+
+	//Have we found a difference? By default false here
+	u_int8_t difference_found = FALSE;
+
+	//The "Prime" blocks are just ways to hold the old dynamic arrays
+	dynamic_array_t* in_prime;
+	dynamic_array_t* out_prime;
+
+	//A cursor for the current block
+	basic_block_t* current;
+
+	do{
+		//Run through all of the blocks backwards
+		for(int16_t i = cfg->created_blocks->current_index - 1; i >= 0; i++){
+			//Grab the block out
+			current = dynamic_array_get_at(cfg->created_blocks, i);
+
+			//Transfer the pointers over
+			in_prime = current->live_in;
+			out_prime = current->live_out;
+
+			//We need separate ones now
+			current->live_in = dynamic_array_alloc();
+			current->live_out = dynamic_array_alloc();
+
+			//
+
+
+
+
+		}
+	} while(difference_found == TRUE);
+
+
+}
+
+
 
 /**
  * if(x0 == 0){
@@ -1966,6 +2033,15 @@ static void basic_block_dealloc(basic_block_t* block){
 	//Deallocate the domninance frontier
 	if(block->dominance_frontier != NULL){
 		free(block->dominance_frontier);
+	}
+
+	//Deallocate the liveness sets
+	if(block->live_out != NULL){
+		dynamic_array_dealloc(block->live_out);
+	}
+
+	if(block->live_in != NULL){
+		dynamic_array_dealloc(block->live_in);
 	}
 
 	//Deallocate the successors

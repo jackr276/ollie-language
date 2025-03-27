@@ -136,6 +136,10 @@ struct basic_block_t{
 	u_int16_t max_df_index;
 	//The dynamic array for the dominator set
 	dynamic_array_t* dominator_set;
+	//The "LIVE_IN" variables for this node
+	dynamic_array_t* live_in;
+	//The "LIVE_OUT" variables for this node
+	dynamic_array_t* live_out;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)
