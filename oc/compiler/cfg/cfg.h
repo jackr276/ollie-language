@@ -116,18 +116,10 @@ struct basic_block_t{
 	basic_block_t* direct_successor;
 	//If we have a case block, what does it break to?
 	basic_block_t* case_block_breaks_to;
-	//Keep track of all active(live) variables
-	three_addr_var_t** live_variables;
-	//The number of active vars
-	u_int16_t live_variable_count;
-	//The current maximum number of live variables
-	u_int16_t max_live_variable_count;
-	//Keep track of all variables that are assigned to
-	three_addr_var_t** assigned_variables;
-	//The number of assigned vars
-	u_int16_t assigned_variable_count;
-	//The current maximum number of assigned variables
-	u_int16_t max_assigned_variable_count;
+	//The array of used variables
+	dynamic_array_t* used_variables;
+	//The array of all assigned variables
+	dynamic_array_t* assigned_variables;
 	//The blocks dominance frontier
 	basic_block_t** dominance_frontier;
 	//The next index in said dominance frontier

@@ -69,7 +69,7 @@ dynamic_array_t* clone_dynamic_array(dynamic_array_t* array){
 int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
 	//If it's null just return false
 	if(array == NULL || array->internal_array == NULL){
-		return FALSE;
+		return NOT_FOUND;
 	}
 
 	//We'll run through the entire array, comparing pointer by pointer

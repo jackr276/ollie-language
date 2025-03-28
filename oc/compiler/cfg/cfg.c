@@ -222,42 +222,29 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
 
 
 /**
- * A simple helper function that allows us to add a live variable into the block's
+ * A simple helper function that allows us to add a used variable into the block's
  * header. It is important to note that only actual variables(not temp variables) count
  * as live
  */
-static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var){
-	//If we haven't even allocated one of these yet, we will now
-	if(basic_block->live_variables == NULL){
-		//Let's allocate it with the default size for now
-		basic_block->live_variables = calloc(sizeof(three_addr_var_t*), MAX_LIVE_VARS);
-		//Set this for later on
-		basic_block->max_live_variable_count = MAX_LIVE_VARS;
-	//Otherwise, there is another case where we may have to readjust
-	} else if(basic_block->live_variable_count == basic_block->max_live_variable_count){
-		//We will double here, seems to be a good strategy
-		basic_block->max_live_variable_count *= 2;
-		//Realloc here
-		basic_block->live_variables = realloc(basic_block->live_variables, basic_block->max_live_variable_count * sizeof(three_addr_var_t*));
+static void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//If this is NULL, we'll need to allocate it
+	if(basic_block->used_variables == NULL){
+		basic_block->used_variables = dynamic_array_alloc();
 	}
 
-	//Check the entire thing for duplicates
-	for(u_int16_t i = 0; i < basic_block->live_variable_count; i++){
-		//These addresses matching means that we have a duplicate. This
-		//is perfectly fine, we just won't add it in
-		if(basic_block->live_variables[i]->linked_var == var->linked_var){
+	//We need a special kind of comparison here, so we can't use the canned method
+	for(u_int16_t i = 0; i < basic_block->used_variables->current_index; i++){
+		//If the linked variables are the same, we're out
+		if(((three_addr_var_t*)(basic_block->used_variables->internal_array[i]))->linked_var == var->linked_var){
 			return;
 		}
 	}
-
-	//Now that we've handled any case where we could run out of memory, we can do this here
-	//Add the given variable in
-	basic_block->live_variables[basic_block->live_variable_count] = var;
-	//We've seen one more
-	(basic_block->live_variable_count)++;
+	
+	//we didn't find it, so we will add
+	dynamic_array_add(basic_block->used_variables, var); 
 
 	//This variable has been live
-	var->linked_var->has_ever_been_live = 1;
+	var->linked_var->has_ever_been_live = TRUE;
 }
 
 
@@ -267,34 +254,21 @@ static void add_live_variable(basic_block_t* basic_block, three_addr_var_t* var)
  * as live
  */
 static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
-	//If we haven't even allocated one of these yet, we will now
+	//If the assigned variable dynamic array is NULL, we'll allocate it here
 	if(basic_block->assigned_variables == NULL){
-		//Let's allocate it with the default size for now
-		basic_block->assigned_variables = calloc(sizeof(three_addr_var_t*), MAX_ASSIGNED_VARS);
-		//Set this for later on
-		basic_block->max_assigned_variable_count = MAX_ASSIGNED_VARS;
-	//Otherwise, there is another case where we may have to readjust
-	} else if(basic_block->assigned_variable_count == basic_block->max_assigned_variable_count){
-		//We will double here, seems to be a good strategy
-		basic_block->max_assigned_variable_count *= 2;
-		//Realloc here
-		basic_block->assigned_variables = realloc(basic_block->assigned_variables, basic_block->max_assigned_variable_count * sizeof(three_addr_var_t*));
+		basic_block->assigned_variables = dynamic_array_alloc();
 	}
 
-	//Check the entire thing for duplicates
-	for(u_int16_t i = 0; i < basic_block->assigned_variable_count; i++){
-		//These addresses matching means that we have a duplicate. This
-		//is perfectly fine, we just won't add it in
-		if(basic_block->assigned_variables[i]->linked_var == var->linked_var){
+	//We need a special kind of comparison here, so we can't use the canned method
+	for(u_int16_t i = 0; i < basic_block->assigned_variables->current_index; i++){
+		//If the linked variables are the same, we're out
+		if(((three_addr_var_t*)(basic_block->assigned_variables->internal_array[i]))->linked_var == var->linked_var){
 			return;
 		}
 	}
 
-	//Now that we've handled any case where we could run out of memory, we can do this here
-	//Add the given variable in
-	basic_block->assigned_variables[basic_block->assigned_variable_count] = var;
-	//We've seen one more
-	(basic_block->assigned_variable_count)++;
+	//We didn't find it, so we'll add it
+	dynamic_array_add(basic_block->assigned_variables, var);
 }
 
 
@@ -315,16 +289,16 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	}
 
 	//Now, we will print all of the active variables that this block has
-	if(block->live_variable_count != 0){
+	if(block->used_variables != NULL){
 		printf("(");
 
 		//Run through all of the live variables and print them out
-		for(u_int16_t i = 0; i < block->live_variable_count; i++){
+		for(u_int16_t i = 0; i < block->used_variables->current_index; i++){
 			//Print it out
-			print_variable(block->live_variables[i], PRINTING_VAR_BLOCK_HEADER);
+			print_variable(block->used_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->live_variable_count - 1){
+			if(i != block->used_variables->current_index - 1){
 				printf(", ");
 			}
 		}
@@ -380,11 +354,11 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	if(block->assigned_variables != NULL){
 		printf("Assigned: (");
 
-		for(u_int16_t i = 0; i < block->assigned_variable_count; i++){
-			print_variable(block->assigned_variables[i], PRINTING_VAR_BLOCK_HEADER);
+		for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
+			print_variable(block->assigned_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->assigned_variable_count - 1){
+			if(i != block->assigned_variables->current_index - 1){
 				printf(", ");
 			}
 		}
@@ -428,7 +402,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		} else {
 			printf(".L%d", printing_block->block_id);
 		}
-
 		//If it isn't the very last one, we need a comma
 		if(i != block->dominator_set->current_index - 1){
 			printf(", ");
@@ -546,16 +519,18 @@ static u_int8_t dominance_frontier_contains(basic_block_t* block, basic_block_t*
  * Does the block assign this variable? We'll do a simple linear scan to find out
  */
 static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
-	//Run through the entirety of the assigned variables in the block
-	for(u_int16_t i = 0; i < block->assigned_variable_count; i++){
-		//If we can find this in the block, we've got one
-		if(block->assigned_variables[i]->linked_var == variable){
-			return TRUE;
-		}
+	//Sanity check - if this is NULL then it's false by default
+	if(block->assigned_variables == NULL){
+		return FALSE;
 	}
 
-	//If we make it here, the block was empty or we found nothing
-	return FALSE;
+	//If we didn't find it, then it's false
+	if(dynamic_array_contains(block->assigned_variables, variable) == NOT_FOUND){
+		return FALSE;
+	}
+
+	//Otherwise we did find it, so
+	return TRUE;
 }
 
 
@@ -990,7 +965,7 @@ static three_addr_var_t* emit_lea_stmt(basic_block_t* basic_block, three_addr_va
 
 	//If the base addr is not temporary, this counts as a read
 	if(base_addr->is_temporary == FALSE){
-		add_live_variable(basic_block, base_addr);
+		add_used_variable(basic_block, base_addr);
 	}
 
 	//Now we leverage the helper to emit this
@@ -1158,7 +1133,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		ident_node->variable->has_ever_been_live = TRUE;
 		
 		//Add it as a live variable to the block, because we've used it
-		add_live_variable(basic_block, var);
+		add_used_variable(basic_block, var);
 
 		//This variable has been assigned to, so we'll add that too
 		if(side == SIDE_TYPE_LEFT){
@@ -1185,7 +1160,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		ident_node->variable->has_ever_been_live = TRUE;
 
 		//Add it into the block
-		add_live_variable(basic_block, non_temp_var);
+		add_used_variable(basic_block, non_temp_var);
 
 		//This variable has been assigned to, so we'll add that too
 		add_assigned_variable(basic_block, non_temp_var);
@@ -1211,7 +1186,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(incrementee->is_temporary == FALSE){
-		add_live_variable(basic_block, incrementee);
+		add_used_variable(basic_block, incrementee);
 	}
 
 	//Add it into the block
@@ -1231,7 +1206,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(decrementee->is_temporary == FALSE){
-		add_live_variable(basic_block, decrementee);
+		add_used_variable(basic_block, decrementee);
 	}
 
 	//Add it into the block
@@ -1252,7 +1227,7 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(indirect_var->is_temporary == FALSE){
-		add_live_variable(basic_block, indirect_var);
+		add_used_variable(basic_block, indirect_var);
 	}
 
 	//Increment the indirection
@@ -1274,7 +1249,7 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 
 	//This is also a case where the variable is read from, so it counts as live
 	if(var->is_temporary == FALSE){
-		add_live_variable(basic_block, var);
+		add_used_variable(basic_block, var);
 	}
 
 	//Now if we need to use a temp, we'll make one here
@@ -1301,12 +1276,12 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant){
 	//If these variables are not temporary, then we have read from them
 	if(assignee->is_temporary == FALSE){
-		add_live_variable(basic_block, assignee);
+		add_used_variable(basic_block, assignee);
 	}
 
 	//Add this one in too
 	if(op1->is_temporary == FALSE){
-		add_live_variable(basic_block, assignee);
+		add_used_variable(basic_block, assignee);
 	}
 
 	//First let's create it
@@ -1335,7 +1310,7 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
 
 	//If this isn't a temp var, we'll add it in as live
 	if(negated->is_temporary == FALSE){
-		add_live_variable(basic_block, negated);
+		add_used_variable(basic_block, negated);
 	}
 
 	//Now let's create it
@@ -1358,7 +1333,7 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
 	
 	//If negated isn't temp, it also counts as a read
 	if(negated->is_temporary == FALSE){
-		add_live_variable(basic_block, negated);
+		add_used_variable(basic_block, negated);
 	}
 
 	//From here, we'll add the statement in
@@ -1433,7 +1408,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 
 			//This counts as a read relationship, so we'll need to add it in as live
 			if(current_var->is_temporary == FALSE){
-				add_live_variable(basic_block, current_var);
+				add_used_variable(basic_block, current_var);
 			}
 
 			//Ensure that we add this into the block
@@ -1647,11 +1622,11 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 
 	//If these are not temporary, they also count as live
 	if(left_hand_temp.assignee->is_temporary == FALSE){
-		add_live_variable(basic_block, left_hand_temp.assignee);
+		add_used_variable(basic_block, left_hand_temp.assignee);
 	}
 
 	if(right_hand_temp.assignee->is_temporary == FALSE){
-		add_live_variable(basic_block, right_hand_temp.assignee);
+		add_used_variable(basic_block, right_hand_temp.assignee);
 	}
 
 	//Add this statement to the block
@@ -1697,7 +1672,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		var->has_ever_been_live = TRUE;
 
 		//Add it in as a live variable
-		add_live_variable(basic_block, left_hand_var);
+		add_used_variable(basic_block, left_hand_var);
 
 		//This has been assigned to
 		add_assigned_variable(basic_block, left_hand_var);
@@ -1991,13 +1966,13 @@ static void basic_block_dealloc(basic_block_t* block){
 	}
 
 	//Deallocate the live variable array
-	if(block->live_variables != NULL){
-		free(block->live_variables);
+	if(block->used_variables != NULL){
+		dynamic_array_dealloc(block->used_variables);
 	}
 
 	//Deallocate the assigned variable array
 	if(block->assigned_variables != NULL){
-		free(block->assigned_variables);
+		dynamic_array_dealloc(block->assigned_variables);
 	}
 
 	//Deallocate the dominator set
@@ -2341,16 +2316,16 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	b->leader_statement = NULL;
 	b->exit_statement = NULL;
 
-	//We'll now need to ensure that all of the live variables in B are also in A
-	for(u_int16_t i = 0; i < b->live_variable_count; i++){
+	//We'll now need to ensure that all of the used variables in B are also in A
+	for(u_int16_t i = 0; b->used_variables != NULL && i < b->used_variables->current_index; i++){
 		//Add these in one by one to A
-		add_live_variable(a, b->live_variables[i]);
+		add_used_variable(a, b->used_variables->internal_array[i]);
 	}
 
 	//Copy over all of the assigned variables too
-	for(u_int16_t i = 0; i < b->assigned_variable_count; i++){
+	for(u_int16_t i = 0; b->assigned_variables != NULL && i < b->assigned_variables->current_index; i++){
 		//Add these in one by one
-		add_assigned_variable(a, b->assigned_variables[i]);
+		add_assigned_variable(a, b->assigned_variables->internal_array[i]);
 	}
 
 	//Very last thing here, we need to be completely rid of B. It can
