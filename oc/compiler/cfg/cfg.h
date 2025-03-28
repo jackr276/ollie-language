@@ -11,11 +11,7 @@
 #include "../three_addr_code/three_address_code.h"
 #include "../dynamic_array/dynamic_array.h"
 
-//The default numbers of predecessors and successors
-#define DEFAULT_PREDECESSORS 2
-#define DEFAULT_SUCCESSORS 2 
 #define INITIAL_STATEMENT_SIZE 2000
-
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
@@ -100,17 +96,9 @@ struct basic_block_t{
 	//Was this block visited by traverser?
 	u_int8_t visited;
 	//Predecessor nodes
-	basic_block_t** predecessors;
-	//The number that we have
-	u_int16_t num_predecessors;
-	//The current maximum number
-	u_int16_t max_predecessors;
+	dynamic_array_t* predecessors;
 	//Successor nodes
-	basic_block_t** successors;
-	//The number that we have
-	u_int16_t num_successors; 
-	//The current maximum number
-	u_int16_t max_successors;
+	dynamic_array_t* successors;
 	//For convenience here. This is the successor that we use to
 	//"drill" to the bottom
 	basic_block_t* direct_successor;

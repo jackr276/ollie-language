@@ -312,8 +312,8 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	printf("Predecessors: {");
 
-	for(u_int16_t i = 0; i < block->num_predecessors; i++){
-		basic_block_t* predecessor = block->predecessors[i];
+	for(u_int16_t i = 0; block->predecessors != NULL && i < block->predecessors->current_index; i++){
+		basic_block_t* predecessor = block->predecessors->internal_array[i];
 
 		//Print the block's ID or the function name
 		if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -322,7 +322,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 			printf(".L%d", predecessor->block_id);
 		}
 
-		if(i != block->num_predecessors - 1){
+		if(i != block->predecessors->current_index - 1){
 			printf(", ");
 		}
 	}
@@ -331,17 +331,17 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	printf("Successors: {");
 
-	for(u_int16_t i = 0; i < block->num_successors; i++){
-		basic_block_t* predecessor = block->successors[i];
+	for(u_int16_t i = 0; block->successors != NULL && i < block->successors->current_index; i++){
+		basic_block_t* successor = block->successors->internal_array[i];
 
 		//Print the block's ID or the function name
-		if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", predecessor->func_record->func_name);
+		if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			printf("%s", successor->func_record->func_name);
 		} else {
-			printf(".L%d", predecessor->block_id);
+			printf(".L%d", successor->block_id);
 		}
 
-		if(i != block->num_successors - 1){
+		if(i != block->successors->current_index - 1){
 			printf(", ");
 		}
 	}
@@ -414,9 +414,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	if(block->block_type == BLOCK_TYPE_IF_STMT_END){
 		printf("If statement end block\n");
 	}
-
-
-
 
 	//Now grab a cursor and print out every statement that we 
 	//have
@@ -598,7 +595,7 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 		//If we have less than 2 successors,the rest of 
 		//the search here is useless
-		if(block->num_predecessors < 2){
+		if(block->predecessors == NULL || block->predecessors->current_index < 2){
 			//Hop out here, there is no need to analyze further
 			continue;
 		}
@@ -607,9 +604,9 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 		basic_block_t* cursor;
 
 		//Now we run through every predecessor of the block
-		for(u_int8_t i = 0; i < block->num_predecessors; i++){
+		for(u_int8_t i = 0; i < block->predecessors->current_index; i++){
 			//Grab it out
-			cursor = block->predecessors[i];
+			cursor = block->predecessors->internal_array[i];
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != immediate_dominator(block)){
@@ -680,9 +677,9 @@ static void calculate_dominator_sets(cfg_t* cfg){
 
 		//If Y has predecessors, we will find the intersection of
 		//their dominator sets
-		if(Y->num_predecessors != 0){
+		if(Y->predecessors != NULL){
 			//Grab the very first predecessor's dominator set
-			dynamic_array_t* pred_dom_set = Y->predecessors[0]->dominator_set;
+			dynamic_array_t* pred_dom_set = ((basic_block_t*)(Y->predecessors->internal_array[0]))->dominator_set;
 
 			//Are we in the intersection of the dominator sets?
 			u_int8_t in_intersection;
@@ -701,9 +698,9 @@ static void calculate_dominator_sets(cfg_t* cfg){
 				 * in all of the dominator sets of the predecessors of Y
 			 	*/
 				//We'll start at 1 here - we've already accounted for 0
-				for(u_int8_t j = 1; j < Y->num_predecessors; j++){
+				for(u_int8_t j = 1; j < Y->predecessors->current_index; j++){
 					//Grab our other predecessor
-					basic_block_t* other_predecessor = Y->predecessors[j];
+					basic_block_t* other_predecessor = Y->predecessors->internal_array[j];
 
 					//Now we will go over this predecessor's dominator set, and see if "dominator"
 					//is also contained within it
@@ -743,8 +740,8 @@ static void calculate_dominator_sets(cfg_t* cfg){
 			Y->dominator_set = new;
 
 			//Now for every successor of Y, add it into the worklist
-			for(u_int8_t i = 0; i < Y->num_successors; i++){
-				dynamic_array_add(worklist, Y->successors[i]);
+			for(u_int8_t i = 0; Y->successors != NULL && i < Y->successors->current_index; i++){
+				dynamic_array_add(worklist, Y->successors->internal_array[i]);
 			}
 
 		//Otherwise they are the same
@@ -1825,11 +1822,17 @@ static void emit_blocks_dfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			print_block_three_addr_code(block_cursor, print_df);
 		}
 
+		//If this is NULL, then we're done
+		if(block_cursor->successors == NULL){
+			continue;
+		}
+
 		//We'll now add in all of the childen
-		for(int8_t i = block_cursor->num_successors-1; i > -1; i--){
+		for(int16_t i = block_cursor->successors->current_index-1; i > -1; i--){
+			basic_block_t* grabbed = block_cursor->successors->internal_array[i];
 			//If we haven't seen it yet, add it to the list
-			if(block_cursor->successors[i]->visited != 2){
-				push(stack, block_cursor->successors[i]);
+			if(grabbed->visited != 2){
+				push(stack, grabbed);
 			}
 		}
 	}
@@ -1869,19 +1872,25 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		block->visited = 3;
 
 		//And finally we'll add all of these onto the queue
-		for(u_int16_t i = 0; i < block->num_successors; i++){
+		for(u_int16_t i = 0; block->successors != NULL && i < block->successors->current_index; i++){
 			//False by default
 			u_int8_t found_others = FALSE;
 
-			if(block->successors[i]->visited != 3){
+			//Grab the successor out
+			basic_block_t* successor = block->successors->internal_array[i];
+
+			//If we haven't seen this before
+			if(successor->visited != 3){
 				//If this block has other predecessors who have not been visited, enqueue those
 				//first so that we can ensure that they are visited before this one
-				for(u_int16_t j = 0; j < block->successors[i]->num_predecessors; j++){
-					if(block->successors[i]->predecessors[j]->visited != 3 
-					   && block->successors[i]->predecessors[j]->block_type != BLOCK_TYPE_FOR_STMT_UPDATE){
+				for(u_int16_t j = 0; successor->predecessors != NULL && j < successor->predecessors->current_index; j++){
+					//Grab the predecessor out
+					basic_block_t* predecessor = successor->predecessors->internal_array[j];
+
+					if(predecessor->visited != 3 && predecessor->block_type != BLOCK_TYPE_FOR_STMT_UPDATE){
 						found_others = TRUE;
 						//Add these into the queue first
-						enqueue(queue, block->successors[i]->predecessors[j]);
+						enqueue(queue, predecessor);
 					}
 				}
 
@@ -1890,7 +1899,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 				//in if we're sure that all of it's predecessors
 				//are now accounted for
 				if(found_others == FALSE){
-					enqueue(queue, block->successors[i]);
+					enqueue(queue, successor);
 				}
 			}
 		}
@@ -1963,12 +1972,12 @@ static void basic_block_dealloc(basic_block_t* block){
 
 	//Deallocate the successors
 	if(block->successors != NULL){
-		free(block->successors);
+		dynamic_array_dealloc(block->successors);
 	}
 
 	//Deallocate the predecessors
 	if(block->predecessors != NULL){
-		free(block->predecessors);
+		dynamic_array_dealloc(block->predecessors);
 	}
 
 	//Grab a statement cursor here
@@ -2029,35 +2038,22 @@ static basic_block_t* create_and_return_err(){
 static void add_successor_only(basic_block_t* target, basic_block_t* successor){
 	//If this is null, we'll perform the initial allocation
 	if(target->successors == NULL){
-		//Allocate here
-		target->successors = calloc(DEFAULT_SUCCESSORS, sizeof(basic_block_t*));
-		//Ensure that we set this too
-		target->max_successors = DEFAULT_SUCCESSORS;
-	
-	//We could also run into a case where we have exceeded our current capacity
-	} else if(target->num_successors == target->max_successors){
-		//Double the current capacity
-		(target->max_successors) *= 2;
-
-		//Now we'll realloc 
-		target->successors = realloc(target->successors, target->max_successors * sizeof(basic_block_t*));
-
-		//And we should be set
+		target->successors = dynamic_array_alloc();
 	}
 
-	//Is this thing already a successor? If so we won't add it
-	for(u_int16_t i = 0; i < target->num_successors; i++){
-		//It's fine, we don't need to add it
-		if(target->successors[i] == successor){
-			return;
-		}
+	//Does this block already contain the successor? If so we'll leave
+	if(dynamic_array_contains(target->successors, successor) != NOT_FOUND){
+		//We DID find it, so we won't add
+		return;
 	}
 
-	//Otherwise we're set here
-	//Add this in
-	target->successors[target->num_successors] = successor;
-	//Increment how many we have
-	(target->num_successors)++;
+	//TODO DEPRECATE
+	if(target->successors->current_index == 0){
+		target->direct_successor = successor;
+	}
+
+	//Otherwise we're set to add it in
+	dynamic_array_add(target->successors, successor);
 }
 
 
@@ -2066,36 +2062,19 @@ static void add_successor_only(basic_block_t* target, basic_block_t* successor){
  * will be touched
  */
 static void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-	//If this is null, we'll perform the initial allocation
+	//If this is NULL, we'll allocate here
 	if(target->predecessors == NULL){
-		//Allocate here
-		target->predecessors = calloc(DEFAULT_PREDECESSORS, sizeof(basic_block_t*));
-		//Ensure that we set this too
-		target->max_predecessors = DEFAULT_PREDECESSORS;
-	
-	//We could also run into a case where we have exceeded our current capacity
-	} else if(target->num_predecessors == target->max_predecessors){
-		//Double the current capacity
-		(target->max_predecessors) *= 2;
-
-		//Now we'll realloc 
-		target->predecessors = realloc(target->predecessors, target->max_predecessors * sizeof(basic_block_t*));
-
-		//And we should be set
+		target->predecessors = dynamic_array_alloc();
 	}
 
-	//Is this block already a predecessor? If so we won't add it
-	for(u_int16_t i = 0; i < target->num_predecessors; i++){
-		if(target->predecessors[i] == predecessor){
-			return;
-		}
+	//Does this contain the predecessor block already? If so we won't add
+	if(dynamic_array_contains(target->predecessors, predecessor) != NOT_FOUND){
+		//We DID find it, so we won't add
+		return;
 	}
 
-	//Otherwise we're set here
-	//Add this in
-	target->predecessors[target->num_predecessors] = predecessor;
-	//Increment how many we have
-	(target->num_predecessors)++;
+	//Now we can add
+	dynamic_array_add(target->predecessors, predecessor);
 }
 
 
@@ -2106,76 +2085,11 @@ static void add_predecessor_only(basic_block_t* target, basic_block_t* predecess
  * then use the "only" methods
  */
 static void add_successor(basic_block_t* target, basic_block_t* successor){
-	//If this is null, we'll perform the initial allocation
-	if(target->successors == NULL){
-		//Allocate here
-		target->successors = calloc(DEFAULT_SUCCESSORS, sizeof(basic_block_t*));
-		//Ensure that we set this too
-		target->max_successors = DEFAULT_SUCCESSORS;
-	
-	//We could also run into a case where we have exceeded our current capacity
-	} else if(target->num_successors == target->max_successors){
-		//Double the current capacity
-		(target->max_successors) *= 2;
+	//First we'll add successor as a successor of target
+	add_successor_only(target, successor);
 
-		//Now we'll realloc 
-		target->successors = realloc(target->successors, target->max_successors * sizeof(basic_block_t*));
-
-		//And we should be set
-	}
-
-	//Now we'll do the exact same thing for the predecessors, but this
-	//will be in the successor block
-	//If this is null, we'll perform the initial allocation
-	if(successor->predecessors == NULL){
-		//Allocate here
-		successor->predecessors = calloc(DEFAULT_PREDECESSORS, sizeof(basic_block_t*));
-		//Ensure that we set this too
-		successor->max_predecessors = DEFAULT_PREDECESSORS;
-	
-	//We could also run into a case where we have exceeded our current capacity
-	} else if(successor->num_predecessors == successor->max_predecessors){
-		//Double the current capacity
-		(successor->max_predecessors) *= 2;
-
-		//Now we'll realloc 
-		successor->predecessors = realloc(successor->predecessors, successor->max_predecessors * sizeof(basic_block_t*));
-
-		//And we should be set
-	}
-
-	//If there are no successors here, add it in as the direct one
-	//TODO DEPRECATE ME
-	if(target->num_successors == 0){
-		target->direct_successor = successor;
-	}
-
-	//Is this thing already a successor? If so we won't add it
-	for(u_int16_t i = 0; i < target->num_successors; i++){
-		//It's fine, we don't need to add it
-		if(target->successors[i] == successor){
-			return;
-		}
-	}
-
-	//Otherwise we're set here
-	//Add this in
-	target->successors[target->num_successors] = successor;
-	//Increment how many we have
-	(target->num_successors)++;
-
-	//Is this block already a predecessor? If so we won't add it
-	for(u_int16_t i = 0; i < successor->num_predecessors; i++){
-		if(successor->predecessors[i] == target){
-			return;
-		}
-	}
-
-	//Otherwise we're set here
-	//Add this in
-	successor->predecessors[successor->num_predecessors] = target;
-	//Increment how many we have
-	(successor->num_predecessors)++;
+	//And then for completeness, we'll add target as a predecessor of successor
+	add_predecessor_only(successor, target);
 }
 
 
@@ -2185,17 +2099,17 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
  */
 static basic_block_t* merge_back_empty_block(basic_block_t* a, basic_block_t* b){
 	//For everything that references the a block as a successor
-	for(u_int16_t i = 0; i < a->num_predecessors; i++){
+	for(u_int16_t i = 0; a->predecessors != NULL && i < a->predecessors->current_index; i++){
 		//Grab this predecessor
-		basic_block_t* pred_cursor = a->predecessors[i];
+		basic_block_t* pred_cursor = a->predecessors->internal_array[i];
 		//For all of the successors in this predecessor, if any of them
 		//match with "a", we will update them to point to
 		//function block
-		for(u_int16_t i = 0; i < pred_cursor->num_successors; i++){
+		for(u_int16_t i = 0; pred_cursor->successors != NULL && i < pred_cursor->successors->current_index; i++){
 			//If we have a match
-			if(pred_cursor->successors[i] == a){
+			if(pred_cursor->successors->internal_array[i] == a){
 				//Update
-				pred_cursor->successors[i] = b;
+				pred_cursor->successors->internal_array[i] = b;
 				
 				//Add this in as a predecessor exclusively
 				add_predecessor_only(b, pred_cursor);
@@ -2242,30 +2156,30 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
 	//Let's merge predecessors first
-	for(u_int16_t i = 0; i < b->num_predecessors; i++){
+	for(u_int16_t i = 0; b->predecessors != NULL && i < b->predecessors->current_index; i++){
 		//Add b's predecessor as one to a
-		add_predecessor_only(a, b->predecessors[i]);
+		add_predecessor_only(a, b->predecessors->internal_array[i]);
 	}
 
 	//Now merge successors
-	for(u_int16_t i = 0; i < b->num_successors; i++){
+	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
 		//Add b's successors to be a's successors
-		add_successor_only(a, b->successors[i]);
+		add_successor_only(a, b->successors->internal_array[i]);
 	}
 
 	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
 	//This is now wrong though. So, for each successor of B, it will need
 	//to have A as predecessor
-	for(u_int8_t i = 0; i < b->num_successors; i++){
+	for(u_int8_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
 		//Grab the block first
-		basic_block_t* successor_block = b->successors[i];
+		basic_block_t* successor_block = b->successors->internal_array[i];
 
 		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int8_t i = 0; i < successor_block->num_predecessors; i++){
+		for(u_int8_t i = 0; successor_block->predecessors != NULL && i < successor_block->predecessors->current_index; i++){
 			//If it's pointing to b, it needs to be updated
-			if(successor_block->predecessors[i] == b){
+			if(successor_block->predecessors->internal_array[i] == b){
 				//Update it to now be correct
-				successor_block->predecessors[i] = a;
+				successor_block->predecessors->internal_array[i] = a;
 			}
 		}
 	}
@@ -2372,10 +2286,13 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 		}
 
 		//We'll now add in all of the childen
-		for(u_int8_t i = 0; i < block_cursor->num_successors; i++){
+		for(u_int8_t i = 0; block_cursor->successors != NULL && i < block_cursor->successors->current_index; i++){
+			//Grab the block out
+			basic_block_t* block = block_cursor->successors->internal_array[i];
+
 			//If we haven't seen it yet, add it to the list
-			if(block_cursor->successors[i]->visited == FALSE){
-				push(stack, block_cursor->successors[i]);
+			if(block->visited == FALSE){
+				push(stack, block);
 			}
 		}
 	}
