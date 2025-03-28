@@ -121,11 +121,7 @@ struct basic_block_t{
 	//The array of all assigned variables
 	dynamic_array_t* assigned_variables;
 	//The blocks dominance frontier
-	basic_block_t** dominance_frontier;
-	//The next index in said dominance frontier
-	u_int16_t next_df_index;
-	//The max index in the dominance frontier
-	u_int16_t max_df_index;
+	dynamic_array_t* dominance_frontier;
 	//The dynamic array for the dominator set
 	dynamic_array_t* dominator_set;
 	//The "LIVE_IN" variables for this node

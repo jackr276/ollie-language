@@ -366,12 +366,12 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	}
 
 	//Print out the dominance frontier if we're in DEBUG mode
-	if(print_df == EMIT_DOMINANCE_FRONTIER){
+	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier != NULL){
 		printf("Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->next_df_index; i++){
-			basic_block_t* printing_block = block->dominance_frontier[i];
+		for(u_int16_t i = 0; i < block->dominance_frontier->current_index; i++){
+			basic_block_t* printing_block = block->dominance_frontier->internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -381,7 +381,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 			}
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->next_df_index - 1){
+			if(i != block->dominance_frontier->current_index - 1){
 				printf(", ");
 			}
 		}
@@ -464,54 +464,21 @@ static void add_statement(basic_block_t* target, three_addr_code_stmt_t* stateme
  * Add a block to the dominance frontier of the first block
  */
 static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t* df_block){
-	//If it's NULL, we'll need to allocate
+	//If the dominance frontier hasn't been allocated yet, we'll do that here
 	if(block->dominance_frontier == NULL){
-		//Allocate it
-		block->dominance_frontier = calloc(MAX_DF_BLOCKS, sizeof(basic_block_t*));
-		//Set this value too for later
-		block->max_df_index = MAX_DF_BLOCKS;
-
-	//If these two are equal, we need to realloc
-	} else if(block->max_df_index == block->next_df_index){
-		//Double it
-		block->max_df_index *= 2;
-
-		//And reallocate the whole thing
-		block->dominance_frontier = realloc(block->dominance_frontier, sizeof(basic_block_t*) * block->max_df_index);
+		block->dominance_frontier = dynamic_array_alloc();
 	}
 
 	//Let's just check - is this already in there. If it is, we will not add it
-	for(u_int16_t i = 0; i < block->next_df_index; i++){
+	for(u_int16_t i = 0; i < block->dominance_frontier->current_index; i++){
 		//This is not a problem at all, we just won't add it
-		if(block->dominance_frontier[i] == df_block){
+		if(block->dominance_frontier->internal_array[i] == df_block){
 			return;
 		}
 	}
 
-	//Now we can add into it
-	block->dominance_frontier[block->next_df_index] = df_block;
-	//And increment this for the next go around
-	(block->next_df_index)++;
-}
-
-
-/**
- * Simple helper function to tell us whether or not a dominance frontier contains
- * something
- *
- * In other words, is "df_block" in the dominance frontier of "block"
- */
-static u_int8_t dominance_frontier_contains(basic_block_t* block, basic_block_t* df_block){
-	//Run through everything in here
-	for(u_int8_t i = 0; i < block->next_df_index; i++){
-		//We've found it
-		if(block->dominance_frontier[i] == df_block){
-			return TRUE;
-		}
-	}
-
-	//Otherwise we make it here and nothing was found
-	return FALSE;
+	//Add this into the dominance frontier
+	dynamic_array_add(block->dominance_frontier, df_block);
 }
 
 
@@ -1982,7 +1949,7 @@ static void basic_block_dealloc(basic_block_t* block){
 
 	//Deallocate the domninance frontier
 	if(block->dominance_frontier != NULL){
-		free(block->dominance_frontier);
+		dynamic_array_dealloc(block->dominance_frontier);
 	}
 
 	//Deallocate the liveness sets
