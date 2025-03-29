@@ -6,6 +6,7 @@
 
 fn main() -> i32{
 	let mut x:i32 := 33;
+	let mut y:i32 := 3232;
 
 	x := 3222;
 
@@ -13,9 +14,10 @@ fn main() -> i32{
 		x := x + 22;
 	} else {
 		x := x - 3;
+		y := 11;
 	}
 
 	x := -1;
 
-	ret 0;
+	ret y;
 }

@@ -348,8 +348,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	printf("}\n");
 
-
-
 	//If we have some assigned variables, we will dislay those for debugging
 	if(block->assigned_variables != NULL){
 		printf("Assigned: (");
@@ -362,8 +360,43 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 				printf(", ");
 			}
 		}
-		printf("):\n");
+		printf(")\n");
 	}
+
+	//Now if we have LIVE_IN variables, we'll print those out
+	if(block->live_in != NULL){
+		printf("LIVE_IN: (");
+
+		for(u_int16_t i = 0; i < block->live_in->current_index; i++){
+			print_variable(block->live_in->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+
+			//If it isn't the very last one, print out a comma
+			if(i != block->live_in->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		//Close it out
+		printf(")\n");
+	}
+
+	//Now if we have LIVE_IN variables, we'll print those out
+	if(block->live_out != NULL){
+		printf("LIVE_OUT: (");
+
+		for(u_int16_t i = 0; i < block->live_out->current_index; i++){
+			print_variable(block->live_out->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+
+			//If it isn't the very last one, print out a comma
+			if(i != block->live_out->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		//Close it out
+		printf(")\n");
+	}
+
 
 	//Print out the dominance frontier if we're in DEBUG mode
 	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier != NULL){
@@ -810,7 +843,21 @@ static u_int8_t variable_dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_
 		}
 	}
 	
+	//If we make it down here then we know that they're the exact same
 	return TRUE;
+}
+
+
+/**
+ * Add a variable into a variable dynamic array. Again this requires special duplication
+ * checks
+ */
+static void variable_dynamic_array_add(dynamic_array_t* array, three_addr_var_t* var){
+	//We'll first check to see if it's already in there. If it isn't, we add
+	if(variable_dynamic_array_contains(array, var) == NOT_FOUND){
+		dynamic_array_add(array, var);
+	}
+	//Otherwise we don't add it
 }
 
 
@@ -834,17 +881,6 @@ static u_int8_t variable_dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_
  *
  */
 static void calculate_liveness_sets(cfg_t* cfg){
-	//We will first initialize every "in" and "out" set
-	//in each block to be empty
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
-		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
-
-		//Set both LIVE_IN and LIVE_OUT to be empty
-		block->live_in = dynamic_array_alloc();
-		block->live_out = dynamic_array_alloc();
-	}
-
 	//Did we find a difference
 	u_int8_t difference_found;
 
@@ -885,7 +921,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				//add it
 				if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
 					//If this is true we can add
-					dynamic_array_add(current->live_in, live_out_var);
+					variable_dynamic_array_add(current->live_in, live_out_var);
 				}
 			}
 
@@ -903,12 +939,10 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				//Add everything in his live_in set into the live_out set
 				for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
 					//Let's check to make sure we haven't already added this
-					three_addr_var_t* successor_live_in_var = successor->live_in->internal_array[l];
+					three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
 
-					if(variable_dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
-						//Add the live in variable to l
-						dynamic_array_add(current->live_out, successor->live_in->internal_array[l]);
-					}
+					//Let the helper method do it for us
+					variable_dynamic_array_add(current->live_out, successor_live_in_var);
 				}
 			}
 
