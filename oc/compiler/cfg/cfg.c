@@ -72,24 +72,6 @@ typedef struct{
 } expr_ret_package_t;
 
 
-//We predeclare up here to avoid needing any rearrangements
-static basic_block_t* visit_declaration_statement(values_package_t* values);
-static basic_block_t* visit_compound_statement(values_package_t* values);
-static basic_block_t* visit_let_statement(values_package_t* values);
-static basic_block_t* visit_if_statement(values_package_t* values);
-static basic_block_t* visit_while_statement(values_package_t* values);
-static basic_block_t* visit_do_while_statement(values_package_t* values);
-static basic_block_t* visit_for_statement(values_package_t* values);
-static basic_block_t* visit_case_statement(values_package_t* values);
-static basic_block_t* visit_default_statement(values_package_t* values);
-static basic_block_t* visit_switch_statement(values_package_t* values);
-
-
-//Return a three address code variable
-static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
-static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
-
-
 //An enum for jump types
 typedef enum{
 	JUMP_CATEGORY_INVERSE,
@@ -116,6 +98,33 @@ typedef enum{
 	USE_TEMP_VAR,
 	PRESERVE_ORIG_VAR,
 } temp_selection_t;
+
+
+//An enum for declare and let statements letting us know what kind of variable
+//that we have
+typedef enum{
+	VARIABLE_SCOPE_GLOBAL,
+	VARIABLE_SCOPE_LOCAL,
+} variable_scope_type_t;
+
+
+//We predeclare up here to avoid needing any rearrangements
+static basic_block_t* visit_declaration_statement(values_package_t* values, variable_scope_type_t scope);
+static basic_block_t* visit_compound_statement(values_package_t* values);
+static basic_block_t* visit_let_statement(values_package_t* values, variable_scope_type_t scope);
+static basic_block_t* visit_if_statement(values_package_t* values);
+static basic_block_t* visit_while_statement(values_package_t* values);
+static basic_block_t* visit_do_while_statement(values_package_t* values);
+static basic_block_t* visit_for_statement(values_package_t* values);
+static basic_block_t* visit_case_statement(values_package_t* values);
+static basic_block_t* visit_default_statement(values_package_t* values);
+static basic_block_t* visit_switch_statement(values_package_t* values);
+
+
+//Return a three address code variable
+static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
+static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
+
 
 
 /**
@@ -1946,48 +1955,55 @@ static basic_block_t* basic_block_alloc(){
  * iterative DFS
  */
 static void emit_blocks_dfs(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
-	//We'll need a stack for our DFS
-	heap_stack_t* stack = heap_stack_alloc();
+	//If it's null we won't bother
+	if(cfg->global_variables != NULL){
+		//First we'll print out the global variables block
+		print_block_three_addr_code(cfg->global_variables, print_df);
+	}
 
-	//The idea here is very simple. If we can walk the function tree and every control path leads 
-	//to a return statement, we return null from every control path
-	
 	//We'll need a cursor to walk the tree
 	basic_block_t* block_cursor;
 
-	//Push the source node
-	push(stack, cfg->root);
+	//Now we'll run through all of the function blocks and print them out
+	//one by one
+	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		//We'll need a stack for our DFS
+		heap_stack_t* stack = heap_stack_alloc();
 
-	//So long as the stack is not empty
-	while(is_empty(stack) == HEAP_STACK_NOT_EMPTY){
-		//Grab the current one off of the stack
-		block_cursor = pop(stack);
+		//Push the function node as a seed
+		push(stack, dynamic_array_get_at(cfg->function_blocks, i));
 
-		//If this wasn't visited
-		if(block_cursor->visited != 2){
-			//Mark this one as seen
-			block_cursor->visited = 2;
+		//So long as the stack is not empty
+		while(is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+			//Grab the current one off of the stack
+			block_cursor = pop(stack);
 
-			print_block_three_addr_code(block_cursor, print_df);
-		}
+			//If this wasn't visited
+			if(block_cursor->visited != 2){
+				//Mark this one as seen
+				block_cursor->visited = 2;
 
-		//If this is NULL, then we're done
-		if(block_cursor->successors == NULL){
-			continue;
-		}
+				print_block_three_addr_code(block_cursor, print_df);
+			}
 
-		//We'll now add in all of the childen
-		for(int16_t i = block_cursor->successors->current_index-1; i > -1; i--){
-			basic_block_t* grabbed = block_cursor->successors->internal_array[i];
-			//If we haven't seen it yet, add it to the list
-			if(grabbed->visited != 2){
-				push(stack, grabbed);
+			//If this is NULL, then we're done
+			if(block_cursor->successors == NULL){
+				continue;
+			}
+
+			//We'll now add in all of the childen
+			for(int16_t i = block_cursor->successors->current_index-1; i > -1; i--){
+				basic_block_t* grabbed = block_cursor->successors->internal_array[i];
+				//If we haven't seen it yet, add it to the list
+				if(grabbed->visited != 2){
+					push(stack, grabbed);
+				}
 			}
 		}
-	}
 
-	//Deallocate our stack once done
-	heap_stack_dealloc(stack);
+		//Deallocate our stack once done
+		heap_stack_dealloc(stack);
+	}
 }
 
 
@@ -1996,86 +2012,76 @@ static void emit_blocks_dfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
  * bfs
  */
 static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
-	//We'll need a queue for our BFS
-	heap_queue_t* queue = heap_queue_alloc();
-	//To be enqueued dynamic array
-	dynamic_array_t* to_be_enqueued = dynamic_array_alloc();
-
-	//Enqueue the very first node
-	enqueue(queue, cfg->root);
-
-	//For holding our blocks
+	//If it's null we won't bother
+	if(cfg->global_variables != NULL){
+		//First we'll print out the global variables block
+		print_block_three_addr_code(cfg->global_variables, print_df);
+	}
+		//For holding our blocks
 	basic_block_t* block;
 
-	//So long as the queue isn't empty
-	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
-		//Pop off of the queue
-		block = dequeue(queue);
+	//Now we'll print out each and every function inside of the function_blocks
+	//array. Each function will be printed using the BFS strategy
+	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		//We'll need a queue for our BFS
+		heap_queue_t* queue = heap_queue_alloc();
+		//To be enqueued dynamic array
+		dynamic_array_t* to_be_enqueued = dynamic_array_alloc();
 
-		//If this wasn't visited, we'll print
-		if(block->visited != 3){
-			print_block_three_addr_code(block, print_df);	
-		}
+		//Seed the search by adding the funciton block into the queue
+		enqueue(queue, dynamic_array_get_at(cfg->function_blocks, i));
 
-		//Now we'll mark this as visited
-		block->visited = 3;
+		//So long as the queue isn't empty
+		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+			//Pop off of the queue
+			block = dequeue(queue);
 
-		//And finally we'll add all of these onto the queue
-		for(u_int16_t i = 0; block->successors != NULL && i < block->successors->current_index; i++){
-			//False by default
-			u_int8_t found_others = FALSE;
+			//If this wasn't visited, we'll print
+			if(block->visited != 3){
+				print_block_three_addr_code(block, print_df);	
+			}
 
-			//Grab the successor out
-			basic_block_t* successor = block->successors->internal_array[i];
+			//Now we'll mark this as visited
+			block->visited = 3;
 
-			//If we haven't seen this before
-			if(successor->visited != 3){
-				//If this block has other predecessors who have not been visited, enqueue those
-				//first so that we can ensure that they are visited before this one
-				for(u_int16_t j = 0; successor->predecessors != NULL && j < successor->predecessors->current_index; j++){
-					//Grab the predecessor out
-					basic_block_t* predecessor = successor->predecessors->internal_array[j];
+			//And finally we'll add all of these onto the queue
+			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
+				//False by default
+				u_int8_t found_others = FALSE;
 
-					if(predecessor->visited != 3 && predecessor->block_type != BLOCK_TYPE_FOR_STMT_UPDATE){
-						found_others = TRUE;
-						//Add these into the queue first
-						enqueue(queue, predecessor);
+				//Grab the successor out
+				basic_block_t* successor = dynamic_array_get_at(block->successors, j);
+
+				//If we haven't seen this before
+				if(successor->visited != 3){
+					//If this block has other predecessors who have not been visited, enqueue those
+					//first so that we can ensure that they are visited before this one
+					for(u_int16_t k = 0; successor->predecessors != NULL && k < successor->predecessors->current_index; k++){
+						//Grab the predecessor out
+						basic_block_t* predecessor = dynamic_array_get_at(successor->predecessors, k);
+
+						if(predecessor->visited != 3 && predecessor->block_type != BLOCK_TYPE_FOR_STMT_UPDATE){
+							found_others = TRUE;
+							//Add these into the queue first
+							enqueue(queue, predecessor);
+						}
 					}
-				}
 
-				//If we did find others, we'll hold off
-				//on putting this one in. We'll only put it
-				//in if we're sure that all of it's predecessors
-				//are now accounted for
-				if(found_others == FALSE){
-					enqueue(queue, successor);
+					//If we did find others, we'll hold off
+					//on putting this one in. We'll only put it
+					//in if we're sure that all of it's predecessors
+					//are now accounted for
+					if(found_others == FALSE){
+						enqueue(queue, successor);
+					}
 				}
 			}
 		}
-	}
 
-	//Destroy the heap queue when done
-	heap_queue_dealloc(queue);
-	//Destroy the dynamic array when done
-	dynamic_array_dealloc(to_be_enqueued);
-}
-
-/**
- * Print out the whole program in order by using the direct successor
- */
-static void emit_blocks_direct_successor(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
-	//Grab a cursor
-	basic_block_t* cursor = cfg->root;
-
-	//So long as we have something to print, we print
-	while(cursor != NULL){
-		if(cursor->visited != 5){
-			print_block_three_addr_code(cursor, print_df);
-		}
-
-		cursor->visited = 5;
-
-		cursor = cursor->direct_successor;
+		//Destroy the heap queue when done
+		heap_queue_dealloc(queue);
+		//Destroy the dynamic array when done
+		dynamic_array_dealloc(to_be_enqueued);
 	}
 }
 
@@ -2162,6 +2168,10 @@ void dealloc_cfg(cfg_t* cfg){
 	deallocate_all_vars();
 	//Destroy all constants
 	deallocate_all_consts();
+
+	//Destroy the dynamic arrays too
+	dynamic_array_dealloc(cfg->created_blocks);
+	dynamic_array_dealloc(cfg->function_blocks);
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
@@ -3032,7 +3042,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 													 	NULL, //If statement end
 													 	NULL); //For loop update block
 			//We'll visit the block here
-			basic_block_t* decl_block = visit_declaration_statement(&decl_values);
+			basic_block_t* decl_block = visit_declaration_statement(&decl_values, VARIABLE_SCOPE_LOCAL);
 
 			//There is nothing to merge here
 
@@ -3049,7 +3059,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(&let_values);
+			basic_block_t* let_block = visit_let_statement(&let_values, VARIABLE_SCOPE_LOCAL);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
@@ -3727,7 +3737,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			values.initial_node = ast_cursor;
 
 			//We'll visit the block here
-			basic_block_t* decl_block = visit_declaration_statement(&values);
+			basic_block_t* decl_block = visit_declaration_statement(&values, VARIABLE_SCOPE_LOCAL);
 
 		//We've found a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
@@ -3735,7 +3745,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			values.initial_node = ast_cursor;
 
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(&values);
+			basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_LOCAL);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
@@ -4327,29 +4337,47 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 /**
  * Visit a declaration statement
  */
-static basic_block_t* visit_declaration_statement(values_package_t* values){
-	//Create the basic block
-	basic_block_t* decl_stmt_block = basic_block_alloc();
+static basic_block_t* visit_declaration_statement(values_package_t* values, variable_scope_type_t scope){
+	//What block are we emitting into?
+	basic_block_t* emittance_block;
+
+	//If we have a global scope, we're emitting into
+	//the global variables block
+	if(scope == VARIABLE_SCOPE_GLOBAL){
+		emittance_block = cfg_ref->global_variables;
+	} else {
+		//Otherwise we've got our own block here
+		emittance_block = basic_block_alloc();
+	}
 
 	//Emit the expression code
-	emit_expr_code(decl_stmt_block, values->initial_node);
+	emit_expr_code(emittance_block, values->initial_node);
 
 	//Give the block back
-	return decl_stmt_block;
+	return emittance_block;
 }
 
 
 /**
  * Visit a let statement
  */
-static basic_block_t* visit_let_statement(values_package_t* values){
-	//Create the basic block
-	basic_block_t* let_stmt_node = basic_block_alloc();
+static basic_block_t* visit_let_statement(values_package_t* values, variable_scope_type_t scope){
+	//What block are we emitting to?
+	basic_block_t* emittance_block;
 
-	emit_expr_code(let_stmt_node, values->initial_node);
+	//If it's the global scope, then we're adding to the CFG's
+	//global variables block
+	if(scope == VARIABLE_SCOPE_GLOBAL){
+		emittance_block = cfg_ref->global_variables;
+	} else {
+		emittance_block = basic_block_alloc();
+	}
+
+	//Add the expresssion into the node
+	emit_expr_code(emittance_block, values->initial_node);
 
 	//Give the block back
-	return let_stmt_node;
+	return emittance_block;
 }
 
 
@@ -4357,16 +4385,9 @@ static basic_block_t* visit_let_statement(values_package_t* values){
  * Visit the prog node for our CFG. This rule will simply multiplex to all other rules
  * between functions, let statements and declaration statements
  */
-static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
-	//Maintain a start and current block here
-	basic_block_t* start_block = NULL;
-	basic_block_t* current_block = start_block;
-
+static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	//A prog node can decay into a function definition, a let statement or otherwise
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
-
-	//Is the current block empty
-	u_int8_t current_block_is_empty = FALSE;
 
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
@@ -4375,35 +4396,15 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 			//Visit the function definition
 			basic_block_t* function_block = visit_function_definition(ast_cursor);
 			
-			//If the start block is null, this becomes the start block
-			if(start_block == NULL){
-				start_block = function_block;
-
-				//Assign separately here
-				current_block = start_block;
-
-			//Otherwise, we'll add this as a successor to the current block
-			//Is the current block completely empty? If it is, we'll just merge
-			//(replace) the blocks here. This is a special kind of merge,
-			//so we won't need to use the merge_blocks() function
-			} else if(current_block->block_type == BLOCK_TYPE_FUNC_EXIT){
-				//Merge the function block into the empty current block
-				current_block = merge_back_empty_block(current_block, function_block);
-			} else {
-				//Otherwise it isn't empty, so we'll have to reassign
-				add_successor(current_block, function_block);
-
-				//We now need to find where the end of the function block is to have that as our current reference
-				current_block = function_block;
+			//If this failed, we're out
+			if(function_block->block_id == -1){
+				return FALSE;
 			}
 
-			//So long as we don't see the exit statement, we keep going
-			while(current_block->block_type != BLOCK_TYPE_FUNC_EXIT){
-				//Always follow the path of the direct successor
-				current_block = current_block->direct_successor;
-			}
-
-			//Finally once we get down here, we have our proper current block
+			//Otherwise we'll add him to the functions dynamic array
+			dynamic_array_add(cfg->function_blocks, function_block);
+			
+			//And we're good to move along
 
 		//Process a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
@@ -4415,21 +4416,14 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 											 	NULL, //Switch statement end
 											 	NULL, //If statement end
 											 	NULL); //For loop update block
-
-			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(&values);
-
-			//If the start block is null, then this is the start block. Otherwise, we merge it in
-			if(start_block == NULL){
-				start_block = let_block;
-				current_block = let_block;
-			//Just merge with current
-			} else {
-				current_block =	merge_blocks(current_block, let_block); 
+			//
+			//If the cfg's global block is empty, we'll add it in here
+			if(cfg->global_variables == NULL){
+				cfg->global_variables = basic_block_alloc();
 			}
 
-			//These are not empty
-			current_block_is_empty = FALSE;
+			//We'll visit the block here
+			basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_GLOBAL);
 
 		//Visit a declaration statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
@@ -4441,35 +4435,29 @@ static basic_block_t* visit_prog_node(generic_ast_node_t* prog_node){
 											 	NULL, //Switch statement end
 											 	NULL, //If statement end
 											 	NULL); //For loop update block
-
-			//We'll visit the block here
-			basic_block_t* decl_block = visit_declaration_statement(&values);
-
-			//If the start block is null, then this is the start block. Otherwise, we merge it in
-			if(start_block == NULL){
-				start_block = decl_block;
-				current_block = decl_block;
-			//Just merge with current
-			} else {
-				current_block = merge_blocks(current_block, decl_block); 
+			
+			//If the cfg's global block is empty, we'll add it in here
+			if(cfg->global_variables == NULL){
+				cfg->global_variables = basic_block_alloc();
 			}
 
-			//Not empty here either
-			current_block_is_empty = FALSE;
+			//We'll visit the block here
+			basic_block_t* decl_block = visit_declaration_statement(&values, VARIABLE_SCOPE_GLOBAL);
 
 		//Some weird error here
 		} else {
 			print_parse_message(PARSE_ERROR, "Unrecognizable node found as child to prog node", ast_cursor->line_number);
 			(*num_errors_ref)++;
-			return create_and_return_err();
+			//Return this because we failed
+			return FALSE;
 		}
 		
 		//Advance to the next child
 		ast_cursor = ast_cursor->next_sibling;
 	}
 
-	//Always return the start block
-	return start_block;
+	//Return true because it worked
+	return TRUE;
 }
 
 
@@ -4490,8 +4478,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
 
-	//Create the dynamic array
+	//Create the dynamic arrays that we need
 	cfg->created_blocks = dynamic_array_alloc();
+	cfg->function_blocks = dynamic_array_alloc();
 
 	//Hold the cfg
 	cfg_ref = cfg;
@@ -4505,11 +4494,8 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 		exit(1);
 	}
 
-	//We'll visit the prog node, and let everything else do the rest
-	cfg->root = visit_prog_node(results.root);
-
-	//If we get a -1 block ID, this means that the whole thing failed
-	if(cfg->root->block_id == -1){
+	// -1 block ID, this means that the whole thing failed
+	if(visit_prog_node(cfg, results.root) == FALSE){
 		print_parse_message(PARSE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}

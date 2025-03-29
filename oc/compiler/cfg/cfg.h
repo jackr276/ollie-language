@@ -63,10 +63,13 @@ typedef enum{
 struct cfg_t{
 	//The current number of blocks
 	u_int32_t num_blocks;
-	//The overall root node.
-	basic_block_t* root;
-	//The current block of the CFG
-	basic_block_t* current;
+	//The global variable block. This is where
+	//anything that is not inside of a function is put
+	basic_block_t* global_variables;
+	//This dynamic array contains all of the function
+	//entry blocks for each function that we have
+	dynamic_array_t* function_blocks;
+	//An array of all blocks that are 
 	//All created blocks
 	dynamic_array_t* created_blocks;
 };
