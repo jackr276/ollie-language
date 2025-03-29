@@ -41,6 +41,11 @@ dynamic_array_t* dynamic_array_alloc(){
  * Create an exact clone of the dynamic array that we're given
  */
 dynamic_array_t* clone_dynamic_array(dynamic_array_t* array){
+	//If it's null then we'll just allocate for the user
+	if(array == NULL){
+		return dynamic_array_alloc();
+	}
+
 	//First we create the overall structure
 	dynamic_array_t* cloned = calloc(sizeof(dynamic_array_t), 1);
 

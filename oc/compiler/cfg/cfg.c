@@ -757,6 +757,64 @@ static void calculate_dominator_sets(cfg_t* cfg){
 
 
 /**
+ * A special helper function that we use for dynamic arrays of variables. Since variables
+ * can be duplicated, we need to compare the symtab variable record, not the three address
+ * variable itself
+ */
+static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, three_addr_var_t* variable){
+	//No question here -- we won't be finding it
+	if(variable_array == NULL){
+		return NOT_FOUND;
+	}
+
+	//We assume that everything in here is a variable and will cast as such
+	three_addr_var_t* current_var;
+
+	//Run through every record in here
+	for(u_int16_t i = 0; i < variable_array->current_index; i++){
+		//Grab a reference
+		current_var = variable_array->internal_array[i];
+
+		//If we found it, give back the index
+		if(current_var->linked_var == variable->linked_var){
+			return i;
+		}
+	}
+
+	//We couldn't find this one, so give back not found
+	return NOT_FOUND;
+}
+
+
+/**
+ * Are two variable dynamic arrays equal? We again use special rules for these kind of comparisons
+ * that are not applicable to regular dynamic arrays
+ */
+static u_int8_t variable_dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
+	//If either one is NULL we're out
+	if(a == NULL || b == NULL){
+		return FALSE;
+	}
+
+	//Are they the same size? If not they're not equal
+	if(a->current_index != b->current_index){
+		return FALSE;
+	}
+
+	//Otherwise we'll do a variable by variable comparison. If there's a variable
+	//in a that isn't in b, we'll fail immediately
+	for(int16_t i = a->current_index - 1; i >= 0; i--){
+		//If b does not contain the variable in A, we're done
+		if(variable_dynamic_array_contains(b, a->internal_array[i]) == NOT_FOUND){
+			return FALSE;
+		}
+	}
+	
+	return TRUE;
+}
+
+
+/**
  * Calculate the "live_in" and "live_out" sets for each basic block
  *
  * General algorithm
@@ -787,8 +845,8 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		block->live_out = dynamic_array_alloc();
 	}
 
-	//Have we found a difference? By default false here
-	u_int8_t difference_found = FALSE;
+	//Did we find a difference
+	u_int8_t difference_found;
 
 	//The "Prime" blocks are just ways to hold the old dynamic arrays
 	dynamic_array_t* in_prime;
@@ -798,8 +856,11 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	basic_block_t* current;
 
 	do{
+		//We'll assume we didn't find a difference each iteration
+		difference_found = FALSE;
+
 		//Run through all of the blocks backwards
-		for(int16_t i = cfg->created_blocks->current_index - 1; i >= 0; i++){
+		for(int16_t i = cfg->created_blocks->current_index - 1; i >= 0; i--){
 			//Grab the block out
 			current = dynamic_array_get_at(cfg->created_blocks, i);
 
@@ -807,19 +868,70 @@ static void calculate_liveness_sets(cfg_t* cfg){
 			in_prime = current->live_in;
 			out_prime = current->live_out;
 
-			//We need separate ones now
-			current->live_in = dynamic_array_alloc();
+			//The live in is a combination of the variables used
+			//at current and the difference of the LIVE_OUT variables defined
+			//ones
+
+			//Since we need all of the used variables, we'll just clone this
+			//dynamic array so that we start off with them all
+			current->live_in = clone_dynamic_array(current->used_variables);
+
+			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
+			for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
+				//Grab a reference for our use
+				three_addr_var_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+
+				//Now we need this block to be not in "assigned" also. If it is in assigned we can't
+				//add it
+				if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
+					//If this is true we can add
+					dynamic_array_add(current->live_in, live_out_var);
+				}
+			}
+
+			//Now we'll turn our attention to live out. The live out set for any block is the union of the
+			//LIVE_IN set for all of it's successors
+			
+			//Set live out to be a new array
 			current->live_out = dynamic_array_alloc();
 
-			//
+			//Run through all of the successors
+			for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+				//Grab the successor out
+				basic_block_t* successor = dynamic_array_get_at(current->successors, k);
 
+				//Add everything in his live_in set into the live_out set
+				for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
+					//Let's check to make sure we haven't already added this
+					three_addr_var_t* successor_live_in_var = successor->live_in->internal_array[l];
 
+					if(variable_dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
+						//Add the live in variable to l
+						dynamic_array_add(current->live_out, successor->live_in->internal_array[l]);
+					}
+				}
+			}
 
+			//Now we'll go through and check if the new live in and live out sets are different. If they are different,
+			//we'll be doing this whole thing again
 
+			//For efficiency - if there was a difference in one block, it's already done - no use in comparing
+			if(difference_found == FALSE){
+				//So we haven't found a difference so far - let's see if we can find one now
+				if(variable_dynamic_arrays_equal(in_prime, current->live_in) == FALSE 
+				  || variable_dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
+					//We have in fact found a difference
+					difference_found = TRUE;
+				}
+			}
+
+			//We made it down here, the prime variables are useless. We'll deallocate them
+			dynamic_array_dealloc(in_prime);
+			dynamic_array_dealloc(out_prime);
 		}
+
+	//So long as we continue finding differences
 	} while(difference_found == TRUE);
-
-
 }
 
 
@@ -863,6 +975,9 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	//We need to calculate the dominance frontier of every single block before
 	//we go any further
 	calculate_dominance_frontiers(cfg);
+
+	//now we calculate the liveness sets
+	calculate_liveness_sets(cfg);
 
 	//------------------------------------------
 	// FIRST STEP: FOR EACH variable we have
