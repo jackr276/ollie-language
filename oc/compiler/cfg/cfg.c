@@ -50,8 +50,6 @@ symtab_function_record_t* current_function;
 typedef struct {
 	//The initial node
 	generic_ast_node_t* initial_node;
-	//The ending block of the function
-	basic_block_t* function_end_block;
 	//For continue statements
 	basic_block_t* loop_stmt_start;
 	//For break statements
@@ -130,13 +128,12 @@ static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, gen
 /**
  * This is a very simple helper function that will pack values for us. This is done to avoid repeated code
  */
-static values_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* function_end_block, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* switch_statement_end, basic_block_t* if_statement_end_block, basic_block_t* for_loop_update_block){
+static values_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* switch_statement_end, basic_block_t* if_statement_end_block, basic_block_t* for_loop_update_block){
 	//Allocate it
 	values_package_t values;
 
 	//Pack with all of our values
 	values.initial_node = initial_node;
-	values.function_end_block = function_end_block;
 	values.loop_stmt_start = loop_stmt_start;
 	values.loop_stmt_end = loop_stmt_end;
 	values.switch_statement_end = switch_statement_end;
@@ -2446,7 +2443,8 @@ static void perform_function_reachability_analysis(generic_ast_node_t* function_
 			 * Then we have a function that does not return in all paths
 			 */
 			//If the direct successor is the exit, but it's not a return statement
-			if(block_cursor->direct_successor != NULL && block_cursor->direct_successor->block_type == BLOCK_TYPE_FUNC_EXIT 
+			if(block_cursor->direct_successor != NULL 
+			  && block_cursor->direct_successor->block_type == BLOCK_TYPE_FUNC_EXIT 
 			  && block_cursor->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//One more dead end
 				dead_ends++;
@@ -2576,7 +2574,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	
 	//Create a copy of our values here
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
-													    values->function_end_block, //Function end block
 													 	condition_block, //Loop statement start -- for loops start at their condition
 													 	for_stmt_exit_block, //Exit block of loop
 													 	NULL,
@@ -2672,7 +2669,6 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//Create a copy of our values here
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
-													    values->function_end_block, //Function end block
 													 	do_while_stmt_entry_block, //Loop statement start
 													 	do_while_stmt_exit_block, //Exit block of loop
 													 	NULL, //Switch statement end
@@ -2763,7 +2759,6 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//Create a copy of our values here
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
-													    values->function_end_block, //Function end block
 													 	while_statement_entry_block, //Loop statement start
 													 	while_statement_end_block, //Exit block of loop
 													 	NULL, //Switch statement end
@@ -2869,7 +2864,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 	//Create a copy of our values here
 	values_package_t if_compound_stmt_values = pack_values(cursor, //Initial Node
-													    values->function_end_block, //Function end block
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
@@ -2942,7 +2936,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	if(cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 		//Create a copy of our values here
 		values_package_t else_values_package = pack_values(cursor, //Initial Node
-													    values->function_end_block, //Function end block
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
@@ -2995,7 +2988,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	} else if(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
 		//Create a copy of our values here
 		values_package_t else_if_values_package = pack_values(cursor, //Initial Node
-													    values->function_end_block, //Function end block
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
@@ -3051,7 +3043,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 		if(current_node->CLASS == AST_NODE_CLASS_DECL_STMT){
 			//Create our values package
 			values_package_t decl_values = pack_values(current_node, //Initial Node
-														NULL, //Function end block
 													 	NULL, //Loop statement start
 													 	NULL, //Exit block of loop
 													 	NULL, //Switch statement end
@@ -3066,7 +3057,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 		} else if(current_node->CLASS == AST_NODE_CLASS_LET_STMT){
 			//Create our values package
 			values_package_t let_values = pack_values(current_node, //Initial Node
-														NULL, //Function end block
 													 	NULL, //Loop statement start
 													 	NULL, //Exit block of loop
 													 	NULL, //Switch statement end
@@ -3100,9 +3090,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//The current block will now be marked as a return statement
 			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
 
-			//The current block's direct and only successor is the function exit block
-			//add_successor(current_block, values->function_end_block);
-
 			//If there is anything after this statement, it is UNREACHABLE
 			if(current_node->next_sibling != NULL){
 				print_cfg_message(WARNING, "Unreachable code detected after return statement", current_node->next_sibling->line_number);
@@ -3116,7 +3103,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 		} else if(current_node->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 			//Pack up all of our values
 			values_package_t compound_stmt_values = pack_values(current_node, //Initial Node
-														values->function_end_block, //Function end block
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
@@ -3158,7 +3144,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			if_end_block->block_type = BLOCK_TYPE_IF_STMT_END;
 
 			values_package_t if_stmt_values = pack_values(current_node, //Initial Node
-														values->function_end_block, //Function end block
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
@@ -3192,7 +3177,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			while_stmt_values.loop_stmt_start = NULL;
 			while_stmt_values.loop_stmt_end = NULL;
 			while_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
-			while_stmt_values.function_end_block = values->function_end_block;
 			while_stmt_values.switch_statement_end = values->switch_statement_end;
 
 			//Visit the while statement
@@ -3221,7 +3205,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Create the values package
 			values_package_t do_while_values;
 			do_while_values.initial_node = current_node;
-			do_while_values.function_end_block = values->function_end_block;
 			do_while_values.if_stmt_end_block = values->if_stmt_end_block;
 			do_while_values.loop_stmt_start = NULL;
 			do_while_values.loop_stmt_end = NULL;
@@ -3264,7 +3247,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Create the values package
 			values_package_t for_stmt_values;
 			for_stmt_values.initial_node = current_node;
-			for_stmt_values.function_end_block = values->function_end_block;
 			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			for_stmt_values.loop_stmt_start = NULL;
 			for_stmt_values.loop_stmt_end = NULL;
@@ -3786,9 +3768,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//The current block will now be marked as a return statement
 			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
 
-			//The current block's direct and only successor is the function exit block
-			//add_successor(current_block, values->function_end_block);
-
 			//If there is anything after this statement, it is UNREACHABLE
 			if(ast_cursor->next_sibling != NULL){
 				print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
@@ -3808,7 +3787,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Create the values package
 			values_package_t if_stmt_values;
 			if_stmt_values.initial_node = ast_cursor;
-			if_stmt_values.function_end_block = values->function_end_block;
 			if_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			if_stmt_values.if_stmt_end_block = if_end_block;
 			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
@@ -3841,7 +3819,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			while_stmt_values.loop_stmt_start = NULL;
 			while_stmt_values.loop_stmt_end = NULL;
 			while_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
-			while_stmt_values.function_end_block = values->function_end_block;
 
 			//Visit the while statement
 			basic_block_t* while_stmt_entry_block = visit_while_statement(&while_stmt_values);
@@ -3869,7 +3846,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Create the values package
 			values_package_t do_while_values;
 			do_while_values.initial_node = ast_cursor;
-			do_while_values.function_end_block = values->function_end_block;
 			do_while_values.if_stmt_end_block = values->if_stmt_end_block;
 			do_while_values.loop_stmt_start = NULL;
 			do_while_values.loop_stmt_end = NULL;
@@ -3911,7 +3887,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Create the values package
 			values_package_t for_stmt_values;
 			for_stmt_values.initial_node = ast_cursor;
-			for_stmt_values.function_end_block = values->function_end_block;
 			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			for_stmt_values.loop_stmt_start = NULL;
 			for_stmt_values.loop_stmt_end = NULL;
@@ -4274,10 +4249,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	basic_block_t* function_starting_block = basic_block_alloc();
 	//Mark that this is a starting block
 	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
-	//The ending block
-	basic_block_t* function_ending_block = basic_block_alloc();
-	//We very clearly mark this as an ending block
-	function_ending_block->block_type = BLOCK_TYPE_FUNC_EXIT;
 
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
@@ -4298,7 +4269,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//Package the values up
 	values_package_t compound_stmt_values = pack_values(func_cursor, //Initial Node
-											    	function_ending_block, //Function end block
 											 		NULL, //Loop statement start
 											 		NULL, //Exit block of loop
 											 		NULL, //Switch statement end
@@ -4311,8 +4281,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//If this compound statement is NULL(which is possible) we just add the starting and ending
 	//blocks as successors
 	if(compound_stmt_block == NULL){
-		add_successor(function_starting_block, function_ending_block);
-		
 		//We'll also throw a warning
 		sprintf(info, "Function \"%s\" was given no body", function_node->func_record->func_name);
 		print_cfg_message(WARNING, info, func_cursor->line_number);
@@ -4333,11 +4301,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	while(compound_stmt_cursor->direct_successor != NULL){
 		compound_stmt_cursor = compound_stmt_cursor->direct_successor;
 	}
-
-	//Once we hit the end, if this isn't an exit block, we'll make it one
-	compound_stmt_cursor->direct_successor = function_ending_block;
-
-	add_successor(compound_stmt_cursor, function_ending_block);
 
 	//Now we'll analyze the reachability of the function
 	perform_function_reachability_analysis(function_node, function_starting_block);
@@ -4426,7 +4389,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
 			//Package the values up
 			values_package_t values = pack_values(ast_cursor, //Initial Node
-											    NULL, //Function end block
 											 	NULL, //Loop statement start
 											 	NULL, //Exit block of loop
 											 	NULL, //Switch statement end
@@ -4447,7 +4409,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
 			//Package the values up
 			values_package_t values = pack_values(ast_cursor, //Initial Node
-											    NULL, //Function end block
 											 	NULL, //Loop statement start
 											 	NULL, //Exit block of loop
 											 	NULL, //Switch statement end
