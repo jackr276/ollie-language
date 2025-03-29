@@ -432,26 +432,29 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("}\n");
 	}
 
-	printf("Dominator set: {");
+	//Only if this is false - global var blocks don't have any of these
+	if(block->is_global_var_block == FALSE){
+		printf("Dominator set: {");
 
-	//Run through and print them all out
-	for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
-		basic_block_t* printing_block = block->dominator_set->internal_array[i];
+		//Run through and print them all out
+		for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
+			basic_block_t* printing_block = block->dominator_set->internal_array[i];
 
-		//Print the block's ID or the function name
-		if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", printing_block->func_record->func_name);
-		} else {
-			printf(".L%d", printing_block->block_id);
+			//Print the block's ID or the function name
+			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", printing_block->func_record->func_name);
+			} else {
+				printf(".L%d", printing_block->block_id);
+			}
+			//If it isn't the very last one, we need a comma
+			if(i != block->dominator_set->current_index - 1){
+				printf(", ");
+			}
 		}
-		//If it isn't the very last one, we need a comma
-		if(i != block->dominator_set->current_index - 1){
-			printf(", ");
-		}
+
+		//And close it out
+		printf("}\n");
 	}
-
-	//And close it out
-	printf("}\n");
 
 	if(block->block_type == BLOCK_TYPE_IF_STMT_END){
 		printf("If statement end block\n");
@@ -684,117 +687,127 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
  * is found(this is when new == DOM for every node, hence there's nowhere
  * left to go)
  *
+ * NOTE: We repeat this for each and every function in the CFG. If blocks aren't in
+ * the same function, then their dominance is completely unrelated
  */
 static void calculate_dominator_sets(cfg_t* cfg){
-	//Initialize a "worklist" dynamic array
-	dynamic_array_t* worklist = dynamic_array_alloc();
-
 	//Every node in the CFG has a dominator set that is set
 	//to be identical to the list of all nodes
 	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
 		//Grab this out
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
 
+		//If this is a global variable block we don't care
+		if(block->is_global_var_block == TRUE){
+			continue;
+		}
+
 		//We will initialize the block's dominator set to be the entire set of nodes
 		block->dominator_set = clone_dynamic_array(cfg->created_blocks);
 	}
 
-	//Add the starting node(index 0) into the worklist as a seed
-	dynamic_array_add(worklist, dynamic_array_get_at(cfg->created_blocks, 0));
-	
-	//The new dominance frontier that we have each time
-	dynamic_array_t* new;
+	//For each and every function that we have, we will perform this operation separately
+	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+		//Initialize a "worklist" dynamic array for this particular function
+		dynamic_array_t* worklist = dynamic_array_alloc();
 
-	//So long as the worklist is not empty
-	while(dynamic_array_is_empty(worklist) == FALSE){
-		//Remove a node Y from the worklist(remove from back - most efficient{O(1)})
-		basic_block_t* Y = dynamic_array_delete_from_back(worklist);
+		//Add this into the worklist as a seed
+		dynamic_array_add(worklist, dynamic_array_get_at(cfg->function_blocks, _));
 		
-		//Create the new dynamic array that will be used for the next
-		//dominator set
-		new = dynamic_array_alloc();
+		//The new dominance frontier that we have each time
+		dynamic_array_t* new;
 
-		//We will add Y into it's own dominator set
-		dynamic_array_add(new, Y);
+		//So long as the worklist is not empty
+		while(dynamic_array_is_empty(worklist) == FALSE){
+			//Remove a node Y from the worklist(remove from back - most efficient{O(1)})
+			basic_block_t* Y = dynamic_array_delete_from_back(worklist);
+			
+			//Create the new dynamic array that will be used for the next
+			//dominator set
+			new = dynamic_array_alloc();
 
-		//If Y has predecessors, we will find the intersection of
-		//their dominator sets
-		if(Y->predecessors != NULL){
-			//Grab the very first predecessor's dominator set
-			dynamic_array_t* pred_dom_set = ((basic_block_t*)(Y->predecessors->internal_array[0]))->dominator_set;
+			//We will add Y into it's own dominator set
+			dynamic_array_add(new, Y);
 
-			//Are we in the intersection of the dominator sets?
-			u_int8_t in_intersection;
+			//If Y has predecessors, we will find the intersection of
+			//their dominator sets
+			if(Y->predecessors != NULL){
+				//Grab the very first predecessor's dominator set
+				dynamic_array_t* pred_dom_set = ((basic_block_t*)(Y->predecessors->internal_array[0]))->dominator_set;
 
-	   		//We will now search every item in this dominator set
-			for(u_int16_t i = 0; i < pred_dom_set->current_index; i++){
-				//Grab the dominator out
-				basic_block_t* dominator = dynamic_array_get_at(pred_dom_set, i);
+				//Are we in the intersection of the dominator sets?
+				u_int8_t in_intersection;
 
-				//By default we assume that this given dominator is in the set. If it
-				//isn't we'll set it appropriately
-				in_intersection = TRUE;
+				//We will now search every item in this dominator set
+				for(u_int16_t i = 0; i < pred_dom_set->current_index; i++){
+					//Grab the dominator out
+					basic_block_t* dominator = dynamic_array_get_at(pred_dom_set, i);
 
-				/**
-				 * An item is in the intersection if and only if it is contained 
-				 * in all of the dominator sets of the predecessors of Y
-			 	*/
-				//We'll start at 1 here - we've already accounted for 0
-				for(u_int8_t j = 1; j < Y->predecessors->current_index; j++){
-					//Grab our other predecessor
-					basic_block_t* other_predecessor = Y->predecessors->internal_array[j];
+					//By default we assume that this given dominator is in the set. If it
+					//isn't we'll set it appropriately
+					in_intersection = TRUE;
 
-					//Now we will go over this predecessor's dominator set, and see if "dominator"
-					//is also contained within it
+					/**
+					 * An item is in the intersection if and only if it is contained 
+					 * in all of the dominator sets of the predecessors of Y
+					*/
+					//We'll start at 1 here - we've already accounted for 0
+					for(u_int8_t j = 1; j < Y->predecessors->current_index; j++){
+						//Grab our other predecessor
+						basic_block_t* other_predecessor = Y->predecessors->internal_array[j];
 
-					//Let's check for it in here. If we can't find it, we set the flag to false and bail out
-					if(dynamic_array_contains(other_predecessor->dominator_set, dominator) == NOT_FOUND){
-						in_intersection = FALSE;
-						break;
+						//Now we will go over this predecessor's dominator set, and see if "dominator"
+						//is also contained within it
+
+						//Let's check for it in here. If we can't find it, we set the flag to false and bail out
+						if(dynamic_array_contains(other_predecessor->dominator_set, dominator) == NOT_FOUND){
+							in_intersection = FALSE;
+							break;
+						}
+					
+						//Otherwise we did find it, so we'll look at the next predecessor, and see if it is also
+						//in there. If we get to the end and "in_intersection" is true, then we know that we've
+						//found this one dominator in every single set
 					}
-				
-					//Otherwise we did find it, so we'll look at the next predecessor, and see if it is also
-					//in there. If we get to the end and "in_intersection" is true, then we know that we've
-					//found this one dominator in every single set
+
+					//If we get here and it is in the intersection, we can add it in
+					//IMPORTANT: we also don't want to add a block in if it's from another
+					//function. While other functions may appear on the page as one above
+					//the other, there is no guarantee that a function will be called in
+					//any particular order, or that it will be called at all. As such,
+					//we exclude dominators that have different function records attached to
+					//them
+					if(in_intersection == TRUE){
+						//Add the dominator in
+						dynamic_array_add(new, dominator);
+					}
+				}
+			}
+
+			//Now we'll check - are these two dominator sets the same? If not, we'll need
+			//to update them
+			if(dynamic_arrays_equal(new, Y->dominator_set) == FALSE){
+				//Destroy the old one
+				dynamic_array_dealloc(Y->dominator_set);
+
+				//And replace it with the new
+				Y->dominator_set = new;
+
+				//Now for every successor of Y, add it into the worklist
+				for(u_int8_t i = 0; Y->successors != NULL && i < Y->successors->current_index; i++){
+					dynamic_array_add(worklist, Y->successors->internal_array[i]);
 				}
 
-				//If we get here and it is in the intersection, we can add it in
-				//IMPORTANT: we also don't want to add a block in if it's from another
-				//function. While other functions may appear on the page as one above
-				//the other, there is no guarantee that a function will be called in
-				//any particular order, or that it will be called at all. As such,
-				//we exclude dominators that have different function records attached to
-				//them
-				if(in_intersection == TRUE && dominator->func_record == Y->func_record){
-					//Add the dominator in
-					dynamic_array_add(new, dominator);
-				}
+			//Otherwise they are the same
+			} else {
+				//Destroy the dominator set that we just made
+				dynamic_array_dealloc(new);
 			}
 		}
 
-		//Now we'll check - are these two dominator sets the same? If not, we'll need
-		//to update them
-		if(dynamic_arrays_equal(new, Y->dominator_set) == FALSE){
-			//Destroy the old one
-			dynamic_array_dealloc(Y->dominator_set);
-
-			//And replace it with the new
-			Y->dominator_set = new;
-
-			//Now for every successor of Y, add it into the worklist
-			for(u_int8_t i = 0; Y->successors != NULL && i < Y->successors->current_index; i++){
-				dynamic_array_add(worklist, Y->successors->internal_array[i]);
-			}
-
-		//Otherwise they are the same
-		} else {
-			//Destroy the dominator set that we just made
-			dynamic_array_dealloc(new);
-		}
+		//Destroy the worklist now that we're done with it
+		dynamic_array_dealloc(worklist);
 	}
-
-	//Destroy the worklist now that we're done with it
-	dynamic_array_dealloc(worklist);
 }
 
 
@@ -1939,6 +1952,9 @@ static basic_block_t* basic_block_alloc(){
 
 	//Usually these are, in special cases they aren't
 	created->good_to_merge = TRUE;
+
+	//Is it a global variable block? Almost always not
+	created->is_global_var_block = FALSE;
 
 	//Let's add in what function this block came from
 	created->func_record = current_function;
@@ -4416,10 +4432,12 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 											 	NULL, //Switch statement end
 											 	NULL, //If statement end
 											 	NULL); //For loop update block
-			//
+
 			//If the cfg's global block is empty, we'll add it in here
 			if(cfg->global_variables == NULL){
 				cfg->global_variables = basic_block_alloc();
+				//Mark this as true
+				cfg->global_variables->is_global_var_block = TRUE;
 			}
 
 			//We'll visit the block here
@@ -4439,6 +4457,8 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			//If the cfg's global block is empty, we'll add it in here
 			if(cfg->global_variables == NULL){
 				cfg->global_variables = basic_block_alloc();
+				//Mark this as true
+				cfg->global_variables->is_global_var_block = TRUE;
 			}
 
 			//We'll visit the block here

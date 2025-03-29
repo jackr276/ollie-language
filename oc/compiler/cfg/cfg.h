@@ -92,6 +92,8 @@ struct basic_block_t{
 	symtab_function_record_t* func_record;
 	//Is this block ok to merge?
 	u_int8_t good_to_merge;
+	//Is this a global variable block?
+	u_int8_t is_global_var_block;
 	//What is the general classification of this block
 	block_type_t block_type;
 	//How does the block terminate? This is important for CFG drilling
