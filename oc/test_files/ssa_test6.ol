@@ -16,6 +16,7 @@ fn main() -> i32{
 
 	if(x <= 32) then{
 		x := x + 22;
+		//ret x;
 	} else {
 		x := x - 3;
 		y := 11;

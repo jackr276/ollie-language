@@ -3063,10 +3063,13 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
 		}
 
-		//The successor to the if-stmt end path is the if statement end block
-		emit_jmp_stmt(if_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
-		//If this is the case, the end block is a successor of the if_stmt end
-		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
+		//If this is not a return block, we will add these
+		if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			//The successor to the if-stmt end path is the if statement end block
+			emit_jmp_stmt(if_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
+			//If this is the case, the end block is a successor of the if_stmt end
+			add_successor(if_compound_stmt_end, values->if_stmt_end_block);
+		}
 	}
 
 	//This is the end if we have a lone "if"
@@ -3077,8 +3080,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//the end block
 		add_successor(entry_block, values->if_stmt_end_block);
 		
-		//If this is the case, the end block is a direct successor
-		add_successor(if_compound_stmt_end, values->if_stmt_end_block);
+		//Again, ensure that we don't have any kind of a return statement before
+		//adding a successor
+		if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			//If this is the case, the end block is a direct successor
+			add_successor(if_compound_stmt_end, values->if_stmt_end_block);
+		}
 
 		/**
 		 * The "if" path is always our direct path, we only need to jump to the else, so we jump
@@ -3137,13 +3144,17 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			else_compound_stmt_end = else_compound_stmt_end->direct_successor;
 		}
 
-		//The successor to this block is the ending block
-		add_successor(else_compound_stmt_end, values->if_stmt_end_block);
+		//If the end is not a return statement, we'll add the jump in. If it is there's no point
+		if(else_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			//The successor to this block is the ending block
+			add_successor(else_compound_stmt_end, values->if_stmt_end_block);
 
-		//Ensure is direct successor
+			//Add in our jump to end here
+			emit_jmp_stmt(else_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
+		}
+
+		//Ensure is direct successor, no matter what
 		else_compound_stmt_end->direct_successor = values->if_stmt_end_block;
-		//Add in our jump to end here
-		emit_jmp_stmt(else_compound_stmt_end, values->if_stmt_end_block, JUMP_TYPE_JMP);
 
 		//We're done here, send it back
 		return entry_block;
