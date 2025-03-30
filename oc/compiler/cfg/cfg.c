@@ -530,13 +530,21 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
 		return FALSE;
 	}
 
-	//If we didn't find it, then it's false
-	if(dynamic_array_contains(block->assigned_variables, variable) == NOT_FOUND){
-		return FALSE;
+	//We'll need to use a special comparison here because we're comparing variables, not plain addresses.
+	//We will compare the linked var of each block in the assigned variables dynamic array
+	for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
+		//Grab the variable out
+		three_addr_var_t* var = dynamic_array_get_at(block->assigned_variables, i);
+		
+		//Now we'll compare the linked variable to the record
+		if(var->linked_var == variable){
+			//If we found it bail out
+			return TRUE;
+		}
 	}
 
-	//Otherwise we did find it, so
-	return TRUE;
+	//If we make it all of the way down here and we didn't find it, fail out
+	return FALSE;
 }
 
 
@@ -1032,6 +1040,8 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	//now we calculate the liveness sets
 	calculate_liveness_sets(cfg);
 
+	//Once we're done with all of this, we're finally ready to insert phi functions
+
 	//------------------------------------------
 	// FIRST STEP: FOR EACH variable we have
 	//------------------------------------------
@@ -1055,12 +1065,12 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 				//----------------------------------
 				//We'll need a "worklist" here - just a dynamic array 
 				dynamic_array_t* worklist = dynamic_array_alloc();
+				//Keep track of those that were ever on the worklist
+				dynamic_array_t* ever_on_worklist;
 
 				//We'll also need a dynamic array that contains everything relating
 				//to if we did or did not already put a phi function into this block
 				dynamic_array_t* already_has_phi_func = dynamic_array_alloc();
-
-
 				
 				//Just run through the entire thing
 				for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
@@ -1074,9 +1084,28 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 					}
 				}
 
+				//Now we can clone the "was ever on worklist" dynamic array
+				ever_on_worklist = clone_dynamic_array(worklist);
+
+				//Now we can actually perform our insertions
+				//So long as the worklist is not empty
+				while(dynamic_array_is_empty(worklist) == FALSE){
+					//Remove the node from the back - more efficient
+					basic_block_t* node = dynamic_array_delete_from_back(worklist);
+					
+					//Now we will go through each node in this worklist's dominance frontier
+					for(u_int16_t j = 0; node->dominance_frontier != NULL && j < node->dominance_frontier->current_index; j++){
+						//Grab this node out
+						basic_block_t* df_node = dynamic_array_get_at(node->dominance_frontier, j);
+
+					}
+
+				}
+
 				//Now that we're done with these, we'll remove them for
 				//the next round
 				dynamic_array_dealloc(worklist);
+				dynamic_array_dealloc(ever_on_worklist);
 				dynamic_array_dealloc(already_has_phi_func);
 			
 				//Advance to the next record in the chain
