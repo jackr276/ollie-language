@@ -546,6 +546,12 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 
 		//And the finishing sequence
 		printf(" * %ld\n", stmt->lea_multiplicator);
+	//Print out a phi function 
+	} else if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
+		printf("PHI ");
+		//Print it in block header mode
+		print_variable(stmt->assignee, PRINTING_VAR_BLOCK_HEADER);
+		printf("\n");
 	}
 }
 
@@ -849,6 +855,22 @@ three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_n
 	strncpy(stmt->inlined_assembly, asm_inline_node->asm_line_statements, asm_inline_node->length);
 
 	//And we're done, now we'll bail out
+	return stmt;
+}
+
+
+/**
+ * Emit a phi function for a given variable. Once emitted, these statements are compiler exclusive,
+ * but they are needed for our optimization
+ */
+three_addr_code_stmt_t* emit_phi_function(three_addr_var_t* variable){
+	//First we allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//We'll just store the assignee here, no need for anything else
+	stmt->assignee = variable;
+
+	//And give the statement back
 	return stmt;
 }
 

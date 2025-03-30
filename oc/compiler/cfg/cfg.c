@@ -475,6 +475,30 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 /**
+ * Add a phi statement into the basic block. Phi statements are always added, without exception,
+ * to the very front of the block
+ */
+static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi_statement){
+	//Generic fail case - this should never happen
+	if(target == NULL){
+		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
+		exit(1);
+	}
+
+	//Special case -- we're adding the head
+	if(target->leader_statement == NULL || target->exit_statement == NULL){
+		//Assign this to be the head and the tail
+		target->leader_statement = phi_statement;
+		target->exit_statement = phi_statement;
+	}
+
+	//Otherwise we will add this in at the very front
+	phi_statement->next_statement = target->leader_statement;
+	target->leader_statement = phi_statement;
+}
+
+
+/**
  * Add a statement to the target block, following all standard linked-list protocol
  */
 static void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node){

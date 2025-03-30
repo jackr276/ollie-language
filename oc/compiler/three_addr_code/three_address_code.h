@@ -102,7 +102,9 @@ typedef enum{
 	//Another special case - a switch statement
 	THREE_ADDR_CODE_SWITCH_STMT,
 	//A "Load effective address(lea)" instruction
-	THREE_ADDR_CODE_LEA_STMT
+	THREE_ADDR_CODE_LEA_STMT,
+	//A phi function - for SSA analysis only
+	THREE_ADDR_CODE_PHI_FUNC
 } three_addr_code_stmt_class_t;
 
 /**
@@ -300,6 +302,11 @@ three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t*
  * by any future optimizations
  */
 three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node);
+
+/**
+ * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
+ */
+three_addr_code_stmt_t* emit_phi_function(three_addr_var_t* variable);
 
 /**
  * Emit an idle statement
