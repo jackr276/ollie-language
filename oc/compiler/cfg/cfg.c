@@ -956,27 +956,6 @@ static void calculate_liveness_sets(cfg_t* cfg){
 			in_prime = current->live_in;
 			out_prime = current->live_out;
 
-			//The live in is a combination of the variables used
-			//at current and the difference of the LIVE_OUT variables defined
-			//ones
-
-			//Since we need all of the used variables, we'll just clone this
-			//dynamic array so that we start off with them all
-			current->live_in = clone_dynamic_array(current->used_variables);
-
-			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-			for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
-				//Grab a reference for our use
-				three_addr_var_t* live_out_var = dynamic_array_get_at(current->live_out, j);
-
-				//Now we need this block to be not in "assigned" also. If it is in assigned we can't
-				//add it
-				if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
-					//If this is true we can add
-					variable_dynamic_array_add(current->live_in, live_out_var);
-				}
-			}
-
 			//Now we'll turn our attention to live out. The live out set for any block is the union of the
 			//LIVE_IN set for all of it's successors
 			
@@ -998,6 +977,28 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				}
 			}
 
+			//The live in is a combination of the variables used
+			//at current and the difference of the LIVE_OUT variables defined
+			//ones
+
+			//Since we need all of the used variables, we'll just clone this
+			//dynamic array so that we start off with them all
+			current->live_in = clone_dynamic_array(current->used_variables);
+
+			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
+			for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
+				//Grab a reference for our use
+				three_addr_var_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+
+				//Now we need this block to be not in "assigned" also. If it is in assigned we can't
+				//add it
+				if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
+					//If this is true we can add
+					variable_dynamic_array_add(current->live_in, live_out_var);
+				}
+			}
+
+		
 			//Now we'll go through and check if the new live in and live out sets are different. If they are different,
 			//we'll be doing this whole thing again
 
@@ -1019,7 +1020,6 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	//So long as we continue finding differences
 	} while(difference_found == TRUE);
 }
-
 
 
 /**
@@ -1128,9 +1128,8 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 							//We DID find it, so we will NOT add anything, it already has one
 							continue;
 						}
-						
-						//If we make it here that means that we don't already have one, so we'll add
-						//it
+
+						//If we make it here that means that we don't already have one, so we'll add it
 						three_addr_code_stmt_t* phi_stmt = emit_phi_function(record);
 
 						//Add the phi statement into the block	

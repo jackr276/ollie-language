@@ -16,13 +16,10 @@ fn main() -> i32{
 
 	if(x <= 32) then{
 		x := x + 22;
-		glob_x := 3232;
 	} else {
 		x := x - 3;
 		y := 11;
 	}
 
-	x := -1;
-
-	ret y;
+	ret x + y;
 }
