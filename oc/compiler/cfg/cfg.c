@@ -453,6 +453,26 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("}\n");
 	}
 
+	//Now print out the dominator children
+	printf("Dominator Children: {");
+
+	for(u_int16_t i = 0; block->dominator_children != NULL && i < block->dominator_children->current_index; i++){
+			basic_block_t* printing_block = block->dominator_children->internal_array[i];
+
+			//Print the block's ID or the function name
+			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", printing_block->func_record->func_name);
+			} else {
+				printf(".L%d", printing_block->block_id);
+			}
+			//If it isn't the very last one, we need a comma
+			if(i != block->dominator_children->current_index - 1){
+				printf(", ");
+			}
+	}
+
+	printf("}\n");
+
 	if(block->block_type == BLOCK_TYPE_IF_STMT_END){
 		printf("If statement end block\n");
 	}
@@ -593,7 +613,7 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 	
 	//For each node in B's Dominance Frontier set(we call this node A)
 	//These nodes are our candidates for immediate dominator
-	for(u_int16_t i = 0; i < B->dominator_set->current_index; i++){
+	for(u_int16_t i = 0; B->dominator_set != NULL && i < B->dominator_set->current_index; i++){
 		//By default we assume A is an IDOM
 		A_is_IDOM = TRUE;
 
@@ -1050,6 +1070,41 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 
 /**
+ * Build the dominator tree for each function in the CFG
+ */
+static void build_dominator_trees(cfg_t* cfg){
+	//For each node in the CFG, we will use that node's immediate dominators to
+	//build a dominator tree
+	
+	//Hold the current block
+	basic_block_t* current;
+
+	//For each block in the CFG
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab out whatever block we're on
+		current = dynamic_array_get_at(cfg->created_blocks, _);
+
+		//No use in doing any computation for this one
+		if(current->is_global_var_block == TRUE){
+			continue;
+		}
+
+		//We will find this block's "immediate dominator". Once we have that,
+		//we will add this block to the "dominator children" set of said immediate
+		//dominator
+		basic_block_t* immediate_dom = immediate_dominator(current);
+
+		//Now we'll go to the immediate dominator's list and add the dominated block in. Of course,
+		//we'll account for the case where there is no immediate dominator. This is possible in
+		//the case of function entry blocks
+		if(immediate_dom != NULL){
+			add_dominated_block(immediate_dom, current);
+		}
+	}
+}
+
+
+/**
  * if(x0 == 0){
  * 	asn x1 := 2;
  * } else {
@@ -1084,6 +1139,9 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
+
+	//Now we'll build the dominator tree up
+	build_dominator_trees(cfg);
 
 	//We need to calculate the dominance frontier of every single block before
 	//we go any further
@@ -1187,15 +1245,6 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 		}
 	}
 }
-
-
-/**
- * Build the dominator tree for each function in the CFG
- */
-static void build_dominator_trees(cfg_t* cfg){
-
-}
-
 
 
 /**
