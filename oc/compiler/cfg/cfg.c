@@ -2457,6 +2457,9 @@ static basic_block_t* merge_back_empty_block(basic_block_t* a, basic_block_t* b)
 	//Now we can delete the a block from the cfg
 	dynamic_array_delete(cfg_ref->created_blocks, a);
 
+	//Now that A is completely gone, we should be safe to completely delete it
+	basic_block_dealloc(a);
+
 	//Give back the b block
 	return b;
 }
@@ -2546,15 +2549,11 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		add_assigned_variable(a, b->assigned_variables->internal_array[i]);
 	}
 
-	//Very last thing here, we need to be completely rid of B. It can
-	//no longer be in the dynamic array. As such, we'll have to remove it
-	u_int16_t index = dynamic_array_contains(cfg_ref->created_blocks, b);
+	//We'll remove this from the list of created blocks
+	dynamic_array_delete(cfg_ref->created_blocks, b);
 
-	//Now we'll delete at this index
-	dynamic_array_delete_at(cfg_ref->created_blocks, index);
-
-	//And finally we'll free B -- MEMORY LEAKS
-	free(b);
+	//And finally we'll deallocate b
+	basic_block_dealloc(b);
 
 	//Give back the pointer to a
 	return a;
