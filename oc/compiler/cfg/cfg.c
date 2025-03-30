@@ -580,6 +580,13 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  *
  */
 static basic_block_t* immediate_dominator(basic_block_t* B){
+	//If we've already found the immediate dominator, why find it again?
+	//We'll just give that back
+	if(B->immediate_dominator != NULL){
+		return B->immediate_dominator;
+	}
+
+	//Regular variable declarations
 	basic_block_t* A; 
 	basic_block_t* C;
 	u_int8_t A_is_IDOM;
@@ -636,10 +643,14 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 		//If we survived, then we're done here
 		if(A_is_IDOM == TRUE){
+			//Mark this for any future runs...we won't waste any time doing this
+			//calculation over again
+			B->immediate_dominator = A;
 			return A;
 		}
 	}
 
+	//Otherwise we didn't find it, so there is no immediate dominator
 	return NULL;
 }
 
@@ -693,6 +704,22 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 				cursor = immediate_dominator(cursor);
 			}
 		}
+	}
+}
+
+
+/**
+ * Add a dominated block to the dominator block that we have
+ */
+static void add_dominated_block(basic_block_t* dominator, basic_block_t* dominated){
+	//If this is NULL, then we'll allocate it right now
+	if(dominator->dominator_children == NULL){
+		dominator->dominator_children = dynamic_array_alloc();
+	}
+
+	//If we do not already have this in the dominator children, then we will add it
+	if(dynamic_array_contains(dominator->dominator_children, dominated) == NOT_FOUND){
+		dynamic_array_add(dominator->dominator_children, dominated);
 	}
 }
 
@@ -1160,6 +1187,15 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 		}
 	}
 }
+
+
+/**
+ * Build the dominator tree for each function in the CFG
+ */
+static void build_dominator_trees(cfg_t* cfg){
+
+}
+
 
 
 /**
@@ -2197,6 +2233,11 @@ static void basic_block_dealloc(basic_block_t* block){
 	//Deallocate the dominator set
 	if(block->dominator_set != NULL){
 		dynamic_array_dealloc(block->dominator_set);
+	}
+
+	//Deallocate the dominator children
+	if(block->dominator_children != NULL){
+		dynamic_array_dealloc(block->dominator_children);
 	}
 
 	//Deallocate the domninance frontier

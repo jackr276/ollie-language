@@ -117,10 +117,16 @@ struct basic_block_t{
 	dynamic_array_t* dominance_frontier;
 	//The dynamic array for the dominator set
 	dynamic_array_t* dominator_set;
+	//The dominator children of a basic block. These are all
+	//of the blocks that this block directly dominates
+	dynamic_array_t* dominator_children;
 	//The "LIVE_IN" variables for this node
 	dynamic_array_t* live_in;
 	//The "LIVE_OUT" variables for this node
 	dynamic_array_t* live_out;
+	//The immediate dominator - this reference isn't always used, but if we go through the work
+	//of calculating it, we may as well store it
+	basic_block_t* immediate_dominator;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)
