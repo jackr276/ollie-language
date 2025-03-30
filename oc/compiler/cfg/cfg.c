@@ -2280,34 +2280,11 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 			//And finally we'll add all of these onto the queue
 			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
-				//False by default
-				u_int8_t found_others = FALSE;
+				//Add the successor into the queue, if it has not yet been visited
+				basic_block_t* successor = block->successors->internal_array[j];
 
-				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(block->successors, j);
-
-				//If we haven't seen this before
 				if(successor->visited != 3){
-					//If this block has other predecessors who have not been visited, enqueue those
-					//first so that we can ensure that they are visited before this one
-					for(u_int16_t k = 0; successor->predecessors != NULL && k < successor->predecessors->current_index; k++){
-						//Grab the predecessor out
-						basic_block_t* predecessor = dynamic_array_get_at(successor->predecessors, k);
-
-						if(predecessor->visited != 3 && predecessor->block_type != BLOCK_TYPE_FOR_STMT_UPDATE){
-							found_others = TRUE;
-							//Add these into the queue first
-							enqueue(queue, predecessor);
-						}
-					}
-
-					//If we did find others, we'll hold off
-					//on putting this one in. We'll only put it
-					//in if we're sure that all of it's predecessors
-					//are now accounted for
-					if(found_others == FALSE){
-						enqueue(queue, successor);
-					}
+					enqueue(queue, successor);
 				}
 			}
 		}
@@ -2511,6 +2488,7 @@ static basic_block_t* merge_back_empty_block(basic_block_t* a, basic_block_t* b)
 				
 				//Add this in as a predecessor exclusively
 				add_predecessor_only(b, pred_cursor);
+
 			}
 		}
 	}

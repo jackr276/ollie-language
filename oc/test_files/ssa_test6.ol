@@ -16,11 +16,21 @@ fn main() -> i32{
 
 	if(x <= 32) then{
 		x := x + 22;
-		//ret x;
 	} else {
 		x := x - 3;
 		y := 11;
 	}
+
+	idle;
+
+	//while(x <= 322) do{
+	//do{
+	for(let _:u32 := 0; _ <= 323; _++) do{
+		x := x + 33;
+
+		break when(x == 32);
+	}//while(x <= 322);
+
 
 	ret x + y;
 }
