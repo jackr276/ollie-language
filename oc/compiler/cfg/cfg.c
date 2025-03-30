@@ -616,18 +616,13 @@ static void cleanup_all_dangling_blocks(cfg_t* cfg){
 		//Is this block a dangling block? We'll know it is if it only has one statement, and
 		//that statement is a jump
 		
-		//If it's an empty block , we don't want it
-		if(current_block->leader_statement == NULL){
-			continue;
-		}
-
 		//Next iteration here, there's more than one statement
 		if(current_block->leader_statement != current_block->exit_statement){
 			continue;
 		}
 
 		//Is it a jump statement? If it isn't then we're done
-		if(current_block->leader_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+		if(current_block->leader_statement == NULL || current_block->leader_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
 			continue;
 		}
 
@@ -638,10 +633,10 @@ static void cleanup_all_dangling_blocks(cfg_t* cfg){
 		//First, we'll delete this from the predecessor set of the block that it jumps to
 		dynamic_array_delete(jumping_to_block->predecessors, current_block);
 
-		//Now what we'll--we'll modify every single predecessor of this block and any
+		//Now we'll modify every single predecessor of this block and any
 		//jump statement in it to point to this new one
 		for(u_int16_t i = 0; current_block->predecessors != NULL && i < current_block->predecessors->current_index; i++){
-			//Grab out the block
+			//Grab out the block from the current block's predecessors
 			basic_block_t* predecessor_block = dynamic_array_get_at(current_block->predecessors, i);
 
 			//Delete any reference to the current block in this block's successor set
@@ -666,6 +661,9 @@ static void cleanup_all_dangling_blocks(cfg_t* cfg){
 				stmt = stmt->next_statement;
 			}
 		}
+
+		//Remove the current block from the created block array
+		dynamic_array_delete(cfg->created_blocks, current_block);
 	}
 }
 
