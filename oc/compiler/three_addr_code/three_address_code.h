@@ -306,7 +306,7 @@ three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_n
 /**
  * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
  */
-three_addr_code_stmt_t* emit_phi_function(three_addr_var_t* variable);
+three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable);
 
 /**
  * Emit an idle statement

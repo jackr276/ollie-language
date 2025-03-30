@@ -488,8 +488,8 @@ static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi
 	//Special case -- we're adding the head
 	if(target->leader_statement == NULL || target->exit_statement == NULL){
 		//Assign this to be the head and the tail
-		target->leader_statement = phi_statement;
-		target->exit_statement = phi_statement;
+		//target->leader_statement = phi_statement;
+		//target->exit_statement = phi_statement;
 	}
 
 	//Otherwise we will add this in at the very front
@@ -1122,8 +1122,30 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						//Grab this node out
 						basic_block_t* df_node = dynamic_array_get_at(node->dominance_frontier, j);
 
-					}
+						//If this node already has a phi function, we're not gonna bother with it
+						if(dynamic_array_contains(already_has_phi_func, df_node) != NOT_FOUND){
+							//We DID find it, so we will NOT add anything, it already has one
+							continue;
+						}
+						
+						//If we make it here that means that we don't already have one, so we'll add
+						//it
+						three_addr_code_stmt_t* phi_stmt = emit_phi_function(record);
 
+						//Add the phi statement into the block	
+						add_phi_statement(df_node, phi_stmt);
+
+						//We'll mark that this block already has one for the future
+						dynamic_array_add(already_has_phi_func, df_node); 
+
+						//If this node has not ever been on the worklist, we'll add it
+						//to keep the search going
+						if(dynamic_array_contains(ever_on_worklist, df_node) == NOT_FOUND){
+							//We did NOT find it, so we WILL add it
+							dynamic_array_add(worklist, df_node);
+							dynamic_array_add(ever_on_worklist, df_node);
+						}
+					}
 				}
 
 				//Now that we're done with these, we'll remove them for

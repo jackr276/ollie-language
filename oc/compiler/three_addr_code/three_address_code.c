@@ -863,12 +863,15 @@ three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_n
  * Emit a phi function for a given variable. Once emitted, these statements are compiler exclusive,
  * but they are needed for our optimization
  */
-three_addr_code_stmt_t* emit_phi_function(three_addr_var_t* variable){
+three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable){
 	//First we allocate it
 	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
 	//We'll just store the assignee here, no need for anything else
-	stmt->assignee = variable;
+	stmt->assignee = emit_var(variable, TRUE, FALSE);
+
+	//Note what kind of node this is
+	stmt->CLASS = THREE_ADDR_CODE_PHI_FUNC;
 
 	//And give the statement back
 	return stmt;
