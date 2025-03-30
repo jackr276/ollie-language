@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "../cfg/cfg.h"
 
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
@@ -445,7 +446,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		}
 
 		//Then print out the block label
-		printf(" .L%d\n", stmt->jumping_to_id);
+		printf(" .L%d\n", ((basic_block_t*)(stmt->jumping_to_block))->block_id);
 
 	//If we have a function call go here
 	} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
@@ -731,13 +732,13 @@ three_addr_code_stmt_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* a
 /**
  * Emit a jump statement where we jump to the block with the ID provided
  */
-three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id, jump_type_t jump_type){
+three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, jump_type_t jump_type){
 	//First allocate it
 	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
-	stmt->jumping_to_id = jumping_to_id;
+	stmt->jumping_to_block = jumping_to_block;
 	stmt->jump_type = jump_type;
 
 	//Give the statement back

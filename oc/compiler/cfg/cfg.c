@@ -122,7 +122,8 @@ static basic_block_t* visit_switch_statement(values_package_t* values);
 //Return a three address code variable
 static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr);
 static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
-
+//Add a successor
+static void add_successor(basic_block_t* target, basic_block_t* successor);
 
 
 /**
@@ -590,6 +591,82 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
 
 	//If we make it all of the way down here and we didn't find it, fail out
 	return FALSE;
+}
+
+
+/**
+ * Our way of using "End blocks" for control flow generation can often leave blocks who only serve
+ * to jump to another block. These blocks create clutter and confusion. As such, we will clean
+ * them up by modifying all predecessors of these blocks to point to whatever this block itself points
+ * to
+ */
+static void cleanup_all_dangling_blocks(cfg_t* cfg){
+	//What is a "dangling block"? It's a block that only has a jump statement. It really
+	//acts as a pure passthrough. Instead of dealing with this, we can clean it up to avoid
+	//the clutter
+
+	//The current block
+	basic_block_t* current_block;
+
+	//For each block in the CFG
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the block out
+		current_block = dynamic_array_get_at(cfg->created_blocks, _);
+
+		//Is this block a dangling block? We'll know it is if it only has one statement, and
+		//that statement is a jump
+		
+		//If it's an empty block , we don't want it
+		if(current_block->leader_statement == NULL){
+			continue;
+		}
+
+		//Next iteration here, there's more than one statement
+		if(current_block->leader_statement != current_block->exit_statement){
+			continue;
+		}
+
+		//Is it a jump statement? If it isn't then we're done
+		if(current_block->leader_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+			continue;
+		}
+
+		//If we make it here(and we usually won't) we know that we have a dangling block
+		//What does this block jump to? Let's find out
+		basic_block_t* jumping_to_block = current_block->leader_statement->jumping_to_block;
+
+		//First, we'll delete this from the predecessor set of the block that it jumps to
+		dynamic_array_delete(jumping_to_block->predecessors, current_block);
+
+		//Now what we'll--we'll modify every single predecessor of this block and any
+		//jump statement in it to point to this new one
+		for(u_int16_t i = 0; current_block->predecessors != NULL && i < current_block->predecessors->current_index; i++){
+			//Grab out the block
+			basic_block_t* predecessor_block = dynamic_array_get_at(current_block->predecessors, i);
+
+			//Delete any reference to the current block in this block's successor set
+			dynamic_array_delete(predecessor_block->successors, current_block);
+
+			//Add the jumping to block as a successor of this one
+			add_successor(predecessor_block, jumping_to_block);
+
+			//Now we'll go through each statement in this block. If it's a jump statement, and it jumps to
+			//current block, we'll update it to be the new block
+			three_addr_code_stmt_t* stmt = predecessor_block->leader_statement;
+
+			//Run through every statement
+			while(stmt != NULL){
+				//If it's a jump statement and referencing this dud block
+				if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && stmt->jumping_to_block == current_block){
+					//Update the reference to be the new block
+					stmt->jumping_to_block = jumping_to_block;
+				}
+
+				//Advance the statement up
+				stmt = stmt->next_statement;
+			}
+		}
+	}
 }
 
 
@@ -1136,20 +1213,6 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	symtab_variable_record_t* record;
 	//A cursor that we can use
 	basic_block_t* block_cursor;
-
-	//We first need to calculate the dominator sets of every single node
-	calculate_dominator_sets(cfg);
-
-	//Now we'll build the dominator tree up
-	build_dominator_trees(cfg);
-
-	//We need to calculate the dominance frontier of every single block before
-	//we go any further
-	calculate_dominance_frontiers(cfg);
-
-	//now we calculate the liveness sets
-	calculate_liveness_sets(cfg);
-
 	//Once we're done with all of this, we're finally ready to insert phi functions
 
 	//------------------------------------------
@@ -1367,7 +1430,7 @@ static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* 
  */
 static void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type){
 	//Use the helper function to emit the statement
-	three_addr_code_stmt_t* stmt = emit_jmp_stmt_three_addr_code(dest_block->block_id, type);
+	three_addr_code_stmt_t* stmt = emit_jmp_stmt_three_addr_code(dest_block, type);
 
 	//Add this into the first block
 	add_statement(basic_block, stmt);
@@ -4656,15 +4719,31 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 		(*num_errors_ref)++;
 	}
 
-	//Destroy the temp variable symtab
-	variable_symtab_dealloc(temp_vars);
+	//Cleanup any and all dangling blocks
+	cleanup_all_dangling_blocks(cfg);
 	
+	//We first need to calculate the dominator sets of every single node
+	calculate_dominator_sets(cfg);
+
+	//Now we'll build the dominator tree up
+	build_dominator_trees(cfg);
+
+	//We need to calculate the dominance frontier of every single block before
+	//we go any further
+	calculate_dominance_frontiers(cfg);
+
+	//now we calculate the liveness sets
+	calculate_liveness_sets(cfg);
+
 	//Add all phi functions for SSA
 	insert_phi_functions(cfg, results.variable_symtab);
 
 	//FOR PRINTING
 	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
-	
+
+	//Destroy the temp variable symtab
+	variable_symtab_dealloc(temp_vars);
+
 	//Give back the reference
 	return cfg;
 }

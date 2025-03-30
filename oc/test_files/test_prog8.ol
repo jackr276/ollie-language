@@ -10,8 +10,6 @@ fn tester(i:u32) -> i32{
 fn main() -> i32{
 	
 	let a:i32 := 23;
-
-
 	
  	declare arr:i32[32][3];
 
@@ -30,7 +28,7 @@ fn main() -> i32{
 			//Test this out
 			for(let _:i32 := 0; _ < 32; _++) do{
 				@tester(_);
-				//break when (_ == 3);
+				break when (_ == 3);
 			}
 
 			let a:i32 := 23;

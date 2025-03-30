@@ -175,8 +175,8 @@ struct three_addr_code_stmt_t{
 	u_int64_t lea_multiplicator;
 	//The actual operator, stored as a token for size requirements
 	Token op;
-	//If we have a jump statement, where we're jumping to
-	int32_t jumping_to_id;
+	//Store a reference to the block that we're jumping to
+	void* jumping_to_block;
 	//Is this a jump table? -- for use in switch statements
 	u_int8_t is_jump_table;
 	//If it's a jump statement, what's the type?
@@ -285,7 +285,7 @@ three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* 
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
-three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(int32_t jumping_to_id, jump_type_t jump_type);
+three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, jump_type_t jump_type);
 
 /**
  * Emit a direct jump statement. This is used only with jump statements the user has made

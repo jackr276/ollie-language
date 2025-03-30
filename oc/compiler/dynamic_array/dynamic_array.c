@@ -189,7 +189,12 @@ void dynamic_array_delete(dynamic_array_t* array, void* ptr){
 	}
 
 	//Otherwise we'll need to grab this index
-	u_int16_t index = dynamic_array_contains(array, ptr);
+	int16_t index = dynamic_array_contains(array, ptr);
+
+	//If we couldn't find it - no harm, we just won't do anything
+	if(index == NOT_FOUND){
+		return;
+	}
 
 	//Now we'll use the index to delete
 	dynamic_array_delete_at(array, index);
