@@ -3028,9 +3028,15 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	return while_statement_entry_block;
 }
 
-static basic_block_t* visit_if_statement2(values_package_t* values){
-	//We always have an entry block
+
+/**
+ * Process the if-statement subtree into CFG form
+ */
+static basic_block_t* visit_if_statement(values_package_t* values){
+	//We always have an entry block and an exit block
 	basic_block_t* entry_block = basic_block_alloc();
+	basic_block_t* exit_block = basic_block_alloc();
+	exit_block->block_type = BLOCK_TYPE_IF_STMT_END;
 
 	//Grab the cursor
 	generic_ast_node_t* cursor = values->initial_node->first_child;
@@ -3049,12 +3055,175 @@ static basic_block_t* visit_if_statement2(values_package_t* values){
 													 	values->if_stmt_end_block, //If statement end
 													 	values->for_loop_update_block); //For loop update block
 
+	//Visit the compound statement that we're required to have here
+	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
+	basic_block_t* if_compound_stmt_end;
 
-	//So long as we keep seeing else-if clauses
-	while(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
+	//If this is null, it's fine, but we should throw a warning
+	if(if_compound_stmt_entry == NULL){
+		print_cfg_message(WARNING, "Empty if clause in if-statement", cursor->line_number);
+		(*num_warnings_ref)++;
 
+		//We'll just set this to jump out of here
+		//We will perform a normal jump to this one
+		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+		emit_jmp_stmt(entry_block, exit_block, jump_to_if);
+		add_successor(entry_block, exit_block);
+
+	//We expect this to be the most likely option
+	} else {
+		//Add the if statement node in as a direct successor
+		add_successor(entry_block, if_compound_stmt_entry);
+		//We will perform a normal jump to this one
+		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+		emit_jmp_stmt(entry_block, if_compound_stmt_entry, jump_to_if);
+
+		//Now we'll find the end of this statement
+		if_compound_stmt_end = if_compound_stmt_entry;
+
+		//Once we've visited, we'll need to drill to the end of this compound statement
+		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
+		}
+
+		//If this is not a return block, we will add these
+		if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			//The successor to the if-stmt end path is the if statement end block
+			emit_jmp_stmt(if_compound_stmt_end, exit_block, JUMP_TYPE_JMP);
+			//If this is the case, the end block is a successor of the if_stmt end
+			add_successor(if_compound_stmt_end, exit_block);
+		}
 	}
 
+	//Advance the cursor up to it's next sibling
+	cursor = cursor->next_sibling;
+
+	//For traversing the else-if tree
+	generic_ast_node_t* else_if_cursor;
+
+	//So long as we keep seeing else-if clauses
+	while(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_ELSE_IF_STMT){
+		//This will be the expression
+		else_if_cursor = cursor->first_child;
+
+		//So we've seen the else-if clause. Let's grab the expression first
+		package = emit_expr_code(entry_block, else_if_cursor);
+
+		//Advance it up -- we should now have a compound statement
+		else_if_cursor = else_if_cursor->next_sibling;
+
+		//For compound statement handling
+		values_package_t else_if_compound_stmt_values = pack_values(else_if_cursor, //Initial Node
+													 	values->loop_stmt_start, //Loop statement start
+													 	values->loop_stmt_end, //Exit block of loop
+													 	values->switch_statement_end, //Switch statement end
+													 	values->if_stmt_end_block, //If statement end
+													 	values->for_loop_update_block); //For loop update block
+
+		//Let this handle the compound statement
+		basic_block_t* else_if_compound_stmt_entry = visit_compound_statement(&else_if_compound_stmt_values);
+		basic_block_t* else_if_compound_stmt_exit;
+
+		//If this is NULL, it's fine, but we should warn
+		if(else_if_compound_stmt_entry == NULL){
+			print_cfg_message(WARNING, "Empty else-if clause in else-if-statement", cursor->line_number);
+			(*num_warnings_ref)++;
+
+			//We'll just set this to jump out of here
+			//We will perform a normal jump to this one
+			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+			emit_jmp_stmt(entry_block, exit_block, jump_to_else_if);
+			add_successor(entry_block, exit_block);
+
+		//We expect this to be the most likely option
+		} else {
+			//Add the if statement node in as a direct successor
+			add_successor(entry_block, else_if_compound_stmt_entry);
+			//We will perform a normal jump to this one
+			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+			emit_jmp_stmt(entry_block, else_if_compound_stmt_entry, jump_to_if);
+
+			//Now we'll find the end of this statement
+			else_if_compound_stmt_exit = else_if_compound_stmt_entry;
+
+			//Once we've visited, we'll need to drill to the end of this compound statement
+			while(else_if_compound_stmt_exit->direct_successor != NULL && else_if_compound_stmt_exit->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+				else_if_compound_stmt_exit = else_if_compound_stmt_exit->direct_successor;
+			}
+
+			//If this is not a return block, we will add these
+			if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
+				//The successor to the if-stmt end path is the if statement end block
+				emit_jmp_stmt(else_if_compound_stmt_exit, exit_block, JUMP_TYPE_JMP);
+				//If this is the case, the end block is a successor of the if_stmt end
+				add_successor(else_if_compound_stmt_exit, exit_block);
+			}
+		}
+
+		//Advance this up to the next one
+		cursor = cursor->next_sibling;
+	}
+
+	//Now that we're out of here - we may have an else statement on our hands
+	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+		//Let's handle the compound statement
+		
+		//For compound statement handling
+		values_package_t else_compound_stmt_values = pack_values(cursor, //Initial Node
+													 	values->loop_stmt_start, //Loop statement start
+													 	values->loop_stmt_end, //Exit block of loop
+													 	values->switch_statement_end, //Switch statement end
+													 	values->if_stmt_end_block, //If statement end
+													 	values->for_loop_update_block); //For loop update block
+
+		//Grab the compound statement
+		basic_block_t* else_compound_stmt_entry = visit_compound_statement(&else_compound_stmt_values);
+		basic_block_t* else_compound_stmt_exit;
+
+		//If it's NULL, that's fine, we'll just throw a warning
+		if(else_compound_stmt_entry == NULL){
+			print_cfg_message(WARNING, "Empty else clause in else-statement", cursor->line_number);
+			(*num_warnings_ref)++;
+			//We'll jump to the end here
+			add_successor(entry_block, exit_block);
+			//Emit a direct jump here
+			emit_jmp_stmt(entry_block, exit_block, JUMP_TYPE_JMP);
+		} else {
+			//Add the if statement node in as a direct successor
+			add_successor(entry_block, else_compound_stmt_entry);
+			//We will perform a normal jump to this one
+			emit_jmp_stmt(entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP);
+
+			//Now we'll find the end of this statement
+			else_compound_stmt_exit = else_compound_stmt_entry;
+
+			//Once we've visited, we'll need to drill to the end of this compound statement
+			while(else_compound_stmt_exit->direct_successor != NULL && else_compound_stmt_exit->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+				else_compound_stmt_exit = else_compound_stmt_exit->direct_successor;
+			}
+
+			//If this is not a return block, we will add these
+			if(else_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
+				//The successor to the if-stmt end path is the if statement end block
+				emit_jmp_stmt(else_compound_stmt_exit, exit_block, JUMP_TYPE_JMP);
+				//If this is the case, the end block is a successor of the if_stmt end
+				add_successor(else_compound_stmt_exit, exit_block);
+			}
+		}
+
+	//Otherwise the if statement will need to jump directly to the end
+	} else {
+		//We'll jump to the end here
+		add_successor(entry_block, exit_block);
+		//Emit a direct jump here
+		emit_jmp_stmt(entry_block, exit_block, JUMP_TYPE_JMP);
+	}
+
+	//For our convenience - this makes drilling way faster
+	entry_block->direct_successor = exit_block;
+
+	//give the entry block back
+	return entry_block;
 }
 
 
@@ -3075,7 +3244,7 @@ static basic_block_t* visit_if_statement2(values_package_t* values){
  * that the "if" part of the statement is always directly underneath the entry block. These else,
  * if such a statement exists, needs to be jumped to to get to it
  */
-static basic_block_t* visit_if_statement(values_package_t* values){
+static basic_block_t* visit_if_statement2(values_package_t* values){
 	//We always have an entry block here -- the end block is made for us
 	basic_block_t* entry_block = basic_block_alloc();
 
@@ -4016,16 +4185,11 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 		//We've found an if-statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IF_STMT){
-			//Create the end block here for pointer reasons
-			basic_block_t* if_end_block = basic_block_alloc();
-			//Explicitly mark this as an if end block
-			if_end_block->block_type = BLOCK_TYPE_IF_STMT_END;
-
 			//Create the values package
 			values_package_t if_stmt_values;
 			if_stmt_values.initial_node = ast_cursor;
 			if_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			if_stmt_values.if_stmt_end_block = if_end_block;
+			if_stmt_values.if_stmt_end_block = NULL;
 			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
 			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
 
