@@ -31,17 +31,18 @@ fn main() -> i32{
 	let mut y:i32 := 3232;
 
 	x := 3222;
-
-	if(x <= 32) then{
-		x := x + 22;
-	} else {
-		x := x - 3;
-		y := 11;
-
-		if( x - y == 0) then{
-			x := 32;
+	for(let _:i32 := 2; _ < 23; _++) do{
+		if(x <= 32) then{
+			x := x + 22;
 		} else {
-			y := 32;
+			x := x - 3;
+			y := 11;
+
+			if( x - y == 0) then{
+				x := 32;
+			} else {
+				y := 32;
+			}
 		}
 	}
 

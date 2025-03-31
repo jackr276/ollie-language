@@ -2924,6 +2924,8 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 		
 	//We'll need a jump statement here to the entrance block
 	emit_jmp_stmt(compound_stmt_end, do_while_stmt_entry_block, jump_type);
+	//Also emit a jump statement to the ending block
+	emit_jmp_stmt(compound_stmt_end, do_while_stmt_exit_block, JUMP_TYPE_JMP);
 
 	//Always return the entry block
 	return do_while_stmt_entry_block;
@@ -4683,7 +4685,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	}
 
 	//Cleanup any and all dangling blocks
-	cleanup_all_dangling_blocks(cfg);
+	//cleanup_all_dangling_blocks(cfg);
 	
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
