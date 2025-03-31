@@ -3028,6 +3028,35 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	return while_statement_entry_block;
 }
 
+static basic_block_t* visit_if_statement2(values_package_t* values){
+	//We always have an entry block
+	basic_block_t* entry_block = basic_block_alloc();
+
+	//Grab the cursor
+	generic_ast_node_t* cursor = values->initial_node->first_child;
+
+	//Add whatever our conditional is into the starting block
+	expr_ret_package_t package = emit_expr_code(entry_block, cursor);
+
+	//No we'll move one step beyond, the next node must be a compound statement
+	cursor = cursor->next_sibling;
+
+	//Create a copy of our values here
+	values_package_t if_compound_stmt_values = pack_values(cursor, //Initial Node
+													 	values->loop_stmt_start, //Loop statement start
+													 	values->loop_stmt_end, //Exit block of loop
+													 	values->switch_statement_end, //Switch statement end
+													 	values->if_stmt_end_block, //If statement end
+													 	values->for_loop_update_block); //For loop update block
+
+
+	//So long as we keep seeing else-if clauses
+	while(cursor->CLASS == AST_NODE_CLASS_IF_STMT){
+
+	}
+
+}
+
 
 /**
  * Process the if-statement subtree into the equivalent CFG form
@@ -3058,12 +3087,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
-
-	//If it isn't, that's an issue
-	if(cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		print_cfg_message(PARSE_ERROR, "Fatal internal compiler error: Expected compound statement in if node", cursor->line_number);
-		exit(1);
-	}
 
 	//Create a copy of our values here
 	values_package_t if_compound_stmt_values = pack_values(cursor, //Initial Node
