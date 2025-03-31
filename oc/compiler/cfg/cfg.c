@@ -56,8 +56,6 @@ typedef struct {
 	basic_block_t* loop_stmt_end;
 	//For break statements as well
 	basic_block_t* switch_statement_end;
-	//For congruety in if-statements
-	basic_block_t* if_stmt_end_block;
 	//For any time we need to do for-loop operations
 	basic_block_t* for_loop_update_block;
 } values_package_t;
@@ -129,7 +127,7 @@ static void add_successor(basic_block_t* target, basic_block_t* successor);
 /**
  * This is a very simple helper function that will pack values for us. This is done to avoid repeated code
  */
-static values_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* switch_statement_end, basic_block_t* if_statement_end_block, basic_block_t* for_loop_update_block){
+static values_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* switch_statement_end, basic_block_t* for_loop_update_block){
 	//Allocate it
 	values_package_t values;
 
@@ -138,7 +136,6 @@ static values_package_t pack_values(generic_ast_node_t* initial_node, basic_bloc
 	values.loop_stmt_start = loop_stmt_start;
 	values.loop_stmt_end = loop_stmt_end;
 	values.switch_statement_end = switch_statement_end;
-	values.if_stmt_end_block = if_statement_end_block;
 	values.for_loop_update_block = for_loop_update_block;
 
 	//And give the copy back
@@ -2779,7 +2776,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	condition_block, //Loop statement start -- for loops start at their condition
 													 	for_stmt_exit_block, //Exit block of loop
-													 	NULL,
 													 	NULL, 
 													 	for_stmt_update_block); //For loop update block
 
@@ -2875,7 +2871,6 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 													 	do_while_stmt_entry_block, //Loop statement start
 													 	do_while_stmt_exit_block, //Exit block of loop
 													 	NULL, //Switch statement end
-													 	NULL, //If statement end
 													 	NULL); //For loop update block
 
 	//We go right into the compound statement here
@@ -2967,7 +2962,6 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 													 	while_statement_entry_block, //Loop statement start
 													 	while_statement_end_block, //Exit block of loop
 													 	NULL, //Switch statement end
-													 	NULL, //If statement end
 													 	NULL); //For loop update block
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
@@ -3054,7 +3048,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
-													 	values->if_stmt_end_block, //If statement end
 													 	values->for_loop_update_block); //For loop update block
 
 	//Visit the compound statement that we're required to have here
@@ -3119,7 +3112,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
-													 	values->if_stmt_end_block, //If statement end
 													 	values->for_loop_update_block); //For loop update block
 
 		//Let this handle the compound statement
@@ -3175,7 +3167,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
-													 	values->if_stmt_end_block, //If statement end
 													 	values->for_loop_update_block); //For loop update block
 
 		//Grab the compound statement
@@ -3254,7 +3245,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 													 	NULL, //Loop statement start
 													 	NULL, //Exit block of loop
 													 	NULL, //Switch statement end
-													 	NULL, //If statement end
 													 	NULL); //For loop update block
 			//We'll visit the block here
 			basic_block_t* decl_block = visit_declaration_statement(&decl_values, VARIABLE_SCOPE_LOCAL);
@@ -3268,7 +3258,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 													 	NULL, //Loop statement start
 													 	NULL, //Exit block of loop
 													 	NULL, //Switch statement end
-													 	NULL, //If statement end
 													 	NULL); //For loop update block
 
 
@@ -3314,7 +3303,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
-													 	values->if_stmt_end_block, //If statement end
 													 	values->for_loop_update_block); //For loop update block
 			
 			//We'll simply recall this function and let it handle it
@@ -3346,16 +3334,11 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 		//We've found an if-statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_IF_STMT){
-			//Create the end block here for pointer reasons
-			basic_block_t* if_end_block = basic_block_alloc();
-			//We will explicitly denote that this is an if statement ending block
-			if_end_block->block_type = BLOCK_TYPE_IF_STMT_END;
-
+			//Pack the values up
 			values_package_t if_stmt_values = pack_values(current_node, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->switch_statement_end, //Switch statement end
-														if_end_block, //If statement end
 													 	values->for_loop_update_block); //For loop update block
 			
 			//We'll now enter the if statement
@@ -3384,7 +3367,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			while_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			while_stmt_values.loop_stmt_start = NULL;
 			while_stmt_values.loop_stmt_end = NULL;
-			while_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
 			while_stmt_values.switch_statement_end = values->switch_statement_end;
 
 			//Visit the while statement
@@ -3413,7 +3395,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Create the values package
 			values_package_t do_while_values;
 			do_while_values.initial_node = current_node;
-			do_while_values.if_stmt_end_block = values->if_stmt_end_block;
 			do_while_values.loop_stmt_start = NULL;
 			do_while_values.loop_stmt_end = NULL;
 			do_while_values.for_loop_update_block = values->for_loop_update_block;
@@ -3458,7 +3439,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			for_stmt_values.loop_stmt_start = NULL;
 			for_stmt_values.loop_stmt_end = NULL;
-			for_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
 			for_stmt_values.switch_statement_end = values->switch_statement_end;
 
 			//First visit the statement
@@ -3991,7 +3971,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			values_package_t if_stmt_values;
 			if_stmt_values.initial_node = ast_cursor;
 			if_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			if_stmt_values.if_stmt_end_block = NULL;
 			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
 			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
 
@@ -4021,7 +4000,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			while_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			while_stmt_values.loop_stmt_start = NULL;
 			while_stmt_values.loop_stmt_end = NULL;
-			while_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
 
 			//Visit the while statement
 			basic_block_t* while_stmt_entry_block = visit_while_statement(&while_stmt_values);
@@ -4049,7 +4027,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Create the values package
 			values_package_t do_while_values;
 			do_while_values.initial_node = ast_cursor;
-			do_while_values.if_stmt_end_block = values->if_stmt_end_block;
 			do_while_values.loop_stmt_start = NULL;
 			do_while_values.loop_stmt_end = NULL;
 			do_while_values.for_loop_update_block = values->for_loop_update_block;
@@ -4093,7 +4070,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			for_stmt_values.loop_stmt_start = NULL;
 			for_stmt_values.loop_stmt_end = NULL;
-			for_stmt_values.if_stmt_end_block = values->if_stmt_end_block;
 
 			//First visit the statement
 			basic_block_t* for_stmt_entry_block = visit_for_statement(&for_stmt_values);
@@ -4475,7 +4451,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 											 		NULL, //Loop statement start
 											 		NULL, //Exit block of loop
 											 		NULL, //Switch statement end
-											 		NULL, //If statement end
 											 		NULL); //For loop update block
 
 	//Once we get here, we know that func cursor is the compound statement that we want
@@ -4595,7 +4570,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 											 	NULL, //Loop statement start
 											 	NULL, //Exit block of loop
 											 	NULL, //Switch statement end
-											 	NULL, //If statement end
 											 	NULL); //For loop update block
 
 			//If the cfg's global block is empty, we'll add it in here
@@ -4615,7 +4589,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 											 	NULL, //Loop statement start
 											 	NULL, //Exit block of loop
 											 	NULL, //Switch statement end
-											 	NULL, //If statement end
 											 	NULL); //For loop update block
 			
 			//If the cfg's global block is empty, we'll add it in here
