@@ -5408,7 +5408,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
  *
  * NOTE: We assume that the caller has already seen and consumed the if token if they make it here
  *
- * BNF Rule: <if-statement> ::= if( <logical-or-expression> ) then <compound-statement> {else <if-statement> | <compound-statement>}*
+ * BNF Rule: <if-statement> ::= if( <logical-or-expression> ) then <compound-statement> {else if statement}* {else-statement}?
  */
 static generic_ast_node_t* if_statement(FILE* fl){
 	//For error printing
@@ -5416,10 +5416,12 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-	//Lookahead token
+	//Lookahead tokens
 	Lexer_item lookahead;
+	Lexer_item lookahead2;
 
-	//Let's first create our if statement
+	//Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
+	//will be a child of this statement
 	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_CLASS_IF_STMT);
 
 	//Remember, we've already seen the if token, so now we just need to see an L_PAREN
@@ -5460,9 +5462,6 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//If we make it here, we can add this in as the first child to the root node
-	add_child_node(if_stmt, expression_node);
-
 	//Following the expression we need to see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -5493,6 +5492,9 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//If we make it here, we can add this in as the first child to the root node
+	add_child_node(if_stmt, expression_node);
+
 	//Now following this, we need to see a valid compound statement
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
@@ -5506,57 +5508,132 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	//If we make it down here, we know that it's valid. As such, we can now add it as a child node
 	add_child_node(if_stmt, compound_stmt_node);
 
-	//Now we're at the point where we can optionally see an else statement. An else statement could
-	//be followed by another if statement optionally. We will handle both cases
+	//Now we're at the point where we can optionally see else if statements.
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead2 = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//No else statement, so we'll just put it back and get out
-	if(lookahead.tok != ELSE){
-		//Push this back
-		push_back_token(lookahead);
-		//Return the root node
-		return if_stmt;
+	//So long as we see "else if's", we will keep repeating this process
+	while(lookahead.tok == ELSE && lookahead2.tok == IF){
+		//We've found one - let's create our fresh else if node
+		generic_ast_node_t* else_if_node = ast_node_alloc(AST_NODE_CLASS_ELSE_IF_STMT);
+
+		//Remember, we've already seen the if token, so now we just need to see an L_PAREN
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail out if we don't have it
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after else if statement", current_line);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Push onto the stack for matching later
+		push_token(grouping_stack, lookahead);
+	
+		//We now need to see a valid conditional expression
+		generic_ast_node_t* else_if_expression_node = logical_or_expression(fl);
+
+		//If we see an invalid one
+		if(else_if_expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid conditional expression given as else if statement condition", current_line);
+			num_errors++;
+			//It's already an error so just return it
+			return else_if_expression_node;
+		}
+
+		/**
+		 * The expression of this type must be compatible at the very list with a u_int64
+		 */
+		symtab_type_record_t* int_type = lookup_type(type_symtab, "u64");
+
+		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
+		if(else_if_expression_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, else_if_expression_node->inferred_type) == NULL){
+			sprintf(info, "If statements require an int or pointer type to be in their condition, but was given type \"%s\"", else_if_expression_node->inferred_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Following the expression we need to see a closing paren
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//If we don't see the R_Paren
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in else-if statement", current_line);
+			num_errors++;
+			//Return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Now let's check the stack, we need to have matching ones here
+		if(pop_token(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
+			num_errors++;
+			//Return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//If we make it to this point, we need to see the THEN keyword
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail out if bad
+		if(lookahead.tok != THEN){
+			print_parse_message(PARSE_ERROR, "then keyword expected following expression in else if statement", current_line);
+			num_errors++;
+			//Return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//If we make it here, we should be safe to add the conditional as an expression
+		add_child_node(else_if_node, else_if_expression_node);
+
+		//Now following this, we need to see a valid compound statement
+		generic_ast_node_t* else_if_compound_stmt_node = compound_statement(fl);
+
+		//If this node fails, whole thing is bad
+		if(else_if_compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			num_errors++;
+			//It's already an error, so just send it back up
+			return else_if_compound_stmt_node;
+		}
+
+		//Add the compound statement as a child to this node
+		add_child_node(else_if_node, else_if_compound_stmt_node);
+
+		//And now that we know everything is good, we can add the else if node as a child
+		//to the if node
+		add_child_node(if_stmt, else_if_node);
+	
+		//Refresh the lookahead tokens for the next round
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead2 = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Otherwise if we get here we did see an else statement. Let's also check
-	//to see if it's an if statement or just a compound statement
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//If we get here, at the very least we know that lookahead2 is bad, so we'll put him back
+	push_back_token(lookahead2);
 
-	//If we see an if statement here
-	if(lookahead.tok == IF){
-		//Now we need to see another if statement
-		generic_ast_node_t* if_stmt_child = if_statement(fl);
-		
-		//If it fails we'll just allow it to propogate
-		if(if_stmt_child->CLASS == AST_NODE_CLASS_ERR_NODE){
-			//It's already an error, just send it up
-			return if_stmt_child;
-		}
-
-		//Otherwise, we'll add it in as a child
-		add_child_node(if_stmt, if_stmt_child);
-
-	//Otherwise, we have a compound statement here
-	} else {
-		//Put the token back
-		push_back_token(lookahead);
-
-		//Now we need to see a valid compound statement
+	//We could've still had an else block here, so we'll check and handle it if we do
+	if(lookahead.tok == ELSE){
+		//We'll now handle the compound statement that comes with this
 		generic_ast_node_t* else_compound_stmt = compound_statement(fl);
-
-		//We have an error here, we'll propogate it through
+		
+		//Let's see if it worked
 		if(else_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid compound statement given in else block", current_line);
-			num_errors++;
-			//It's already an error, just send it up
+			//It failed, send it up the chain
 			return else_compound_stmt;
 		}
-		//Otherwise it all worked so we'll add it in as a child
+
+		//Otherwise it worked, so add it in
 		add_child_node(if_stmt, else_compound_stmt);
+	} else {
+		//Otherwise there was no else token, so put it back
+		push_back_token(lookahead);
 	}
 	
 	//Store the line number
 	if_stmt->line_number = current_line;
+
 	//Once we reach the end, return the root level node
 	return if_stmt;
 }

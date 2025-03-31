@@ -28,7 +28,6 @@ fn:static main(argv:char**, argc:i8) -> i32{
 
 	if(a == TYPE_STRONG) then{
 		let mut b:u32 := 32;
-		
 	}
 
 	ret 32;
