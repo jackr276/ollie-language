@@ -2850,8 +2850,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//This node will always jump right back to the start
 	add_successor(for_stmt_update_block, condition_block);
-	//The direct successor of the update block is the exit block
-	for_stmt_update_block->direct_successor = for_stmt_exit_block;
 	
 	//Unconditional jump to condition block
 	emit_jmp_stmt(for_stmt_update_block, condition_block, JUMP_TYPE_JMP);
@@ -2899,9 +2897,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//This will always be a successor to the conditional statement
 	add_successor(condition_block, compound_stmt_start);
 
-	//The direct successor of the condition block is the compound statement start
-	condition_block->direct_successor = compound_stmt_start;
-
 	//Make the condition block jump to the compound stmt start
 	emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type);
 
@@ -2922,14 +2917,16 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 
 	//The successor to the end block is the update block
 	add_successor(compound_stmt_end, for_stmt_update_block);
-	//The direct successor is the update block
-	compound_stmt_end->direct_successor = for_stmt_update_block;
+
 	//We also need an uncoditional jump right to the update block
 	emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP);
 
 	//We must also remember that the condition block can point to the ending block, because
 	//if the condition fails, we will be jumping here
 	add_successor(condition_block, for_stmt_exit_block);
+
+	//The direct successor to the entry block is the exit block, for efficiency reasons
+	for_stmt_entry_block->direct_successor = for_stmt_exit_block;
 
 	//Give back the entry block
 	return for_stmt_entry_block;
@@ -3005,6 +3002,9 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//Make sure it's the direct successor
 	compound_stmt_end->direct_successor = do_while_stmt_exit_block;
 
+	//We'll set the entry block's direct successor to be the exit block for efficiency
+	do_while_stmt_entry_block->direct_successor = do_while_stmt_exit_block;
+
 	//It's other successor though is the loop entry. This is for flow analysis
 	add_successor(compound_stmt_end, do_while_stmt_entry_block);
 
@@ -3032,6 +3032,9 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	basic_block_t* while_statement_end_block = basic_block_alloc();
 	//We will specifically mark the end block here as an ending block
 	while_statement_end_block->block_type = BLOCK_TYPE_WHILE_END;
+
+	//For drilling efficiency reasons, we'll want the entry block's direct successor to be the end block
+	while_statement_entry_block->direct_successor = while_statement_end_block;
 
 	//Grab this for convenience
 	generic_ast_node_t* while_stmt_node = values->initial_node;
@@ -3069,8 +3072,6 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 		//We do still need to have our successor be the ending block
 		add_successor(while_statement_entry_block, while_statement_end_block);
-		//It is our direct successor
-		while_statement_entry_block->direct_successor = while_statement_end_block;
 
 		//We'll just return now
 		return while_statement_entry_block;
@@ -3085,8 +3086,9 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//Otherwise it isn't null, so we can add it as a successor
 	add_successor(while_statement_entry_block, compound_stmt_start);
-	//The successor to the entry block is the starting block
-	while_statement_entry_block->direct_successor = compound_stmt_start;
+
+	//The exit block is also a successor to the entry block
+	add_successor(while_statement_entry_block, while_statement_end_block);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
