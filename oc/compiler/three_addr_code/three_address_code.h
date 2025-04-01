@@ -115,7 +115,7 @@ typedef enum{
 struct three_addr_var_t{
 	//For memory management
 	//For convenience
-	char var_name[MAX_IDENT_LENGTH];
+	char var_name[MAX_IDENT_LENGTH + 10];
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
 	//Is this a temp variable?
@@ -124,8 +124,6 @@ struct three_addr_var_t{
 	u_int8_t is_constant;
 	//What is the indirection level
 	u_int16_t indirection_level;
-	//What is the SSA generation level
-	u_int16_t ssa_generation_level;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//Store the type info for faster access

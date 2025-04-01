@@ -30,6 +30,9 @@ static int32_t increment_and_get_temp_id(){
 
 /**
  * Dynamically allocate and create a temp var
+ *
+ * Temp Vars do NOT have their lightstack initialized. If ever you are using the stack of a temp
+ * var, you are doing something seriously incorrect
 */
 three_addr_var_t* emit_temp_var(generic_type_t* type){
 	//Let's first create the temporary variable
@@ -72,9 +75,6 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u
 	emitted_var->type = var->type;
 	//And store the symtab record
 	emitted_var->linked_var = var;
-
-	//Store this for printing, regardless of what happened
-	emitted_var->ssa_generation_level = var->current_generation;
 
 	sprintf(emitted_var->var_name, "%s", var->var_name);
 
@@ -184,11 +184,6 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 	
 	//Print the variables declared name out -- along with it's SSA generation
 	printf("%s", variable->var_name);
-
-	//If and only if it isn't a temporary variable, we print the SSA generation level
-	if(variable->is_temporary == 0){
-		printf("%d", variable->ssa_generation_level);
-	}
 
 	//Lastly we print out the remaining indirection characters
 	for(u_int16_t i = 0; mode != PRINTING_VAR_BLOCK_HEADER && i < variable->indirection_level; i++){

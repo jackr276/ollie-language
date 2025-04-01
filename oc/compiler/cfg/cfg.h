@@ -90,8 +90,6 @@ struct basic_block_t{
 	u_int8_t contains_assignment;
 	//The function record -- we need to store this for printing
 	symtab_function_record_t* func_record;
-	//Is this block ok to merge?
-	u_int8_t good_to_merge;
 	//Is this a global variable block?
 	u_int8_t is_global_var_block;
 	//What is the general classification of this block
@@ -100,6 +98,8 @@ struct basic_block_t{
 	block_terminal_type_t block_terminal_type;
 	//Was this block visited by traverser?
 	u_int8_t visited;
+	//Was this block visited by the variable renamer
+	u_int8_t visited_renamer;
 	//Predecessor nodes
 	dynamic_array_t* predecessors;
 	//Successor nodes

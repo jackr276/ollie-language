@@ -7,12 +7,7 @@
  * jump commands, are able to be deciphered at this stage, and as such we do
  * so in the OIR
  *
- *
- * SSA code notes:
- *
- * - A "live" variable, in the context of a block, is one that is defined in that block.
- *   We keep track of these here, and they are appended to the headers of the blocks for ease of understanding
- *   to the programmer
+ * This module will take an AST, put it into a CFG, put the CFG into SSA form, and pass it along to the optimizer
 */
 
 #include "cfg.h"
@@ -1381,7 +1376,16 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
  * 					pop(Stacks[V])
  * }
  */
-static void rename_block(basic_block_t* b){
+static void rename_block(basic_block_t* entry){
+	//If we've previously visited this block, then return
+	if(entry->visited_renamer == TRUE){
+		return;
+	}
+
+	//Otherwise we'll flag it for the future
+	entry->visited_renamer = TRUE;
+
+
 
 }
 
@@ -2259,9 +2263,6 @@ static basic_block_t* basic_block_alloc(){
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
 
-	//Usually these are, in special cases they aren't
-	created->good_to_merge = TRUE;
-
 	//Is it a global variable block? Almost always not
 	created->is_global_var_block = FALSE;
 
@@ -2687,94 +2688,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//Give back the pointer to a
 	return a;
-}
-
-
-/**
- * We will perform reachability analysis on the function CFG. We wish to know if the function
- * returns from every control path
- */
-static void perform_function_reachability_analysis(generic_ast_node_t* function_node, basic_block_t* entry_block){
-	//For error printing
-	char info[1000];
-	//The number of dead-ends
-	u_int32_t dead_ends = 0;
-
-	//If the function returns void, there is no need for any reachability analysis, it will return when 
-	//the function runs off anyway
-	if(strcmp(function_node->func_record->return_type->type_name, "void") == 0){
-		return;
-	}
-
-	//We'll need a stack for our DFS
-	heap_stack_t* stack = heap_stack_alloc();
-
-	//The idea here is very simple. If we can walk the function tree and every control path leads 
-	//to a return statement, we return null from every control path
-	
-	//We'll need a cursor to walk the tree
-	basic_block_t* block_cursor;
-
-	//Push the source node
-	push(stack, entry_block);
-
-	//So long as the stack is not empty
-	while(is_empty(stack) == HEAP_STACK_NOT_EMPTY){
-		//Grab the current one off of the stack
-		block_cursor = pop(stack);
-
-		//If this wasn't visited
-		if(block_cursor->visited == FALSE){
-			//Mark this one as seen
-			block_cursor->visited = TRUE;
-
-			/**
-			 * Now we can perform our checks. If we find a block that:
-			 * 	a.) Has a direct successor
-			 * 	b.) That direct successor POINTS to a function ending block
-			 * 	c.) It is NOT a return statement
-			 *
-			 * Then we have a function that does not return in all paths
-			 */
-			//If the direct successor is the exit, but it's not a return statement
-			if(block_cursor->direct_successor != NULL 
-			  && block_cursor->direct_successor->block_type == BLOCK_TYPE_FUNC_EXIT 
-			  && block_cursor->block_terminal_type != BLOCK_TERM_TYPE_RET){
-				//One more dead end
-				dead_ends++;
-				//Go to the next iteration
-				continue;
-			}
-
-			//If it is a return statement none of its children are relevant
-			if(block_cursor->block_terminal_type == BLOCK_TERM_TYPE_RET){
-				continue;
-			}
-		}
-
-		//We'll now add in all of the childen
-		for(u_int8_t i = 0; block_cursor->successors != NULL && i < block_cursor->successors->current_index; i++){
-			//Grab the block out
-			basic_block_t* block = block_cursor->successors->internal_array[i];
-
-			//If we haven't seen it yet, add it to the list
-			if(block->visited == FALSE){
-				push(stack, block);
-			}
-		}
-	}
-	
-	//Once we escape our while loop, we can actually see what the analysis said
-	if(dead_ends > 0){
-		//Extract the function name
-		char* func_name = function_node->func_record->func_name;
-		sprintf(info, "Non-void function \"%s\" does not return a value in all control paths", func_name);
-		print_cfg_message(WARNING, info, function_node->line_number);
-		(*num_warnings_ref) += dead_ends;
-	}
-
-	//Destroy the stack once we're done
-	heap_stack_dealloc(stack);
 }
 
 
@@ -4184,10 +4097,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block = current_block->direct_successor;
 			}
 
-			//But if we don't then this is the current node
-			//This current node is the for statement exit block. It will always be ok to merge this node
-			current_block->good_to_merge = TRUE;
-
 		//Handle a continue statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
 			//Let's first see if we're in a loop or not
@@ -4416,9 +4325,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//starting block's direct successor
 			if(starting_block == NULL){
 				starting_block = switch_stmt_entry;
-			} else if(current_block->good_to_merge == TRUE){
-				//Merge them if we can
-				merge_blocks(current_block, switch_stmt_entry);
 			} else {
 				//Otherwise this is a direct successor
 				add_successor(current_block, switch_stmt_entry);
@@ -4576,9 +4482,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 		compound_stmt_cursor = compound_stmt_cursor->direct_successor;
 	}
 
-	//Now we'll analyze the reachability of the function
-	perform_function_reachability_analysis(function_node, function_starting_block);
-	
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
 
