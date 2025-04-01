@@ -991,6 +991,36 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
 
 
 /**
+ * A special helper function that we use for dynamic arrays of variables. Since variables
+ * can be duplicated, we need to compare the symtab variable record, not the three address
+ * variable itself
+ */
+static int16_t symtab_record_variable_dynamic_array_contains(dynamic_array_t* variable_array, symtab_variable_record_t* variable){
+	//No question here -- we won't be finding it
+	if(variable_array == NULL){
+		return NOT_FOUND;
+	}
+
+	//We assume that everything in here is a variable and will cast as such
+	three_addr_var_t* current_var;
+
+	//Run through every record in here
+	for(u_int16_t i = 0; i < variable_array->current_index; i++){
+		//Grab a reference
+		current_var = variable_array->internal_array[i];
+
+		//If we found it, give back the index
+		if(current_var->linked_var == variable){
+			return i;
+		}
+	}
+
+	//We couldn't find this one, so give back not found
+	return NOT_FOUND;
+}
+
+
+/**
  * Are two variable dynamic arrays equal? We again use special rules for these kind of comparisons
  * that are not applicable to regular dynamic arrays
  */
@@ -1269,6 +1299,25 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						//If this node already has a phi function, we're not gonna bother with it
 						if(dynamic_array_contains(already_has_phi_func, df_node) != NOT_FOUND){
 							//We DID find it, so we will NOT add anything, it already has one
+							continue;
+						}
+
+						//Let's check to see if we really need one here.
+						//----------------------------------------
+						// CRITERION:
+						// If a variable is NOT Live-out at the join node,
+						// that means that it is not LIVE-IN at any of
+						// the successors of that block. If a variable
+						// is not active(used) at the join node either,
+						// that means that the phi function is useless.
+						//
+						// So, we will skip inserting a phi function
+						// if the variable is not used and not LIVE_OUT
+						// at N
+						//----------------------------------------
+						if(symtab_record_variable_dynamic_array_contains(df_node->used_variables, record) == NOT_FOUND
+						   && symtab_record_variable_dynamic_array_contains(df_node->live_out, record) == NOT_FOUND){
+							//If we cannot find it in the used variables OR the live-out set, we don't want to add anything
 							continue;
 						}
 
