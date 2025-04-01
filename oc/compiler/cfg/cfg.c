@@ -1306,6 +1306,51 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 
 
 /**
+ * Rename all variables to be in SSA form. This is the final step in our conversion
+ *
+ * Algorithm:
+ *
+ * rename(){
+ * 	for each block b
+ * 		if b previously visited continue
+ * 		for each phi-function p in b
+ * 			v = LHS(p)
+ * 			vn = GenName(v) and replace v with vn
+ * 		for each statement s in b
+ * 			for each variable v in the RHS of s
+ * 				replace V with Top(Stacks[V]);
+ * 			for each variable V in the LHS
+ * 				vn = GenName(V) and replace v with vn
+ * 			for each CFG successor of b
+ * 				j <- position in s's phi-functon belonging to b
+ * 				for each phi function p in s
+ * 					replace the jth operand of RHS(p) with Top(Stacks[V])
+ * 			for each s in the dominator children of b
+ * 				Rename(s)
+ * 			for each phi-function or statement t in b
+ * 				for each vi in the LHS(T)
+ * 					pop(Stacks[V])
+ * }
+ */
+static void rename_block(basic_block_t* b){
+
+}
+
+
+static void rename_all_variables(cfg_t* cfg){
+	//We will call the rename block function on the first block
+	//for each of our functions. The rename block function is 
+	//recursive, so that should in theory take care of everything for us
+	
+	//For each function block
+	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+		//Invoke the rename function on it
+		rename_block(dynamic_array_get_at(cfg->function_blocks, _));
+	}
+}
+
+
+/**
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
@@ -4675,6 +4720,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Add all phi functions for SSA
 	insert_phi_functions(cfg, results.variable_symtab);
+
+	//Rename all variables after we're done with the phi functions
+	rename_all_variables(cfg);
 
 	//FOR PRINTING
 	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
