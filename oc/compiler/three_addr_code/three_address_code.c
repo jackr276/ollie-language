@@ -84,7 +84,7 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u
 
 
 /**
- * Emit a copy of this far
+ * Emit a copy of this variable
  */
 three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	//Let's first create the non-temp variable
@@ -908,6 +908,11 @@ void three_addr_stmt_dealloc(three_addr_code_stmt_t* stmt){
 	if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
 		//We must also free the pointer in here
 		free(stmt->inlined_assembly);
+	}
+
+	//If we have a phi function, deallocate the dynamic array
+	if(stmt->phi_function_parameters != NULL){
+		dynamic_array_dealloc(stmt->phi_function_parameters);
 	}
 	
 	//Free the overall stmt -- variables handled elsewhere

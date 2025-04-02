@@ -13,6 +13,7 @@
 #include <string.h>
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
+#include "../stack/lightstack.h"
 
 
 //We define that each lexical scope can have 5000 symbols at most
@@ -159,6 +160,10 @@ struct symtab_variable_record_t{
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 	//The next hashtable record
 	symtab_variable_record_t* next;
+	//For SSA renaming
+	lightstack_t counter_stack;
+	//Current generation level(for SSA)
+	u_int16_t counter;
 };
 
 

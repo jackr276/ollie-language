@@ -113,8 +113,7 @@ typedef enum{
  * for eventual SSA and type information
 */
 struct three_addr_var_t{
-	//For memory management
-	//For convenience
+	//For memory management. An extra 10 is given for SSA
 	char var_name[MAX_IDENT_LENGTH + 10];
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
@@ -187,7 +186,8 @@ struct three_addr_code_stmt_t{
 	three_addr_var_t* params[MAX_FUNCTION_PARAMS];
 	//Very special case, only for inlined assembly
 	char* inlined_assembly;
-	//TODO may add more
+	//The phi function parameters - stored in a dynamic array
+	void* phi_function_parameters;
 };
 
 

@@ -224,6 +224,11 @@ symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T sto
 	//Store the storage class
 	record->storage_class = storage_class;
 
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
 	return record;
 }
 
@@ -1031,6 +1036,18 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 
 
 /**
+ * Private helper that deallocates a variable
+ */
+static void variable_dealloc(symtab_variable_record_t* variable){
+	//If we have a lightstack that's linked, destroy that
+	lightstack_dealloc(&(variable->counter_stack));
+
+	//Free the overall variable
+	free(variable);
+}
+
+
+/**
  * Provide a function that will destroy the variable symtab completely
  */
 void variable_symtab_dealloc(variable_symtab_t* symtab){
@@ -1063,7 +1080,6 @@ void variable_symtab_dealloc(variable_symtab_t* symtab){
 	//Finally free the symtab itself
 	free(symtab);
 }
-
 
 /**
  * Provide a function that will destroy the variable symtab completely

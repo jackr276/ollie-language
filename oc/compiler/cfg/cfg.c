@@ -490,6 +490,9 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 /**
  * Add a phi statement into the basic block. Phi statements are always added, without exception,
  * to the very front of the block
+ *
+ * This statement also takes care of the linking that we need to do. When we have a phi-function, we'll
+ * need to link it back to whichever variables it refers to
  */
 static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi_statement){
 	//Generic fail case - this should never happen
@@ -504,6 +507,11 @@ static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi
 		target->leader_statement = phi_statement;
 		target->exit_statement = phi_statement;
 		return;
+	}
+
+	//For each of the predecessors of the current index
+	for(u_int16_t _ = 0; _ < target->predecessors->current_index; _++){
+
 	}
 
 	//Otherwise we will add this in at the very front
@@ -1317,7 +1325,10 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						}
 
 						//If we make it here that means that we don't already have one, so we'll add it
+						//This function only emits the skeleton of a phi function
 						three_addr_code_stmt_t* phi_stmt = emit_phi_function(record);
+
+						//
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
@@ -1346,6 +1357,27 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 			}
 		}
 	}
+}
+
+
+/**
+ * Generate a new name for the given three address variable
+ */
+static void new_name(three_addr_var_t* var){
+	//Grab the linked variable out
+	symtab_variable_record_t* linked_var = var->linked_var;
+
+	//Grab the name out of the counter
+	u_int16_t generation_level = linked_var->counter;
+
+	//Now we increment the counter for the next go around
+	(linked_var->counter)++;
+
+	//We'll also push this generation level onto the stack
+	lightstack_push(&(linked_var->counter_stack), generation_level);
+
+	//Actually perform the renaming. Now this variable is in SSA form
+	sprintf(var->var_name, "%s_%d", var->var_name, generation_level);
 }
 
 
@@ -1384,6 +1416,9 @@ static void rename_block(basic_block_t* entry){
 
 	//Otherwise we'll flag it for the future
 	entry->visited_renamer = TRUE;
+
+	//For each phi function in b, rewrite the assignee
+	//with a new name
 
 
 

@@ -27,6 +27,7 @@ fn main() -> i32{
 	//do{
 	for(let _:u32 := 0; _ <= 323; _++) do{
 		x := x + 33;
+		y := y - 1;
 
 		break when(x == 32);
 	}//while(x <= 322);

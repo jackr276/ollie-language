@@ -87,3 +87,15 @@ u_int8_t lightstack_is_empty(lightstack_t* stack){
 	//Otherwise not
 	return FALSE;
 }
+
+
+/**
+ * Peek from the top of the stack
+*/
+u_int16_t lightstack_peek(lightstack_t* stack){
+	if(stack->top_index == 0){
+		return 0;
+	} else {
+		return stack->stack[stack->top_index - 1];
+	}
+}
