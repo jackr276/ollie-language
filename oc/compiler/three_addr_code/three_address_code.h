@@ -128,8 +128,6 @@ struct three_addr_var_t{
 	//Store the type info for faster access
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
-	//Linked list functionality
-	three_addr_var_t* next;
 	//For memory management
 	three_addr_var_t* next_created;
 };
