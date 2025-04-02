@@ -1095,7 +1095,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	//A cursor for the current block
 	basic_block_t* current;
 
-	do{
+	do {
 		//We'll assume we didn't find a difference each iteration
 		difference_found = FALSE;
 
@@ -1107,27 +1107,6 @@ static void calculate_liveness_sets(cfg_t* cfg){
 			//Transfer the pointers over
 			in_prime = current->live_in;
 			out_prime = current->live_out;
-
-			//Now we'll turn our attention to live out. The live out set for any block is the union of the
-			//LIVE_IN set for all of it's successors
-			
-			//Set live out to be a new array
-			current->live_out = dynamic_array_alloc();
-
-			//Run through all of the successors
-			for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
-				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(current->successors, k);
-
-				//Add everything in his live_in set into the live_out set
-				for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
-					//Let's check to make sure we haven't already added this
-					three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
-
-					//Let the helper method do it for us
-					variable_dynamic_array_add(current->live_out, successor_live_in_var);
-				}
-			}
 
 			//The live in is a combination of the variables used
 			//at current and the difference of the LIVE_OUT variables defined
@@ -1150,7 +1129,28 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				}
 			}
 
-		
+			//Now we'll turn our attention to live out. The live out set for any block is the union of the
+			//LIVE_IN set for all of it's successors
+			
+			//Set live out to be a new array
+			current->live_out = dynamic_array_alloc();
+
+			//Run through all of the successors
+			for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+				//Grab the successor out
+				basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+
+				//Add everything in his live_in set into the live_out set
+				for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
+					//Let's check to make sure we haven't already added this
+					three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
+
+					//Let the helper method do it for us
+					variable_dynamic_array_add(current->live_out, successor_live_in_var);
+				}
+			}
+
+
 			//Now we'll go through and check if the new live in and live out sets are different. If they are different,
 			//we'll be doing this whole thing again
 
@@ -1615,13 +1615,13 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		//This variable now is live
 		ident_node->variable->has_ever_been_live = TRUE;
 		
-		//Add it as a live variable to the block, because we've used it
-		add_used_variable(basic_block, var);
-
 		//This variable has been assigned to, so we'll add that too
 		if(side == SIDE_TYPE_LEFT){
 			//We only do this if it's the LHS
 			add_assigned_variable(basic_block, var);
+		} else {
+			//Add it as a live variable to the block, because we've used it
+			add_used_variable(basic_block, var);
 		}
 
 		//Give it back
@@ -1642,11 +1642,14 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		//THis has been live
 		ident_node->variable->has_ever_been_live = TRUE;
 
-		//Add it into the block
-		add_used_variable(basic_block, non_temp_var);
-
 		//This variable has been assigned to, so we'll add that too
-		add_assigned_variable(basic_block, non_temp_var);
+		if(side == SIDE_TYPE_LEFT){
+			//We only do this if it's the LHS
+			add_assigned_variable(basic_block, non_temp_var);
+		} else {
+			//Add it as a live variable to the block, because we've used it
+			add_used_variable(basic_block, non_temp_var);
+		}
 
 		//Let's first create the assignment statement
 		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), non_temp_var);
@@ -2153,9 +2156,6 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 		//Mark that this has been live
 		var->has_ever_been_live = TRUE;
-
-		//Add it in as a live variable
-		add_used_variable(basic_block, left_hand_var);
 
 		//This has been assigned to
 		add_assigned_variable(basic_block, left_hand_var);
