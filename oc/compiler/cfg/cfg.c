@@ -1386,7 +1386,7 @@ static void lhs_new_name(three_addr_var_t* var){
 	lightstack_push(&(linked_var->counter_stack), generation_level);
 
 	//Actually perform the renaming. Now this variable is in SSA form
-	sprintf(var->var_name, "%s_%d", var->var_name, generation_level);
+	sprintf(var->var_name, "%s_%d", linked_var->var_name, generation_level);
 }
 
 
@@ -1403,7 +1403,7 @@ static void rhs_new_name(three_addr_var_t* var){
 
 	//And now we'll rename with this name
 	//Actually perform the renaming. Now this variable is in SSA form
-	sprintf(var->var_name, "%s_%d", var->var_name, generation_level);
+	sprintf(var->var_name, "%s_%d", linked_var->var_name, generation_level);
 }
 
 
@@ -1474,6 +1474,17 @@ static void rename_block(basic_block_t* entry){
 			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
 				lhs_new_name(cursor->assignee);
 			}
+
+			//Special case - do we have a function call?
+			if(cursor->CLASS == THREE_ADDR_CODE_FUNC_CALL){
+				//Go through every single variable. If it isn't temp, rename it
+				for(u_int16_t k = 0; k < 6 && cursor->params[k] != NULL; k++){
+					//If it's not temporary, rename it
+					if(cursor->params[k]->is_temporary == FALSE){
+						rhs_new_name(cursor->params[k]);
+					}
+				}
+			}
 		}
 
 		//Advance up to the next statement
@@ -1537,9 +1548,6 @@ static void rename_block(basic_block_t* entry){
 		//Advance to the next one
 		cursor = cursor->next_statement;
 	}
-
-
-
 }
 
 
@@ -1728,7 +1736,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		}
 
 		//Emit the variable
-		three_addr_var_t* var = emit_var(ident_node->variable, use_temp, 0);
+		three_addr_var_t* var = emit_var(ident_node->variable, use_temp, FALSE);
 
 		//This variable now is live
 		ident_node->variable->has_ever_been_live = TRUE;

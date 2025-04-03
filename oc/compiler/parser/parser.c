@@ -521,7 +521,10 @@ static generic_ast_node_t* function_call(FILE* fl){
 		//We can now safely add this into the function call node as a child. In the function call node, 
 		//the parameters will appear in order from left to right
 		add_child_node(function_call_node, current_param);
-		
+
+		//Record that we saw one more parameter
+		num_params++;
+
 		//Refresh the token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -538,9 +541,19 @@ static generic_ast_node_t* function_call(FILE* fl){
 			//Create and return an error node
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
+	}
 
-		//Otherwise it was fine. We'll first record that we saw one more parameter
-		num_params++;
+	/**
+	 * If we have a mismatch between what the function takes and what we want, throw an
+	 * error
+	 */
+	if(num_params != function_num_params){
+		sprintf(info, "Function %s expectects %d parameters, but was only given %d", function_record->func_name, function_num_params, num_params);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_function_name(function_record);
+		num_errors++;
+		//Error out
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
