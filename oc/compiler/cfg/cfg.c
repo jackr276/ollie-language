@@ -1185,7 +1185,7 @@ static void build_dominator_trees(cfg_t* cfg){
 	basic_block_t* current;
 
 	//For each block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(int16_t _ = cfg->created_blocks->current_index - 1; _ >= 0; _--){
 		//Grab out whatever block we're on
 		current = dynamic_array_get_at(cfg->created_blocks, _);
 
@@ -1363,7 +1363,7 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 /**
  * Generate a new name for the given three address variable
  */
-static void new_name(three_addr_var_t* var){
+static void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
 	symtab_variable_record_t* linked_var = var->linked_var;
 
@@ -1376,6 +1376,23 @@ static void new_name(three_addr_var_t* var){
 	//We'll also push this generation level onto the stack
 	lightstack_push(&(linked_var->counter_stack), generation_level);
 
+	//Actually perform the renaming. Now this variable is in SSA form
+	sprintf(var->var_name, "%s_%d", var->var_name, generation_level);
+}
+
+
+/**
+ * Rename the variable with the top of the stack. This DOES NOT
+ * manipulate the stack in any way
+ */
+static void rhs_new_name(three_addr_var_t* var){
+	//Grab the linked var out
+	symtab_variable_record_t* linked_var = var->linked_var;
+
+	//Grab the value off of the stack
+	u_int16_t generation_level = lightstack_peek(&(linked_var->counter_stack));
+
+	//And now we'll rename with this name
 	//Actually perform the renaming. Now this variable is in SSA form
 	sprintf(var->var_name, "%s_%d", var->var_name, generation_level);
 }
@@ -1417,8 +1434,52 @@ static void rename_block(basic_block_t* entry){
 	//Otherwise we'll flag it for the future
 	entry->visited_renamer = TRUE;
 
+	//Grab out our leader statement here. We will iterate over all statements
+	//looking for phi functions
+	three_addr_code_stmt_t* cursor = entry->leader_statement;
+
+	//So long as this isn't null
+	while(cursor != NULL){
+		//First option - if we encounter a phi function
+		if(cursor->CLASS == THREE_ADDR_CODE_PHI_FUNC){
+			//We will rewrite the assigneed of the phi function(LHS)
+			//with the new name
+			lhs_new_name(cursor->assignee);
+
+		//And now if it's anything else that has an assignee, operands, etc,
+		//we'll need to rewrite all of those as well
+		} else {
+			//If we get here we know that we don't have a phi function
+
+			//If we have a non-temp variable, rename it
+			if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
+				rhs_new_name(cursor->op1);
+			}
+
+			//If we have a non-temp variable, rename it
+			if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE){
+				rhs_new_name(cursor->op2);
+			}
+
+			//Same goes for the assignee, except this one is the LHS
+			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+				lhs_new_name(cursor->assignee);
+			}
+		}
+
+		//Advance up to the next statement
+		cursor = cursor->next_statement;
+	}
+
+	//Now that we're done with the renaming, we'll go through each dominator child in this node
+	//and perform the same operation
+	for(u_int16_t _ = 0; entry->dominator_children != NULL && _ < entry->dominator_children->current_index; _++){
+		rename_block(dynamic_array_get_at(entry->dominator_children, _));
+	}
+
 	//For each phi function in b, rewrite the assignee
 	//with a new name
+	
 
 
 
