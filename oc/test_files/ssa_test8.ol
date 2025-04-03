@@ -18,7 +18,10 @@ fn main() -> i32{
 
 	let mut w:i32 := x + y;
 
+	w := 327;
+	w := 322;
+
 	idle;
 
-	ret x;
+	ret w;
 }

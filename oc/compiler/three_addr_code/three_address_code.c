@@ -544,10 +544,25 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		printf(" * %ld\n", stmt->lea_multiplicator);
 	//Print out a phi function 
 	} else if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
-		printf("PHI ");
 		//Print it in block header mode
 		print_variable(stmt->assignee, PRINTING_VAR_BLOCK_HEADER);
-		printf("\n");
+		printf(" <- PHI(");
+
+		//For convenience
+		dynamic_array_t* phi_func_params = stmt->phi_function_parameters;
+
+		//Now run through all of the parameters
+		for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
+			//Print out the variable
+			print_variable(dynamic_array_get_at(phi_func_params, _), PRINTING_VAR_BLOCK_HEADER);
+
+			//If it isn't the very last one, add a comma space
+			if(_ != phi_func_params->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		printf(")\n");
 	}
 }
 

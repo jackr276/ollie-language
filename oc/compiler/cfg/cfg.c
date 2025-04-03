@@ -509,14 +509,24 @@ static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi
 		return;
 	}
 
-	//For each of the predecessors of the current index
-	for(u_int16_t _ = 0; _ < target->predecessors->current_index; _++){
-
-	}
-
 	//Otherwise we will add this in at the very front
 	phi_statement->next_statement = target->leader_statement;
 	target->leader_statement = phi_statement;
+}
+
+
+/**
+ * Add a parameter to a phi statement
+ */
+static void add_phi_parameter(three_addr_code_stmt_t* phi_statement, three_addr_var_t* var){
+	//If we've not yet given the dynamic array
+	if(phi_statement->phi_function_parameters == NULL){
+		//Take care of allocation then
+		phi_statement->phi_function_parameters = dynamic_array_alloc();
+	}
+
+	//Add this to the phi statement parameters
+	dynamic_array_add(phi_statement->phi_function_parameters, var);
 }
 
 
@@ -1318,17 +1328,16 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						// if the variable is not used and not LIVE_OUT
 						// at N
 						//----------------------------------------
+
+						//Let's see if we can find it in one of these. We'll record if we can
 						if(symtab_record_variable_dynamic_array_contains(df_node->used_variables, record) == NOT_FOUND
-						   && symtab_record_variable_dynamic_array_contains(df_node->live_out, record) == NOT_FOUND){
-							//If we cannot find it in the used variables OR the live-out set, we don't want to add anything
+							&& symtab_record_variable_dynamic_array_contains(df_node->live_out, record) == NOT_FOUND){
 							continue;
 						}
 
 						//If we make it here that means that we don't already have one, so we'll add it
 						//This function only emits the skeleton of a phi function
 						three_addr_code_stmt_t* phi_stmt = emit_phi_function(record);
-
-						//
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
@@ -1471,15 +1480,63 @@ static void rename_block(basic_block_t* entry){
 		cursor = cursor->next_statement;
 	}
 
+	//Now for each successor of b, we'll need to add the phi-function parameters according
+	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
+		//Grab the successor out
+		basic_block_t* successor = dynamic_array_get_at(entry->successors, _);
+
+		//Now for each phi-function in this successor that uses something in the defined variables
+		//here, we'll want to add that newly renamed defined variable into the phi function parameters
+		
+		//Yet another cursor
+		three_addr_code_stmt_t* succ_cursor = successor->leader_statement;
+		//The address of the variable
+		int16_t var_addr;
+
+		//So long as it isn't null AND it's a phi function
+		while(succ_cursor != NULL && succ_cursor->CLASS == THREE_ADDR_CODE_PHI_FUNC){
+			//If we can find this phi function variable inside of the assigned variables
+			if((var_addr = variable_dynamic_array_contains(entry->assigned_variables, succ_cursor->assignee)) != NOT_FOUND){
+				//Grab the variable out
+				three_addr_var_t* phi_func_var = dynamic_array_get_at(entry->assigned_variables, var_addr);
+
+				//Emit a variable for it
+				three_addr_var_t* phi_func_param = emit_var(phi_func_var->linked_var, FALSE, FALSE);
+
+				//Emit the name for this variable
+				rhs_new_name(phi_func_param);
+
+				//Now add it into the phi function
+				add_phi_parameter(succ_cursor, phi_func_param);
+			}
+
+			//Advance this up
+			succ_cursor = succ_cursor->next_statement;
+		}
+	}
+
 	//Now that we're done with the renaming, we'll go through each dominator child in this node
 	//and perform the same operation
 	for(u_int16_t _ = 0; entry->dominator_children != NULL && _ < entry->dominator_children->current_index; _++){
 		rename_block(dynamic_array_get_at(entry->dominator_children, _));
 	}
 
-	//For each phi function in b, rewrite the assignee
-	//with a new name
+	//Once we're done, we'll need to unwind our stack here. Anything that involves an assignee, we'll
+	//need to pop it's stack so we don't have excessive variable numbers. We'll now iterate over again
+	//and perform pops whereever we see a variable being assigned
 	
+	//Grab the cursor again
+	cursor = entry->leader_statement;
+	while(cursor != NULL){
+		//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
+		if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+			//Pop it off
+			lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
+		}
+
+		//Advance to the next one
+		cursor = cursor->next_statement;
+	}
 
 
 
