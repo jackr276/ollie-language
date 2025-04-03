@@ -1798,7 +1798,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(incrementee->is_temporary == FALSE){
-		add_used_variable(basic_block, incrementee);
+		add_assigned_variable(basic_block, incrementee);
 	}
 
 	//Add it into the block
@@ -1818,7 +1818,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(decrementee->is_temporary == FALSE){
-		add_used_variable(basic_block, decrementee);
+		add_assigned_variable(basic_block, decrementee);
 	}
 
 	//Add it into the block

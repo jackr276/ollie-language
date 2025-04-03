@@ -25,9 +25,9 @@ fn:static main(argv:char**, argc:i8) -> i32{
 	while(b >= 9 && b <= 32) do{
 		b--;
 	}
-
+	
 	if(a == TYPE_STRONG) then{
-		let mut b:u32 := 32;
+		b := 32;
 	}
 
 	ret 32;
