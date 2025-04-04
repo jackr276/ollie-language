@@ -4,13 +4,15 @@
 [![Parser test](https://github.com/jackr276/ollie-language/actions/workflows/parser_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/parser_test.yml)
 [![Global compiler test](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml)
 
-## Current Goal
-Current goal involves getting a very basic subset of the language to produce workable assembly code
+## Ollie Language Front-End
 
-### Global TODO(tentative)
-- Preprocessor implementation, testing and validation
-- Dependency graph build-up
-- Dependency graph implementation and compiler-order determination in compiler.c
-- (maybe) ternary operation support
-- SSA implementation
-- Backend build-up
+Conceptual Roadmap:
+The Ollie Compiler takes a normal 3-phase approach for compilation
+
+Phase 1: "Front-End"
+The Front-End of the compiler is concerned with translating the source-code into an optimization-ready intermediate representation, called Ollie Intermediate Representation(OIR). The OIR will be given in SSA form, such that dataflow analysis is simplified. The general
+flow is given below in the diagram
+
+### Ollie Compiler Front-End
+
+![Ollie Compiler Front End drawio(1)](https://github.com/user-attachments/assets/83e07b13-429a-47ef-ae84-7a831496d903)
