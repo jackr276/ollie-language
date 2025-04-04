@@ -143,4 +143,11 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 //Deallocate our entire cfg structure
 void dealloc_cfg(cfg_t* cfg);
 
+/**
+ * For DEBUGGING purposes - we will print all of the blocks in the control
+ * flow graph. This is meant to be invoked by the programmer, and as such is exposed
+ * via the header file
+ */
+void print_all_cfg_blocks(cfg_t* cfg);
+
 #endif /* CFG_H */

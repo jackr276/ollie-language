@@ -231,12 +231,6 @@ int main(int argc, char** argv){
 		goto final_printout;
 	}
 
-	//Run through and check for any unused functions. This generates warnings for the user,
-	//and can be done before any construction of a CFG. As such, we do this here
-	check_for_unused_functions(results.function_symtab, &num_warnings);
-	//Check for any bad variable declarations
-	check_for_var_errors(results.variable_symtab, &num_warnings);
-	
 	//============================= Middle End =======================================
 		/**
 	 	 * The middle end is responsible for control-flow checks and optimization for the parser. The first 

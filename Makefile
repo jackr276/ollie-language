@@ -169,6 +169,18 @@ three_address_code.o: $(THREE_ADDRESS_CODE_PATH)/three_address_code.c
 three_address_coded.o: $(THREE_ADDRESS_CODE_PATH)/three_address_code.c
 	$(CC) $(CFLAGS) -g -o $(OUT)/three_address_coded.o $(THREE_ADDRESS_CODE_PATH)/three_address_code.c
 
+front_end_test.o: $(TEST_SUITE_PATH)/front_end_test.c
+	$(CC) $(CFLAGS) -o $(OUT)/front_end_test.o $(TEST_SUITE_PATH)/front_end_test.c
+
+front_end_testd.o: $(TEST_SUITE_PATH)/front_end_test.c
+	$(CC) $(CFLAGS) -g  -o $(OUT)/front_end_testd.o $(TEST_SUITE_PATH)/front_end_test.c
+
+front_end_test: front_end_test.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_analyzer.o priority_queue.o dynamic_array.o lightstack.o
+	$(CC) -o $(OUT)/front_end_test $(OUT)/front_end_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_analyzer.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
+
+front_end_testd: front_end_testd.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_analyzer.o priority_queue.o dynamic_array.o lightstack.o
+	$(CC) -o $(OUT)/front_end_testd $(OUT)/front_end_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_analyzer.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
+
 oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_analyzer.o priority_queue.o dynamic_array.o lightstack.o
 	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_analyzer.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
 
@@ -183,6 +195,9 @@ stestd: symtab_testd
 
 ptest: parser_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/parser_test
+
+front_test: front_end_test
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/front_end_test
 
 compiler_test: oc
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/oc

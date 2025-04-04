@@ -4779,6 +4779,17 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 
 
 /**
+ * For DEBUGGING purposes - we will print all of the blocks in the control
+ * flow graph. This is meant to be invoked by the programmer, and as such is exposed
+ * via the header file
+ */
+void print_all_cfg_blocks(cfg_t* cfg){
+	//We will emit the DF
+	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -4839,11 +4850,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Rename all variables after we're done with the phi functions
 	rename_all_variables(cfg);
 
-	//FOR PRINTING
-	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
-
 	//Destroy the temp variable symtab
-	variable_symtab_dealloc(temp_vars);
+	//TODO FIX ME
+	//variable_symtab_dealloc(temp_vars);
 
 	//Give back the reference
 	return cfg;

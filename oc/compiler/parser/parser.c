@@ -56,9 +56,9 @@ static u_int8_t found_default_clause = 0;
 static lex_stack_t* grouping_stack = NULL;
 
 //The number of errors
-static u_int16_t num_errors;
+static u_int32_t num_errors;
 //The number of warnings
-static u_int16_t num_warnings;
+static u_int32_t num_warnings;
 
 //The current parser line number
 static u_int16_t parser_line_num = 1;
@@ -9189,8 +9189,11 @@ front_end_results_package_t parse(FILE* fl, char* file_token){
 	//the root being here
 	prog = program(fl);
 
-	//We won't finalize the scopes until the very end
-	
+	//Check for any unused functions
+	check_for_unused_functions(function_symtab, &num_warnings);
+	//Check for any bad variable declarations
+	check_for_var_errors(variable_symtab, &num_warnings);
+
 	//Initialize our results package here
 	front_end_results_package_t results;
 
