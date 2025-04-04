@@ -61,7 +61,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
  * that they share is the overall variable that they're linked back to, which stores their type information,
  * etc.
 */
-three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t assignment, u_int8_t is_label){
+three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
@@ -879,7 +879,7 @@ three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable){
 	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
 	//We'll just store the assignee here, no need for anything else
-	stmt->assignee = emit_var(variable, TRUE, FALSE);
+	stmt->assignee = emit_var(variable, FALSE);
 
 	//Note what kind of node this is
 	stmt->CLASS = THREE_ADDR_CODE_PHI_FUNC;

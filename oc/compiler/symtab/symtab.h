@@ -421,7 +421,7 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
  * Lookup a variable in all lower scopes. This is specifically and only intended for
  * jump statements
  */
-symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, symtab_function_record_t* function_declared_in, char* name);
+symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name);
 
 /**
  * Lookup a type name in the symtab

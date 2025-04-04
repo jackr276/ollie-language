@@ -5370,7 +5370,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	char* label_name = label_ident->identifier;
 
 	//We now need to make sure that it isn't a duplicate
-	symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, current_function, label_name);
+	symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, label_name);
 
 	//If we did find it, that's bad
 	if(found != NULL){
@@ -8296,7 +8296,7 @@ static int8_t check_jump_labels(symtab_function_record_t* func_record){
 
 		//We now need to lookup the name in here. We use a special function that allows
 		//us to look deeper into the scopes 
-		symtab_variable_record_t* label = lookup_variable_lower_scope(variable_symtab, func_record, name);
+		symtab_variable_record_t* label = lookup_variable_lower_scope(variable_symtab, name);
 
 		//If we didn't find it, we fail out
 		if(label == NULL){

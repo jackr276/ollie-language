@@ -14,6 +14,7 @@
 #include "preprocessor/preprocessor.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
+#include "optimizer/optimizer.h"
 
 
 // A list of currently compiled files

@@ -1438,7 +1438,7 @@ static void rename_block(basic_block_t* entry){
 				three_addr_var_t* phi_func_var = dynamic_array_get_at(entry->assigned_variables, var_addr);
 
 				//Emit a variable for it
-				three_addr_var_t* phi_func_param = emit_var(phi_func_var->linked_var, FALSE, FALSE);
+				three_addr_var_t* phi_func_param = emit_var(phi_func_var->linked_var, FALSE);
 
 				//Emit the name for this variable
 				rhs_new_name(phi_func_param);
@@ -1573,7 +1573,7 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
  */
 static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t* label_node){
 	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(label_node->variable, 0, 1);
+	three_addr_var_t* label_var = emit_var(label_node->variable, TRUE);
 
 	//This is a special case here -- these don't really count as variables
 	//in the way that most do. As such, we will not add it in as live
@@ -1591,7 +1591,7 @@ static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t*
  */
 static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* jump_statement){
 	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(jump_statement->variable, 0, 1);
+	three_addr_var_t* label_var = emit_var(jump_statement->variable, TRUE);
 
 	//This is a special case here -- these don't really count as variables
 	//in the way that most do. As such, we will not add it in as live
@@ -1662,7 +1662,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		}
 
 		//Emit the variable
-		three_addr_var_t* var = emit_var(ident_node->variable, use_temp, FALSE);
+		three_addr_var_t* var = emit_var(ident_node->variable, FALSE);
 
 		//This variable now is live
 		ident_node->variable->has_ever_been_live = TRUE;
@@ -1689,7 +1689,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 
 	} else {
 		//First we'll create the non-temp var here
-		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, 0, 0);
+		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
 
 		//THis has been live
 		ident_node->variable->has_ever_been_live = TRUE;
@@ -2204,7 +2204,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		symtab_variable_record_t* var =  expr_node->variable;
 
 		//Create the variable associated with this
-	 	three_addr_var_t* left_hand_var = emit_var(var, 1, 0);
+	 	three_addr_var_t* left_hand_var = emit_var(var, FALSE);
 
 		//Mark that this has been live
 		var->has_ever_been_live = TRUE;
@@ -2644,42 +2644,6 @@ static void add_successor(basic_block_t* target, basic_block_t* successor){
 
 	//And then for completeness, we'll add target as a predecessor of successor
 	add_predecessor_only(successor, target);
-}
-
-
-/**
- * If the "a" block is completely empty, with NO statements at all in it,
- * we will perform a mergeback by updating all references of A to point to B
- */
-static basic_block_t* merge_back_empty_block(basic_block_t* a, basic_block_t* b){
-	//For everything that references the a block as a successor
-	for(u_int16_t i = 0; a->predecessors != NULL && i < a->predecessors->current_index; i++){
-		//Grab this predecessor
-		basic_block_t* pred_cursor = a->predecessors->internal_array[i];
-		//For all of the successors in this predecessor, if any of them
-		//match with "a", we will update them to point to
-		//function block
-		for(u_int16_t i = 0; pred_cursor->successors != NULL && i < pred_cursor->successors->current_index; i++){
-			//If we have a match
-			if(pred_cursor->successors->internal_array[i] == a){
-				//Update
-				pred_cursor->successors->internal_array[i] = b;
-				
-				//Add this in as a predecessor exclusively
-				add_predecessor_only(b, pred_cursor);
-
-			}
-		}
-	}
-
-	//Now we can delete the a block from the cfg
-	dynamic_array_delete(cfg_ref->created_blocks, a);
-
-	//Now that A is completely gone, we should be safe to completely delete it
-	basic_block_dealloc(a);
-
-	//Give back the b block
-	return b;
 }
 
 
