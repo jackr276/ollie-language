@@ -2,7 +2,8 @@
  * A simple tester program that tests our parsing ability
 */
 
-#include "parser.h"
+//Link to the parser
+#include "../parser/parser.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include "../ast/ast.h"

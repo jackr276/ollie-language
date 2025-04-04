@@ -2,7 +2,8 @@
  * Simple testing suite for symtab
 */
 
-#include "symtab.h"
+//Link to the symtab
+#include "../symtab/symtab.h"
 #include <stdio.h>
 #include <sys/types.h>
 

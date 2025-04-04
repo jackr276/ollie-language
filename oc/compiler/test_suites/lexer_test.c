@@ -4,7 +4,8 @@
 
 #include <stdio.h>
 #include <sys/types.h>
-#include "lexer.h"
+//Link to the lexer
+#include "../lexer/lexer.h"
 
 int main(int argc, char** argv){
 	if(argc < 2){

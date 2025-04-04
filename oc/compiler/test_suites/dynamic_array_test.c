@@ -4,7 +4,8 @@
  * be run as a CI/CD job upon each push
 */
 
-#include "dynamic_array.h"
+//Link to dynamic array
+#include "../dynamic_array/dynamic_array.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>

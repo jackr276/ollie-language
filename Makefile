@@ -2,6 +2,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -c -Wimplicit-fallthrough=0
 CFLAGSLINK = -Wall -Wextra
+TEST_SUITE_PATH = ./oc/compiler/test_suites
 LEX_PATH = ./oc/compiler/lexer
 STACK_PATH = ./oc/compiler/stack
 SYMTAB_PATH = ./oc/compiler/symtab
@@ -27,8 +28,8 @@ ltest: lexer_test
 lexer_test: lexer.o lexer_test.o lexstack.o
 	$(CC) -o $(OUT)/lexer_test $(OUT)/lexer_test.o $(OUT)/lexer.o $(OUT)/lexstack.o
 
-lexer_test.o: $(LEX_PATH)/lexer_test.c
-	$(CC) $(CFLAGS) $(LEX_PATH)/lexer_test.c -o $(OUT)/lexer_test.o
+lexer_test.o: $(TEST_SUITE_PATH)/lexer_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT)/lexer_test.o
 
 lexer.o: $(LEX_PATH)/lexer.c
 	$(CC) $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT)/lexer.o
@@ -114,17 +115,17 @@ parser.o: $(PARSER_PATH)/parser.c
 parserd.o: $(PARSER_PATH)/parser.c
 	$(CC) -g $(CFLAGS) $(PARSER_PATH)/parser.c -o $(OUT)/parserd.o
 
-symtab_test.o: $(SYMTAB_PATH)/symtab_test.c
-	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab_test.c -o $(OUT)/symtab_test.o
+symtab_test.o: $(TEST_SUITE_PATH)/symtab_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/symtab_test.c -o $(OUT)/symtab_test.o
 
-symtab_testd.o: $(SYMTAB_PATH)/symtab_test.c
-	$(CC) -g $(CFLAGS) $(SYMTAB_PATH)/symtab_test.c -o $(OUT)/symtab_testd.o
+symtab_testd.o: $(TEST_SUITE_PATH)/symtab_test.c
+	$(CC) -g $(CFLAGS) $(TEST_SUITE_PATH)/symtab_test.c -o $(OUT)/symtab_testd.o
 
-dynamic_array_test.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array_test.c
-	$(CC) $(CFLAGS) $(DYNAMIC_ARRAY_PATH)/dynamic_array_test.c -o $(OUT)/dynamic_array_test.o
+dynamic_array_test.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_array_test.c -o $(OUT)/dynamic_array_test.o
 
-dynamic_array_testd.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array_test.c
-	$(CC) $(CFLAGS) -g $(DYNAMIC_ARRAY_PATH)/dynamic_array_test.c -o $(OUT)/dynamic_array_testd.o
+dynamic_array_testd.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
+	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATh)/dynamic_array_test.c -o $(OUT)/dynamic_array_testd.o
 
 dynamic_array_test: dynamic_array_test.o dynamic_array.o
 	$(CC) -o $(OUT)/dynamic_array_test $(OUT)/dynamic_array_test.o $(OUT)/dynamic_array.o
@@ -132,11 +133,11 @@ dynamic_array_test: dynamic_array_test.o dynamic_array.o
 dynamic_array_testd: dynamic_array_testd.o dynamic_arrayd.o
 	$(CC) -o $(OUT)/dynamic_array_testd $(OUT)/dynamic_array_testd.o $(OUT)/dynamic_arrayd.o
 
-parser_test.o: $(PARSER_PATH)/parser_test.c
-	$(CC) $(CFLAGS) $(PARSER_PATH)/parser_test.c -o $(OUT)/parser_test.o
+parser_test.o: $(TEST_SUITE_PATH)/parser_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/parser_test.c -o $(OUT)/parser_test.o
 
-parser_testd.o: $(PARSER_PATH)/parser_test.c
-	$(CC) $(CFLAGS) $(PARSER_PATH)/parser_test.c -o $(OUT)/parser_testd.o
+parser_testd.o: $(TEST_SUITE_PATH)/parser_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/parser_test.c -o $(OUT)/parser_testd.o
 
 parser_test: parser.o lexer.o parser_test.o symtab.o lexstack.o heapstack.o type_system.o ast.o call_graph.o heap_queue.o lightstack.o
 	$(CC) -o $(OUT)/parser_test $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexstack.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/call_graph.o $(OUT)/heap_queue.o $(OUT)/lightstack.o
