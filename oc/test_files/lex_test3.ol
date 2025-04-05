@@ -3,7 +3,6 @@
 * This program is total nonsense, it just tests the lexing
 */
 
-#file LEX_TEST_3;
 
 alias char** as str_arr;
 alias char* as str;

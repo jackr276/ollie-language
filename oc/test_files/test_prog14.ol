@@ -3,8 +3,6 @@
  * Block merging test
 */
 
-#file test_prog14;
-
 fn tester(a:u32) -> u32 {
 	ret a;
 }

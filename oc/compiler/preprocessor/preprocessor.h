@@ -37,8 +37,8 @@ typedef enum {
 struct dependency_package_t{
 	//What do we depend on? We don't want to be limited here
 	char** dependencies;
-	//What is the actual name of this file?
-	char module_name[100];
+	//The file name, we'll hang onto it for printing
+	char file_name[FILE_NAME_LENGTH];
 	//Count how many we have
 	u_int16_t num_dependencies;
 	//Max dependencies. This can be realloc'd if certain files

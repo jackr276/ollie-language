@@ -1,6 +1,4 @@
 
-#file TEST_PROG_2;
-
 fn test_func() -> i32 {
 	let mut i:u32 := 232;
 	let mut j:u32 := 32;

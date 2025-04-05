@@ -69,8 +69,8 @@ generic_ast_node_t* deferred_stmts_node = NULL;
 //Did we find a main function?
 u_int8_t found_main_function = 0;
 
-//The actual file token that we have, given on each parse
-static char* current_file_token = NULL;
+//The current file name
+static char* current_file_name = NULL;
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
@@ -110,7 +110,7 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	fprintf(stderr, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_token, parse_message.line_num, type[parse_message.message], parse_message.info);
+	fprintf(stderr, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, parse_message.line_num, type[parse_message.message], parse_message.info);
 }
 
 
@@ -7763,7 +7763,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	//The line_number
 	declared_var->line_number = current_line;
 	//Store what module this was defined in
-	strncpy(declared_var->module_defined_in, current_file_token, MAX_IDENT_LENGTH);
+	strncpy(declared_var->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -8010,7 +8010,7 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	//Save the line num
 	declared_var->line_number = current_line;
 	//Insert what module this came from
-	strncpy(declared_var->module_defined_in, current_file_token, MAX_IDENT_LENGTH);
+	strncpy(declared_var->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
@@ -8480,7 +8480,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//By default, this function has never been called
 		function_record->called = 0;
 		//Copy the module it was defined in
-		strncpy(function_record->module_defined_in, current_file_token, MAX_IDENT_LENGTH);
+		strncpy(function_record->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -8937,7 +8937,7 @@ static u_int8_t replace_statement(FILE* fl){
 	created_const->constant_node = constant_node;
 	created_const->line_number = parser_line_num;
 	//Store what module this was defined in
-	strncpy(created_const->module_defined_in, current_file_token, MAX_IDENT_LENGTH);
+	strncpy(created_const->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 
 	//Insert the record into the symtab
 	insert_constant(constant_symtab, created_const);
@@ -9048,38 +9048,6 @@ static generic_ast_node_t* program(FILE* fl){
 		prog = ast_node_alloc(AST_NODE_CLASS_PROG);
 	}
 
-	//We shouldn't even get here if this doesn't exist, but for our
-	//purposes we need to skip through the #file FILE_NAME; top-level
-	//declaration
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we don't see this we fail
-	if(lookahead.tok != FILE_TOK){
-		print_parse_message(PARSE_ERROR, "Top-level \"#file FILE_TOKEN;\" declaration required.", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Now we need to see the file's identifier
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If it isn't an identifier we fail
-	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Top-level \"#file FILE_TOKEN;\" declaration required.", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//One last thing -- need to see the semicolon
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If it isn't an identifier we fail
-	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required after top-level declaration", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
 	//Let's lookahead to see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -9144,7 +9112,7 @@ static generic_ast_node_t* program(FILE* fl){
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
-front_end_results_package_t parse(FILE* fl, char* file_token){
+front_end_results_package_t parse(FILE* fl, char* file_name){
 	//We always reset the entire thing
 	reset_file(fl);
 
@@ -9166,7 +9134,7 @@ front_end_results_package_t parse(FILE* fl, char* file_token){
 	}
 
 	//Assign the file token
-	current_file_token = file_token;
+	current_file_name = file_name;
 
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens

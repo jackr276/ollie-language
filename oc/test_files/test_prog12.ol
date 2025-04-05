@@ -1,4 +1,3 @@
-#file TEST_PROG_12;
 
 /**
  * For multi-layer array access

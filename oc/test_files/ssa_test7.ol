@@ -2,8 +2,6 @@
 * SSA Testing
 */
 
-#file SSA_TEST7;
-
 //Global variables
 let mut glob_x:u32 := 3232;
 let glog_y:i32 := -232;

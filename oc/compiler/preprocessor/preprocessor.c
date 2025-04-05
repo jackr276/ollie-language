@@ -18,6 +18,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+//Default error size
+#define DEFAULT_ERROR_SIZE 1000
+
 /**
  * This dictates any errors that we print out
  */
@@ -29,6 +32,7 @@ typedef enum{
 
 //The token of the current file that we are in
 static char* current_file_token = NULL;
+
 
 /**
  * Print out a custom, stylized preprocessor error for the user
@@ -46,12 +50,13 @@ static void print_preproc_error(preproc_msg_type_t type, char* error_message){
 	}
 }
 
+
 /**
  * Print out a custom, stylized preprocessor error for the user with number line
  */
 static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_message, u_int16_t line_num){
 	//For ease of printing
-	char* message_types[3] = {"ERROR", "WARNING", "INFO"};
+	char* message_types[] = {"ERROR", "WARNING", "INFO"};
 
 	//Print out the error in a stylized manner
 	if(current_file_token == NULL){
@@ -61,6 +66,7 @@ static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_mes
 	}
 }
 
+
 /**
  * Parse the beginning parts of a file and determine any/all dependencies.
  * The dependencies that we have here will be used to build the overall dependency
@@ -68,7 +74,7 @@ static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_mes
 */
 static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 	//For any/all error printing
-	char info[1000];
+	char info[DEFAULT_ERROR_SIZE];
 	//We will be returning a copy here, no need for dynamic allocation
 	dependency_package_t return_package;
 	//The lookahead token
@@ -77,47 +83,8 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 	return_package.dependencies = NULL;
 	return_package.num_dependencies = 0;
 
-
 	//The parser line number -- largely unused in this module
 	u_int16_t parser_line_num = 0;
-
-	//We shouldn't even get here if this doesn't exist, but for our
-	//purposes we need to skip through the #file FILE_NAME; top-level
-	//declaration
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we don't see this we fail
-	if(lookahead.tok != FILE_TOK){
-		print_preproc_error_linenum(PREPROC_ERR, "Top-level \"#file FILE_TOKEN;\" declaration required.", parser_line_num);
-		return_package.return_token = PREPROC_ERROR;
-		return return_package;
-	}
-
-	//Now we need to see the file's identifier
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If it isn't an identifier we fail
-	if(lookahead.tok != IDENT){
-		print_preproc_error_linenum(PREPROC_ERR, "Top-level \"#file FILE_TOKEN;\" declaration required.", parser_line_num);
-		return_package.return_token = PREPROC_ERROR;
-		return return_package;
-	}
-
-	//Now we can copy the name of this file(referred to as a token) into the results package
-	strncpy(return_package.module_name, lookahead.lexeme, 100);
-
-	//Save this for later on
-	current_file_token = return_package.module_name;
-
-	//One last thing -- need to see the semicolon
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If it isn't an identifier we fail
-	if(lookahead.tok != SEMICOLON){
-		print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after top-level declaration", parser_line_num);
-		return_package.return_token = PREPROC_ERROR;
-		return return_package;
-	}
 
 	//We will run through the opening part of the file. If we do not
 	//see the comptime guards, we will back right out
@@ -318,7 +285,6 @@ void destroy_dependency_package(dependency_package_t* package){
 }
 
 
-
 /**
  * Our entry point method to the ollie preprocessor. This also serves
  * as a useful first check to see if any files do not exist(fail to open).
@@ -328,10 +294,11 @@ void destroy_dependency_package(dependency_package_t* package){
  */
 dependency_package_t preprocess(char* fname){
 	//For any/all error printing
-	char info[500];
+	char info[DEFAULT_ERROR_SIZE];
+
 	//The return token. Remember that OC uses an "errors-as-values" approach, 
 	//so this return token will be what we use to communicate errors as well
-	dependency_package_t ret_package;
+	dependency_package_t dep_package;
 
 	//Attempt to open the file
 	FILE* fl = fopen(fname, "r");
@@ -340,16 +307,17 @@ dependency_package_t preprocess(char* fname){
 	if(fl == NULL){
 		sprintf(info, "File \"%s\" could not be opened", fname);
 		print_preproc_error(PREPROC_ERR, "info");
-		ret_package.return_token = PREPROC_ERROR;
-		return ret_package;
+		dep_package.return_token = PREPROC_ERROR;
+		return dep_package;
 	}
 
 	//Otherwise it did work. In this instance, we will return the dependency package result in here. The actual 
 	//orienting of compiler direction is done by a different submodule
-	ret_package = determine_linkage_and_dependencies(fl);
+	dep_package = determine_linkage_and_dependencies(fl);
 
 	//Now we close the file
 	fclose(fl);
 
-	return ret_package;
+	//Give this one back
+	return dep_package;
 }

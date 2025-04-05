@@ -29,18 +29,17 @@ struct dependency_tree_node_t{
 	//N-ary tree structure, first child and next sibling
 	dependency_tree_node_t* first_child;
 	dependency_tree_node_t* next_sibling;
-	//Keep track of how many that we have
-	u_int16_t num_connections;
 	//Has it been visited?
 	u_int8_t visited;
 	//The file that we'll need to compile
 	char filename[FILENAME_LENGTH];
 };
 
+
 /**
- * Create and add a node to the graph
+ * Initialize a dependency tree
  */
-dependency_tree_node_t* dependency_tree_node_alloc(char* filename);
+dependency_tree_node_t* initialize_dependency_tree();
 
 /**
  * Add a directed connection between two nodes. This kind of relationship

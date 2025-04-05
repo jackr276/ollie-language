@@ -1,7 +1,6 @@
 /**
 * This one should not work
 */
-#file LEX_TEST_11;
 
 fn:static example(mut my_arr:i32*, max:u32) -> void{
 	*my_arr := 2+3 + 6-1;

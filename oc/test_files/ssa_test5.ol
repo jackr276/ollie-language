@@ -2,8 +2,6 @@
 * SSA Testing
 */
 
-#file SSA_TEST5;
-
 fn main() -> i32{
 	let mut x:i32 := 33;
 

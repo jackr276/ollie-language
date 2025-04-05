@@ -16,7 +16,6 @@
 #include "cfg/cfg.h"
 #include "optimizer/optimizer.h"
 
-
 // A list of currently compiled files
 typedef struct compiled_file_token_t compiled_file_token_t;
 
@@ -165,7 +164,8 @@ static front_end_results_package_t compile(char* fname){
 	}
 
 	//Now we'll parse the whole thing
-	results = parse(fl, dependencies.module_name);
+	//results = parse(fl, dependencies.file_name);
+	results = parse(fl, "FIX ME");
 
 	//Increment these while we're here
 	num_errors += results.num_errors;

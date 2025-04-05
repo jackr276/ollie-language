@@ -1,4 +1,3 @@
-#file TEST_PROG_13;
 
 /**
  * Testing do-while

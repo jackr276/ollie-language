@@ -1,5 +1,4 @@
 
-#file TEST_PROG_3;
 
 /*
 fn my_fn() -> void{

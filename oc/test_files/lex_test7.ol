@@ -2,7 +2,6 @@
 * Has a bad declared word deep in if else
 */
 
-#file LEX_TEST_7;
 alias char* as str;
 
 define construct con{

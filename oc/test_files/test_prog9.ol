@@ -1,4 +1,3 @@
-#file TEST_PROG_9;
 
 fn tester(i:u32) -> i32{
 	ret 1;

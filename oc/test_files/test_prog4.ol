@@ -2,7 +2,6 @@
 * Example
 */
 
-#file TEST_PROG_4;
 #dependencies
 require "./oc/test_files/test_prog3.ol";
 #dependencies

@@ -1,5 +1,4 @@
 
-#file TEST_PROG_1;
 define construct my_struct {
 	a:u32;
 	b:u32;

@@ -2,7 +2,6 @@
 * Here we will test bad chars in idents
 */
 
-#file LEX_TEST_4;
 
 fn:static main() -> i32{
 	declare a:u32;

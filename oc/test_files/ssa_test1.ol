@@ -2,8 +2,6 @@
 * SSA Testing
 */
 
-#file SSA_TEST1;
-
 
 // Test function
 fn tester() -> i32 {

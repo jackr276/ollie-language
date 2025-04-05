@@ -2,8 +2,6 @@
 * SSA Testing
 */
 
-#file SSA_TEST8;
-
 fn main() -> i32{
 	let mut x:i32 := 33;
 	let mut y:i32 := 3232;

@@ -2,8 +2,6 @@
 * SSA Testing
 */
 
-#file SSA_TEST1;
-
 fn main() -> i32{
 	let mut x:u32 := 33;
 	defer x++;

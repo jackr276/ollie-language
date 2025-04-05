@@ -28,7 +28,7 @@ int main(int argc, char** argv){
 			printf("COULD NOT OPEN FILE %s\n", argv[i]);
 		}
 
-		front_end_results_package_t results = parse(fl, "Sample");
+		front_end_results_package_t results = parse(fl, "PARSER TEST INPUT");
 		ast_dealloc();
 
 		fclose(fl);
