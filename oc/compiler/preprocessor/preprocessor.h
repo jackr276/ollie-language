@@ -10,6 +10,7 @@
 
 #include <stdio.h>
 #include <sys/types.h>
+#include "../dependency_tree/dependency_tree.h"
 
 //Max length for most linux-based file systems
 #define FILE_NAME_LENGTH 255
@@ -35,15 +36,8 @@ typedef enum {
  * to the compiler
  */
 struct dependency_package_t{
-	//What do we depend on? We don't want to be limited here
-	char** dependencies;
-	//The file name, we'll hang onto it for printing
-	char file_name[FILE_NAME_LENGTH];
-	//Count how many we have
-	u_int16_t num_dependencies;
-	//Max dependencies. This can be realloc'd if certain files
-	//demand it
-	u_int16_t max_dependencies;
+	//The root of the dependency tree that we'll need to use
+	dependency_tree_node_t* root;
 	//What kind of token do we have(errors as values approach)
 	preproc_return_token_t return_token;
 };
@@ -59,9 +53,4 @@ struct dependency_package_t{
 */
 dependency_package_t preprocess(char* fname);
 
-/**
- * For convenience, destroy the dependency package in its entirety
-*/
-void destroy_dependency_package(dependency_package_t* package);
-
-#endif
+#endif /* PREPROCESSOR_H */

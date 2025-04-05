@@ -34,7 +34,6 @@ typedef enum {
 	ASM,
 	ASM_STATEMENT,
 	IF,
-	FILE_TOK,
 	THEN,
 	REPLACE,
 	//For expansion of func params

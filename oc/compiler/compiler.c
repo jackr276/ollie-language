@@ -23,71 +23,6 @@ typedef struct compiled_file_token_t compiled_file_token_t;
 u_int32_t num_errors;
 u_int32_t num_warnings;
 
-struct compiled_file_token_t{
-	//Linked list functionality - point to the next one
-	compiled_file_token_t* next;
-	//Store the file's token
-	char file_name[256];
-};
-
-//Initially nothing has been compiled
-compiled_file_token_t* head = NULL;
-
-
-/**
- * Compiled file list destructor
- */
-static void deallocate_compiled_files(){
-	//Grab a temp variable for deallocation
-	compiled_file_token_t* temp;
-
-	//So long as this isn't null
-	while(head != NULL){
-		temp = head;
-		head = head->next;
-		free(temp);
-	}
-}
-
-
-/**
- * Add a compiled file onto the compilation list
- */
-static void add_compiled_file(char* file_name){
-	//First we allocate
-	compiled_file_token_t* new = calloc(1, sizeof(compiled_file_token_t));
-	
-	//Populate appropriately
-	strncpy(new->file_name, file_name, strlen(file_name));
-
-	//Then we append this to the front
-	new->next = head;	
-	head = new;
-}
-
-
-/**
- * Crawl the linked list to see if this file has already been compiled
- */
-static u_int8_t has_file_been_compiled(char* file_name){
-	//Crawl through the linked list, comparing for compiled files
-	compiled_file_token_t* cursor = head;
-
-	//So long as the cursor isn't null
-	while(cursor != NULL){
-		//If these match, then it has been compiled
-		if(strcmp(cursor->file_name, file_name) == 0){
-			return 1;
-		}
-
-		//Otherwise, iterate to the next one
-		cursor = cursor->next;
-	}
-
-	//If we make it here, it hasn't been compiled
-	return 0;
-}
-
 
 /**
  *	Compile an individual file. This function can be recursively called to deal 
@@ -142,6 +77,7 @@ static front_end_results_package_t compile(char* fname){
 	 * result in parser errors about files not existing
 	 */
 	//We will go through dependency by dependency
+	/*
 	for(u_int16_t i = 0; i < dependencies.num_dependencies; i++){
 		//Grab the current one out of here
 		char* current_dependency = dependencies.dependencies[i];
@@ -162,6 +98,7 @@ static front_end_results_package_t compile(char* fname){
 			}
 		}
 	}
+	*/
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
@@ -171,14 +108,8 @@ static front_end_results_package_t compile(char* fname){
 	num_errors += results.num_errors;
 	num_warnings += results.num_warnings;
 
-	//We're done with this package, we don't need it 
-	destroy_dependency_package(&dependencies);
-
 	//Now that we're done, we can close
 	fclose(fl);
-
-	//Add this file to the list of compiled files
-	add_compiled_file(fname);
 
 	//Give back the results
 	return results;
@@ -197,13 +128,16 @@ static front_end_results_package_t compile(char* fname){
 int main(int argc, char** argv){
 	//How much time we've spent
 	double time_spent;
+	//By default, we assume that we've errored
+	ast_node_class_t CLASS = AST_NODE_CLASS_ERR_NODE;
 
+	//We'll be giving summaries for the user as we go
 	fprintf(stderr, "==================================== Ollie Compiler ======================================\n");
 
 	//Just hop out here
 	if(argc < 2){
 		fprintf(stderr, "Ollie compiler requires a filename to be passed in\n");
-		exit(1);
+		goto final_printout; 
 	}
 
 	front_end_results_package_t results;
@@ -240,7 +174,7 @@ int main(int argc, char** argv){
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
 
 	//Grab bfore freeing
-	ast_node_class_t CLASS = results.root->CLASS;
+	CLASS = results.root->CLASS;
 
 	//FOR NOW -- deallocate this stuff
 	ast_dealloc();
@@ -251,7 +185,6 @@ int main(int argc, char** argv){
 	variable_symtab_dealloc(results.variable_symtab);
 	constants_symtab_dealloc(results.constant_symtab);
 	dealloc_cfg(cfg);
-	deallocate_compiled_files();
 	
 	//Timer end
 	clock_t end = clock();

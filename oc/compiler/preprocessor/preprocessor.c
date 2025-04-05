@@ -72,16 +72,13 @@ static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_mes
  * The dependencies that we have here will be used to build the overall dependency
  * tree, which will determine the entire order of compilation
 */
-static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
+static dependency_package_t build_dependency_tree(FILE* fl){
 	//For any/all error printing
 	char info[DEFAULT_ERROR_SIZE];
 	//We will be returning a copy here, no need for dynamic allocation
 	dependency_package_t return_package;
 	//The lookahead token
 	Lexer_item lookahead;
-	//Set these initially here
-	return_package.dependencies = NULL;
-	return_package.num_dependencies = 0;
 
 	//The parser line number -- largely unused in this module
 	u_int16_t parser_line_num = 0;
@@ -96,7 +93,7 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 		//This is totally fine, we just move right along
 		return_package.return_token = PREPROC_SUCCESS;
 		//0 dependencies here
-		return_package.num_dependencies = 0;
+		return_package.root = NULL;
 		//Give it back
 		return return_package;
 	}
@@ -141,31 +138,11 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 				return return_package;
 			}
 
-			//If we see a string constant, that is our filename. We'll add it into the list
-			//If we need to create this, we'll do that now
-			if(return_package.dependencies == NULL){
-				//We need to allocate this
-				return_package.dependencies = calloc(DEFAULT_DEPENDENCIES, sizeof(char*));
-				return_package.max_dependencies = DEFAULT_DEPENDENCIES;
-			//There's a chance that we've overflown, and need to realloc
-			} else if(return_package.num_dependencies == return_package.max_dependencies){
-				//Double it
-				return_package.max_dependencies *= 2;
-				//Reallocate here
-				return_package.dependencies = realloc(return_package.dependencies, return_package.max_dependencies * sizeof(char*));
-			}
-
 			//Allocate it 
 			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
 
 			//Copy the lexeme over
 			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
-
-			//Now we'll store it in the proper location
-			return_package.dependencies[return_package.num_dependencies] = added_filename;
-
-			//And we'll increment the number that we have here
-			return_package.num_dependencies++;
 
 			//One last thing that we need to see -- closing semicolon
 			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -194,31 +171,11 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 				return return_package;
 			}
 			
-			//If we see a string constant, that is our filename. We'll add it into the list
-			//If we need to create this, we'll do that now
-			if(return_package.dependencies == NULL){
-				//We need to allocate this
-				return_package.dependencies = calloc(DEFAULT_DEPENDENCIES, sizeof(char*));
-				return_package.max_dependencies = DEFAULT_DEPENDENCIES;
-			//There's a chance that we've overflown, and need to realloc
-			} else if(return_package.num_dependencies == return_package.max_dependencies){
-				//Double it
-				return_package.max_dependencies *= 2;
-				//Reallocate here
-				return_package.dependencies = realloc(return_package.dependencies, return_package.max_dependencies * sizeof(char*));
-			}
-
 			//Allocate it 
 			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
 
 			//Copy the lexeme over
 			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
-
-			//Now we'll store it in the proper location
-			return_package.dependencies[return_package.num_dependencies] = added_filename;
-
-			//And we'll increment the number that we have here
-			return_package.num_dependencies++;
 
 			//One last thing that we need to see -- closing semicolon
 			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -253,35 +210,12 @@ static dependency_package_t determine_linkage_and_dependencies(FILE* fl){
 	}
 
 	//If we have a completely empty package, we should throw a warning
-	if(return_package.num_dependencies == 0){
+	if(return_package.root == NULL){
 		print_preproc_error(PREPROC_WARN, "Empty #dependencies region given. Consider removing this region entirely if not in use.");
 	}
 
 	//Give it back
 	return return_package;
-}
-
-
-/**
- * A convenient freer method that we have for destroying
- * dependencies
-*/
-void destroy_dependency_package(dependency_package_t* package){
-	//If it's null we're done here
-	if(package->dependencies == NULL){
-		return;
-	}
-	
-	//Run through all of the records, deallocating them one by one
-	for(u_int16_t i = 0; i < package->num_dependencies; i++){
-		free(*(package->dependencies + i));
-	}
-
-	//At the very end, free the overall pointer
-	free(package->dependencies);
-
-	//Set this as a warning
-	package->dependencies = NULL;
 }
 
 
@@ -313,7 +247,7 @@ dependency_package_t preprocess(char* fname){
 
 	//Otherwise it did work. In this instance, we will return the dependency package result in here. The actual 
 	//orienting of compiler direction is done by a different submodule
-	dep_package = determine_linkage_and_dependencies(fl);
+	dep_package = build_dependency_tree(fl);
 
 	//Now we close the file
 	fclose(fl);

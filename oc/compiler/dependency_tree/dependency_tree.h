@@ -23,6 +23,19 @@ typedef enum{
 	COMPILER_ORDER_CIRC_DEP
 } compiler_order_status_t;
 
+
+/**
+ * The dependency tree is a way to organize our order of compilation. In the ideal scenario,
+ * the user will be able to have a main file that references any other file they need. If they
+ * compile the main file, the ollie compiler will automatically pull in any other file that they need
+ *
+ * We call it a tree here, but really it's a directed acyclic graph. It's acyclic because, if we have
+ * a circular dependency, we end up in a "chicken or the egg" problem, where we don't know what
+ * to compile first. 
+ *
+ * The root of the tree is ALWAYS the file that was passed into the ollie compiler. Every child of said root
+ * is a dependency that will need to be compiled first
+ */
 struct dependency_tree_node_t{
 	//What is the next-created node
 	dependency_tree_node_t* next_created;
@@ -35,6 +48,10 @@ struct dependency_tree_node_t{
 	char filename[FILENAME_LENGTH];
 };
 
+/**
+ * Allocate a dependency node
+ */
+dependency_tree_node_t* dependency_tree_node_alloc(char* filename);
 
 /**
  * Initialize a dependency tree
