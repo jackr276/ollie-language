@@ -6,8 +6,8 @@
 */
 
 //Include guards
-#ifndef DEPENDENCY_ANALYZER_H
-#define DEPENDENCY_ANALYZER_H
+#ifndef DEPENDENCY_TREE_H 
+#define DEPENDENCY_TREE_H 
 #include <sys/types.h>
 
 //The length of filenames with some extra space for good measure
@@ -52,4 +52,4 @@ void add_dependency_node(dependency_tree_node_t* parent, dependency_tree_node_t*
 */
 void dependency_tree_dealloc();
 
-#endif
+#endif /* DEPENDENCY_TREE_H */

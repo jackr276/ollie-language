@@ -4,7 +4,7 @@
  * to the header file of the same name
 */
 
-#include "dependency_analyzer.h"
+#include "dependency_tree.h"
 #include <string.h>
 #include <stdlib.h>
 

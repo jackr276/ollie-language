@@ -12,7 +12,7 @@ CALL_GRAPH_PATH = ./oc/compiler/call_graph
 AST_PATH = ./oc/compiler/ast
 CFG_PATH = ./oc/compiler/cfg
 PREPROC_PATH = ./oc/compiler/preprocessor
-DEPENDENCY_ANALYZER_PATH = ./oc/compiler/dependency_analyzer
+DEPENDENCY_TREE_PATH = ./oc/compiler/dependency_tree
 DYNAMIC_ARRAY_PATH = ./oc/compiler/dynamic_array
 THREE_ADDRESS_CODE_PATH = ./oc/compiler/three_addr_code
 QUEUE_PATH = ./oc/compiler/queue
@@ -85,11 +85,11 @@ preproc.o: $(PREPROC_PATH)/preprocessor.c
 preprocd.o: $(PREPROC_PATH)/preprocessor.c
 	$(CC) $(CFLAGS) -g $(PREPROC_PATH)/preprocessor.c -o $(OUT)/preprocd.o
 
-dependency_analyzer.o: $(DEPENDENCY_ANALYZER_PATH)/dependency_analyzer.c
-	$(CC) $(CFLAGS) $(DEPENDENCY_ANALYZER_PATH)/dependency_analyzer.c -o $(OUT)/dependency_analyzer.o
+dependency_tree.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
+	$(CC) $(CFLAGS) $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT)/dependency_tree.o
 
-dependency_analyzerd.o: $(DEPENDENCY_ANALYZER_PATH)/dependency_analyzer.c
-	$(CC) $(CFLAGS) -g $(DEPENDENCY_ANALYZER_PATH)/dependency_analyzer.c -o $(OUT)/dependency_analyzerd.o
+dependency_treed.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
+	$(CC) $(CFLAGS) -g $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT)/dependency_treed.o
 
 symtab.o: $(SYMTAB_PATH)/symtab.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT)/symtab.o
@@ -175,17 +175,17 @@ front_end_test.o: $(TEST_SUITE_PATH)/front_end_test.c
 front_end_testd.o: $(TEST_SUITE_PATH)/front_end_test.c
 	$(CC) $(CFLAGS) -g  -o $(OUT)/front_end_testd.o $(TEST_SUITE_PATH)/front_end_test.c
 
-front_end_test: front_end_test.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_analyzer.o priority_queue.o dynamic_array.o lightstack.o
-	$(CC) -o $(OUT)/front_end_test $(OUT)/front_end_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_analyzer.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
+front_end_test: front_end_test.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_tree.o priority_queue.o dynamic_array.o lightstack.o
+	$(CC) -o $(OUT)/front_end_test $(OUT)/front_end_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_tree.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
 
-front_end_testd: front_end_testd.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_analyzer.o priority_queue.o dynamic_array.o lightstack.o
-	$(CC) -o $(OUT)/front_end_testd $(OUT)/front_end_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_analyzer.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
+front_end_testd: front_end_testd.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_treed.o priority_queue.o dynamic_array.o lightstack.o
+	$(CC) -o $(OUT)/front_end_testd $(OUT)/front_end_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_treed.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
 
-oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_analyzer.o priority_queue.o dynamic_array.o lightstack.o
-	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_analyzer.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
+oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o three_address_code.o heap_queue.o preproc.o dependency_tree.o priority_queue.o dynamic_array.o lightstack.o
+	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/three_address_code.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_tree.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o
 
-oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o call_graphd.o lexstackd.o three_address_coded.o heap_queued.o preprocd.o dependency_analyzerd.o priority_queued.o dynamic_arrayd.o lightstackd.o
-	$(CC) -o $(OUT)/ocd $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/lexstackd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o $(OUT)/three_address_coded.o $(OUT)/heap_queued.o $(OUT)/preprocd.o $(OUT)/dependency_analyzerd.o $(OUT)/priority_queued.o $(OUT)/dynamic_arrayd.o $(OUT)/lightstackd.o
+oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o call_graphd.o lexstackd.o three_address_coded.o heap_queued.o preprocd.o dependency_treed.o priority_queued.o dynamic_arrayd.o lightstackd.o
+	$(CC) -o $(OUT)/ocd $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/lexstackd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o $(OUT)/three_address_coded.o $(OUT)/heap_queued.o $(OUT)/preprocd.o $(OUT)/dependency_treed.o $(OUT)/priority_queued.o $(OUT)/dynamic_arrayd.o $(OUT)/lightstackd.o
 
 stest: symtab_test
 	$(OUT)/symtab_test
