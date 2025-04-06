@@ -40,6 +40,8 @@ type_symtab_t* type_symtab;
 cfg_t* cfg_ref;
 //Keep a reference to whatever function we are currently in
 symtab_function_record_t* current_function;
+//The current function exit block. Unlike loops, these can't be nested, so this is totally fine
+basic_block_t* function_exit_block = NULL;
 
 //A package of values that each visit function uses
 typedef struct {
@@ -194,6 +196,57 @@ static jump_type_t select_appropriate_jump_stmt(Token operator, jump_category_t 
 			}
 	}
 }
+
+
+/**
+ * We'll go through in the regular traversal, pushing each node onto the stack in
+ * postorder. 
+ */
+static void post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry, u_int8_t use_reverse_cfg){
+	//If we've already seen this then we're done
+	if(entry->visited == TRUE){
+		return;
+	}
+
+	//Mark it as visited
+	entry->visited = TRUE;
+
+	//For every child(successor), we visit it as well
+	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
+		//Visit each of the blocks
+		post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _), use_reverse_cfg);
+	}
+
+	//Now we can push entry onto the stack
+	push(stack, entry);
+}
+
+
+/**
+ * Get and return a reverse post order traversal of a function-level CFG
+ */
+dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_int8_t use_reverse_cfg){
+	//For our postorder traversal
+	heap_stack_t* stack = heap_stack_alloc();
+	//We'll need this eventually for postorder
+	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
+
+	//Invoke the recursive helper
+	post_order_traversal_rec(stack, entry, use_reverse_cfg);
+
+	//Now we'll pop everything off of the stack, and put it onto the RPO 
+	//array in backwards order
+	while(is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+		dynamic_array_add(reverse_post_order_traversal, pop(stack));
+	}
+
+	//And when we're done, get rid of the stack
+	heap_stack_dealloc(stack);
+
+	//Give back the reverse post order traversal
+	return reverse_post_order_traversal;
+}
+
 
 
 /**
@@ -796,6 +849,8 @@ static void calculate_dominator_sets(cfg_t* cfg){
 
 	//For each and every function that we have, we will perform this operation separately
 	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+		//If the 
+
 		//Initialize a "worklist" dynamic array for this particular function
 		dynamic_array_t* worklist = dynamic_array_alloc();
 
@@ -1362,12 +1417,12 @@ static void rhs_new_name(three_addr_var_t* var){
  */
 static void rename_block(basic_block_t* entry){
 	//If we've previously visited this block, then return
-	if(entry->visited_renamer == TRUE){
+	if(entry->visited == TRUE){
 		return;
 	}
 
 	//Otherwise we'll flag it for the future
-	entry->visited_renamer = TRUE;
+	entry->visited = TRUE;
 
 	//Grab out our leader statement here. We will iterate over all statements
 	//looking for phi functions
@@ -1477,7 +1532,13 @@ static void rename_block(basic_block_t* entry){
 }
 
 
+/**
+ * Rename all of the variables in the CFG
+ */
 static void rename_all_variables(cfg_t* cfg){
+	//Before we do this - let's reset the entire CFG
+	reset_visited_status(cfg);
+
 	//We will call the rename block function on the first block
 	//for each of our functions. The rename block function is 
 	//recursive, so that should in theory take care of everything for us
@@ -2373,7 +2434,11 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		//First we'll print out the global variables block
 		print_block_three_addr_code(cfg->global_variables, print_df);
 	}
-		//For holding our blocks
+
+	//First, we'll reset every single block here
+	reset_visited_status(cfg);
+
+	//For holding our blocks
 	basic_block_t* block;
 
 	//Now we'll print out each and every function inside of the function_blocks
@@ -2393,19 +2458,19 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			block = dequeue(queue);
 
 			//If this wasn't visited, we'll print
-			if(block->visited != 3){
+			if(block->visited == FALSE){
 				print_block_three_addr_code(block, print_df);	
 			}
 
 			//Now we'll mark this as visited
-			block->visited = 3;
+			block->visited = TRUE;
 
 			//And finally we'll add all of these onto the queue
 			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
 				//Add the successor into the queue, if it has not yet been visited
 				basic_block_t* successor = block->successors->internal_array[j];
 
-				if(successor->visited != 3){
+				if(successor->visited == FALSE){
 					enqueue(queue, successor);
 				}
 			}
@@ -2510,6 +2575,11 @@ void dealloc_cfg(cfg_t* cfg){
 	//Destroy the dynamic arrays too
 	dynamic_array_dealloc(cfg->created_blocks);
 	dynamic_array_dealloc(cfg->function_blocks);
+
+	//If we have a reverse post order traversal, get rid of it too
+	if(cfg->reverse_post_order_traversal != NULL){
+		dynamic_array_dealloc(cfg->reverse_post_order_traversal);
+	}
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
@@ -2815,13 +2885,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
-	//Once we get here, if it is a return statement, that means that we always return
-	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
-		//We should warn here
-		print_cfg_message(WARNING, "For loop internal returns through every control block, will only execute once", for_stmt_node->line_number);
-		(*num_warnings_ref)++;
-	}
-
 	//The successor to the end block is the update block
 	add_successor(compound_stmt_end, for_stmt_update_block);
 
@@ -2995,14 +3058,6 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	//So long as it isn't null or return
 	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 		compound_stmt_end = compound_stmt_end->direct_successor;
-	}
-	
-	//If we make it to the end and this ending statement is a return, that means that we always return
-	//Throw a warning
-	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
-		//It is only an error though -- the user is allowed to do this
-		print_cfg_message(WARNING, "While loop body returns in all control paths. It will only execute at most once", while_stmt_node->line_number);
-		(*num_warnings_ref)++;
 	}
 
 	//A successor to the end block is the block at the top of the loop
@@ -3278,6 +3333,9 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 			//Emit the return statement, let the sub rule handle
 			emit_ret_stmt(current_block, current_node);
+
+			//A successor to this current block is the function exit block
+			add_successor(current_block, function_exit_block);
 
 			//The current block will now be marked as a return statement
 			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
@@ -3920,6 +3978,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Emit the return statement, let the sub rule handle
 			emit_ret_stmt(current_block, ast_cursor);
 
+			//A successor to this block is the exit block
+			add_successor(current_block, function_exit_block);
+
 			//The current block will now be marked as a return statement
 			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
 
@@ -4358,8 +4419,12 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	char info[1000];
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc();
+	//The function exit block
+	function_exit_block = basic_block_alloc();
 	//Mark that this is a starting block
 	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
+	//Mark that this is an exit block
+	function_exit_block->block_type = BLOCK_TYPE_FUNC_EXIT;
 
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
@@ -4412,8 +4477,16 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 		compound_stmt_cursor = compound_stmt_cursor->direct_successor;
 	}
 
+	//We will mark that this end here has a direct successor in the function exit block
+	add_successor(compound_stmt_cursor, function_exit_block);
+	//Ensure that it's the direct successor
+	compound_stmt_cursor->direct_successor = function_exit_block;
+
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
+
+	//Mark this as NULL for the next go around
+	function_exit_block = NULL;
 
 	//We always return the start block
 	return function_starting_block;

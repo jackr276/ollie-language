@@ -94,6 +94,9 @@ int main(int argc, char** argv){
 	//We'll be giving summaries for the user as we go
 	fprintf(stderr, "==================================== Ollie Compiler ======================================\n");
 
+	//Display the filename for now
+	fprintf(stderr, "INPUT FILE: %s\n\n", argv[1]);
+
 	//Just hop out here
 	if(argc < 2){
 		fprintf(stderr, "Ollie compiler requires a filename to be passed in\n");
@@ -127,7 +130,6 @@ int main(int argc, char** argv){
 	printf("============================================= BEFORE OPTIMIZATION =======================================\n");
 	print_all_cfg_blocks(cfg);
 	printf("============================================= BEFORE OPTIMIZATION =======================================\n");
-
 
 	//Now we will run the optimizer
 	cfg = optimize(cfg, results.os, 5);
