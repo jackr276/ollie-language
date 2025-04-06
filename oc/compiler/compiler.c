@@ -33,86 +33,46 @@ u_int32_t num_warnings;
  *  that gives us the order needed for compilation. We will then perform a reverse
  *  level-order traversal and compile in that order
  */
-static front_end_results_package_t compile(char* fname){
-	//Declare our return package
-	front_end_results_package_t results;
+static void compile(char* fname, front_end_results_package_t* results){
 	//These are all NULL initially
-	results.constant_symtab = NULL;
-	results.function_symtab = NULL;
-	results.type_symtab = NULL;
-	results.variable_symtab = NULL;
-	results.os = NULL;
-	results.root = NULL;
-
-	//First we try to open the file
-	FILE* fl = fopen(fname, "r");
-
-	//If this fails, the whole thing is done
-	if(fl == NULL){
-		fprintf(stderr, "[FATAL COMPILER ERROR]: Failed to open file \"%s\"", fname);
-		results.num_errors = 1;
-		results.lines_processed = 0;
-		//Failed here
-		results.result_type = PARSER_RESULT_FAILURE;
-		//Give it back
-		return results;
-	}
+	results->constant_symtab = NULL;
+	results->function_symtab = NULL;
+	results->type_symtab = NULL;
+	results->variable_symtab = NULL;
+	results->os = NULL;
+	results->root = NULL;
 
 	//Otherwise it opened, so we now need to process it and compile dependencies
 	dependency_package_t dependencies = preprocess(fname);
 
+	
+
 	//If this fails, we error out
 	if(dependencies.return_token == PREPROC_ERROR){
-		results.num_errors = 1;
-		results.lines_processed = 0;
+		results->num_errors = 1;
+		results->lines_processed = 0;
 		//Failed here
-		results.result_type = PARSER_RESULT_FAILURE;
+		results->result_type = PARSER_RESULT_FAILURE;
 		//Give it back
-		return results;
+		return;
 	}
 
-	/**
-	 * We now need to analyze the dependencies of this file. If there are dependencies,
-	 * the parser requires that those be loaded into memory first. Failure to do this will
-	 * result in parser errors about files not existing
-	 */
-	//We will go through dependency by dependency
-	/*
-	for(u_int16_t i = 0; i < dependencies.num_dependencies; i++){
-		//Grab the current one out of here
-		char* current_dependency = dependencies.dependencies[i];
-
-		//There is a (strong) chance that whatever we've grabbed here has already been 
-		//compiled. If so, we'll just skip it. We don't want to continuously recompile commonly
-		//used files. To achieve this, we maintain a list of everything that has been compiled(specifically)
-		//their FILE_TOKENS, and we will cross these off as we compile them 
-
-		//If this has not been compiled already
-		if(has_file_been_compiled(current_dependency) == 0){
-			//Then we'll compile it
-			results = compile(current_dependency);
-
-			//If results is bad, we fail here
-			if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
-				return results;
-			}
-		}
-	}
-	*/
+	//First we try to open the file
+	FILE* fl = fopen(fname, "r");
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
-	results = parse(fl, "FIX ME");
+	front_end_results_package_t parser_results = parse(fl, "FIX ME");
 
 	//Increment these while we're here
-	num_errors += results.num_errors;
-	num_warnings += results.num_warnings;
+	num_errors += parser_results.num_errors;
+	num_warnings += parser_results.num_warnings;
 
 	//Now that we're done, we can close
 	fclose(fl);
 
 	//Give back the results
-	return results;
+	return;
 }
 
 
@@ -140,26 +100,15 @@ int main(int argc, char** argv){
 		goto final_printout; 
 	}
 
-	front_end_results_package_t results;
-
 	//Start the timer
 	clock_t begin = clock();
-
-	// ================== Front End ===========================
-		/**
-		 * The front end consists of the lexer and parser. When the front end
-		 * completes, we are guaranteed the following:
-		 * 	1.) A syntactically correct program
-		 * 	2.) A fully complete symbol table for each area of the program
-		 * 	3.) The elaboration and elimination of all preprocessor/compiler-only operations
-		 *  4.) A fully fleshed out Abstract-Syntax-Tree(AST) that can be used by the middle end
-		*/
 
 	//Grab whatever this file is
 	char* fname = argv[1];
 
 	//Call the compiler, let this handle it
-	results = compile(fname);
+	front_end_results_package_t results;
+	compile(fname, &results);
 
 	//If the AST root is bad, there's no use in going on here
 	if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){

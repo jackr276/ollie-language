@@ -30,8 +30,8 @@ typedef enum{
 	PREPROC_INFO,
 } preproc_msg_type_t;
 
-//The token of the current file that we are in
-static char* current_file_token = NULL;
+//The token of the current file that we are in - largely for printing purposes
+static char* current_file = NULL;
 
 
 /**
@@ -42,11 +42,11 @@ static void print_preproc_error(preproc_msg_type_t type, char* error_message){
 	char* message_types[3] = {"ERROR", "WARNING", "INFO"};
 
 	//Print out the error in a stylized manner
-	if(current_file_token == NULL){
+	if(current_file == NULL){
 		printf("[PREPROCESSOR %s]: %s\n", message_types[type], error_message);
 	//We can add the name in here
 	} else {
-		printf("[FILE: %s] --> [PREPROCESSOR %s]: %s\n", current_file_token, message_types[type], error_message);
+		printf("[FILE: %s] --> [PREPROCESSOR %s]: %s\n", current_file, message_types[type], error_message);
 	}
 }
 
@@ -59,11 +59,19 @@ static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_mes
 	char* message_types[] = {"ERROR", "WARNING", "INFO"};
 
 	//Print out the error in a stylized manner
-	if(current_file_token == NULL){
+	if(current_file == NULL){
 		printf("[LINE %d | PREPROCESSOR %s]: %s\n", line_num, message_types[type], error_message);
 	} else {
-		printf("[FILE: %s] --> [LINE %d | PREPROCESSOR %s]: %s\n", current_file_token, line_num, message_types[type], error_message);
+		printf("[FILE: %s] --> [LINE %d | PREPROCESSOR %s]: %s\n", current_file, line_num, message_types[type], error_message);
 	}
+}
+
+/**
+ * Recursively build a dependency tree
+ */
+static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
+
+	return NULL; //for now, not done
 }
 
 
@@ -72,13 +80,24 @@ static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_mes
  * The dependencies that we have here will be used to build the overall dependency
  * tree, which will determine the entire order of compilation
 */
-static dependency_package_t build_dependency_tree(FILE* fl){
+static dependency_package_t build_dependency_tree(char* fname){
 	//For any/all error printing
 	char info[DEFAULT_ERROR_SIZE];
 	//We will be returning a copy here, no need for dynamic allocation
 	dependency_package_t return_package;
 	//The lookahead token
 	Lexer_item lookahead;
+
+	//Open the file first off
+	FILE* fl = fopen(fname, "r");
+
+	//If it fails we're done
+	if(fl == NULL){
+		sprintf(info, "File %s could not be opened", fname);
+		print_preproc_error(PREPROC_ERR, info);
+		return_package.return_token = PREPROC_ERROR; 
+		return return_package;
+	}
 
 	//The parser line number -- largely unused in this module
 	u_int16_t parser_line_num = 0;
@@ -214,6 +233,8 @@ static dependency_package_t build_dependency_tree(FILE* fl){
 		print_preproc_error(PREPROC_WARN, "Empty #dependencies region given. Consider removing this region entirely if not in use.");
 	}
 
+	fclose(fl);
+
 	//Give it back
 	return return_package;
 }
@@ -234,23 +255,9 @@ dependency_package_t preprocess(char* fname){
 	//so this return token will be what we use to communicate errors as well
 	dependency_package_t dep_package;
 
-	//Attempt to open the file
-	FILE* fl = fopen(fname, "r");
-
-	//Error out completely here
-	if(fl == NULL){
-		sprintf(info, "File \"%s\" could not be opened", fname);
-		print_preproc_error(PREPROC_ERR, "info");
-		dep_package.return_token = PREPROC_ERROR;
-		return dep_package;
-	}
-
 	//Otherwise it did work. In this instance, we will return the dependency package result in here. The actual 
 	//orienting of compiler direction is done by a different submodule
-	dep_package = build_dependency_tree(fl);
-
-	//Now we close the file
-	fclose(fl);
+	dep_package = build_dependency_tree(fname);
 
 	//Give this one back
 	return dep_package;
