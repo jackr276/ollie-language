@@ -764,6 +764,13 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 /**
  * Calculate the dominance frontiers of every block in the CFG
  *
+ * The dominance frontier is every block, in relation to the current block, that:
+ * 	Is a successor of a block that IS dominated by the current block
+ * 		BUT
+ * 	It itself is not dominated by the current block
+ *
+ * To think of it, it's essentially every block that is "just barely not dominated" by the current block
+ *
  * Standard dominance frontier algorithm:
  * 	for all nodes b in the CFG
  * 		if b has less than 2 predecessors
@@ -827,6 +834,78 @@ static void add_dominated_block(basic_block_t* dominator, basic_block_t* dominat
 	if(dynamic_array_contains(dominator->dominator_children, dominated) == NOT_FOUND){
 		dynamic_array_add(dominator->dominator_children, dominated);
 	}
+}
+
+
+/**
+ * Calculate the postdominator sets for each and every node
+ *
+ * Routing postdominators
+ * 	For each basic block
+ * 		if block is exit then Pdom <- exit else pdom = all nodes
+ *
+ *
+ * We'll be using a change watcher algorithm for this one
+ */
+static void calculate_postdominator_sets(cfg_t* cfg){
+	//The current block
+	basic_block_t* current;
+
+	//We'll first initialize everything here
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		//Grab the block out
+		current = dynamic_array_get_at(cfg->created_blocks, i);
+
+		//If it's the global var block we don't care
+		if(current->is_global_var_block == TRUE){
+			continue;
+		}
+
+		//If it's an exit block, then it's postdominator set just has itself
+		if(current->block_type == BLOCK_TYPE_FUNC_EXIT){
+			//If it's an exit block, then this set just contains itself
+			current->postdominator_set = dynamic_array_alloc();
+			//Add the block to it's own set
+			dynamic_array_add(current->postdominator_set, current);
+		} else {
+			//If it's not an exit block, then we set this to be the entire body of blocks
+			current->postdominator_set = clone_dynamic_array(cfg->created_blocks);
+		}
+	}
+
+	//Now that we've initialized, we'll perform the same while change algorithm as before
+	//For each and every function
+	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_blocks, i);
+
+		//If we don't have the RPO for this block, we'll make it now
+		if(current_function_block->reverse_post_order == NULL){
+			//We'll use false because we want the straightforward CFG, not the reverse one
+			current_function_block->reverse_post_order = compute_reverse_post_order_traversal(current_function_block, FALSE);
+		}
+
+		//Have we seen a change
+		u_int8_t changed;
+		
+		//Now we will go through everything in this blocks reverse post order set
+		do {
+			//By default, we'll assume there was no change
+			changed = FALSE;
+
+			//Now for each basic block in the reverse post order set
+			for(u_int16_t _ = 0; _ < current_function_block->reverse_post_order->current_index; _++){
+				//Grab the block out
+				basic_block_t* current = dynamic_array_get_at(current_function_block->reverse_post_order, _);
+
+
+			}
+
+		
+
+		} while(changed == TRUE);
+
+	}
+	
 }
 
 
@@ -1117,15 +1196,15 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 			//Calculate the reverse post order in reverse mode for this block, if it doesn't
 			//already exist
-			if(func_entry->reverse_post_order == NULL){
+			if(func_entry->reverse_post_order_reverse_cfg == NULL){
 				//True because we want this in reverse mode
-				func_entry->reverse_post_order = compute_reverse_post_order_traversal(func_entry, TRUE);
+				func_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(func_entry, TRUE);
 			}
 
 			//Now we can go through the entire RPO set
-			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order->current_index; _++){
+			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order_reverse_cfg->current_index; _++){
 				//The current block is whichever we grab
-				current = dynamic_array_get_at(func_entry->reverse_post_order, _);
+				current = dynamic_array_get_at(func_entry->reverse_post_order_reverse_cfg, _);
 
 				//Transfer the pointers over
 				in_prime = current->live_in;
@@ -2550,6 +2629,12 @@ static void basic_block_dealloc(basic_block_t* block){
 	if(block->dominance_frontier != NULL){
 		dynamic_array_dealloc(block->dominance_frontier);
 	}
+
+	//Deallocate the reverse post order set
+	if(block->reverse_post_order_reverse_cfg != NULL){
+		dynamic_array_dealloc(block->reverse_post_order_reverse_cfg);
+	}
+
 
 	//Deallocate the reverse post order set
 	if(block->reverse_post_order != NULL){
@@ -4673,7 +4758,7 @@ void reset_visited_status(cfg_t* cfg){
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
 
 		//Set it's visited status to 0
-		block->visited = 0;
+		block->visited = FALSE;
 	}
 }
 
