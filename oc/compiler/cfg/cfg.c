@@ -2364,63 +2364,6 @@ static basic_block_t* basic_block_alloc(){
 
 
 /**
- * Print out the whole program in order. This is done using an
- * iterative DFS
- */
-static void emit_blocks_dfs(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
-	//If it's null we won't bother
-	if(cfg->global_variables != NULL){
-		//First we'll print out the global variables block
-		print_block_three_addr_code(cfg->global_variables, print_df);
-	}
-
-	//We'll need a cursor to walk the tree
-	basic_block_t* block_cursor;
-
-	//Now we'll run through all of the function blocks and print them out
-	//one by one
-	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
-		//We'll need a stack for our DFS
-		heap_stack_t* stack = heap_stack_alloc();
-
-		//Push the function node as a seed
-		push(stack, dynamic_array_get_at(cfg->function_blocks, i));
-
-		//So long as the stack is not empty
-		while(is_empty(stack) == HEAP_STACK_NOT_EMPTY){
-			//Grab the current one off of the stack
-			block_cursor = pop(stack);
-
-			//If this wasn't visited
-			if(block_cursor->visited != 2){
-				//Mark this one as seen
-				block_cursor->visited = 2;
-
-				print_block_three_addr_code(block_cursor, print_df);
-			}
-
-			//If this is NULL, then we're done
-			if(block_cursor->successors == NULL){
-				continue;
-			}
-
-			//We'll now add in all of the childen
-			for(int16_t i = block_cursor->successors->current_index-1; i > -1; i--){
-				basic_block_t* grabbed = block_cursor->successors->internal_array[i];
-				//If we haven't seen it yet, add it to the list
-				if(grabbed->visited != 2){
-					push(stack, grabbed);
-				}
-			}
-		}
-
-		//Deallocate our stack once done
-		heap_stack_dealloc(stack);
-	}
-}
-
-
-/**
  * Print out the whole program in order. Done using an iterative
  * bfs
  */
@@ -2948,14 +2891,6 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
-	//Once we get here, if it's a return statement, everything below is unreachable
-	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
-		print_cfg_message(WARNING, "Do-while returns through all internal control paths. All following code is unreachable", do_while_stmt_node->line_number);
-		(*num_warnings_ref)++;
-		//Just return the block here
-		return do_while_stmt_entry_block;
-	}
-
 	//Add the conditional check into the end here
 	expr_ret_package_t package = emit_expr_code(compound_stmt_end, ast_cursor->next_sibling);
 
@@ -3385,13 +3320,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				current_block = current_block->direct_successor;
 			}
 
-			//If we did hit a return block here and there are nodes after this one in the chain, then we have
-			//unreachable code
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET && current_node->next_sibling != NULL){
-				print_parse_message(WARNING, "Unreachable code detected after ret statement", current_node->next_sibling->line_number);
-
-			}
-
 		//We've found an if-statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_IF_STMT){
 			//Pack the values up
@@ -3480,15 +3408,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				current_block = current_block->direct_successor;
 			}
 
-			//If we make it here and we had a return statement, we need to get out
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
-				//Everything beyond this point is unreachable, no point in going on
-				print_cfg_message(WARNING, "Unreachable code detected after block that returns in all control paths", current_node->next_sibling->line_number);
-				(*num_warnings_ref)++;
-				//Get out nowk
-				return starting_block;
-			}
-
 			//Otherwise, we're all set to go to the next iteration
 
 		//Handle a for statement
@@ -3554,12 +3473,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					add_successor(current_block, values->for_loop_update_block);
 					//Emit a direct unconditional jump statement to it
 					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP);
-				}
-
-				//Further, anything after this is unreachable
-				if(current_node->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after continue statement", current_node->next_sibling->line_number);
-					(*num_warnings_ref)++;
 				}
 
 				//We're done here, so return the starting block. There is no 
@@ -3632,12 +3545,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					current_block->case_block_breaks_to = values->switch_statement_end;
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jmp_stmt(current_block, values->switch_statement_end, JUMP_TYPE_JMP);
-				}
-
-				//If we see anything after this, it is unreachable so throw a warning
-				if(current_node->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after break statement", current_node->next_sibling->line_number);
-					(*num_errors_ref)++;
 				}
 
 				//For a regular break statement, this is it, so we just get out
@@ -4111,15 +4018,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block = current_block->direct_successor;
 			}
 
-			//If we make it here and we had a return statement, we need to get out
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET){
-				//Everything beyond this point is unreachable, no point in going on
-				print_cfg_message(WARNING, "Unreachable code detected after block that returns in all control paths", ast_cursor->next_sibling->line_number);
-				(*num_warnings_ref)++;
-				//Get out now
-				return starting_block;
-			}
-
 			//Otherwise, we're all set to go to the next iteration
 
 		//Handle a for statement
@@ -4184,12 +4082,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					add_successor(current_block, values->for_loop_update_block);
 					//Emit a direct unconditional jump statement to it
 					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP);
-				}
-
-				//Further, anything after this is unreachable
-				if(ast_cursor->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after continue statement", ast_cursor->next_sibling->line_number);
-					(*num_warnings_ref)++;
 				}
 
 				//We're done here, so return the starting block. There is no 
@@ -4262,12 +4154,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					current_block->case_block_breaks_to = values->switch_statement_end;
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jmp_stmt(current_block, values->switch_statement_end, JUMP_TYPE_JMP);
-				}
-
-				//If we see anything after this, it is unreachable so throw a warning
-				if(ast_cursor->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after break statement", ast_cursor->next_sibling->line_number);
-					(*num_errors_ref)++;
 				}
 
 				//For a regular break statement, this is it, so we just get out
@@ -4413,13 +4299,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Once we're here the start is in current, we'll need to drill to the end
 			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				current_block = current_block->direct_successor;
-			}
-
-			//If we did hit a return block here and there are nodes after this one in the chain, then we have
-			//unreachable code
-			if(current_block->block_terminal_type == BLOCK_TERM_TYPE_RET && ast_cursor->next_sibling != NULL){
-				print_parse_message(WARNING, "Unreachable code detected after ret statement", ast_cursor->next_sibling->line_number);
-
 			}
 
 		//These are 100% user generated,
@@ -4680,6 +4559,21 @@ void print_all_cfg_blocks(cfg_t* cfg){
 
 
 /**
+ * Reset the visited status of the CFG
+ */
+void reset_visited_status(cfg_t* cfg){
+	//For each block in the CFG
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+
+		//Set it's visited status to 0
+		block->visited = 0;
+	}
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -4718,9 +4612,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 		(*num_errors_ref)++;
 	}
 
-	//Cleanup any and all dangling blocks
-	//cleanup_all_dangling_blocks(cfg);
-	
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
 

@@ -22,6 +22,6 @@
  *
  * TODO - we may need more parameters here, this is a start
  */
-cfg_t* optimize(cfg_t* cfg, u_int8_t num_passes);
+cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes);
 
 #endif /* OPTIMIZER_H */

@@ -1,6 +1,23 @@
+
+/**
+* TEST: Missing #dependencies end directive
+*/
+
+#dependencies
+//============================================
+require "test_prog4.ol";
+require "test_prog3.ol";
+//Require a library file. These files are stored
+//in "TBD" and are not in the local directory
+require lib "stdlib.ol";
+//============================================
+
+#replace TEST_INT with -1;
+#replace my_char with 'c';
 /**
  * Additiong of two's complement ints that saturates to TMAX or TMIN
  * as opposed to creating a positive or negative overflow
+*/
 fn saturating_add(x:i32, y:i32) -> i32{
 	//Find the regular sum
 	let mut sum:i32 := x + y;
@@ -27,24 +44,7 @@ fn saturating_add(x:i32, y:i32) -> i32{
 
 	ret (~was_overflow & sum) + (was_overflow & maxint_or_minint);
 }
-*/
 
-
-/**
-* TEST: Missing #dependencies end directive
-*/
-
-#dependencies
-//============================================
-require "test_prog4.ol";
-require "test_prog3.ol";
-//Require a library file. These files are stored
-//in "TBD" and are not in the local directory
-require lib "stdlib.ol";
-//============================================
-
-#replace TEST_INT with -1;
-#replace my_char with 'c';
 
 fn tester() -> void{
 	let mut x:i32 := !3;

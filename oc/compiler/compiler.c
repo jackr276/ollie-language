@@ -62,11 +62,11 @@ static void compile(char* fname, front_end_results_package_t* results){
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
-	front_end_results_package_t parser_results = parse(fl, "FIX ME");
+	*results = parse(fl, "FIX ME");
 
 	//Increment these while we're here
-	num_errors += parser_results.num_errors;
-	num_warnings += parser_results.num_warnings;
+	num_errors += results->num_errors;
+	num_warnings += results->num_warnings;
 
 	//Now that we're done, we can close
 	fclose(fl);
@@ -112,6 +112,7 @@ int main(int argc, char** argv){
 
 	//If the AST root is bad, there's no use in going on here
 	if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		printf("HERE\n");
 		goto final_printout;
 	}
 
@@ -121,6 +122,20 @@ int main(int argc, char** argv){
 		 * part of this is the construction of the control-flow-graph
 		*/
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
+
+	//FOR NOW to simplify debugging
+	printf("============================================= BEFORE OPTIMIZATION =======================================\n");
+	print_all_cfg_blocks(cfg);
+	printf("============================================= BEFORE OPTIMIZATION =======================================\n");
+
+
+	//Now we will run the optimizer
+	cfg = optimize(cfg, results.os, 5);
+
+	printf("============================================= AFTER OPTIMIZATION =======================================\n");
+	print_all_cfg_blocks(cfg);
+	printf("============================================= AFTER OPTIMIZATION =======================================\n");
+
 
 	//Grab bfore freeing
 	CLASS = results.root->CLASS;

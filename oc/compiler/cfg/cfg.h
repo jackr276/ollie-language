@@ -150,4 +150,9 @@ void dealloc_cfg(cfg_t* cfg);
  */
 void print_all_cfg_blocks(cfg_t* cfg);
 
+/**
+ * Reset the visited status of the CFG
+ */
+void reset_visited_status(cfg_t* cfg);
+
 #endif /* CFG_H */

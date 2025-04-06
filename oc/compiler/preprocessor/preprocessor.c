@@ -123,9 +123,8 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	if(lookahead.tok != DEPENDENCIES){
 		//Close the file
 		fclose(fl);
-		//Give it back as NULL - no issue here, just nothing to
-		//give back
-		return NULL;
+		//Just give back the root node here -- there's no issue
+		return root_node;
 	}
 
 	//If we make it here then we did see the dependencies directive. We can do a very
@@ -136,16 +135,16 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	if(lookahead.tok == DEPENDENCIES){
 		//Throw a warning for the user
 		print_preproc_error_linenum(PREPROC_WARN, "Empty \"dependencies\" region detected, consider removing it.", parser_line_num, fname);
+		//And we'll close the file, and give it back
+		fclose(fl);
+		return root_node;
 	}
 
-	//If we see the dependencies region, the programmer has just mistakenly put an empty one here
-
+	//Now that we know we did see this, we should actually create our dynamic array
+	dependency_list = dynamic_array_alloc(); 
+	
 	//Otherwise it did have a comptime guard. As such, we'll need to parse through
 	//require statements one by one here, seeing which files are requested
-	
-	//We will go until we either a) see something that isn't "require"(an error)
-	//						  or b) see the ending #comptime guard
-
 	//So long as we keep seeing require -- there is no limit here
 	while(lookahead.tok == REQUIRE){
 		//After the require keyword, we can either see the "lib" keyword or a string constant
@@ -174,12 +173,10 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 			//If it's not a semicolon, we fail
 			if(lookahead.tok != SEMICOLON){
 				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num, fname);
+				fclose(fl);
 				//Package up and return an error here
 				return create_and_return_error_node();
 			}
-
-
-			//Otherwise it worked, so we can add this into the list
 
 		} else if(lookahead.tok == STR_CONST){
 			
@@ -195,6 +192,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 			//If it's not a semicolon, we fail
 			if(lookahead.tok != SEMICOLON){
 				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num, fname);
+				fclose(fl);
 				//Package up and return an error here
 				return create_and_return_error_node();
 			}
@@ -202,6 +200,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 		} else {
 			//This is an error here
 			print_preproc_error(PREPROC_ERR, "\"lib\" keyword or filename required after \"require\" keyword", fname);
+			fclose(fl);
 			//Package up and return an error here
 			return create_and_return_error_node();
 		}
@@ -214,12 +213,16 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//have some kind of issue
 	if(lookahead.tok != DEPENDENCIES){
 		print_preproc_error(PREPROC_ERR, "#dependencies end guard expected after preprocessor region", fname);
+		fclose(fl);
 		//Package up an error and send it out
 		return create_and_return_error_node();
 	}
 
 	//Finally close the file
 	fclose(fl);
+
+	//We're done with our dependency list, so deallocate it
+	dynamic_array_dealloc(dependency_list);
 	
 	//Finally give back the root node that we made here
 	return root_node;
