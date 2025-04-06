@@ -8,8 +8,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-//The current head of the tree, used for memory management
-static dependency_tree_node_t* current_head = NULL;
 
 /**
  * Create a node for a given filename
@@ -21,10 +19,6 @@ dependency_tree_node_t* dependency_tree_node_alloc(char* filename){
 	//We'll then copy over the filename
 	strncpy(node->filename, filename, FILENAME_LENGTH);
 	
-	//Attach this to the head
-	node->next_created = current_head;
-	current_head = node;
-
 	//And now we're done, we'll bail out
 	return node;
 }
@@ -53,22 +47,21 @@ void add_dependency_node(dependency_tree_node_t* parent, dependency_tree_node_t*
 
 
 /**
- * Destroy the dependency tree by doing a depth first search
+ * Destroy the dependency tree by a postorder tree traversal
  */
-void dependency_tree_dealloc(){
-	//We will run through the linked list of created nodes, freeing them
-	//one-by-one. This memory management style allows us to free memory
-	//in a low-computing cost way
-	dependency_tree_node_t* temp;
+void dependency_tree_dealloc(dependency_tree_node_t* root){
+	//While we have children(starting with first child) to deallocate, we'll
+	//do that from left to right
+	dependency_tree_node_t* child = root->first_child;
 
-	//Run through the creation list
-	while(current_head != NULL){
-		//Grab a temporary pointer
-		temp = current_head;
-		//Advance this up
-		current_head = current_head->next_created;
-		//Free the node
-		free(temp);
+	//So long as we have more we'll invoke the destructor
+	while(child != NULL){
+		dependency_tree_dealloc(child);
+		
+		//Advance to the next sibling
+		child = child->next_sibling;
 	}
-}
 
+	//Now we'll actually free our node
+	free(root);
+}

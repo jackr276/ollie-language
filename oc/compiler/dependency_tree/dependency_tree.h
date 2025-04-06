@@ -37,8 +37,6 @@ typedef enum{
  * is a dependency that will need to be compiled first
  */
 struct dependency_tree_node_t{
-	//What is the next-created node
-	dependency_tree_node_t* next_created;
 	//N-ary tree structure, first child and next sibling
 	dependency_tree_node_t* first_child;
 	dependency_tree_node_t* next_sibling;
@@ -67,6 +65,6 @@ void add_dependency_node(dependency_tree_node_t* parent, dependency_tree_node_t*
 /**
  * Destructor - used for memory freeing
 */
-void dependency_tree_dealloc();
+void dependency_tree_dealloc(dependency_tree_node_t* root);
 
 #endif /* DEPENDENCY_TREE_H */
