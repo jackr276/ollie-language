@@ -13,6 +13,8 @@
 #include "preprocessor.h"
 //For tokenizing/lexical analyzing purposes
 #include "../lexer/lexer.h"
+//We'll make use of this too
+#include "../dynamic_array/dynamic_array.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
@@ -30,23 +32,23 @@ typedef enum{
 	PREPROC_INFO,
 } preproc_msg_type_t;
 
-//The token of the current file that we are in - largely for printing purposes
-static char* current_file = NULL;
-
+//These come from the parser
+extern u_int32_t num_errors;
+extern u_int32_t num_warnings;
 
 /**
  * Print out a custom, stylized preprocessor error for the user
  */
-static void print_preproc_error(preproc_msg_type_t type, char* error_message){
+static void print_preproc_error(preproc_msg_type_t type, char* error_message, char* filename){
 	//For ease of printing
 	char* message_types[3] = {"ERROR", "WARNING", "INFO"};
 
 	//Print out the error in a stylized manner
-	if(current_file == NULL){
+	if(filename == NULL){
 		printf("[PREPROCESSOR %s]: %s\n", message_types[type], error_message);
 	//We can add the name in here
 	} else {
-		printf("[FILE: %s] --> [PREPROCESSOR %s]: %s\n", current_file, message_types[type], error_message);
+		printf("[FILE: %s] --> [PREPROCESSOR %s]: %s\n", filename, message_types[type], error_message);
 	}
 }
 
@@ -54,15 +56,15 @@ static void print_preproc_error(preproc_msg_type_t type, char* error_message){
 /**
  * Print out a custom, stylized preprocessor error for the user with number line
  */
-static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_message, u_int16_t line_num){
+static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_message, u_int16_t line_num, char* filename){
 	//For ease of printing
 	char* message_types[] = {"ERROR", "WARNING", "INFO"};
 
 	//Print out the error in a stylized manner
-	if(current_file == NULL){
+	if(filename == NULL){
 		printf("[LINE %d | PREPROCESSOR %s]: %s\n", line_num, message_types[type], error_message);
 	} else {
-		printf("[FILE: %s] --> [LINE %d | PREPROCESSOR %s]: %s\n", current_file, line_num, message_types[type], error_message);
+		printf("[FILE: %s] --> [LINE %d | PREPROCESSOR %s]: %s\n", filename, line_num, message_types[type], error_message);
 	}
 }
 
@@ -94,6 +96,8 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	u_int16_t parser_line_num = 0;
 	//The lookahead token
 	Lexer_item lookahead;
+	//Keep a running list of what we need to compile
+	dynamic_array_t* dependency_list;
 
 	//Open the file first off
 	FILE* fl = fopen(fname, "r");
@@ -101,10 +105,14 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//If it fails we're done
 	if(fl == NULL){
 		sprintf(info, "File %s could not be opened", fname);
-		print_preproc_error(PREPROC_ERR, info);
+		print_preproc_error(PREPROC_ERR, info, NULL);
 		//Give back an error
 		return create_and_return_error_node();
 	}
+
+	//Now that we know this file has actually openened, we're safe to create a dependency tree node
+	//for it
+	dependency_tree_node_t* root_node = dependency_tree_node_alloc(fname);
 
 	//We will run through the opening part of the file. If we do not
 	//see the comptime guards, we will back right out
@@ -120,14 +128,23 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 		return NULL;
 	}
 
+	//If we make it here then we did see the dependencies directive. We can do a very
+	//simple check for a common error by seeing if the next token is the dependencies
+	//end guard. In doing this we'll save processing time and ensure that any allocations
+	//going forward are actually needed
+	lookahead = get_next_token(fl,  &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	if(lookahead.tok == DEPENDENCIES){
+		//Throw a warning for the user
+		print_preproc_error_linenum(PREPROC_WARN, "Empty \"dependencies\" region detected, consider removing it.", parser_line_num, fname);
+	}
+
+	//If we see the dependencies region, the programmer has just mistakenly put an empty one here
+
 	//Otherwise it did have a comptime guard. As such, we'll need to parse through
 	//require statements one by one here, seeing which files are requested
 	
 	//We will go until we either a) see something that isn't "require"(an error)
 	//						  or b) see the ending #comptime guard
-
-	//Get our token here to seed the search
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//So long as we keep seeing require -- there is no limit here
 	while(lookahead.tok == REQUIRE){
@@ -142,7 +159,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 
 			//If we don't see one here, then it's immediately a failure
 			if(lookahead.tok != STR_CONST){
-				print_preproc_error_linenum(PREPROC_ERR, "Filename required after \"lib\" keyword", parser_line_num);
+				print_preproc_error_linenum(PREPROC_ERR, "Filename required after \"lib\" keyword", parser_line_num, fname);
 			}
 
 			//Allocate it 
@@ -156,7 +173,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 
 			//If it's not a semicolon, we fail
 			if(lookahead.tok != SEMICOLON){
-				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num);
+				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num, fname);
 				//Package up and return an error here
 				return create_and_return_error_node();
 			}
@@ -177,14 +194,14 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 
 			//If it's not a semicolon, we fail
 			if(lookahead.tok != SEMICOLON){
-				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num);
+				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num, fname);
 				//Package up and return an error here
 				return create_and_return_error_node();
 			}
 
 		} else {
 			//This is an error here
-			print_preproc_error(PREPROC_ERR, "\"lib\" keyword or filename required after \"require\" keyword");
+			print_preproc_error(PREPROC_ERR, "\"lib\" keyword or filename required after \"require\" keyword", fname);
 			//Package up and return an error here
 			return create_and_return_error_node();
 		}
@@ -196,7 +213,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//At the very end, if what we saw here causing us to exit was not a COMPTIME token, we
 	//have some kind of issue
 	if(lookahead.tok != DEPENDENCIES){
-		print_preproc_error(PREPROC_ERR, "#dependencies end guard expected after preprocessor region");
+		print_preproc_error(PREPROC_ERR, "#dependencies end guard expected after preprocessor region", fname);
 		//Package up an error and send it out
 		return create_and_return_error_node();
 	}
@@ -204,172 +221,8 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//Finally close the file
 	fclose(fl);
 	
-	return NULL;
-}
-
-
-/**
- * Parse the beginning parts of a file and determine any/all dependencies.
- * The dependencies that we have here will be used to build the overall dependency
- * tree, which will determine the entire order of compilation
-*/
-static dependency_package_t build_dependency_tree(char* fname){
-	//For any/all error printing
-	char info[DEFAULT_ERROR_SIZE];
-	//We will be returning a copy here, no need for dynamic allocation
-	dependency_package_t return_package;
-	//The lookahead token
-	Lexer_item lookahead;
-
-	//Open the file first off
-	FILE* fl = fopen(fname, "r");
-
-	//If it fails we're done
-	if(fl == NULL){
-		sprintf(info, "File %s could not be opened", fname);
-		print_preproc_error(PREPROC_ERR, info);
-		return_package.return_token = PREPROC_ERROR; 
-		return return_package;
-	}
-
-	//The parser line number -- largely unused in this module
-	u_int16_t parser_line_num = 0;
-
-	//We will run through the opening part of the file. If we do not
-	//see the comptime guards, we will back right out
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we see a DEPENDENCIES token, we need to keep going. However if we don't see this, we're
-	//completely done here
-	if(lookahead.tok != DEPENDENCIES){
-		//This is totally fine, we just move right along
-		return_package.return_token = PREPROC_SUCCESS;
-		//0 dependencies here
-		return_package.root = NULL;
-		//Give it back
-		return return_package;
-	}
-
-	//Otherwise it did have a comptime guard. As such, we'll need to parse through
-	//require statements one by one here, seeing which files are requested
-	
-	//We will go until we either a) see something that isn't "require"(an error)
-	//						  or b) see the ending #comptime guard
-
-	//Get our token here to seed the search
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//So long as we keep seeing require -- there is no limit here
-	while(lookahead.tok == REQUIRE){
-		//After the require keyword, we can either see the "lib" keyword or a string constant
-		lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
-
-		//We have a library file here -- special location
-		//TODO LIKELY NOT DONE
-		if(lookahead.tok == LIB){
-			//We still need to see a string constant
-			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
-
-			//If we don't see one here, then it's immediately a failure
-			if(lookahead.tok != STR_CONST){
-				print_preproc_error_linenum(PREPROC_ERR, "Filename required after \"lib\" keyword", parser_line_num);
-				//Package up and return an error here
-				return_package.return_token = PREPROC_ERROR;
-				return return_package;
-			}
-
-			//This is a linux-specific thing: max filename sizes are 255 bytes. If
-			//the length of the string is more than 255 bytes, it can't possibly
-			//be a valid linux file
-			if(strlen(lookahead.lexeme) >= 255){
-				//Throw the error
-				sprintf(info, "\"%s\" is not a valid filename", lookahead.lexeme); 
-				print_preproc_error_linenum(PREPROC_ERR, info, parser_line_num);
-				//Package up and return an error here
-				return_package.return_token = PREPROC_ERROR;
-				return return_package;
-			}
-
-			//Allocate it 
-			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
-
-			//Copy the lexeme over
-			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
-
-			//One last thing that we need to see -- closing semicolon
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-			//If it's not a semicolon, we fail
-			if(lookahead.tok != SEMICOLON){
-				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num);
-				//Package up and return an error here
-				return_package.return_token = PREPROC_ERROR;
-				return return_package;
-			}
-
-
-			//Otherwise it worked, so we can add this into the list
-
-		} else if(lookahead.tok == STR_CONST){
-			//This is a linux-specific thing: max filename sizes are 255 bytes. If
-			//the length of the string is more than 255 bytes, it can't possibly
-			//be a valid linux file
-			if(strlen(lookahead.lexeme) >= 255){
-				//Throw the error
-				sprintf(info, "\"%s\" is not a valid filename", lookahead.lexeme); 
-				print_preproc_error_linenum(PREPROC_ERR, info, parser_line_num);
-				//Package up and return an error here
-				return_package.return_token = PREPROC_ERROR;
-				return return_package;
-			}
-			
-			//Allocate it 
-			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
-
-			//Copy the lexeme over
-			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
-
-			//One last thing that we need to see -- closing semicolon
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-			//If it's not a semicolon, we fail
-			if(lookahead.tok != SEMICOLON){
-				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num);
-				//Package up and return an error here
-				return_package.return_token = PREPROC_ERROR;
-				return return_package;
-			}
-
-		} else {
-			//This is an error here
-			print_preproc_error(PREPROC_ERR, "\"lib\" keyword or filename required after \"require\" keyword");
-			//Package up and return an error here
-			return_package.return_token = PREPROC_ERROR;
-			return return_package;
-		}
-
-		//Refresh the token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
-
-	//At the very end, if what we saw here causing us to exit was not a COMPTIME token, we
-	//have some kind of issue
-	if(lookahead.tok != DEPENDENCIES){
-		print_preproc_error(PREPROC_ERR, "#dependencies end guard expected after preprocessor region");
-		//Package up an error and send it out
-		return_package.return_token = PREPROC_ERROR;
-		return return_package;
-	}
-
-	//If we have a completely empty package, we should throw a warning
-	if(return_package.root == NULL){
-		print_preproc_error(PREPROC_WARN, "Empty #dependencies region given. Consider removing this region entirely if not in use.");
-	}
-
-	fclose(fl);
-
-	//Give it back
-	return return_package;
+	//Finally give back the root node that we made here
+	return root_node;
 }
 
 
@@ -385,9 +238,13 @@ dependency_package_t preprocess(char* fname){
 	//so this return token will be what we use to communicate errors as well
 	dependency_package_t dep_package;
 
+	//Both 0 to start with
+	num_errors = 0;
+	num_warnings = 0;	
+
 	//Otherwise it did work. In this instance, we will return the dependency package result in here. The actual 
 	//orienting of compiler direction is done by a different submodule
-	dep_package = build_dependency_tree(fname);
+	build_dependency_tree_rec(fname);
 
 	//Give this one back
 	return dep_package;
