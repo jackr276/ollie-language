@@ -13,6 +13,11 @@
 #include "../parser/parser.h"
 //Link to cfg
 #include "../cfg/cfg.h"
+//Link to preproc
+#include "../preprocessor/preprocessor.h"
+
+u_int32_t num_warnings;
+u_int32_t num_errors;
 
 /**
  * Our main and only function
@@ -20,6 +25,9 @@
 int main(int argc, char** argv){
 	//How much time we've spent
 	double time_spent;
+	//Initialize these both to 0
+	num_errors = 0;
+	num_warnings = 0;
 
 	fprintf(stderr, "==================================== FRONT END TEST ======================================\n");
 
@@ -67,8 +75,8 @@ int main(int argc, char** argv){
 	}
 
 	//The number of warnings and errors
-	u_int32_t num_warnings = parse_results.num_warnings;
-	u_int32_t num_errors = parse_results.num_errors;
+	num_warnings += parse_results.num_warnings;
+	num_errors += parse_results.num_errors;
 
 	//Now we'll invoke the cfg builder
 	cfg_t* cfg = build_cfg(parse_results, &num_errors, &num_warnings);
