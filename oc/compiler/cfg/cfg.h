@@ -72,8 +72,6 @@ struct cfg_t{
 	//An array of all blocks that are 
 	//All created blocks
 	dynamic_array_t* created_blocks;
-	//If we use this more than once, we'll probably want to hold onto it
-	dynamic_array_t* reverse_post_order_traversal;
 };
 
 
@@ -117,6 +115,8 @@ struct basic_block_t{
 	dynamic_array_t* dominance_frontier;
 	//The reverse dominance frontier(for analysis)
 	dynamic_array_t* reverse_dominance_frontier;
+	//The reverse post order set
+	dynamic_array_t* reverse_post_order;
 	//The dynamic array for the dominator set
 	dynamic_array_t* dominator_set;
 	//The dominator children of a basic block. These are all

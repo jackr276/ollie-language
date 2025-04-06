@@ -211,11 +211,22 @@ static void post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry, 
 	//Mark it as visited
 	entry->visited = TRUE;
 
-	//For every child(successor), we visit it as well
-	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
-		//Visit each of the blocks
-		post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _), use_reverse_cfg);
+	//Dependending on what we're doing here, we may be using reverse mode
+	if(use_reverse_cfg == TRUE){
+		//For every child(predecessor-it's reverse), we visit it as well
+		for(u_int16_t _ = 0; entry->predecessors != NULL && _ < entry->predecessors->current_index; _++){
+			//Visit each of the blocks
+			post_order_traversal_rec(stack, dynamic_array_get_at(entry->predecessors, _), use_reverse_cfg);
+		}
+	} else {
+		//We'll go in regular order
+		//For every child(successor), we visit it as well
+		for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
+			//Visit each of the blocks
+			post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _), use_reverse_cfg);
+		}
 	}
+
 
 	//Now we can push entry onto the stack
 	push(stack, entry);
@@ -224,12 +235,23 @@ static void post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry, 
 
 /**
  * Get and return a reverse post order traversal of a function-level CFG
+ * 
+ * NOTE: for data liveness problems, we have the option to compute this on the reverse cfg. This will
+ * treat every successor like a predecessor, and vice versa
  */
 dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_int8_t use_reverse_cfg){
 	//For our postorder traversal
 	heap_stack_t* stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
 	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
+
+	//If we are using the reverse tree, we'll need to reformulate entry to be exit
+	if(use_reverse_cfg == TRUE){
+		//Go all the way to the bottom
+		while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
+			entry = entry->direct_successor;
+		}
+	}
 
 	//Invoke the recursive helper
 	post_order_traversal_rec(stack, entry, use_reverse_cfg);
@@ -849,8 +871,6 @@ static void calculate_dominator_sets(cfg_t* cfg){
 
 	//For each and every function that we have, we will perform this operation separately
 	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
-		//If the 
-
 		//Initialize a "worklist" dynamic array for this particular function
 		dynamic_array_t* worklist = dynamic_array_alloc();
 
@@ -1091,75 +1111,87 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		difference_found = FALSE;
 
 		//Run through all of the blocks backwards
-		for(int16_t i = cfg->created_blocks->current_index - 1; i >= 0; i--){
+		for(int16_t i = cfg->function_blocks->current_index - 1; i >= 0; i--){
 			//Grab the block out
-			current = dynamic_array_get_at(cfg->created_blocks, i);
+			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_blocks, i);
 
-			//Transfer the pointers over
-			in_prime = current->live_in;
-			out_prime = current->live_out;
-
-			//The live in is a combination of the variables used
-			//at current and the difference of the LIVE_OUT variables defined
-			//ones
-
-			//Since we need all of the used variables, we'll just clone this
-			//dynamic array so that we start off with them all
-			current->live_in = clone_dynamic_array(current->used_variables);
-
-			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-			for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
-				//Grab a reference for our use
-				three_addr_var_t* live_out_var = dynamic_array_get_at(current->live_out, j);
-
-				//Now we need this block to be not in "assigned" also. If it is in assigned we can't
-				//add it
-				if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
-					//If this is true we can add
-					variable_dynamic_array_add(current->live_in, live_out_var);
-				}
+			//Calculate the reverse post order in reverse mode for this block, if it doesn't
+			//already exist
+			if(func_entry->reverse_post_order == NULL){
+				//True because we want this in reverse mode
+				func_entry->reverse_post_order = compute_reverse_post_order_traversal(func_entry, TRUE);
 			}
 
-			//Now we'll turn our attention to live out. The live out set for any block is the union of the
-			//LIVE_IN set for all of it's successors
-			
-			//Set live out to be a new array
-			current->live_out = dynamic_array_alloc();
+			//Now we can go through the entire RPO set
+			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order->current_index; _++){
+				//The current block is whichever we grab
+				current = dynamic_array_get_at(func_entry->reverse_post_order, _);
 
-			//Run through all of the successors
-			for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
-				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+				//Transfer the pointers over
+				in_prime = current->live_in;
+				out_prime = current->live_out;
 
-				//Add everything in his live_in set into the live_out set
-				for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
-					//Let's check to make sure we haven't already added this
-					three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
+				//The live in is a combination of the variables used
+				//at current and the difference of the LIVE_OUT variables defined
+				//ones
 
-					//Let the helper method do it for us
-					variable_dynamic_array_add(current->live_out, successor_live_in_var);
+				//Since we need all of the used variables, we'll just clone this
+				//dynamic array so that we start off with them all
+				current->live_in = clone_dynamic_array(current->used_variables);
+
+				//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
+				for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
+					//Grab a reference for our use
+					three_addr_var_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+
+					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
+					//add it
+					if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
+						//If this is true we can add
+						variable_dynamic_array_add(current->live_in, live_out_var);
+					}
 				}
-			}
 
+				//Now we'll turn our attention to live out. The live out set for any block is the union of the
+				//LIVE_IN set for all of it's successors
+				
+				//Set live out to be a new array
+				current->live_out = dynamic_array_alloc();
 
-			//Now we'll go through and check if the new live in and live out sets are different. If they are different,
-			//we'll be doing this whole thing again
+				//Run through all of the successors
+				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+					//Grab the successor out
+					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
 
-			//For efficiency - if there was a difference in one block, it's already done - no use in comparing
-			if(difference_found == FALSE){
-				//So we haven't found a difference so far - let's see if we can find one now
-				if(variable_dynamic_arrays_equal(in_prime, current->live_in) == FALSE 
-				  || variable_dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
-					//We have in fact found a difference
-					difference_found = TRUE;
+					//Add everything in his live_in set into the live_out set
+					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
+						//Let's check to make sure we haven't already added this
+						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
+
+						//Let the helper method do it for us
+						variable_dynamic_array_add(current->live_out, successor_live_in_var);
+					}
 				}
-			}
 
-			//We made it down here, the prime variables are useless. We'll deallocate them
-			dynamic_array_dealloc(in_prime);
-			dynamic_array_dealloc(out_prime);
+
+				//Now we'll go through and check if the new live in and live out sets are different. If they are different,
+				//we'll be doing this whole thing again
+
+				//For efficiency - if there was a difference in one block, it's already done - no use in comparing
+				if(difference_found == FALSE){
+					//So we haven't found a difference so far - let's see if we can find one now
+					if(variable_dynamic_arrays_equal(in_prime, current->live_in) == FALSE 
+					  || variable_dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
+						//We have in fact found a difference
+						difference_found = TRUE;
+					}
+				}
+
+				//We made it down here, the prime variables are useless. We'll deallocate them
+				dynamic_array_dealloc(in_prime);
+				dynamic_array_dealloc(out_prime);
+			}
 		}
-
 	//So long as we continue finding differences
 	} while(difference_found == TRUE);
 }
@@ -2519,6 +2551,11 @@ static void basic_block_dealloc(basic_block_t* block){
 		dynamic_array_dealloc(block->dominance_frontier);
 	}
 
+	//Deallocate the reverse post order set
+	if(block->reverse_post_order != NULL){
+		dynamic_array_dealloc(block->reverse_post_order);
+	}
+
 	//Deallocate the liveness sets
 	if(block->live_out != NULL){
 		dynamic_array_dealloc(block->live_out);
@@ -2575,11 +2612,6 @@ void dealloc_cfg(cfg_t* cfg){
 	//Destroy the dynamic arrays too
 	dynamic_array_dealloc(cfg->created_blocks);
 	dynamic_array_dealloc(cfg->function_blocks);
-
-	//If we have a reverse post order traversal, get rid of it too
-	if(cfg->reverse_post_order_traversal != NULL){
-		dynamic_array_dealloc(cfg->reverse_post_order_traversal);
-	}
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
