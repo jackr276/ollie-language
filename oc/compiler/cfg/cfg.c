@@ -519,6 +519,27 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 		//And close it out
 		printf("}\n");
+
+		printf("Postdominator Set: {");
+
+		//Run through and print them all out
+		for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
+			basic_block_t* postdominator = block->postdominator_set->internal_array[i];
+
+			//Print the block's ID or the function name
+			if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", postdominator->func_record->func_name);
+			} else {
+				printf(".L%d", postdominator->block_id);
+			}
+			//If it isn't the very last one, we need a comma
+			if(i != block->postdominator_set->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		//And close it out
+		printf("}\n");
 	}
 
 	//Now print out the dominator children
@@ -844,8 +865,18 @@ static void add_dominated_block(basic_block_t* dominator, basic_block_t* dominat
  * 	For each basic block
  * 		if block is exit then Pdom <- exit else pdom = all nodes
  *
+ * while change = true
+ * 	changed = false
+ * 	for each Basic Block w/o exit block
+ * 		temp = BB + {x | x elem of intersect of pdom(s) | s is a successor to B}
  *
- * We'll be using a change watcher algorithm for this one
+ * 		if temp != pdom
+ * 			pdom = temp
+ * 			change = true
+ *
+ *
+ * We'll be using a change watcher algorithm for this one. This algorithm will repeat until a stable solution
+ * is found
  */
 static void calculate_postdominator_sets(cfg_t* cfg){
 	//The current block
@@ -897,11 +928,82 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 				//Grab the block out
 				basic_block_t* current = dynamic_array_get_at(current_function_block->reverse_post_order, _);
 
+				//If it's the exit block, we don't need to bother with it. The exit block is always postdominated
+				//by itself
+				if(current->block_type == BLOCK_TYPE_FUNC_EXIT){
+					//Just go onto the next one
+					continue;
+				}
 
+				//The temporary array that we will use as a holder for this iteration's postdominator set 
+				dynamic_array_t* temp = dynamic_array_alloc();
+
+				//The temp will always have this block in it
+				dynamic_array_add(temp, current);
+
+				//The temporary array also has the intersection of all of the successor's of BB's postdominator 
+				//sets in it. As such, we'll now compute those
+
+				//If this block has any successors
+				if(current->successors != NULL){
+					//Let's just grab out the very first successor
+					basic_block_t* first_successor = dynamic_array_get_at(current->successors, 0);
+
+					//Now, if a node IS in the set of all successor's postdominator sets, it must be in here. As such, any node that
+					//is not in the set of all successors will NOT be in here, and every node that IS in the set
+					//of all successors WILL be. So, we can just run through this entire array and see if each node is 
+					//everywhere else
+
+					//For each node in the first one's postdominator set
+					for(u_int16_t k = 0; first_successor->postdominator_set != NULL && k < first_successor->postdominator_set->current_index; k++){
+						//Are we in the intersection of the sets? By default we think so
+						u_int8_t in_intersection = TRUE;
+
+						//Grab out the postdominator
+						basic_block_t* postdominator = dynamic_array_get_at(first_successor->postdominator_set, k);
+
+						//Now let's see if this postdominator is in every other postdominator set for the remaining successors
+						for(u_int16_t l = 1; l < current->successors->current_index; l++){
+							//Grab the successor out
+							basic_block_t* other_successor = dynamic_array_get_at(current->successors, l);
+
+							//Now we'll check to see - is our given postdominator in this one's dominator set?
+							//If it isn't, we'll set the flag and break out. If it is we'll move on to the next one
+							if(dynamic_array_contains(other_successor->postdominator_set, postdominator) == NOT_FOUND){
+								//We didn't find it, set the flag and get out
+								in_intersection = FALSE;
+								break;
+							}
+
+							//Otherwise we did find it, so we'll keep going
+						}
+
+						//By the time we make it here, we'll either have our flag set to true or false. If the postdominator
+						//made it to true, it's in the intersection, and will add it to the new set
+						if(in_intersection == TRUE){
+							dynamic_array_add(temp, postdominator);
+						}
+					}
+				}
+
+				//Let's compare the two dynamic arrays - if they aren't the same, we've found a difference
+				if(dynamic_arrays_equal(temp, current->postdominator_set) == FALSE){
+					//Set the flag
+					changed = TRUE;
+
+					//And we can get rid of the old one
+					dynamic_array_dealloc(current->postdominator_set);
+					
+					//Set temp to be the new postdominator set
+					current->postdominator_set = temp;
+
+				//Otherwise they weren't changed, so the new one that we made has to go
+				} else {
+					dynamic_array_dealloc(temp);
+				}
+
+				//And now we're onto the next block
 			}
-
-		
-
 		} while(changed == TRUE);
 
 	}
@@ -2613,6 +2715,11 @@ static void basic_block_dealloc(basic_block_t* block){
 	//Deallocate the assigned variable array
 	if(block->assigned_variables != NULL){
 		dynamic_array_dealloc(block->assigned_variables);
+	}
+
+	//Deallocate the postdominator set
+	if(block->postdominator_set != NULL){
+		dynamic_array_dealloc(block->postdominator_set);
 	}
 
 	//Deallocate the dominator set
@@ -4811,6 +4918,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//We need to calculate the dominance frontier of every single block before
 	//we go any further
 	calculate_dominance_frontiers(cfg);
+
+	//Calculate the postdominator sets for later analysis in the optimizer
+	calculate_postdominator_sets(cfg);
 
 	//now we calculate the liveness sets
 	calculate_liveness_sets(cfg);
