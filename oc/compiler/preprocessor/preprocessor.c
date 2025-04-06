@@ -67,11 +67,144 @@ static void print_preproc_error_linenum(preproc_msg_type_t type, char* error_mes
 }
 
 /**
- * Recursively build a dependency tree
+ * Create and return a dependency tree node that is in error. This is to support
+ * our errors-as-values approach
+ */
+static dependency_tree_node_t* create_and_return_error_node(){
+		//Create and return an error node
+		dependency_tree_node_t* err = dependency_tree_node_alloc(NULL);
+		//Set it to be in error
+		err->is_in_error = TRUE;
+		//Give it back
+		return err;
+}
+
+
+/**
+ * Recursively build a dependency tree. We'll take in the parent node for the tree,
+ * and process all of it's dependencies by opening the file and parsing. In theory,
+ * by the time that we're done, we'll have a fully built tree with the root of the tree
+ * being the file that was origianlly passed in
  */
 static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
+	//For any/all error printing
+	char info[DEFAULT_ERROR_SIZE];
+	//The parser line number -- largely unused in this module, but there is a chance
+	//that we'll need it for errors if for some reason we run into an error preprocessing
+	u_int16_t parser_line_num = 0;
+	//The lookahead token
+	Lexer_item lookahead;
 
-	return NULL; //for now, not done
+	//Open the file first off
+	FILE* fl = fopen(fname, "r");
+
+	//If it fails we're done
+	if(fl == NULL){
+		sprintf(info, "File %s could not be opened", fname);
+		print_preproc_error(PREPROC_ERR, info);
+		//Give back an error
+		return create_and_return_error_node();
+	}
+
+	//We will run through the opening part of the file. If we do not
+	//see the comptime guards, we will back right out
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we see a DEPENDENCIES token, we need to keep going. However if we don't see this, we're
+	//completely done here
+	if(lookahead.tok != DEPENDENCIES){
+		//Close the file
+		fclose(fl);
+		//Give it back as NULL - no issue here, just nothing to
+		//give back
+		return NULL;
+	}
+
+	//Otherwise it did have a comptime guard. As such, we'll need to parse through
+	//require statements one by one here, seeing which files are requested
+	
+	//We will go until we either a) see something that isn't "require"(an error)
+	//						  or b) see the ending #comptime guard
+
+	//Get our token here to seed the search
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we keep seeing require -- there is no limit here
+	while(lookahead.tok == REQUIRE){
+		//After the require keyword, we can either see the "lib" keyword or a string constant
+		lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+		//We have a library file here -- special location
+		//TODO LIKELY NOT DONE
+		if(lookahead.tok == LIB){
+			//We still need to see a string constant
+			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+			//If we don't see one here, then it's immediately a failure
+			if(lookahead.tok != STR_CONST){
+				print_preproc_error_linenum(PREPROC_ERR, "Filename required after \"lib\" keyword", parser_line_num);
+			}
+
+			//Allocate it 
+			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
+
+			//Copy the lexeme over
+			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
+
+			//One last thing that we need to see -- closing semicolon
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//If it's not a semicolon, we fail
+			if(lookahead.tok != SEMICOLON){
+				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num);
+				//Package up and return an error here
+				return create_and_return_error_node();
+			}
+
+
+			//Otherwise it worked, so we can add this into the list
+
+		} else if(lookahead.tok == STR_CONST){
+			
+			//Allocate it 
+			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
+
+			//Copy the lexeme over
+			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
+
+			//One last thing that we need to see -- closing semicolon
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//If it's not a semicolon, we fail
+			if(lookahead.tok != SEMICOLON){
+				print_preproc_error_linenum(PREPROC_ERR, "Semicolon required after require statement", parser_line_num);
+				//Package up and return an error here
+				return create_and_return_error_node();
+			}
+
+		} else {
+			//This is an error here
+			print_preproc_error(PREPROC_ERR, "\"lib\" keyword or filename required after \"require\" keyword");
+			//Package up and return an error here
+			return create_and_return_error_node();
+		}
+
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//At the very end, if what we saw here causing us to exit was not a COMPTIME token, we
+	//have some kind of issue
+	if(lookahead.tok != DEPENDENCIES){
+		print_preproc_error(PREPROC_ERR, "#dependencies end guard expected after preprocessor region");
+		//Package up an error and send it out
+		return create_and_return_error_node();
+	}
+
+	//Finally close the file
+	fclose(fl);
+	
+	return NULL;
 }
 
 
@@ -248,9 +381,6 @@ static dependency_package_t build_dependency_tree(char* fname){
  * it also means that if one file can't be compiled, the whole thing will fail
  */
 dependency_package_t preprocess(char* fname){
-	//For any/all error printing
-	char info[DEFAULT_ERROR_SIZE];
-
 	//The return token. Remember that OC uses an "errors-as-values" approach, 
 	//so this return token will be what we use to communicate errors as well
 	dependency_package_t dep_package;

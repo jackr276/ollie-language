@@ -42,6 +42,8 @@ struct dependency_tree_node_t{
 	dependency_tree_node_t* next_sibling;
 	//Has it been visited?
 	u_int8_t visited;
+	//Is this node in error(for passing failures)
+	u_int8_t is_in_error;
 	//The file that we'll need to compile
 	char filename[FILENAME_LENGTH];
 };

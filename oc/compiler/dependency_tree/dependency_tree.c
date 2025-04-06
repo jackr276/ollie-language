@@ -17,7 +17,9 @@ dependency_tree_node_t* dependency_tree_node_alloc(char* filename){
 	dependency_tree_node_t* node = calloc(1, sizeof(dependency_tree_node_t));
 
 	//We'll then copy over the filename
-	strncpy(node->filename, filename, FILENAME_LENGTH);
+	if(filename != NULL){
+		strncpy(node->filename, filename, FILENAME_LENGTH);
+	}
 	
 	//And now we're done, we'll bail out
 	return node;
