@@ -121,6 +121,8 @@ struct basic_block_t{
 	dynamic_array_t* reverse_post_order_reverse_cfg;
 	//The dynamic array for the dominator set
 	dynamic_array_t* dominator_set;
+	//The reverse dominator set for this block
+	dynamic_array_t* reverse_dominator_set;
 	//The dynamic array for the postdominator set
 	dynamic_array_t* postdominator_set;
 	//The dominator children of a basic block. These are all
