@@ -134,6 +134,8 @@ struct basic_block_t{
 	//The immediate dominator - this reference isn't always used, but if we go through the work
 	//of calculating it, we may as well store it
 	basic_block_t* immediate_dominator;
+	//The immediate postdominator reference
+	basic_block_t* immediate_postdominator;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)

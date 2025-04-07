@@ -761,7 +761,7 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 			//have an immediate dominator in A.
 			//
 			//This would look like A -Doms> C -Doms> B, so A is not an immediate dominator
-			if(dynamic_array_contains(C->dominator_set, A) == TRUE){
+			if(dynamic_array_contains(C->dominator_set, A) != NOT_FOUND){
 				//A is disqualified, it's not an IDOM
 				A_is_IDOM = FALSE;
 				break;
@@ -773,6 +773,88 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 			//Mark this for any future runs...we won't waste any time doing this
 			//calculation over again
 			B->immediate_dominator = A;
+			return A;
+		}
+	}
+
+	//Otherwise we didn't find it, so there is no immediate dominator
+	return NULL;
+}
+
+
+/**
+ * Grab the immediate postdominator dominator of the block
+ * A IPDOM B if A SPDOM B and there does not exist a node C 
+ * such that C ≠ A, C ≠ B, A pdom C, and C pdom B
+ *
+ */
+static basic_block_t* immediate_postdominator(basic_block_t* B){
+	//If we've already found the immediate dominator, why find it again?
+	//We'll just give that back
+	if(B->immediate_postdominator != NULL){
+		return B->immediate_postdominator;
+	}
+
+	//Regular variable declarations
+	basic_block_t* A; 
+	basic_block_t* C;
+	u_int8_t A_is_IPDOM;
+	
+	//For each node in B's PostDominantor set(we call this node A)
+	//These nodes are our candidates for immediate postdominator
+	for(u_int16_t i = 0; B->postdominator_set != NULL && i < B->postdominator_set->current_index; i++){
+		//By default we assume A is a IPDOM
+		A_is_IPDOM = TRUE;
+
+		//A is our "candidate" for possibly being an immediate postdominator
+		A = dynamic_array_get_at(B->postdominator_set, i);
+
+		//If A == B, that means that A does NOT strictly postdominate(PDOM)
+		//B, so it's disqualified
+		if(A == B){
+			continue;
+		}
+
+		//If we get here, we know that A SPDOM B
+		//Now we must check, is there any "C" in the way.
+		//We can tell if this is the case by checking every other
+		//node in the dominance frontier of B, and seeing if that
+		//node is also dominated by A
+		
+		//For everything in B's dominator set that IS NOT A, we need
+		//to check if this is an intermediary. As in, does C get in-between
+		//A and B in the dominance chain
+		for(u_int16_t j = 0; j < B->postdominator_set->current_index; j++){
+			//Skip this case
+			if(i == j){
+				continue;
+			}
+
+			//If it's aleady B or A, we're skipping
+			C = dynamic_array_get_at(B->postdominator_set, j);
+
+			//If this is the case, disqualified
+			if(C == B || C == A){
+				continue;
+			}
+
+			//We can now see that C dominates B. The true test now is
+			//if C is dominated by A. If that's the case, then we do NOT
+			//have an immediate dominator in A.
+			//
+			//This would look like A -PDoms> C -PDoms> B, so A is not an immediate postdominator
+			if(dynamic_array_contains(C->postdominator_set, A) != NOT_FOUND){
+				//A is disqualified, it's not an IDOM
+				A_is_IPDOM = FALSE;
+				break;
+			}
+		}
+
+		//If we survived, then we're done here
+		if(A_is_IPDOM == TRUE){
+			//Mark this for any future runs...we won't waste any time doing this
+			//calculation over again
+			B->immediate_postdominator = A;
 			return A;
 		}
 	}
