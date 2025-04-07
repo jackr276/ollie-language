@@ -520,7 +520,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		//And close it out
 		printf("}\n");
 
-		printf("Postdominator Set: {");
+		printf("Postdominator(reverse dominator) Set: {");
 
 		//Run through and print them all out
 		for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
@@ -1138,144 +1138,6 @@ static void calculate_dominator_sets(cfg_t* cfg){
 				//Now for every successor of Y, add it into the worklist
 				for(u_int16_t i = 0; Y->successors != NULL && i < Y->successors->current_index; i++){
 					dynamic_array_add(worklist, Y->successors->internal_array[i]);
-				}
-
-			//Otherwise they are the same
-			} else {
-				//Destroy the dominator set that we just made
-				dynamic_array_dealloc(new);
-			}
-		}
-
-		//Destroy the worklist now that we're done with it
-		dynamic_array_dealloc(worklist);
-	}
-}
-
-
-/**
- * The reverse dominator sets are used in the calculation of the reverse dominance
- * frontier(RDF). The RDF is used in dead-code elimination in the optimizer
- */
-static void calculate_reverse_dominator_sets(cfg_t* cfg){
-	//Every node in the CFG has a reverse dominator set that is set
-	//to be identical to the list of all nodes
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
-		//Grab this out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
-
-		//If this is a global variable block we don't care
-		if(block->is_global_var_block == TRUE){
-			continue;
-		}
-
-		//We will initialize the block's reverse dominator set to be the entire set of nodes
-		block->reverse_dominator_set = clone_dynamic_array(cfg->created_blocks);
-	}
-
-	//For each and every function that we have, we will perform this operation separately
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
-		//Initialize a "worklist" dynamic array for this particular function
-		dynamic_array_t* worklist = dynamic_array_alloc();
-
-		//Since we're using predecessors as opposed to successors here, we'll
-		//actually want to start at the function's exit block
-		//Grab the starting block out
-		basic_block_t* function_ending_block = dynamic_array_get_at(cfg->function_blocks, _);
-
-		//Now we'll drill to the very end
-		while(function_ending_block->block_type != BLOCK_TYPE_FUNC_EXIT){
-			function_ending_block = function_ending_block->direct_successor;
-		}
-		//And now we'll be ready to push it in
-
-		//Add this into the worklist as a seed
-		dynamic_array_add(worklist, function_ending_block);
-		
-		//The new dominance frontier that we have each time
-		dynamic_array_t* new;
-
-		//So long as the worklist is not empty
-		while(dynamic_array_is_empty(worklist) == FALSE){
-			//Remove a node Y from the worklist(remove from back - most efficient{O(1)})
-			basic_block_t* Y = dynamic_array_delete_from_back(worklist);
-			
-			//Create the new dynamic array that will be used for the next
-			//dominator set
-			new = dynamic_array_alloc();
-
-			//We will add Y into it's own reverse dominator set
-			dynamic_array_add(new, Y);
-
-			//If Y has successors, we will find the intersection of
-			//their dominator sets
-			if(Y->successors != NULL){
-				//Grab the first successor
-				basic_block_t* first_successor = dynamic_array_get_at(Y->successors, 0);
-				//Grab the very first successor's dominator set
-				dynamic_array_t* succ_reverse_dom_set = first_successor->reverse_dominator_set;
-
-				//Are we in the intersection of the dominator sets?
-				u_int8_t in_intersection;
-
-				//We will now search every item in this dominator set
-				for(u_int16_t i = 0; i < succ_reverse_dom_set->current_index; i++){
-					//Grab the dominator out
-					basic_block_t* reverse_dominator = dynamic_array_get_at(succ_reverse_dom_set, i);
-
-					//By default we assume that this given dominator is in the set. If it
-					//isn't we'll set it appropriately
-					in_intersection = TRUE;
-
-					/**
-					 * An item is in the intersection if and only if it is contained 
-					 * in all of the dominator sets of the predecessors of Y
-					*/
-					//We'll start at 1 here - we've already accounted for 0
-					for(u_int8_t j = 1; j < Y->successors->current_index; j++){
-						//Grab our other predecessor
-						basic_block_t* other_successor = Y->successors->internal_array[j];
-
-						//Now we will go over this predecessor's dominator set, and see if "dominator"
-						//is also contained within it
-
-						//Let's check for it in here. If we can't find it, we set the flag to false and bail out
-						if(dynamic_array_contains(other_successor->reverse_dominator_set, reverse_dominator) == NOT_FOUND){
-							in_intersection = FALSE;
-							break;
-						}
-					
-						//Otherwise we did find it, so we'll look at the next predecessor, and see if it is also
-						//in there. If we get to the end and "in_intersection" is true, then we know that we've
-						//found this one dominator in every single set
-					}
-
-					//If we get here and it is in the intersection, we can add it in
-					//IMPORTANT: we also don't want to add a block in if it's from another
-					//function. While other functions may appear on the page as one above
-					//the other, there is no guarantee that a function will be called in
-					//any particular order, or that it will be called at all. As such,
-					//we exclude dominators that have different function records attached to
-					//them
-					if(in_intersection == TRUE){
-						//Add the dominator in
-						dynamic_array_add(new, reverse_dominator);
-					}
-				}
-			}
-
-			//Now we'll check - are these two dominator sets the same? If not, we'll need
-			//to update them
-			if(dynamic_arrays_equal(new, Y->reverse_dominator_set) == FALSE){
-				//Destroy the old one
-				dynamic_array_dealloc(Y->reverse_dominator_set);
-
-				//And replace it with the new
-				Y->reverse_dominator_set = new;
-
-				//Now for every predecessor of Y, add it into the worklist
-				for(u_int16_t i = 0; Y->predecessors != NULL && i < Y->predecessors->current_index; i++){
-					dynamic_array_add(worklist, Y->predecessors->internal_array[i]);
 				}
 
 			//Otherwise they are the same
@@ -2861,11 +2723,6 @@ static void basic_block_dealloc(basic_block_t* block){
 	//Deallocate the dominator set
 	if(block->dominator_set != NULL){
 		dynamic_array_dealloc(block->dominator_set);
-	}
-
-	//Deallocate the reverse dominator set
-	if(block->dominator_set != NULL){
-		dynamic_array_dealloc(block->reverse_dominator_set);
 	}
 
 	//Deallocate the dominator children
@@ -5063,9 +4920,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
 	
-	//We'll also need the reverse dominator set
-	calculate_reverse_dominator_sets(cfg);
-
 	//Now we'll build the dominator tree up
 	build_dominator_trees(cfg);
 
