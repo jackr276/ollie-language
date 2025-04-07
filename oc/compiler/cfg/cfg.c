@@ -32,8 +32,6 @@ static int32_t current_block_id = 0;
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
-//Keep a variable symtab of temporary variables
-variable_symtab_t* temp_vars;
 //Keep the type symtab up and running
 type_symtab_t* type_symtab;
 //The CFG that we're working with
@@ -2998,9 +2996,6 @@ void dealloc_cfg(cfg_t* cfg){
 	dynamic_array_dealloc(cfg->created_blocks);
 	dynamic_array_dealloc(cfg->function_blocks);
 
-	//Destroy the variable symtab
-	variable_symtab_dealloc(cfg->temp_vars);
-
 	//At the very end, be sure to destroy this too
 	free(cfg);
 }
@@ -5087,18 +5082,12 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Add this in
 	type_symtab = results.type_symtab;
 
-	//Create the temp vars symtab
-	temp_vars = variable_symtab_alloc();
-
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
 
 	//Create the dynamic arrays that we need
 	cfg->created_blocks = dynamic_array_alloc();
 	cfg->function_blocks = dynamic_array_alloc();
-
-	//Store this in the CFG too
-	cfg->temp_vars = temp_vars;
 
 	//Hold the cfg
 	cfg_ref = cfg;

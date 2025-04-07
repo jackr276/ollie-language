@@ -72,8 +72,6 @@ struct cfg_t{
 	//An array of all blocks that are 
 	//All created blocks
 	dynamic_array_t* created_blocks;
-	//The structure that contains all temporary variables
-	variable_symtab_t* temp_vars;
 };
 
 
