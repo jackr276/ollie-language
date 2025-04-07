@@ -497,6 +497,32 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("}\n");
 	}
 
+	//Print out the reverse dominance frontier if we're in DEBUG mode
+	if(print_df == EMIT_DOMINANCE_FRONTIER && block->reverse_dominance_frontier != NULL){
+		printf("Reverse Dominance frontier: {");
+
+		//Run through and print them all out
+		for(u_int16_t i = 0; i < block->reverse_dominance_frontier->current_index; i++){
+			basic_block_t* printing_block = block->reverse_dominance_frontier->internal_array[i];
+
+			//Print the block's ID or the function name
+			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", printing_block->func_record->func_name);
+			} else {
+				printf(".L%d", printing_block->block_id);
+			}
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->reverse_dominance_frontier->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		//And close it out
+		printf("}\n");
+	}
+
+
 	//Only if this is false - global var blocks don't have any of these
 	if(block->is_global_var_block == FALSE){
 		printf("Dominator set: {");
@@ -670,6 +696,28 @@ static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t*
 
 	//Add this into the dominance frontier
 	dynamic_array_add(block->dominance_frontier, df_block);
+}
+
+
+/**
+ * Add a block to the reverse dominance frontier of the first block
+ */
+static void add_block_to_reverse_dominance_frontier(basic_block_t* block, basic_block_t* rdf_block){
+	//If the dominance frontier hasn't been allocated yet, we'll do that here
+	if(block->reverse_dominance_frontier == NULL){
+		block->reverse_dominance_frontier = dynamic_array_alloc();
+	}
+
+	//Let's just check - is this already in there. If it is, we will not add it
+	for(u_int16_t i = 0; i < block->reverse_dominance_frontier->current_index; i++){
+		//This is not a problem at all, we just won't add it
+		if(block->reverse_dominance_frontier->internal_array[i] == rdf_block){
+			return;
+		}
+	}
+
+	//Add this into the dominance frontier
+	dynamic_array_add(block->reverse_dominance_frontier, rdf_block);
 }
 
 
@@ -918,6 +966,66 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 				//Cursor now becomes it's own immediate dominator, and
 				//we crawl our way up the CFG
 				cursor = immediate_dominator(cursor);
+			}
+		}
+	}
+}
+
+
+/**
+ * Calculate the reverse dominance frontiers of every block in the CFG
+ *
+ * The reverse dominance frontier is every block, in relation to the current block, that:
+ * 	Is a predecessor of a block that IS postdominated by the current block
+ * 		BUT
+ * 	It itself is not postdominated by the current block
+ *
+ * To think of it, it's essentially every block that is "just barely not postdominated" by the current block
+ *
+ * Standard reverse dominance frontier algorithm:
+ * 	for all nodes b in the CFG
+ * 		if b has less than 2 successors 
+ * 			continue
+ * 		else
+ * 			for all successors p of b
+ * 				cursor = p
+ * 				while cursor is not IPDOM(b)
+ * 					add b to cursor RDF set
+ * 					cursor = IPDOM(cursor)
+ * 	
+ */
+static void calculate_reverse_dominance_frontiers(cfg_t* cfg){
+	//Our metastructure will come in handy here, we'll be able to run through 
+	//node by node and ensure that we've gotten everything
+	
+	//Run through every block
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		//Grab this from the array
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+
+		//If we have less than 2 successors,the rest of 
+		//the search here is useless
+		if(block->successors == NULL || block->successors->current_index < 2){
+			//Hop out here, there is no need to analyze further
+			continue;
+		}
+
+		//A cursor for traversing our successors 
+		basic_block_t* cursor;
+
+		//Now we run through every successor of the block
+		for(u_int8_t i = 0; i < block->successors->current_index; i++){
+			//Grab it out
+			cursor = block->successors->internal_array[i];
+
+			//While cursor is not the immediate dominator of block
+			while(cursor != immediate_postdominator(block)){
+				//Add block to cursor's reverse dominance frontier set
+				add_block_to_reverse_dominance_frontier(cursor, block);
+				
+				//Cursor now becomes it's own immediate postdominator, and
+				//we crawl our down up the CFG
+				cursor = immediate_postdominator(cursor);
 			}
 		}
 	}
@@ -2817,6 +2925,11 @@ static void basic_block_dealloc(basic_block_t* block){
 		dynamic_array_dealloc(block->dominance_frontier);
 	}
 
+	//Deallocate the reverse dominance frontier
+	if(block->reverse_dominance_frontier != NULL){
+		dynamic_array_dealloc(block->reverse_dominance_frontier);
+	}
+
 	//Deallocate the reverse post order set
 	if(block->reverse_post_order_reverse_cfg != NULL){
 		dynamic_array_dealloc(block->reverse_post_order_reverse_cfg);
@@ -2884,6 +2997,9 @@ void dealloc_cfg(cfg_t* cfg){
 	//Destroy the dynamic arrays too
 	dynamic_array_dealloc(cfg->created_blocks);
 	dynamic_array_dealloc(cfg->function_blocks);
+
+	//Destroy the variable symtab
+	variable_symtab_dealloc(cfg->temp_vars);
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
@@ -4981,6 +5097,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	cfg->created_blocks = dynamic_array_alloc();
 	cfg->function_blocks = dynamic_array_alloc();
 
+	//Store this in the CFG too
+	cfg->temp_vars = temp_vars;
+
 	//Hold the cfg
 	cfg_ref = cfg;
 
@@ -5012,6 +5131,10 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Calculate the postdominator sets for later analysis in the optimizer
 	calculate_postdominator_sets(cfg);
 
+	//We'll also now calculate the reverse dominance frontier that will be used
+	//in later analysis by the optimizer
+	calculate_reverse_dominance_frontiers(cfg);
+
 	//now we calculate the liveness sets
 	calculate_liveness_sets(cfg);
 
@@ -5020,10 +5143,6 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Rename all variables after we're done with the phi functions
 	rename_all_variables(cfg);
-
-	//Destroy the temp variable symtab
-	//TODO FIX ME
-	//variable_symtab_dealloc(temp_vars);
 
 	//Give back the reference
 	return cfg;
