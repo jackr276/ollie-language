@@ -88,6 +88,8 @@ struct basic_block_t{
 	int32_t block_id;
 	//Does this block ever contain an assignment?
 	u_int8_t contains_assignment;
+	//Does this block contain a marked record?
+	u_int8_t contains_mark;
 	//The function record -- we need to store this for printing
 	symtab_function_record_t* func_record;
 	//Is this a global variable block?

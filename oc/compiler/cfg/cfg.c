@@ -714,6 +714,9 @@ static void add_statement(basic_block_t* target, three_addr_code_stmt_t* stateme
 	target->exit_statement->next_statement = statement_node;
 	//Update the tail reference
 	target->exit_statement = statement_node;
+
+	//Save what block we're in
+	statement_node->block_contained_in = target;
 }
 
 

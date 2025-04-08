@@ -157,6 +157,8 @@ struct three_addr_const_t{
  * statements
  */
 struct three_addr_code_stmt_t{
+	//What block holds this?
+	void* block_contained_in;
 	//For linked list properties -- the next statement
 	three_addr_code_stmt_t* next_statement;
 	//A three address code always has 2 operands and an assignee
@@ -174,6 +176,8 @@ struct three_addr_code_stmt_t{
 	void* jumping_to_block;
 	//Is this a jump table? -- for use in switch statements
 	u_int8_t is_jump_table;
+	//Is this operation critical?
+	u_int8_t mark;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
 	//The function called
