@@ -119,6 +119,8 @@ struct basic_block_t{
 	dynamic_array_t* reverse_post_order;
 	//The reverse post order set on the reverse cfg
 	dynamic_array_t* reverse_post_order_reverse_cfg;
+	//The post order set for a function
+	dynamic_array_t* post_order;
 	//The dynamic array for the dominator set
 	dynamic_array_t* dominator_set;
 	//The dynamic array for the postdominator set. The postdominator
@@ -163,5 +165,10 @@ void print_all_cfg_blocks(cfg_t* cfg);
  * Reset the visited status of the CFG
  */
 void reset_visited_status(cfg_t* cfg);
+
+/**
+ * Compute the postorder traversal for a function-level cfg
+ */
+dynamic_array_t* compute_post_order_traversal(basic_block_t* entry);
 
 #endif /* CFG_H */
