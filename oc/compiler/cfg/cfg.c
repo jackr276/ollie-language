@@ -2859,7 +2859,7 @@ static basic_block_t* basic_block_alloc(){
 	created->is_global_var_block = FALSE;
 
 	//Let's add in what function this block came from
-	created->func_record = current_function;
+	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
 	dynamic_array_add(cfg_ref->created_blocks, created);
@@ -4891,6 +4891,15 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 static basic_block_t* visit_function_definition(generic_ast_node_t* function_node){
 	//For error printing
 	char info[1000];
+
+	//Grab the function record
+	symtab_function_record_t* func_record = function_node->func_record;
+	//We will now store this as the current function
+	current_function = func_record;
+
+	//Reset the three address code accordingly
+	set_new_function(func_record);
+
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc();
 	//The function exit block
@@ -4899,12 +4908,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
 	//Mark that this is an exit block
 	function_exit_block->block_type = BLOCK_TYPE_FUNC_EXIT;
-
-	//Grab the function record
-	symtab_function_record_t* func_record = function_node->func_record;
-	//We will now store this as the current function
-	current_function = func_record;
-
 	//Store this in the entry block
 	function_starting_block->func_record = func_record;
 

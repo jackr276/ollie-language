@@ -92,6 +92,8 @@ struct basic_block_t{
 	u_int8_t contains_mark;
 	//The function record -- we need to store this for printing
 	symtab_function_record_t* func_record;
+	//The function that we're defined in
+	symtab_function_record_t* function_defined_in;
 	//Is this a global variable block?
 	u_int8_t is_global_var_block;
 	//What is the general classification of this block

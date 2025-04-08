@@ -28,6 +28,96 @@ static void sweep(cfg_t* cfg){
 
 
 /**
+ * Does the block assign this variable? We'll do a simple linear scan to find out
+ */
+static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
+	//Sanity check - if this is NULL then it's false by default
+	if(block->assigned_variables == NULL){
+		return FALSE;
+	}
+
+	//We'll need to use a special comparison here because we're comparing variables, not plain addresses.
+	//We will compare the linked var of each block in the assigned variables dynamic array
+	for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
+		//Grab the variable out
+		three_addr_var_t* var = dynamic_array_get_at(block->assigned_variables, i);
+		
+		//Now we'll compare the linked variable to the record
+		if(var->linked_var == variable){
+			//If we found it bail out
+			return TRUE;
+		}
+	}
+
+	//If we make it all of the way down here and we didn't find it, fail out
+	return FALSE;
+}
+
+
+/**
+ * Mark definitions(assignment) of a three address variable within
+ * the current function. If a definition is not marked, it must be added to the worklist
+ */
+static void mark_and_add_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+	//If this is NULL, just leave
+	if(variable == NULL){
+		return;
+	}
+
+	//Run through everything here
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+
+		//If it's not in the current function, get rid of it
+		if(block->function_defined_in != current_function){
+			continue;
+		}
+
+		//If this does assign the variable, we'll look through it
+		if(variable->is_temporary == FALSE && does_block_assign_variable(block, variable->linked_var) == TRUE){
+			//Let's find where we assign it
+			three_addr_code_stmt_t* stmt = block->leader_statement;
+
+			//So long as this isn't NULL
+			while(stmt != NULL){
+				//Is the assignee our variable AND it's unmarked?
+				if(stmt->assignee->linked_var == variable->linked_var && stmt->mark == FALSE){
+					//Add this in
+					dynamic_array_add(worklist, stmt);
+					//Mark it
+					stmt->mark = TRUE;
+				}
+
+				//Advance the statement
+				stmt = stmt->next_statement;
+			}
+
+		//If it's a temp var, the search is not so easy. We'll need to crawl through
+		//each statement and see if the assignee has the same temp number
+		} else if(variable->is_temporary == TRUE){
+			//Let's find where we assign it
+			three_addr_code_stmt_t* stmt = block->leader_statement;
+
+			//So long as this isn't NULL
+			while(stmt != NULL){
+				//Is the assignee our variable AND it's unmarked?
+				if(stmt->assignee->temp_var_number == variable->temp_var_number && stmt->mark == FALSE){
+					//Add this in
+					dynamic_array_add(worklist, stmt);
+					//Mark it
+					stmt->mark = TRUE;
+				}
+
+				//Advance the statement
+				stmt = stmt->next_statement;
+			}
+		}
+	}
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -96,8 +186,19 @@ static void mark(cfg_t* cfg){
 		three_addr_code_stmt_t* stmt = dynamic_array_delete_from_back(worklist);
 
 		//We need to mark the place where each definition is set
-		
+		mark_and_add_definitions(cfg, stmt->assignee, stmt->function, worklist);
+		mark_and_add_definitions(cfg, stmt->op1, stmt->function, worklist);
+		mark_and_add_definitions(cfg, stmt->op2, stmt->function, worklist);
 
+		//Grab this out for convenience
+		basic_block_t* block = stmt->block_contained_in;
+
+		//Now for everything in this statement's block's RDF, we'll mark it's block-ending branches
+		//as useful
+		for(u_int16_t i = 0; block->reverse_dominance_frontier != NULL && i < block->reverse_dominance_frontier->current_index; i++){
+			//Grab the RDF block out
+
+		}
 	}
 
 	//And get rid of the worklist

@@ -119,6 +119,8 @@ struct three_addr_var_t{
 	symtab_variable_record_t* linked_var;
 	//Is this a temp variable?
 	u_int8_t is_temporary;
+	//What's the temp var number
+	u_int32_t temp_var_number;
 	//Is this a constant?
 	u_int8_t is_constant;
 	//What is the indirection level
@@ -178,12 +180,16 @@ struct three_addr_code_stmt_t{
 	u_int8_t is_jump_table;
 	//Is this operation critical?
 	u_int8_t mark;
+	//What is the sequence number of this statement
+	u_int32_t sequence_number;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
 	//The function called
 	symtab_function_record_t* func_record;
 	//The variable record
 	symtab_variable_record_t* var_record;
+	//What function are we currently in?
+	symtab_function_record_t* function;
 	//The list of temp variable parameters at most 6
 	three_addr_var_t* params[MAX_FUNCTION_PARAMS];
 	//Very special case, only for inlined assembly
@@ -192,6 +198,11 @@ struct three_addr_code_stmt_t{
 	void* phi_function_parameters;
 };
 
+
+/**
+ * Declare that we are in a new function
+ */
+void set_new_function(symtab_function_record_t* func);
 
 /**
  * Create and return a temporary variable
