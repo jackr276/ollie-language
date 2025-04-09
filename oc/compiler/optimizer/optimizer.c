@@ -65,12 +65,16 @@ static void sweep(cfg_t* cfg){
 							//Set this to NULL
 							block->leader_statement->previous_statement = NULL;
 						}
+					} else if(block->exit_statement == stmt){
+
 					//Otherwise, we have one in the middle
 					} else {
-						//Set the previous one's old one to be the next one
-						stmt->previous_statement->next_statement = stmt->next_statement;
-						//Update the old reference too
-						stmt->next_statement->previous_statement = stmt->previous_statement;
+						//Reverse them like so
+						three_addr_code_stmt_t* previous = stmt->previous_statement;
+						three_addr_code_stmt_t* next = stmt->next_statement;
+						previous->next_statement = next;
+						next->previous_statement = previous;
+
 					}
 
 					//Store this
@@ -241,6 +245,12 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
+			} else if(current_stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
+				current_stmt->mark = TRUE;
+				//Add it to the list
+				dynamic_array_add(worklist, current_stmt);
+				//The block now has a mark
+				current->contains_mark = TRUE;
 			}
 
 			//Advance the current statement up
@@ -261,6 +271,9 @@ static void mark(cfg_t* cfg){
 
 		//Grab this out for convenience
 		basic_block_t* block = stmt->block_contained_in;
+
+		//TODO WEIRD 
+		if(block == NULL) continue;
 
 		//Now for everything in this statement's block's RDF, we'll mark it's block-ending branches
 		//as useful

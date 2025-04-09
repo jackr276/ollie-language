@@ -8,6 +8,7 @@ fn main() -> i32{
 
 	if(x == 32) then {
 		x := x + 3222;
+		let z:i32 := -2;
 		y := 323;
 	} else {
 		x := 32;
