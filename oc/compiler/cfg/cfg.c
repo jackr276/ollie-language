@@ -102,7 +102,7 @@ typedef enum{
 //We predeclare up here to avoid needing any rearrangements
 static basic_block_t* visit_declaration_statement(values_package_t* values, variable_scope_type_t scope);
 static basic_block_t* visit_compound_statement(values_package_t* values);
-static basic_block_t* visit_let_statement(values_package_t* values, variable_scope_type_t scope);
+static basic_block_t* visit_let_statement(values_package_t* values, variable_scope_type_t scope, u_int8_t is_branch_ending);
 static basic_block_t* visit_if_statement(values_package_t* values);
 static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
@@ -3875,7 +3875,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(&let_values, VARIABLE_SCOPE_LOCAL);
+			basic_block_t* let_block = visit_let_statement(&let_values, VARIABLE_SCOPE_LOCAL, FALSE);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
@@ -4519,7 +4519,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			values.initial_node = ast_cursor;
 
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_LOCAL);
+			basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_LOCAL, FALSE);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
@@ -5086,7 +5086,7 @@ static basic_block_t* visit_declaration_statement(values_package_t* values, vari
 /**
  * Visit a let statement
  */
-static basic_block_t* visit_let_statement(values_package_t* values, variable_scope_type_t scope){
+static basic_block_t* visit_let_statement(values_package_t* values, variable_scope_type_t scope, u_int8_t is_branch_ending){
 	//What block are we emitting to?
 	basic_block_t* emittance_block;
 
@@ -5099,7 +5099,7 @@ static basic_block_t* visit_let_statement(values_package_t* values, variable_sco
 	}
 
 	//Add the expresssion into the node
-	emit_expr_code(emittance_block, values->initial_node, FALSE);
+	emit_expr_code(emittance_block, values->initial_node, is_branch_ending);
 
 	//Give the block back
 	return emittance_block;
@@ -5148,7 +5148,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			}
 
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_GLOBAL);
+			basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_GLOBAL, FALSE);
 
 		//Visit a declaration statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){

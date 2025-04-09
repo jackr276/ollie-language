@@ -6,7 +6,6 @@
 */
 
 #include "optimizer.h"
-#include <stdio.h>
 #include <sys/types.h>
 
 //Standard true and false definitions
@@ -21,6 +20,45 @@
  */
 static void clean(cfg_t* cfg){
 
+}
+
+
+/**
+ * Delete a statement from the CFG - handling any/all edge cases that may arise
+ */
+static void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt){
+	//If it's the leader statement, we'll just update the references
+	if(block->leader_statement == stmt){
+		//Special case - it's the only statement. We'll just delete it here
+		if(block->leader_statement->next_statement == NULL){
+			//Just remove it entirely
+			block->leader_statement = NULL;
+			block->exit_statement = NULL;
+		//Otherwise it is the leader, but we have more
+		} else {
+			//Update the reference
+			block->leader_statement = stmt->next_statement;
+			//Set this to NULL
+			block->leader_statement->previous_statement = NULL;
+		}
+
+	//What if it's the exit statement?
+	} else if(block->exit_statement == stmt){
+		three_addr_code_stmt_t* previous = stmt->previous_statement;
+		//Nothing at the end
+		previous->next_statement = NULL;
+
+		//This now is the exit statement
+		block->exit_statement = previous;
+		
+	//Otherwise, we have one in the middle
+	} else {
+		//Regular middle deletion here
+		three_addr_code_stmt_t* previous = stmt->previous_statement;
+		three_addr_code_stmt_t* next = stmt->next_statement;
+		previous->next_statement = next;
+		next->previous_statement = previous;
+	}
 }
 
 
@@ -43,58 +81,32 @@ static void sweep(cfg_t* cfg){
 
 		//For each statement in the block
 		while(stmt != NULL){
-			//If the statement is unmarked(useless)
-			if(stmt->mark == FALSE){
-				//It's a conditional jump
-				if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-					//TODO add me in, we're ignoring for now
+			//If it's useful, ignore it
+			if(stmt->mark == TRUE){
+				stmt = stmt->next_statement;
+				continue;
+			}
 
-				//Otherwise we delete the statement
-				} else {
-					//If it's the leader statement, we'll just update the references
-					if(block->leader_statement == stmt){
-						//Special case - it's the only statement. We'll just delete it here
-						if(block->leader_statement->next_statement == NULL){
-							//Just remove it entirely
-							block->leader_statement = NULL;
-							block->exit_statement = NULL;
-						//Otherwise it is the leader, but we have more
-						} else {
-							//Update the reference
-							block->leader_statement = stmt->next_statement;
-							//Set this to NULL
-							block->leader_statement->previous_statement = NULL;
-						}
-
-					//What if it's the exit statement?
-					} else if(block->exit_statement == stmt){
-						three_addr_code_stmt_t* previous = stmt->previous_statement;
-						//Nothing at the end
-						previous->next_statement = NULL;
-
-						//This now is the exit statement
-						block->exit_statement = previous;
-						
-					//Otherwise, we have one in the middle
-					} else {
-						//Regular middle deletion here
-						three_addr_code_stmt_t* previous = stmt->previous_statement;
-						three_addr_code_stmt_t* next = stmt->next_statement;
-						previous->next_statement = next;
-						next->previous_statement = previous;
-					}
+			//Otherwise we kniw that the statement is unmarked(useless)
+			//We've encountered a jump statement of some kind
+			if(stmt->is_branch_ending == TRUE){
+				//What we'll need to do is delete everythin here that is branch ending
+				//and useless
+				while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
+					delete_statement(cfg, stmt->block_contained_in, stmt);
+					stmt = stmt->next_statement;
 				}
 
-				//Store this
-				three_addr_code_stmt_t* temp = stmt->next_statement;
-				//We always destroy it at the very end
-				three_addr_stmt_dealloc(stmt);
-				//Reassign
-				stmt = temp;
+				return;
 
+			//Otherwise we delete the statement
 			} else {
-				//Advance this up
+				delete_statement(cfg, stmt->block_contained_in, stmt);
+				//Perform the deletion and advancement
+				three_addr_code_stmt_t* temp = stmt;
 				stmt = stmt->next_statement;
+				three_addr_stmt_dealloc(temp);
+
 			}
 		}
 	}
@@ -238,14 +250,6 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
-
-			//Jump statments are also always useful
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
 			} else if(current_stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
 				current_stmt->mark = TRUE;
 				//Add it to the list
@@ -273,7 +277,6 @@ static void mark(cfg_t* cfg){
 		three_addr_code_stmt_t* stmt = dynamic_array_delete_from_back(worklist);
 
 		//We need to mark the place where each definition is set
-		mark_and_add_definitions(cfg, stmt->assignee, stmt->function, worklist);
 		mark_and_add_definitions(cfg, stmt->op1, stmt->function, worklist);
 		mark_and_add_definitions(cfg, stmt->op2, stmt->function, worklist);
 

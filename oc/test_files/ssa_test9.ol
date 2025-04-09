@@ -21,6 +21,7 @@ fn other_test() -> void{
 	}
 
 	let mut asd:i32 := l + j;
+	ret;
 }
 
 
