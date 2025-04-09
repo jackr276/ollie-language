@@ -301,7 +301,8 @@ static void mark(cfg_t* cfg){
 
 			//Run through and mark each statement TODO NOT RIGHT
 			while(rdf_block_stmt != NULL){
-				if(rdf_block_stmt->mark == FALSE){
+				//For each statement that has NOT been marked but IS loop ending, we'll flag it
+				if(rdf_block_stmt->mark == FALSE && rdf_block_stmt->is_branch_ending == TRUE){
 					rdf_block_stmt->mark = TRUE;
 					//Add into the worklist
 					dynamic_array_add(worklist, rdf_block_stmt);

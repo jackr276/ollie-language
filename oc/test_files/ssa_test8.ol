@@ -23,6 +23,7 @@ fn other_test() -> u32{
 fn main() -> i32{
 	let mut x:i32 := 33;
 	let mut y:i32 := 3232;
+	let mut abc:i32 := 3232;
 
 	if(x == 32) then {
 		x := x + 3222;

@@ -182,6 +182,9 @@ struct three_addr_code_stmt_t{
 	u_int8_t is_jump_table;
 	//Is this operation critical?
 	u_int8_t mark;
+	//Is this operation a "branch-ending" operation. This would encompass
+	//things like if statement decisions and loop conditions
+	u_int8_t is_branch_ending;
 	//What is the sequence number of this statement
 	u_int32_t sequence_number;
 	//If it's a jump statement, what's the type?
