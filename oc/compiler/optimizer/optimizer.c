@@ -92,13 +92,11 @@ static void sweep(cfg_t* cfg){
 			if(stmt->is_branch_ending == TRUE){
 				//What we'll need to do is delete everythin here that is branch ending
 				//and useless
-				while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
-					delete_statement(cfg, stmt->block_contained_in, stmt);
-					stmt = stmt->next_statement;
-				}
-
-				return;
-
+				//while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
+				//	delete_statement(cfg, stmt->block_contained_in, stmt);
+				//	stmt = stmt->next_statement;
+				//}
+				stmt = stmt->next_statement;
 			//Otherwise we delete the statement
 			} else {
 				delete_statement(cfg, stmt->block_contained_in, stmt);
