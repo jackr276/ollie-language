@@ -286,9 +286,6 @@ static void mark(cfg_t* cfg){
 		//Grab this out for convenience
 		basic_block_t* block = stmt->block_contained_in;
 
-		//TODO WEIRD 
-		if(block == NULL) continue;
-
 		//Now for everything in this statement's block's RDF, we'll mark it's block-ending branches
 		//as useful
 		for(u_int16_t i = 0; block->reverse_dominance_frontier != NULL && i < block->reverse_dominance_frontier->current_index; i++){
@@ -296,10 +293,10 @@ static void mark(cfg_t* cfg){
 			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
 
 			//Now we'll go through this block and mark all of the operations as needed
-			//TODO THIS IS NOT CORRECT FULLY
 			three_addr_code_stmt_t* rdf_block_stmt = rdf_block->leader_statement;
 
-			//Run through and mark each statement TODO NOT RIGHT
+			//Run through and mark each statement in the RDF that is flagged as "branch ending". As in, it's 
+			//important to our operations as a whole to get to this important instruction where we currently are
 			while(rdf_block_stmt != NULL){
 				//For each statement that has NOT been marked but IS loop ending, we'll flag it
 				if(rdf_block_stmt->mark == FALSE && rdf_block_stmt->is_branch_ending == TRUE){

@@ -674,6 +674,9 @@ static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi
 	//Otherwise we will add this in at the very front
 	phi_statement->next_statement = target->leader_statement;
 	target->leader_statement = phi_statement;
+
+	//Mark what block we're in
+	phi_statement->block_contained_in = target;
 }
 
 
@@ -707,6 +710,8 @@ static void add_statement(basic_block_t* target, three_addr_code_stmt_t* stateme
 		//Assign this to be the head and the tail
 		target->leader_statement = statement_node;
 		target->exit_statement = statement_node;
+		//Save what block we're in
+		statement_node->block_contained_in = target;
 		return;
 	}
 
