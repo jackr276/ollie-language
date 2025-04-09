@@ -11,17 +11,14 @@ fn other_test() -> void{
 	let mut j:i32 := 3232;
 
 	if(l == 32) then {
-		/*
 		l := l + 3222;
 		j := 323;
-		*/
 		let mut iii:i32 := -2;
 		@other_test();
-	}/* else {
+	} else {
 		l := 32;
 		j := l + 3;
 	}
-	*/
 
 	let mut asd:i32 := l + j;
 }

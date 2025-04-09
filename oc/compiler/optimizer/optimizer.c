@@ -43,8 +43,6 @@ static void sweep(cfg_t* cfg){
 
 		//For each statement in the block
 		while(stmt != NULL){
-			printf("Working on\n");
-			print_three_addr_code_stmt(stmt);
 			//If the statement is unmarked(useless)
 			if(stmt->mark == FALSE){
 				//It's a conditional jump

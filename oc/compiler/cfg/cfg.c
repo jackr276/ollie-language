@@ -668,11 +668,16 @@ static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi
 		//Assign this to be the head and the tail
 		target->leader_statement = phi_statement;
 		target->exit_statement = phi_statement;
+		//Mark the block that we're in
+		phi_statement->block_contained_in = target;
 		return;
 	}
 
 	//Otherwise we will add this in at the very front
 	phi_statement->next_statement = target->leader_statement;
+	//Update this reference
+	target->leader_statement->previous_statement = phi_statement;
+	//And then we can update this one
 	target->leader_statement = phi_statement;
 
 	//Mark what block we're in

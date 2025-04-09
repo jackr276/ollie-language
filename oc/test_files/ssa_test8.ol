@@ -6,8 +6,8 @@
 fn main() -> i32{
 	let mut x:i32 := 33;
 	let mut y:i32 := 3232;
-	let mut abc:i32 := 3232;
 
+	let mut abc:i32 := 3232;
 	//100% useless
 	if(abc == 1) then {
 		abc := 2;
