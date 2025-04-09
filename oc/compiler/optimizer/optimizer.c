@@ -6,7 +6,12 @@
 */
 
 #include "optimizer.h"
+#include <stdio.h>
 #include <sys/types.h>
+
+//Standard true and false definitions
+#define TRUE 1
+#define FALSE 0
 
 
 /**
@@ -23,7 +28,65 @@ static void clean(cfg_t* cfg){
  * The sweep algorithm will go through and remove every operation that has not been marked
  */
 static void sweep(cfg_t* cfg){
+	//For each and every operation in every basic block
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
 
+		//If it's the global var block don't bother with it
+		if(block->is_global_var_block == TRUE){
+			continue;
+		}
+
+		//Grab the statement out
+		three_addr_code_stmt_t* stmt = block->leader_statement;
+
+		//For each statement in the block
+		while(stmt != NULL){
+			//If the statement is unmarked(useless)
+			if(stmt->mark == FALSE){
+				//It's a conditional jump
+				if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && stmt->op != JUMP){
+					//TODO add me in
+
+				//Otherwise we delete the statement
+				} else {
+					//If it's the leader statement, we'll just update the references
+					if(block->leader_statement == stmt){
+						//Special case - it's the only statement. We'll just delete it here
+						if(block->leader_statement->next_statement == NULL){
+							//Just remove it entirely
+							block->leader_statement = NULL;
+							block->exit_statement = NULL;
+						//Otherwise it is the leader, but we have more
+						} else {
+							//Update the reference
+							block->leader_statement = stmt->next_statement;
+							//Set this to NULL
+							block->leader_statement->previous_statement = NULL;
+						}
+					//Otherwise, we have one in the middle
+					} else {
+						//Set the previous one's old one to be the next one
+						stmt->previous_statement->next_statement = stmt->next_statement;
+						//Update the old reference too
+						stmt->next_statement->previous_statement = stmt->previous_statement;
+					}
+
+					//Store this
+					three_addr_code_stmt_t* temp = stmt->next_statement;
+					//We always destroy it at the very end
+					three_addr_stmt_dealloc(stmt);
+					//Reassign
+					stmt = temp;
+				}
+
+			} else {
+				//Advance this up
+				stmt = stmt->next_statement;
+			}
+		}
+	}
 }
 
 
@@ -60,7 +123,7 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  */
 static void mark_and_add_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
-	if(variable == NULL){
+	if(variable == NULL || current_function == NULL){
 		return;
 	}
 
@@ -75,14 +138,14 @@ static void mark_and_add_definitions(cfg_t* cfg, three_addr_var_t* variable, sym
 		}
 
 		//If this does assign the variable, we'll look through it
-		if(variable->is_temporary == FALSE && does_block_assign_variable(block, variable->linked_var) == TRUE){
+		if(variable->is_temporary == FALSE){
 			//Let's find where we assign it
 			three_addr_code_stmt_t* stmt = block->leader_statement;
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
 				//Is the assignee our variable AND it's unmarked?
-				if(stmt->assignee->linked_var == variable->linked_var && stmt->mark == FALSE){
+				if(stmt->assignee != NULL && stmt->assignee->linked_var == variable->linked_var && stmt->mark == FALSE){
 					//Add this in
 					dynamic_array_add(worklist, stmt);
 					//Mark it
@@ -95,14 +158,14 @@ static void mark_and_add_definitions(cfg_t* cfg, three_addr_var_t* variable, sym
 
 		//If it's a temp var, the search is not so easy. We'll need to crawl through
 		//each statement and see if the assignee has the same temp number
-		} else if(variable->is_temporary == TRUE){
+		} else {
 			//Let's find where we assign it
 			three_addr_code_stmt_t* stmt = block->leader_statement;
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
 				//Is the assignee our variable AND it's unmarked?
-				if(stmt->assignee->temp_var_number == variable->temp_var_number && stmt->mark == FALSE){
+				if(stmt->assignee != NULL && stmt->assignee->temp_var_number == variable->temp_var_number && stmt->mark == FALSE){
 					//Add this in
 					dynamic_array_add(worklist, stmt);
 					//Mark it
@@ -172,6 +235,12 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
+			} else if(current_stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
+				current_stmt->mark = TRUE;
+				//Add it to the list
+				dynamic_array_add(worklist, current_stmt);
+				//The block now has a mark
+				current->contains_mark = TRUE;
 			}
 
 			//Advance the current statement up
@@ -197,7 +266,25 @@ static void mark(cfg_t* cfg){
 		//as useful
 		for(u_int16_t i = 0; block->reverse_dominance_frontier != NULL && i < block->reverse_dominance_frontier->current_index; i++){
 			//Grab the RDF block out
+			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
 
+			//Now we'll go through this block and mark all of the operations as needed
+			//TODO THIS IS NOT CORRECT FULLY
+			three_addr_code_stmt_t* rdf_block_stmt = rdf_block->leader_statement;
+
+			//Run through and mark each statement TODO NOT RIGHT
+			while(rdf_block_stmt != NULL){
+				if(rdf_block_stmt->mark == FALSE){
+					rdf_block_stmt->mark = TRUE;
+					//Add into the worklist
+					dynamic_array_add(worklist, rdf_block_stmt);
+					//Mark the block
+					rdf_block->contains_mark = TRUE;
+				}
+
+				//Advance it
+				rdf_block_stmt = rdf_block_stmt->next_statement;
+			}
 		}
 	}
 
@@ -216,7 +303,7 @@ static void mark_and_sweep(cfg_t* cfg){
 
 	//Now once everything has been marked, we'll invoke sweep to get rid of all
 	//dead operations
-	sweep(cfg);
+	//sweep(cfg);
 }
 
 

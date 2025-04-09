@@ -712,6 +712,9 @@ static void add_statement(basic_block_t* target, three_addr_code_stmt_t* stateme
 
 	//Otherwise, we are not dealing with the head. We'll simply tack this on to the tail
 	target->exit_statement->next_statement = statement_node;
+	//Mark this as the prior statement
+	statement_node->previous_statement = target->exit_statement;
+
 	//Update the tail reference
 	target->exit_statement = statement_node;
 
@@ -3202,6 +3205,16 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	a->block_terminal_type = b->block_terminal_type;
 
+	//For each statement in b, all of it's old statements are now "defined" in a
+	three_addr_code_stmt_t* b_stmt = b->leader_statement;
+
+	while(b_stmt != NULL){
+		b_stmt->block_contained_in = a;
+
+		//Push it up
+		b_stmt = b_stmt->next_statement;
+	}
+	
 	//IMPORTANT--wipe b's statements out
 	b->leader_statement = NULL;
 	b->exit_statement = NULL;
@@ -3217,6 +3230,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		//Add these in one by one
 		add_assigned_variable(a, b->assigned_variables->internal_array[i]);
 	}
+
 
 	//We'll remove this from the list of created blocks
 	dynamic_array_delete(cfg_ref->created_blocks, b);

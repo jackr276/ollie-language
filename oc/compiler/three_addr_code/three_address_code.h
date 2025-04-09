@@ -163,6 +163,8 @@ struct three_addr_code_stmt_t{
 	void* block_contained_in;
 	//For linked list properties -- the next statement
 	three_addr_code_stmt_t* next_statement;
+	//For doubly linked list properties -- the previous statement
+	three_addr_code_stmt_t* previous_statement;
 	//A three address code always has 2 operands and an assignee
 	three_addr_var_t* op1;
 	//For convenience: op1 can also be a const sometimes

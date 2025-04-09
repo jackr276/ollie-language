@@ -47,7 +47,7 @@ static u_int32_t increment_and_get_sequence_number(){
  */
 void set_new_function(symtab_function_record_t* func){
 	//We'll save this up top
-	current_function = 0;
+	current_function = func;
 	//Also reset the sequence number
 	current_sequence_number = 0;
 }
