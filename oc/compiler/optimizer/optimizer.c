@@ -43,6 +43,8 @@ static void sweep(cfg_t* cfg){
 
 		//For each statement in the block
 		while(stmt != NULL){
+			printf("Working on\n");
+			print_three_addr_code_stmt(stmt);
 			//If the statement is unmarked(useless)
 			if(stmt->mark == FALSE){
 				//It's a conditional jump
@@ -247,12 +249,6 @@ static void mark(cfg_t* cfg){
 				//The block now has a mark
 				current->contains_mark = TRUE;
 			} else if(current_stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
 				current_stmt->mark = TRUE;
 				//Add it to the list
 				dynamic_array_add(worklist, current_stmt);

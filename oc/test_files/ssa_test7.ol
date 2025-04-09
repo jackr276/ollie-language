@@ -7,18 +7,18 @@ let mut glob_x:u32 := 3232;
 let glog_y:i32 := -232;
 
 fn other_test() -> void{
-	let mut x:i32 := 33;
-	let mut y:i32 := 3232;
+	let mut l:i32 := 33;
+	let mut j:i32 := 3232;
 
-	if(x == 32) then {
-		x := x + 3222;
-		y := 323;
+	if(l == 32) then {
+		l := l + 3222;
+		j := 323;
 	} else {
-		x := 32;
-		y := x + 3;
+		l := 32;
+		j := l + 3;
 	}
 
-	let mut w:i32 := x + y;
+	let mut asd:i32 := l + j;
 }
 
 
