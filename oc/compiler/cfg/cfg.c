@@ -3162,6 +3162,8 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		//Otherwise it's a "true merge"
 		//The leader statement in b will be connected to a's tail
 		a->exit_statement->next_statement = b->leader_statement;
+		//Connect backwards too
+		b->leader_statement->previous_statement = a->exit_statement;
 		//Now once they're connected we'll set a's exit to be b's exit
 		a->exit_statement = b->exit_statement;
 	}

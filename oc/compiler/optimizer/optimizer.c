@@ -46,8 +46,8 @@ static void sweep(cfg_t* cfg){
 			//If the statement is unmarked(useless)
 			if(stmt->mark == FALSE){
 				//It's a conditional jump
-				if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && stmt->op != JUMP){
-					//TODO add me in
+				if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+					//TODO add me in, we're ignoring for now
 
 				//Otherwise we delete the statement
 				} else {
@@ -65,25 +65,32 @@ static void sweep(cfg_t* cfg){
 							//Set this to NULL
 							block->leader_statement->previous_statement = NULL;
 						}
-					} else if(block->exit_statement == stmt){
 
+					//What if it's the exit statement?
+					} else if(block->exit_statement == stmt){
+						three_addr_code_stmt_t* previous = stmt->previous_statement;
+						//Nothing at the end
+						previous->next_statement = NULL;
+
+						//This now is the exit statement
+						block->exit_statement = previous;
+						
 					//Otherwise, we have one in the middle
 					} else {
-						//Reverse them like so
+						//Regular middle deletion here
 						three_addr_code_stmt_t* previous = stmt->previous_statement;
 						three_addr_code_stmt_t* next = stmt->next_statement;
 						previous->next_statement = next;
 						next->previous_statement = previous;
-
 					}
-
-					//Store this
-					three_addr_code_stmt_t* temp = stmt->next_statement;
-					//We always destroy it at the very end
-					three_addr_stmt_dealloc(stmt);
-					//Reassign
-					stmt = temp;
 				}
+
+				//Store this
+				three_addr_code_stmt_t* temp = stmt->next_statement;
+				//We always destroy it at the very end
+				three_addr_stmt_dealloc(stmt);
+				//Reassign
+				stmt = temp;
 
 			} else {
 				//Advance this up
@@ -251,7 +258,14 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
+			} else if(current_stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
+				current_stmt->mark = TRUE;
+				//Add it to the list
+				dynamic_array_add(worklist, current_stmt);
+				//The block now has a mark
+				current->contains_mark = TRUE;
 			}
+
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;
@@ -316,7 +330,7 @@ static void mark_and_sweep(cfg_t* cfg){
 
 	//Now once everything has been marked, we'll invoke sweep to get rid of all
 	//dead operations
-	//sweep(cfg);
+	sweep(cfg);
 }
 
 
