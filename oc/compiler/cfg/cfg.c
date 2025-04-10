@@ -703,7 +703,7 @@ static void add_phi_parameter(three_addr_code_stmt_t* phi_statement, three_addr_
 /**
  * Add a statement to the target block, following all standard linked-list protocol
  */
-static void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node){
+void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node){
 	//Generic fail case
 	if(target == NULL){
 		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);

@@ -155,6 +155,9 @@ struct basic_block_t{
 //always has the root block
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
+//Add a statement to the basic block
+void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node);
+
 //Deallocate our entire cfg structure
 void dealloc_cfg(cfg_t* cfg);
 

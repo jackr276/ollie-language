@@ -87,16 +87,50 @@ static void sweep(cfg_t* cfg){
 				continue;
 			}
 
-			//Otherwise we kniw that the statement is unmarked(useless)
+			//Otherwise we know that the statement is unmarked(useless)
+			//There are two options when this happens. If it's just a normal statement, we'll just delete it 
+			//and that's the end of things. If it's a branch that we've identified as useless, then we'll
+			//replace that branch with a jump to it's nearest marked postdominator
+			//
+			//
 			//We've encountered a jump statement of some kind
 			if(stmt->is_branch_ending == TRUE){
+				//Grab the block out. We need to do this here because we're about to be deleting blocks,
+				//and we'll lose the reference if we do
+				basic_block_t* block = stmt->block_contained_in;
+
 				//What we'll need to do is delete everythin here that is branch ending
 				//and useless
-				//while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
-				//	delete_statement(cfg, stmt->block_contained_in, stmt);
-				//	stmt = stmt->next_statement;
-				//}
-				stmt = stmt->next_statement;
+				while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
+					//Delete it
+					delete_statement(cfg, stmt->block_contained_in, stmt);
+					//Perform the deletion and advancement
+					three_addr_code_stmt_t* temp = stmt;
+					//Advance it
+					stmt = stmt->next_statement;
+					//Destroy it
+					three_addr_stmt_dealloc(temp);
+				}
+
+				//Let's find the nearest marked postdominator
+				for(u_int16_t i = 0; block->postdominator_set != NULL && i < block->postdominator_set->current_index; i++){
+					//Grab the postdominator out
+					basic_block_t* postdominator = dynamic_array_get_at(block->postdominator_set, i);
+					//And we'll see if it's marked. If it is, we're done
+					if(postdominator->contains_mark == TRUE){
+						//Emit a direct jump
+						three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(postdominator, JUMP_TYPE_JMP);
+						//It's jumping to something marked, so
+						//jump_stmt->mark = TRUE;
+						//Throw it in there
+						add_statement(block, jump_stmt);
+						//And we're done
+					}
+				}
+
+				//Now just go onto the next iteration
+				continue;
+
 			//Otherwise we delete the statement
 			} else {
 				delete_statement(cfg, stmt->block_contained_in, stmt);
@@ -109,6 +143,7 @@ static void sweep(cfg_t* cfg){
 		}
 	}
 }
+
 
 /**
  * Mark definitions(assignment) of a three address variable within
