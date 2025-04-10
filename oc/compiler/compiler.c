@@ -42,27 +42,12 @@ static void compile(char* fname, front_end_results_package_t* results){
 	results->os = NULL;
 	results->root = NULL;
 
-	//Otherwise it opened, so we now need to process it and compile dependencies
-	dependency_package_t dependencies = preprocess(fname);
-
-	
-
-	//If this fails, we error out
-	if(dependencies.return_token == PREPROC_ERROR){
-		results->num_errors = 1;
-		results->lines_processed = 0;
-		//Failed here
-		results->result_type = PARSER_RESULT_FAILURE;
-		//Give it back
-		return;
-	}
-
 	//First we try to open the file
 	FILE* fl = fopen(fname, "r");
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
-	*results = parse(fl, "FIX ME");
+	*results = parse(fl, fname);
 
 	//Increment these while we're here
 	num_errors += results->num_errors;

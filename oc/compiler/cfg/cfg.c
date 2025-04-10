@@ -115,8 +115,6 @@ static basic_block_t* visit_switch_statement(values_package_t* values);
 //Return a three address code variable
 static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
-//Add a successor
-static void add_successor(basic_block_t* target, basic_block_t* successor);
 
 
 /**
@@ -1125,6 +1123,8 @@ static void add_dominated_block(basic_block_t* dominator, basic_block_t* dominat
  * is found
  */
 static void calculate_postdominator_sets(cfg_t* cfg){
+	//Reset the visited status
+	reset_visited_status(cfg);
 	//The current block
 	basic_block_t* current;
 
@@ -1521,6 +1521,8 @@ static void variable_dynamic_array_add(dynamic_array_t* array, three_addr_var_t*
  *
  */
 static void calculate_liveness_sets(cfg_t* cfg){
+	//Reset the visited status
+	reset_visited_status(cfg);
 	//Did we find a difference
 	u_int8_t difference_found;
 
@@ -3201,7 +3203,7 @@ static void add_predecessor_only(basic_block_t* target, basic_block_t* predecess
  * of "successor". If you wish to ONLY add a successor or predecessor(very rare),
  * then use the "only" methods
  */
-static void add_successor(basic_block_t* target, basic_block_t* successor){
+ void add_successor(basic_block_t* target, basic_block_t* successor){
 	//First we'll add successor as a successor of target
 	add_successor_only(target, successor);
 

@@ -15,8 +15,7 @@
 
 /**
  * The clean algorithm will remove all useless control flow structures, ideally
- * resulting in a simplified CFG. This should be done after we use mark and sweep
- * to get rid of useless code, because that may lead to empty blocks that we can clean up here
+ * resulting in a simplified CFG. This should be done after we use mark and sweep to get rid of useless code, because that may lead to empty blocks that we can clean up here
  */
 static void clean(cfg_t* cfg){
 
@@ -63,6 +62,90 @@ static void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_s
 
 
 /**
+ * Grab the immediate postdominator dominator of the block
+ * A IPDOM B if A SPDOM B and there does not exist a node C 
+ * such that C ≠ A, C ≠ B, A pdom C, and C pdom B
+ *
+ * In this special iteration of the immediate postdominator, we only
+ * want the immediate MARKED postdominator
+ *
+ */
+static basic_block_t* immediate_marked_postdominator(basic_block_t* B){
+	//Regular variable declarations
+	basic_block_t* A; 
+	basic_block_t* C;
+	u_int8_t A_is_IPDOM;
+	
+	//For each node in B's PostDominantor set(we call this node A)
+	//These nodes are our candidates for immediate postdominator
+	for(u_int16_t i = 0; B->postdominator_set != NULL && i < B->postdominator_set->current_index; i++){
+		//By default we assume A is a IPDOM
+		A_is_IPDOM = TRUE;
+
+		//A is our "candidate" for possibly being an immediate postdominator
+		A = dynamic_array_get_at(B->postdominator_set, i);
+
+		//If A == B, that means that A does NOT strictly postdominate(PDOM)
+		//B, so it's disqualified
+		if(A == B){
+			continue;
+		}
+
+		//It's not marked, so we're done
+		if(A->contains_mark == FALSE){
+			continue;
+		}
+
+		//If we get here, we know that A SPDOM B
+		//Now we must check, is there any "C" in the way.
+		//We can tell if this is the case by checking every other
+		//node in the dominance frontier of B, and seeing if that
+		//node is also dominated by A
+		
+		//For everything in B's dominator set that IS NOT A, we need
+		//to check if this is an intermediary. As in, does C get in-between
+		//A and B in the dominance chain
+		for(u_int16_t j = 0; j < B->postdominator_set->current_index; j++){
+			//Skip this case
+			if(i == j){
+				continue;
+			}
+
+			//If it's aleady B or A, we're skipping
+			C = dynamic_array_get_at(B->postdominator_set, j);
+
+			//If this is the case, disqualified
+			if(C == B || C == A || C->contains_mark == FALSE){
+				continue;
+			}
+
+			//We can now see that C dominates B. The true test now is
+			//if C is dominated by A. If that's the case, then we do NOT
+			//have an immediate dominator in A.
+			//
+			//This would look like A -PDoms> C -PDoms> B, so A is not an immediate postdominator
+			if(dynamic_array_contains(C->postdominator_set, A) != NOT_FOUND){
+				//A is disqualified, it's not an IDOM
+				A_is_IPDOM = FALSE;
+				break;
+			}
+		}
+
+		//If we survived, then we're done here
+		if(A_is_IPDOM == TRUE){
+			//Mark this for any future runs...we won't waste any time doing this
+			//calculation over again
+			return A;
+		}
+	}
+
+	//Otherwise we didn't find it, so there is no immediate dominator
+	return NULL;
+}
+
+
+
+/**
  * The sweep algorithm will go through and remove every operation that has not been marked
  */
 static void sweep(cfg_t* cfg){
@@ -102,8 +185,13 @@ static void sweep(cfg_t* cfg){
 				//What we'll need to do is delete everythin here that is branch ending
 				//and useless
 				while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
+					//If it's a jump statement, we need to ameliorate the predecessors and successors
+					if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+						//TODO we need a way of figuring this out -- may be done by clean()
+					}
+
 					//Delete it
-					delete_statement(cfg, stmt->block_contained_in, stmt);
+					delete_statement(cfg, block, stmt);
 					//Perform the deletion and advancement
 					three_addr_code_stmt_t* temp = stmt;
 					//Advance it
@@ -112,6 +200,7 @@ static void sweep(cfg_t* cfg){
 					three_addr_stmt_dealloc(temp);
 				}
 
+				
 				//Let's find the nearest marked postdominator
 				for(u_int16_t i = 0; block->postdominator_set != NULL && i < block->postdominator_set->current_index; i++){
 					//Grab the postdominator out
@@ -120,13 +209,24 @@ static void sweep(cfg_t* cfg){
 					if(postdominator->contains_mark == TRUE){
 						//Emit a direct jump
 						three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(postdominator, JUMP_TYPE_JMP);
-						//It's jumping to something marked, so
-						//jump_stmt->mark = TRUE;
 						//Throw it in there
 						add_statement(block, jump_stmt);
+						//We also have a new successor since we're jumping like this
+						add_successor(block, postdominator);
 						//And we're done
+						break;
 					}
 				}
+				
+				
+				
+				/*
+				basic_block_t* immediate_postdominator = immediate_marked_postdominator(block);
+				three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
+
+				add_statement(block, jump_stmt);
+				add_successor(block, immediate_postdominator);
+				*/
 
 				//Now just go onto the next iteration
 				continue;
@@ -290,7 +390,7 @@ static void mark(cfg_t* cfg){
 		if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
 			dynamic_array_t* phi_function_parameters = stmt->phi_function_parameters;
 			//Add this in here
-			for(u_int16_t i = 0; i < phi_function_parameters->current_index; i++){
+			for(u_int16_t i = 0; phi_function_parameters != NULL && i < phi_function_parameters->current_index; i++){
 				//Grab the param out
 				three_addr_var_t* phi_func_param = dynamic_array_get_at(phi_function_parameters, i);
 
