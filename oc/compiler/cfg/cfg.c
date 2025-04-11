@@ -2968,8 +2968,6 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
 		//We'll need a queue for our BFS
 		heap_queue_t* queue = heap_queue_alloc();
-		//To be enqueued dynamic array
-		dynamic_array_t* to_be_enqueued = dynamic_array_alloc();
 
 		//Seed the search by adding the funciton block into the queue
 		enqueue(queue, dynamic_array_get_at(cfg->function_blocks, i));
@@ -3000,8 +2998,6 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 		//Destroy the heap queue when done
 		heap_queue_dealloc(queue);
-		//Destroy the dynamic array when done
-		dynamic_array_dealloc(to_be_enqueued);
 	}
 }
 

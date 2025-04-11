@@ -5,7 +5,7 @@
  * it is implemented as one monolothic block
 */
 #include "optimizer.h"
-#include <stdio.h>
+#include "../queue/heap_queue.h"
 #include <sys/types.h>
 
 //Standard true and false definitions
@@ -62,85 +62,66 @@ static void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_s
 
 
 /**
- * Grab the immediate postdominator dominator of the block
- * A IPDOM B if A SPDOM B and there does not exist a node C 
- * such that C ≠ A, C ≠ B, A pdom C, and C pdom B
- *
- * In this special iteration of the immediate postdominator, we only
- * want the immediate MARKED postdominator
- *
+ * To find the nearest marked postdominator, we can do a breadth-first
+ * search starting at our block B. Whenever we find a node that is both:
+ * 	a.) A postdominator of B
+ * 	b.) marked
+ * we'll have our answer
  */
-static basic_block_t* immediate_marked_postdominator(basic_block_t* B){
-	//Regular variable declarations
-	basic_block_t* A; 
-	basic_block_t* C;
-	u_int8_t A_is_IPDOM;
-	
-	//For each node in B's PostDominantor set(we call this node A)
-	//These nodes are our candidates for immediate postdominator
-	for(u_int16_t i = 0; B->postdominator_set != NULL && i < B->postdominator_set->current_index; i++){
-		//By default we assume A is a IPDOM
-		A_is_IPDOM = TRUE;
+static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B){
+	//We'll need a queue for the BFS
+	heap_queue_t* queue = heap_queue_alloc();
 
-		//A is our "candidate" for possibly being an immediate postdominator
-		A = dynamic_array_get_at(B->postdominator_set, i);
+	//First, we'll reset every single block here
+	reset_visited_status(cfg);
 
-		//If A == B, that means that A does NOT strictly postdominate(PDOM)
-		//B, so it's disqualified
-		if(A == B){
-			continue;
-		}
+	//Seed the search with B
+	enqueue(queue, B);
 
-		//It's not marked, so we're done
-		if(A->contains_mark == FALSE){
-			continue;
-		}
+	//The nearest marked postdominator and a holder for our candidates
+	basic_block_t* nearest_marked_postdominator = NULL;
+	basic_block_t* candidate;
 
-		//If we get here, we know that A SPDOM B
-		//Now we must check, is there any "C" in the way.
-		//We can tell if this is the case by checking every other
-		//node in the dominance frontier of B, and seeing if that
-		//node is also dominated by A
+	//So long as the queue is not empty
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		//Grab the block off
+		candidate = dequeue(queue);
 		
-		//For everything in B's dominator set that IS NOT A, we need
-		//to check if this is an intermediary. As in, does C get in-between
-		//A and B in the dominance chain
-		for(u_int16_t j = 0; j < B->postdominator_set->current_index; j++){
-			//Skip this case
-			if(i == j){
-				continue;
-			}
-
-			//If it's aleady B or A, we're skipping
-			C = dynamic_array_get_at(B->postdominator_set, j);
-
-			//If this is the case, disqualified
-			if(C == B || C == A || C->contains_mark == FALSE){
-				continue;
-			}
-
-			//We can now see that C dominates B. The true test now is
-			//if C is dominated by A. If that's the case, then we do NOT
-			//have an immediate dominator in A.
-			//
-			//This would look like A -PDoms> C -PDoms> B, so A is not an immediate postdominator
-			if(dynamic_array_contains(C->postdominator_set, A) != NOT_FOUND){
-				//A is disqualified, it's not an IDOM
-				A_is_IPDOM = FALSE;
-				break;
-			}
+		//If we've been here before, continue;
+		if(candidate->visited == TRUE){
+			continue;
 		}
 
-		//If we survived, then we're done here
-		if(A_is_IPDOM == TRUE){
-			//Mark this for any future runs...we won't waste any time doing this
-			//calculation over again
-			return A;
+		//Mark this for later
+		candidate->visited = TRUE;
+
+		//Now let's check for our criterion
+		if(dynamic_array_contains(B->postdominator_set, candidate) != NOT_FOUND
+		  && candidate->contains_mark == TRUE){
+			//We've found it, so we're done
+			nearest_marked_postdominator = candidate;
+			//Get out
+			break;
+		}
+
+		//Otherwise, we didn't find anything, so we'll keep going
+		//Enqueue all of the successors
+		for(u_int16_t i = 0; candidate->successors != NULL && i < candidate->successors->current_index; i++){
+			//Grab the successor out
+			basic_block_t* successor = dynamic_array_get_at(candidate->successors, i);
+
+			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
+			if(successor->visited == FALSE){
+				enqueue(queue, successor);
+			}
 		}
 	}
 
-	//Otherwise we didn't find it, so there is no immediate dominator
-	return NULL;
+	//Destroy the queue when done
+	heap_queue_dealloc(queue);
+
+	//And give this back
+	return nearest_marked_postdominator;
 }
 
 
@@ -200,33 +181,14 @@ static void sweep(cfg_t* cfg){
 					three_addr_stmt_dealloc(temp);
 				}
 
-				
-				//Let's find the nearest marked postdominator
-				for(u_int16_t i = 0; block->postdominator_set != NULL && i < block->postdominator_set->current_index; i++){
-					//Grab the postdominator out
-					basic_block_t* postdominator = dynamic_array_get_at(block->postdominator_set, i);
-					//And we'll see if it's marked. If it is, we're done
-					if(postdominator->contains_mark == TRUE){
-						//Emit a direct jump
-						three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(postdominator, JUMP_TYPE_JMP);
-						//Throw it in there
-						add_statement(block, jump_stmt);
-						//We also have a new successor since we're jumping like this
-						add_successor(block, postdominator);
-						//And we're done
-						break;
-					}
-				}
-				
-				
-				
-				/*
-				basic_block_t* immediate_postdominator = immediate_marked_postdominator(block);
+				//We'll first find the nearest marked postdominator
+				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
+				//We'll then emit a jump to that node
 				three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
 
 				add_statement(block, jump_stmt);
+				//It is also now a successor
 				add_successor(block, immediate_postdominator);
-				*/
 
 				//Now just go onto the next iteration
 				continue;
