@@ -222,8 +222,8 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
 
-		//If it's not in the current function, get rid of it
-		if(block->function_defined_in != current_function){
+		//If it's not in the current function and it's temporary, get rid of it
+		if(variable->is_temporary == TRUE && block->function_defined_in != current_function){
 			continue;
 		}
 
@@ -345,8 +345,19 @@ static void mark(cfg_t* cfg){
 					dynamic_array_add(worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
+				//If we have a pointer type and are assigning to a derefence of a function parameter(inout mode), we are modifying the value of that pointer
+				} else if(current_stmt->assignee->linked_var->is_function_paramater == TRUE 
+						&& current_stmt->assignee->type->type_class == TYPE_CLASS_POINTER 
+						&& current_stmt->assignee->indirection_level > 0){
+					//Mark it
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
 				}
 			}
+		
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;
