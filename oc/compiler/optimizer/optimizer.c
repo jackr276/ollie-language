@@ -334,8 +334,19 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
+			//We need to check - are we manipulating any global variables here? If we
+			//are, those are also considered important
+			} else if(current_stmt->assignee != NULL && current_stmt->assignee->is_temporary == FALSE){
+				//If we have an assignee and that assignee is a global variable, then this is marked as
+				//important
+				if(current_stmt->assignee->linked_var->is_global == TRUE){
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+				}
 			}
-
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;

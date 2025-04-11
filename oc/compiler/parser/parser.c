@@ -25,6 +25,9 @@
 #define SUCCESS 1
 #define FAILURE 0
 
+#define TRUE 1
+#define FALSE 0
+
 //All error sizes are 1000 unless specified
 #define ERROR_SIZE 1500
 #define LARGE_ERROR_SIZE 2000
@@ -77,14 +80,14 @@ static generic_ast_node_t* cast_expression(FILE* fl);
 static generic_ast_node_t* type_specifier(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl);
-static generic_ast_node_t* declaration(FILE* fl);
+static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
-static generic_ast_node_t* let_statement(FILE* fl);
+static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
 static generic_ast_node_t* case_statement(FILE* fl);
 static generic_ast_node_t* default_statement(FILE* fl);
-static generic_ast_node_t* declare_statement(FILE* fl);
+static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee);
@@ -6572,7 +6575,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	if(lookahead.tok == LET){
 		//On the contrary, the let statement rule assumes that let has already been consumed, so we won't
 		//put it back here, we'll just call the rule
-		generic_ast_node_t* let_stmt = let_statement(fl);
+		generic_ast_node_t* let_stmt = let_statement(fl, FALSE);
 
 		//If it fails, we also fail
 		if(let_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -6824,7 +6827,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 			push_back_token(lookahead);
 
 			//We now need to see a valid version
-			generic_ast_node_t* declaration_node = declaration(fl);
+			generic_ast_node_t* declaration_node = declaration(fl, FALSE);
 
 			//If it's invalid, we pass right through, no error printing
 			if(declaration_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7285,9 +7288,9 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 		return branch_statement(fl);
 	//Let statement
 	} else if(lookahead.tok == LET){
-		return let_statement(fl);
+		return let_statement(fl, FALSE);
 	} else if(lookahead.tok == DECLARE){
-		return declare_statement(fl);
+		return declare_statement(fl, FALSE);
 	} else {
 		//Otherwise, this is some kind of expression statement. We'll put the token back and
 		//return that
@@ -7595,7 +7598,7 @@ static generic_ast_node_t* case_statement(FILE* fl){
  *
  * BNF Rule: <declare-statement> ::= declare {register | static}? {mut}? <identifier> : <type-specifier>;
  */
-static generic_ast_node_t* declare_statement(FILE* fl){
+static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//For error printing
 	char info[LARGE_ERROR_SIZE];
 	//Freeze the current line number
@@ -7757,11 +7760,13 @@ static generic_ast_node_t* declare_statement(FILE* fl){
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type = dealias_type(type_spec_node->inferred_type);
 	//It was not initialized
-	declared_var->initialized = 0;
+	declared_var->initialized = FALSE;
 	//It was declared
 	declared_var->declare_or_let = 0;
 	//The line_number
 	declared_var->line_number = current_line;
+	//Is it global? This speeds up optimization down the line
+	declared_var->is_global = is_global;
 	//Store what module this was defined in
 	strncpy(declared_var->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 	//Now that we're all good, we can add it into the symbol table
@@ -7787,7 +7792,7 @@ static generic_ast_node_t* declare_statement(FILE* fl){
  *
  * BNF Rule: <let-statement> ::= let {register | static}? {mut}? <identifier> : <type-specifier> := <conditional-expression>;
  */
-static generic_ast_node_t* let_statement(FILE* fl){
+static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//For error printing
 	char info[LARGE_ERROR_SIZE];
 	//The line number
@@ -8007,6 +8012,8 @@ static generic_ast_node_t* let_statement(FILE* fl){
 	declared_var->initialized = 1;
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
+	//Is it a global var or not? This speeds up optimization
+	declared_var->is_global = is_global;
 	//Save the line num
 	declared_var->line_number = current_line;
 	//Insert what module this came from
@@ -8208,7 +8215,7 @@ static u_int8_t definition(FILE* fl){
  * <declaration> ::= <declare-statement> 
  * 				   | <let-statement> 
  */
-static generic_ast_node_t* declaration(FILE* fl){
+static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 	//For error printing
 	char info[LARGE_ERROR_SIZE];
 	//Lookahead token
@@ -8221,10 +8228,10 @@ static generic_ast_node_t* declaration(FILE* fl){
 
 	//We have a declare statement
 	if(lookahead.tok == DECLARE){
-		return declare_statement(fl);
+		return declare_statement(fl, is_global);
 	//We have a let statement
 	} else if(lookahead.tok == LET){
-		return let_statement(fl);
+		return let_statement(fl, is_global);
 	//Otherwise we have some weird error here
 	} else {
 		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme);
@@ -9027,7 +9034,8 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 		push_back_token(lookahead);
 
 		//We'll simply return whatever the product of the declaration function is
-		return declaration(fl);
+		//Do note: these variables will all be global
+		return declaration(fl, TRUE);
 	}
 }
 

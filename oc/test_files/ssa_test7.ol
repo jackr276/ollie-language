@@ -11,6 +11,7 @@ fn other_test() -> void{
 	let mut j:i32 := 3232;
 
 	if(l == 32) then {
+		glob_x := 23;
 		l := l + 3222;
 		j := 323;
 	} else {
