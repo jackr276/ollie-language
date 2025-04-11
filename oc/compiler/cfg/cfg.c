@@ -1917,11 +1917,16 @@ static void rename_block(basic_block_t* entry){
 
 			//Special case - do we have a function call?
 			if(cursor->CLASS == THREE_ADDR_CODE_FUNC_CALL){
-				//Go through every single variable. If it isn't temp, rename it
-				for(u_int16_t k = 0; k < 6 && cursor->params[k] != NULL; k++){
-					//If it's not temporary, rename it
-					if(cursor->params[k]->is_temporary == FALSE){
-						rhs_new_name(cursor->params[k]);
+				//Grab it out
+				dynamic_array_t* func_params = cursor->function_parameters;
+				//Run through them all
+				for(u_int16_t k = 0; func_params != NULL && k < func_params->current_index; k++){
+					//Grab it out
+					three_addr_var_t* current_param = dynamic_array_get_at(func_params, k);
+
+					//If it's not temporary, we rename
+					if(current_param->is_temporary == FALSE){
+						rhs_new_name(current_param);
 					}
 				}
 			}
@@ -2883,6 +2888,12 @@ static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, gen
 	//Let's grab a param cursor for ourselves
 	generic_ast_node_t* param_cursor = function_call_node->first_child;
 
+	//If this isn't NULL, we have parameters
+	if(param_cursor != NULL){
+		//Create this
+		func_call_stmt->function_parameters = dynamic_array_alloc();
+	}
+
 	//The current param of the index
 	u_int8_t current_func_param_idx = 0;
 
@@ -2891,9 +2902,8 @@ static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, gen
 		//Emit whatever we have here into the basic block
 		expr_ret_package_t package = emit_expr_code(basic_block, param_cursor, is_branch_ending);
 		
-		//The temporary variable that we get will be our parameter
-		func_call_stmt->params[current_func_param_idx] = package.assignee;
-		current_func_param_idx++;
+		//Add the parameter in
+		dynamic_array_add(func_call_stmt->function_parameters, package.assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;

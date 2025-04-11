@@ -360,6 +360,16 @@ static void mark(cfg_t* cfg){
 				mark_and_add_definition(cfg, phi_func_param, stmt->function, worklist);
 			}
 
+		//Otherwise if we have a function call, every single thing in that function call is important
+		} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
+			//Grab the parameters out
+			dynamic_array_t* params = stmt->function_parameters;
+
+			//Run through them all and mark them
+			for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
+				mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
+			}
+
 		} else {
 			//We need to mark the place where each definition is set
 			mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);

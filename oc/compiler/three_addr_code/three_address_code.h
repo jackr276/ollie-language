@@ -196,7 +196,7 @@ struct three_addr_code_stmt_t{
 	//What function are we currently in?
 	symtab_function_record_t* function;
 	//The list of temp variable parameters at most 6
-	three_addr_var_t* params[MAX_FUNCTION_PARAMS];
+	void* function_parameters;
 	//Very special case, only for inlined assembly
 	char* inlined_assembly;
 	//The phi function parameters - stored in a dynamic array

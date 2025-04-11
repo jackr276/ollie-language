@@ -496,15 +496,19 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		//by the function name
 		printf("call %s(", stmt->func_record->func_name);
 
+		//Grab this out
+		dynamic_array_t* func_params = stmt->function_parameters;
+
 		//Now we can go through and print out all of our parameters here
-		for(u_int8_t i = 0; i < stmt->func_record->number_of_params; i++){
+		for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
+			//Grab it out
+			three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
+			
 			//Print this out here
-			if(stmt->params[i] != NULL){
-				print_variable(stmt->params[i], PRINTING_VAR_INLINE);
-			}
+			print_variable(func_param, PRINTING_VAR_INLINE);
 
 			//If we need to, print out a comma
-			if(i != stmt->func_record->number_of_params - 1){
+			if(i != func_params->current_index - 1){
 				printf(", ");
 			}
 		}
@@ -1016,6 +1020,11 @@ void three_addr_stmt_dealloc(three_addr_code_stmt_t* stmt){
 	//If we have a phi function, deallocate the dynamic array
 	if(stmt->phi_function_parameters != NULL){
 		dynamic_array_dealloc(stmt->phi_function_parameters);
+	}
+
+	//If we have function parameters get rid of them
+	if(stmt->function_parameters != NULL){
+		dynamic_array_dealloc(stmt->function_parameters);
 	}
 	
 	//Free the overall stmt -- variables handled elsewhere
