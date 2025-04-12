@@ -1627,7 +1627,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 /**
  * Build the dominator tree for each function in the CFG
  */
-static void build_dominator_trees(cfg_t* cfg){
+static void build_dominator_trees(cfg_t* cfg, u_int8_t build_fresh){
 	//For each node in the CFG, we will use that node's immediate dominators to
 	//build a dominator tree
 	
@@ -3023,6 +3023,60 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 
 /**
+ * Destroy all old control relations in anticipation of new ones coming in
+ */
+void cleanup_all_control_relations(cfg_t* cfg){
+	//For each block in the CFG
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+
+		//Run through and destroy all of these old control flow constructs
+		//Deallocate the postdominator set
+		if(block->postdominator_set != NULL){
+			dynamic_array_dealloc(block->postdominator_set);
+			block->postdominator_set = NULL;
+		}
+
+		//Deallocate the dominator set
+		if(block->dominator_set != NULL){
+			dynamic_array_dealloc(block->dominator_set);
+			block->dominator_set = NULL;
+		}
+
+		//Deallocate the dominator children
+		if(block->dominator_children != NULL){
+			dynamic_array_dealloc(block->dominator_children);
+			block->dominator_children = NULL;
+		}
+
+		//Deallocate the domninance frontier
+		if(block->dominance_frontier != NULL){
+			dynamic_array_dealloc(block->dominance_frontier);
+			block->dominance_frontier = NULL;
+		}
+
+		//Deallocate the reverse dominance frontier
+		if(block->reverse_dominance_frontier != NULL){
+			dynamic_array_dealloc(block->reverse_dominance_frontier);
+			block->reverse_dominance_frontier = NULL;
+		}
+
+		//Deallocate the reverse post order set
+		if(block->reverse_post_order_reverse_cfg != NULL){
+			dynamic_array_dealloc(block->reverse_post_order_reverse_cfg);
+			block->reverse_post_order_reverse_cfg = NULL;
+		}
+
+		//Deallocate the reverse post order set
+		if(block->reverse_post_order != NULL){
+			dynamic_array_dealloc(block->reverse_post_order);
+			block->reverse_post_order = NULL;
+		}
+	}
+}
+
+/**
  * Deallocate a basic block
 */
 void basic_block_dealloc(basic_block_t* block){
@@ -3523,7 +3577,9 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	}
 
 	//No matter what, this will get merged into the top statement
-	do_while_stmt_entry_block = merge_blocks(do_while_stmt_entry_block, do_while_compound_stmt_entry);
+	add_successor(do_while_stmt_entry_block, do_while_compound_stmt_entry);
+	//Now we'll jump to it
+	emit_jmp_stmt(do_while_stmt_entry_block, do_while_compound_stmt_entry, JUMP_TYPE_JMP, TRUE);
 
 	//We will drill to the bottom of the compound statement
 	basic_block_t* compound_stmt_end = do_while_stmt_entry_block;
@@ -3538,6 +3594,8 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
+	add_successor(compound_stmt_end, do_while_stmt_entry_block);
+	//It's other successor though is the loop entry. This is for flow analysis
 	add_successor(compound_stmt_end, do_while_stmt_exit_block);
 
 	//Make sure it's the direct successor
@@ -3545,9 +3603,6 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//We'll set the entry block's direct successor to be the exit block for efficiency
 	do_while_stmt_entry_block->direct_successor = do_while_stmt_exit_block;
-
-	//It's other successor though is the loop entry. This is for flow analysis
-	add_successor(compound_stmt_end, do_while_stmt_entry_block);
 
 	//Discern the jump type here--This is a direct jump
 	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
@@ -5238,6 +5293,36 @@ void reset_visited_status(cfg_t* cfg){
 
 
 /**
+ * We will calculate:
+ *  1.) Dominator Sets
+ *  2.) Dominator Trees
+ *  3.) Dominance Frontiers
+ *  4.) Postdominator sets
+ *  5.) Reverse Dominance frontiers
+ *
+ * For every block in the CFG
+ */
+void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh){
+	//We first need to calculate the dominator sets of every single node
+	calculate_dominator_sets(cfg);
+	
+	//Now we'll build the dominator tree up
+	build_dominator_trees(cfg, build_fresh);
+
+	//We need to calculate the dominance frontier of every single block before
+	//we go any further
+	calculate_dominance_frontiers(cfg);
+
+	//Calculate the postdominator sets for later analysis in the optimizer
+	calculate_postdominator_sets(cfg);
+
+	//We'll also now calculate the reverse dominance frontier that will be used
+	//in later analysis by the optimizer
+	calculate_reverse_dominance_frontiers(cfg);
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -5273,22 +5358,8 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 		(*num_errors_ref)++;
 	}
 
-	//We first need to calculate the dominator sets of every single node
-	calculate_dominator_sets(cfg);
-	
-	//Now we'll build the dominator tree up
-	build_dominator_trees(cfg);
-
-	//We need to calculate the dominance frontier of every single block before
-	//we go any further
-	calculate_dominance_frontiers(cfg);
-
-	//Calculate the postdominator sets for later analysis in the optimizer
-	calculate_postdominator_sets(cfg);
-
-	//We'll also now calculate the reverse dominance frontier that will be used
-	//in later analysis by the optimizer
-	calculate_reverse_dominance_frontiers(cfg);
+	//Let the helper deal with this
+	calculate_all_control_relations(cfg, FALSE);
 
 	//now we calculate the liveness sets
 	calculate_liveness_sets(cfg);

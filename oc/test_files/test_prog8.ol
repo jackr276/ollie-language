@@ -16,12 +16,14 @@ fn main() -> i32{
 
 	let b:i32 := arr[3][2];
 
-	let _:i32 := 0;
 
-	while(_ < 32) do {
+	do{
+	//while(b < 32) do{
+	//for(let _:i32 := 0; _ < 838; _++) do{
 		a++;
-		_++;
-	}
+		break when (a == 32);
+		b--;
+	} while(b < 32);
 
 
 	ret a;

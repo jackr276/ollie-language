@@ -165,6 +165,16 @@ void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node
 void dealloc_cfg(cfg_t* cfg);
 
 /**
+ * Destroy all old control relations in anticipation of new ones coming in
+ */
+void cleanup_all_control_relations(cfg_t* cfg);
+
+/**
+ * Calculate(or recalculate) all control relations in the CFG
+ */
+void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh);
+
+/**
  * For DEBUGGING purposes - we will print all of the blocks in the control
  * flow graph. This is meant to be invoked by the programmer, and as such is exposed
  * via the header file

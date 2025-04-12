@@ -105,7 +105,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//This counts as a change
 				changed = TRUE;
 			}
-
 		}
 		//Otherwise we're all set
 
@@ -334,15 +333,12 @@ static void sweep(cfg_t* cfg){
 				//We'll first find the nearest marked postdominator
 				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
 
-
-				if(immediate_postdominator != NULL){
-					//We'll then emit a jump to that node
-					three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
-					//Add this statement in
-					add_statement(block, jump_stmt);
-					//It is also now a successor
-					add_successor(block, immediate_postdominator);
-				}
+				//We'll then emit a jump to that node
+				three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
+				//Add this statement in
+				add_statement(block, jump_stmt);
+				//It is also now a successor
+				add_successor(block, immediate_postdominator);
 
 				//And go onto the next iteration
 				continue;
@@ -511,7 +507,6 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 				}
 			}
-		
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;
@@ -610,7 +605,13 @@ cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
 	//entire block. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
-	clean(cfg);
+	//clean(cfg);
+
+	//PASS 4: Recalculate everything
+	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
+	//etc. So, to remedy this, we will recalculate everything in the CFG
+	//cleanup_all_control_relations(cfg);
+	//calculate_all_control_relations(cfg, TRUE);
 	
 	return cfg;
 }
