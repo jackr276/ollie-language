@@ -3441,7 +3441,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	if(ast_cursor->first_child != NULL){
 		//This is always the first part of the repeating block
 		condition_block_vals = emit_expr_code(condition_block, ast_cursor->first_child, TRUE);
-
 	//It is impossible for the second one to be blank
 	} else {
 		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Should not have gotten here if blank", for_stmt_node->line_number);
@@ -3534,13 +3533,14 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
-	//The successor to the end block is the update block
+	//If it ends in a return statement, there is no point in continuing this
+	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+		//We also need an uncoditional jump right to the update block
+		emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP, TRUE);
+	}
+
+	//We'll add the successor either way for control flow reasons
 	add_successor(compound_stmt_end, for_stmt_update_block);
-
-	//We also need an uncoditional jump right to the update block
-	emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP, TRUE);
-
-
 
 	//The direct successor to the entry block is the exit block, for efficiency reasons
 	for_stmt_entry_block->direct_successor = for_stmt_exit_block;
@@ -3601,6 +3601,11 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//So long as we don't see NULL or return
 	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 		compound_stmt_end = compound_stmt_end->direct_successor;
+	}
+
+	//If we get this, we can't go forward. Just give it back
+	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
+		return do_while_stmt_entry_block;
 	}
 
 	//Add the conditional check into the end here
@@ -3714,15 +3719,18 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		compound_stmt_end = compound_stmt_end->direct_successor;
 	}
 
-	//A successor to the end block is the block at the top of the loop
-	add_successor(compound_stmt_end, while_statement_entry_block);
-	//His direct successor is the end block
-	add_successor(compound_stmt_end, while_statement_end_block);
+	//If it's not a return statement, we can add all of these in
+	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+		//A successor to the end block is the block at the top of the loop
+		add_successor(compound_stmt_end, while_statement_entry_block);
+		//His direct successor is the end block
+		add_successor(compound_stmt_end, while_statement_end_block);
+		//The compound statement end will jump right back up to the entry block
+		emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP, TRUE);
+	}
+
 	//Set this to make sure
 	compound_stmt_end->direct_successor = while_statement_end_block;
-
-	//The compound statement end will jump right back up to the entry block
-	emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP, TRUE);
 
 	//Now we're done, so
 	return while_statement_entry_block;
@@ -3990,6 +3998,13 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 
 			//Emit the return statement, let the sub rule handle
 			emit_ret_stmt(current_block, current_node, FALSE);
+
+			//Destroy any/all successors of the current block. Once you have a return statement in a block, there
+			//can be no other successors
+			if(current_block->successors != NULL){
+				dynamic_array_dealloc(current_block->successors);
+				current_block->successors = NULL;
+			}
 
 			//A successor to this current block is the function exit block
 			add_successor(current_block, function_exit_block);
@@ -4627,6 +4642,13 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Emit the return statement, let the sub rule handle
 			emit_ret_stmt(current_block, ast_cursor, FALSE);
+
+			//Destroy any/all successors of the current block. Once you have a return statement in a block, there
+			//can be no other successors
+			if(current_block->successors != NULL){
+				dynamic_array_dealloc(current_block->successors);
+				current_block->successors = NULL;
+			}
 
 			//A successor to this block is the exit block
 			add_successor(current_block, function_exit_block);

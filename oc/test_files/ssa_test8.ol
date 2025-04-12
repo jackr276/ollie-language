@@ -27,6 +27,7 @@ fn main() -> i32{
 	if(x == 32) then {
 		x := x + 3222;
 		y := 323;
+		//ret x;
 	} else {
 		x := 32;
 		y := x + y + 3;
@@ -35,7 +36,7 @@ fn main() -> i32{
 	let mut w:i32 := x + y;
 
 	//w := 327;
-	w := 322;
+//	w := 322;
 
 	idle;
 
