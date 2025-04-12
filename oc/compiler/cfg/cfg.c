@@ -961,7 +961,7 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 		}
 	}
 
-	//Otherwise we didn't find it, so there is no immediate dominator
+	//Otherwise we didn't find it, so there is no immediate postdominator
 	return NULL;
 }
 
@@ -2289,6 +2289,8 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 	//This will count as live if we read from it
 	if(incrementee->is_temporary == FALSE){
 		add_assigned_variable(basic_block, incrementee);
+		//This is a rare case were we're assigning to AND using
+		add_used_variable(basic_block, incrementee);
 	}
 
 	//Mark this with whatever was passed through
@@ -2312,6 +2314,8 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 	//This will count as live if we read from it
 	if(decrementee->is_temporary == FALSE){
 		add_assigned_variable(basic_block, decrementee);
+		//This is a rare case were we're assigning to AND using
+		add_used_variable(basic_block, decrementee);
 	}
 
 	//Mark this with whatever was passed through
@@ -3420,6 +3424,9 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//The condition block is always a successor to the entry block
 	add_successor(for_stmt_entry_block, condition_block);
 
+	//We will now emit a jump from the entry block, to the condition block
+	emit_jmp_stmt(for_stmt_entry_block, condition_block, JUMP_TYPE_JMP ,TRUE);
+
 	//Move along to the next node
 	ast_cursor = ast_cursor->next_sibling;
 
@@ -3454,13 +3461,13 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		//Emit the update expression
 		emit_expr_code(for_stmt_update_block, ast_cursor->first_child, TRUE);
 	}
-
-	//This node will always jump right back to the start
-	add_successor(for_stmt_update_block, condition_block);
 	
 	//Unconditional jump to condition block
 	emit_jmp_stmt(for_stmt_update_block, condition_block, JUMP_TYPE_JMP, TRUE);
 
+	//This node will always jump right back to the start
+	add_successor(for_stmt_update_block, condition_block);
+	
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
 	
@@ -3504,10 +3511,17 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//This will always be a successor to the conditional statement
 	add_successor(condition_block, compound_stmt_start);
 
+	//We must also remember that the condition block can point to the ending block, because
+	//if the condition fails, we will be jumping here
+	add_successor(condition_block, for_stmt_exit_block);
+
 	//Make the condition block jump to the compound stmt start
 	emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type, TRUE);
 
-	//The conditional block ends in a branch
+	//Emit a direct jump from the condition block to the compound stmt start
+	emit_jmp_stmt(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE);
+
+		//The conditional block ends in a branch
 	condition_block->ends_in_conditional_branch = TRUE;
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
@@ -3524,9 +3538,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//We also need an uncoditional jump right to the update block
 	emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP, TRUE);
 
-	//We must also remember that the condition block can point to the ending block, because
-	//if the condition fails, we will be jumping here
-	add_successor(condition_block, for_stmt_exit_block);
+
 
 	//The direct successor to the entry block is the exit block, for efficiency reasons
 	for_stmt_entry_block->direct_successor = for_stmt_exit_block;
@@ -4128,9 +4140,10 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			if(starting_block == NULL){
 				starting_block = for_stmt_entry_block;
 				current_block = starting_block;
-			//We ALWAYS merge for statements into the current block
+			//Don't merge, just add successors
 			} else {
-				current_block = merge_blocks(current_block, for_stmt_entry_block);
+				add_successor(current_block, for_stmt_entry_block);
+				current_block = for_stmt_entry_block;
 			}
 			
 			//Once we're here the start is in current
@@ -4203,10 +4216,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
-					basic_block_t* successor = current_block->direct_successor;
 					add_successor(current_block, values->for_loop_update_block);
-					//Restore the direct successor
-					current_block->direct_successor = successor;
 					//Emit a direct unconditional jump statement to it
 					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE);
 				}
@@ -4260,12 +4270,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//There are two options here. If we're in a loop, that takes precedence. If we're in
 				//a switch statement, then that takes precedence
 				if(values->loop_stmt_end != NULL){
-					//This block can jump right out of the loop
-					basic_block_t* successor = current_block->direct_successor;
 					add_successor(current_block, values->loop_stmt_end);
-					//Restore
-					current_block->direct_successor = successor;
-
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
 
@@ -4740,9 +4745,10 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			if(starting_block == NULL){
 				starting_block = for_stmt_entry_block;
 				current_block = starting_block;
-			//We ALWAYS merge for statements into the current block
+			//We don't merge, we'll add successors
 			} else {
-				current_block = merge_blocks(current_block, for_stmt_entry_block);
+				add_successor(current_block, for_stmt_entry_block);
+				current_block = for_stmt_entry_block;
 			}
 			
 			//Once we're here the start is in current

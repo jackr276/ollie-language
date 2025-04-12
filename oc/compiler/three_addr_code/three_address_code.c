@@ -607,7 +607,8 @@ three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decremen
 
 	//Now we populate
 	dec_stmt->CLASS = THREE_ADDR_CODE_DEC_STMT;
-	dec_stmt->assignee = decrementee;
+	dec_stmt->assignee = emit_var_copy(decrementee);
+	dec_stmt->op1 = decrementee;
 	//What function are we in
 	dec_stmt->function = current_function;
 	//And give it back
@@ -624,7 +625,8 @@ three_addr_code_stmt_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incremen
 
 	//Now we populate
 	inc_stmt->CLASS = THREE_ADDR_CODE_INC_STMT;
-	inc_stmt->assignee = incrementee;
+	inc_stmt->assignee = emit_var_copy(incrementee);
+	inc_stmt->op1 = incrementee;
 	//What function are we in
 	inc_stmt->function = current_function;
 	//And give it back

@@ -316,7 +316,6 @@ static void sweep(cfg_t* cfg){
 				//and we'll lose the reference if we do
 				basic_block_t* block = stmt->block_contained_in;
 
-
 				//What we'll need to do is delete everythin here that is branch ending
 				//and useless
 				while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
@@ -605,7 +604,7 @@ cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
 	//entire block. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
-	//clean(cfg);
+	clean(cfg);
 
 	//PASS 4: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
