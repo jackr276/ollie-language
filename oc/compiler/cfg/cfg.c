@@ -1946,25 +1946,20 @@ static void rename_block(basic_block_t* entry){
 		
 		//Yet another cursor
 		three_addr_code_stmt_t* succ_cursor = successor->leader_statement;
-		//The address of the variable
-		int16_t var_addr;
 
 		//So long as it isn't null AND it's a phi function
 		while(succ_cursor != NULL && succ_cursor->CLASS == THREE_ADDR_CODE_PHI_FUNC){
-			//If we can find this phi function variable inside of the assigned variables
-			if((var_addr = variable_dynamic_array_contains(entry->assigned_variables, succ_cursor->assignee)) != NOT_FOUND){
-				//Grab the variable out
-				three_addr_var_t* phi_func_var = dynamic_array_get_at(entry->assigned_variables, var_addr);
+			//We have a phi function, so what are we assigning to it?
+			symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
 
-				//Emit a variable for it
-				three_addr_var_t* phi_func_param = emit_var(phi_func_var->linked_var, FALSE);
+			//Emit a new variable for this one
+			three_addr_var_t* phi_func_param = emit_var(phi_func_var, FALSE);
 
-				//Emit the name for this variable
-				rhs_new_name(phi_func_param);
+			//Emit the name for this variable
+			rhs_new_name(phi_func_param);
 
-				//Now add it into the phi function
-				add_phi_parameter(succ_cursor, phi_func_param);
-			}
+			//Now add it into the phi function
+			add_phi_parameter(succ_cursor, phi_func_param);
 
 			//Advance this up
 			succ_cursor = succ_cursor->next_statement;
