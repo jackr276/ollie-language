@@ -477,6 +477,12 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
+			} else if(current_stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
+				current_stmt->mark = TRUE;
+				//Add it to the list
+				dynamic_array_add(worklist, current_stmt);
+				//The block now has a mark
+				current->contains_mark = TRUE;
 			} else if(current_stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
 				current_stmt->mark = TRUE;
 				//Add it to the list

@@ -1897,7 +1897,8 @@ static void rename_block(basic_block_t* entry){
 
 		//And now if it's anything else that has an assignee, operands, etc,
 		//we'll need to rewrite all of those as well
-		} else {
+		//We'll exclude direct jump statements, these we don't care about
+		} else if(cursor->CLASS != THREE_ADDR_CODE_DIR_JUMP_STMT && cursor->CLASS != THREE_ADDR_CODE_LABEL_STMT){
 			//If we get here we know that we don't have a phi function
 
 			//If we have a non-temp variable, rename it
@@ -1980,7 +1981,8 @@ static void rename_block(basic_block_t* entry){
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
 		//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-		if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+		if(cursor->CLASS != THREE_ADDR_CODE_DIR_JUMP_STMT && cursor->CLASS != THREE_ADDR_CODE_LABEL_STMT &&
+			cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
 			//Pop it off
 			lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
 		}

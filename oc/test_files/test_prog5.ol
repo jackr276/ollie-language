@@ -57,6 +57,7 @@ fn main() -> i32{
 	let mut my_val:i32 := x + -32;
 	let mut teste:i32 := TEST_INT;
 	let test_char:char := my_char;
+	jump $label1;
 
 	//Example asm inline statement
 	defer asm{
