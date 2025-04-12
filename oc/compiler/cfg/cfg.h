@@ -102,6 +102,8 @@ struct basic_block_t{
 	block_terminal_type_t block_terminal_type;
 	//Was this block visited by traverser?
 	u_int8_t visited;
+	//Does this block end in a conditional branch?
+	u_int8_t ends_in_conditional_branch;
 	//Predecessor nodes
 	dynamic_array_t* predecessors;
 	//Successor nodes
@@ -173,6 +175,11 @@ void print_all_cfg_blocks(cfg_t* cfg);
  * Reset the visited status of the CFG
  */
 void reset_visited_status(cfg_t* cfg);
+
+/**
+ * Deallocate a block
+ */
+void basic_block_dealloc(basic_block_t* block);
 
 /**
  * Compute the postorder traversal for a function-level cfg

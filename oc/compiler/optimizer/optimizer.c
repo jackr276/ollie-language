@@ -14,15 +14,107 @@
 #define FALSE 0
 
 
+/**
+ * Replace all targets that jump to "empty block" with "replacement". This is a helper 
+ * function for the "Empty Block Removal" step of clean()
+ */
+static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, basic_block_t* replacement){
+	//For everything in the predecessor set of the empty block
+	for(u_int16_t _ = 0; _ < empty_block->predecessors->current_index; _++){
+		//Grab a given predecessor out
+		basic_block_t* predecessor = dynamic_array_get_at(empty_block->predecessors, _);
+
+		//We'll firstly remove the empty block as a successor
+		dynamic_array_delete(predecessor->successors, empty_block); 
+		//We won't even bother modifying the empty block's predecessors -- it's being deleted anyways
+
+		//Now we'll go through every single statement in this block. If it's a jump statement whose target
+		//is the empty block, we'll replace that reference with the replacement
+		three_addr_code_stmt_t* current_stmt = predecessor->leader_statement;
+
+		//So long as this isn't null
+		while(current_stmt != NULL){
+			//If it's a jump statement AND the jump target is the empty block, we're interested
+			if(current_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && current_stmt->jumping_to_block == empty_block){
+				//Update the reference
+				current_stmt->jumping_to_block = replacement;
+				//Be sure to add the new block as a successor 
+				add_successor(predecessor, replacement);
+			}
+
+			//Advance it
+			current_stmt = current_stmt->next_statement;
+		}
+	}
+
+	//We also want to remove this block from the predecessors of the replacement
+	dynamic_array_delete(replacement->predecessors, empty_block);
+	
+	//This block is now entirely useless, so we delete it
+	dynamic_array_delete(cfg->created_blocks, empty_block);
+
+	//Deallocate this
+	//basic_block_dealloc(empty_block);
+}
+
 
 /**
  * The branch reduce function is what we use on each pass of the function
  * postorder
+ *
+ * Procedure branch_reduce():
+ * 	for each block in postorder
+ * 		if i ends in a conditional branch
+ * 			if both targets are identical then
+ * 				replace branch with a jump
+ *
+ * 		if i ends in a jump to j then
+ * 			if i is empty then
+ * 				replace transfers to i with transfers to j
+ * 			if j has only one predecessor then
+ * 				merge i and j
+ * 			if j is empty and ends in a conditional branch then
+ * 				overwrite i's jump with a copy of j's branch
  */
-static u_int8_t branch_reduce(dynamic_array_t* postorder){
-	//DUMMY FOR NOW
-	return FALSE;
+static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
+	//Have we seen a change? By default we assume not
+	u_int8_t changed = FALSE;
+
+	//Our current block
+	basic_block_t* current;
+
+	//For each block in postorder
+	for(u_int16_t _ = 0; _ < postorder->current_index; _++){
+		//Grab the current block out
+		current = dynamic_array_get_at(postorder, _);
+
+		//Does this block end in a conditional branch?	
+		if(current->ends_in_conditional_branch == TRUE){
+			
+
+		//Do we end in a jump statement?
+		} else if(current->exit_statement != NULL && current->exit_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+			//=============================== EMPTY BLOCK REMOVAL ============================================
+			//If this is the only thing that is in here, then the entire block is redundant and just serves as a branching
+			//point. As such, we'll replace branches to i with branches to whatever it jumps to
+			if(current->leader_statement == current->exit_statement && current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+				//Replace any and all statements that jump to "current" with ones that jump to whichever block it
+				//unconditionally jumps to
+				replace_all_jump_targets(cfg, current, current->exit_statement->jumping_to_block);
+
+				//This counts as a change
+				changed = TRUE;
+			}
+
+		}
+		//Otherwise we're all set
+
+	}
+
+	//Give back whether or not we changed
+	return changed;
 }
+
 
 /**
  * The clean algorithm will remove all useless control flow structures, ideally
@@ -34,7 +126,7 @@ static u_int8_t branch_reduce(dynamic_array_t* postorder){
  * Procedure clean():
  * 	while changed
  * 	 compute Postorder of CFG
- * 	 branch_reduct()
+ * 	 branch_reduce()
  *
  * Procedure branch_reduce():
  * 	for each block in postorder
@@ -69,7 +161,7 @@ static void clean(cfg_t* cfg){
 			postorder = compute_post_order_traversal(function_entry);
 
 			//Call onepass() for the reduction
-			changed = branch_reduce(postorder);
+			changed = branch_reduce(cfg, postorder);
 
 			//We can free up the old postorder now
 			dynamic_array_dealloc(postorder);
@@ -153,9 +245,13 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 		//Mark this for later
 		candidate->visited = TRUE;
 
-		//Now let's check for our criterion
+		//Now let's check for our criterion.
+		//We want:
+		//	it to be in the postdominator set
+		//	it to have a mark
+		//	it to not equal itself
 		if(dynamic_array_contains(B->postdominator_set, candidate) != NOT_FOUND
-		  && candidate->contains_mark == TRUE){
+		  && candidate->contains_mark == TRUE && B != candidate){
 			//We've found it, so we're done
 			nearest_marked_postdominator = candidate;
 			//Get out
@@ -237,12 +333,16 @@ static void sweep(cfg_t* cfg){
 
 				//We'll first find the nearest marked postdominator
 				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
-				//We'll then emit a jump to that node
-				three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
-				//Add this statement in
-				add_statement(block, jump_stmt);
-				//It is also now a successor
-				add_successor(block, immediate_postdominator);
+
+
+				if(immediate_postdominator != NULL){
+					//We'll then emit a jump to that node
+					three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
+					//Add this statement in
+					add_statement(block, jump_stmt);
+					//It is also now a successor
+					add_successor(block, immediate_postdominator);
+				}
 
 				//And go onto the next iteration
 				continue;

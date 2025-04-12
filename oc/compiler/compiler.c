@@ -100,7 +100,7 @@ int main(int argc, char** argv){
 
 	//If the AST root is bad, there's no use in going on here
 	if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
-		printf("HERE\n");
+		printf("CFG CONSTRUCTOR WILL NOT BE INVOKED\n");
 		goto final_printout;
 	}
 
