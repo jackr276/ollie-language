@@ -483,6 +483,12 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
+			} else if(current_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && current->block_type == BLOCK_TYPE_FOR_STMT_UPDATE){
+				current_stmt->mark = TRUE;
+				//Add it to the list
+				dynamic_array_add(worklist, current_stmt);
+				//The block now has a mark
+				current->contains_mark = TRUE;
 			//We need to check - are we manipulating any global variables here? If we
 			//are, those are also considered important
 			} else if(current_stmt->assignee != NULL && current_stmt->assignee->is_temporary == FALSE){
