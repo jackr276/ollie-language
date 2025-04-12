@@ -13,8 +13,6 @@
 
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
-//The atomically increasing sequence number
-static int32_t current_sequence_number = 0;
 //The current function
 static symtab_function_record_t* current_function = NULL;
 
@@ -31,25 +29,12 @@ static int32_t increment_and_get_temp_id(){
 	return current_temp_id;
 }
 
-
-/**
- * A helper function that gets the sequence statement of a block
- */
-static u_int32_t increment_and_get_sequence_number(){
-	//Increment and return
-	current_sequence_number++;
-	return current_sequence_number;
-}
-
-
 /**
  * Declare that we are in a new function
  */
 void set_new_function(symtab_function_record_t* func){
 	//We'll save this up top
 	current_function = func;
-	//Also reset the sequence number
-	current_sequence_number = 0;
 }
 
 
@@ -141,8 +126,6 @@ three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee
 	stmt->op1 = op1;
 	stmt->op2 = op2;
 	stmt->lea_multiplicator = type_size;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//This is an address, so it must be a quad word
@@ -163,8 +146,6 @@ three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* label)
 	stmt->assignee = label;
 	//Note the class too
 	stmt->CLASS = THREE_ADDR_CODE_LABEL_STMT;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//And give it back
@@ -183,8 +164,6 @@ three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jump
 	stmt->assignee = jumping_to;
 	//Note the class too
 	stmt->CLASS = THREE_ADDR_CODE_DIR_JUMP_STMT;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//and give it back
@@ -201,8 +180,6 @@ three_addr_code_stmt_t* emit_idle_statement_three_addr_code(){
 
 	//Store the class
 	stmt->CLASS = THREE_ADDR_CODE_IDLE_STMT;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//And we're done
@@ -607,6 +584,16 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		}
 
 		printf(")\n");
+	//Print out a conditional branch statement
+	} else if(stmt->CLASS == THREE_ADDR_CODE_COND_BRANCH_STMT){
+		printf("CBR(");
+
+		//Print out the assignee
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+
+		basic_block_t* if_target = stmt->if_branch_target;
+		basic_block_t* else_target = stmt->else_branch_target;
+		printf(", .L%d, .L%d)\n", if_target->block_id, else_target->block_id);
 	}
 }
 
@@ -621,8 +608,6 @@ three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decremen
 	//Now we populate
 	dec_stmt->CLASS = THREE_ADDR_CODE_DEC_STMT;
 	dec_stmt->assignee = decrementee;
-	//Add in the sequence number
-	dec_stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	dec_stmt->function = current_function;
 	//And give it back
@@ -640,8 +625,6 @@ three_addr_code_stmt_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incremen
 	//Now we populate
 	inc_stmt->CLASS = THREE_ADDR_CODE_INC_STMT;
 	inc_stmt->assignee = incrementee;
-	//Add in the sequence number
-	inc_stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	inc_stmt->function = current_function;
 	//And give it back
@@ -709,8 +692,6 @@ three_addr_code_stmt_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee
 	stmt->CLASS = THREE_ADDR_CODE_RET_STMT;
 	//Set op1 to be the returnee
 	stmt->op1 = returnee;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//And that's all, so we'll hop out
@@ -732,8 +713,6 @@ three_addr_code_stmt_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, 
 	stmt->op1 = op1;
 	stmt->op = op;
 	stmt->op2 = op2;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//Give back the newly allocated statement
@@ -754,8 +733,6 @@ three_addr_code_stmt_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t*
 	stmt->op1 = op1;
 	stmt->op = op;
 	stmt->op1_const = op2;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//Give back the newly allocated statement
@@ -775,8 +752,6 @@ three_addr_code_stmt_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assigne
 	stmt->CLASS = THREE_ADDR_CODE_ASSN_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//And that's it, we'll just leave our now
@@ -795,8 +770,6 @@ three_addr_code_stmt_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* a
 	stmt->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
 	stmt->assignee = assignee;
 	stmt->op1_const = constant;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//And that's it, we'll now just give it back
@@ -815,8 +788,6 @@ three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, ju
 	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
 	stmt->jumping_to_block = jumping_to_block;
 	stmt->jump_type = jump_type;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//Give the statement back
@@ -835,8 +806,6 @@ three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t*
 	stmt->CLASS = THREE_ADDR_CODE_FUNC_CALL;
 	stmt->func_record = func_record;
 	stmt->assignee = assigned_to;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 	//We do NOT add parameters here, instead we had them in the CFG function
@@ -877,8 +846,6 @@ three_addr_code_stmt_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee
 	stmt->CLASS = THREE_ADDR_CODE_NEG_STATEMENT;
 	stmt->assignee = assignee;
 	stmt->op1 = negatee;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 
@@ -900,8 +867,6 @@ three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var){
 	stmt->assignee = var;
 	//For the potential of temp variables
 	stmt->op1 = var;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 
@@ -922,8 +887,6 @@ three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* 
 	stmt->assignee = assignee;
 	//Leave it in here
 	stmt->op1 = var;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 
@@ -948,8 +911,6 @@ three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_n
 
 	//Copy the assembly over
 	strncpy(stmt->inlined_assembly, asm_inline_node->asm_line_statements, asm_inline_node->length);
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 
@@ -971,12 +932,33 @@ three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable){
 
 	//Note what kind of node this is
 	stmt->CLASS = THREE_ADDR_CODE_PHI_FUNC;
-	//Add in the sequence number
-	stmt->sequence_number = increment_and_get_sequence_number();
 	//What function are we in
 	stmt->function = current_function;
 
 	//And give the statement back
+	return stmt;
+}
+
+
+/**
+ * Emit a conditional branch statement
+ */
+three_addr_code_stmt_t* emit_cbr_statement_three_addr_code(three_addr_var_t* assignee, void* if_branch_target, void* else_branch_target){
+	//First we allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	
+	//Store these all
+	stmt->assignee = assignee;
+	stmt->if_branch_target = if_branch_target;
+	stmt->else_branch_target = else_branch_target;
+
+	//Mark the type
+	stmt->CLASS = THREE_ADDR_CODE_COND_BRANCH_STMT;
+
+	//Mark the function
+	stmt->function = current_function;
+
+	//And give it back
 	return stmt;
 }
 

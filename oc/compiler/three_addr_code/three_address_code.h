@@ -104,7 +104,9 @@ typedef enum{
 	//A "Load effective address(lea)" instruction
 	THREE_ADDR_CODE_LEA_STMT,
 	//A phi function - for SSA analysis only
-	THREE_ADDR_CODE_PHI_FUNC
+	THREE_ADDR_CODE_PHI_FUNC,
+	//A conditional branch OIR statement
+	THREE_ADDR_CODE_COND_BRANCH_STMT
 } three_addr_code_stmt_class_t;
 
 /**
@@ -185,8 +187,9 @@ struct three_addr_code_stmt_t{
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
-	//What is the sequence number of this statement
-	u_int32_t sequence_number;
+	//These are both for conditional branch statements
+	void* if_branch_target;
+	void* else_branch_target;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
 	//The function called
@@ -328,6 +331,11 @@ three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable);
  * Emit an idle statement
  */
 three_addr_code_stmt_t* emit_idle_statement_three_addr_code();
+
+/**
+ * Emit a conditional branch statement
+ */
+three_addr_code_stmt_t* emit_cbr_statement_three_addr_code(three_addr_var_t* assignee, void* if_branch_target, void* else_branch_target);
 
 /**
  * Pretty print a three address code statement
