@@ -3067,11 +3067,6 @@ static void basic_block_dealloc(basic_block_t* block){
 		dynamic_array_dealloc(block->reverse_post_order);
 	}
 
-	//Deallocate the postorder set
-	if(block->post_order != NULL){
-		dynamic_array_dealloc(block->post_order);
-	}
-
 	//Deallocate the liveness sets
 	if(block->live_out != NULL){
 		dynamic_array_dealloc(block->live_out);

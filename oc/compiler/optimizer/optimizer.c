@@ -14,12 +14,69 @@
 #define FALSE 0
 
 
+
+/**
+ * The branch reduce function is what we use on each pass of the function
+ * postorder
+ */
+static u_int8_t branch_reduce(dynamic_array_t* postorder){
+	//DUMMY FOR NOW
+	return FALSE;
+}
+
 /**
  * The clean algorithm will remove all useless control flow structures, ideally
- * resulting in a simplified CFG. This should be done after we use mark and sweep to get rid of useless code, because that may lead to empty blocks that we can clean up here
+ * resulting in a simplified CFG. This should be done after we use mark and sweep to get rid of useless code,
+ * because that may lead to empty blocks that we can clean up here
+ *
+ * Algorithm:
+ *
+ * Procedure clean():
+ * 	while changed
+ * 	 compute Postorder of CFG
+ * 	 branch_reduct()
+ *
+ * Procedure branch_reduce():
+ * 	for each block in postorder
+ * 	
+ * 	if i ends in a conditional branch
+ * 		if both targets are identical then
+ * 			replace branch with a jump
+ *
+ * 	if i ends in a jump to j then
+ * 		if i is empty then
+ * 			replace transfers to i with transfers to j
+ * 		if j has only one predecessor then
+ * 			merge i and j
+ * 		if j is empty and ends in a conditional branch then
+ * 			overwrite i's jump with a copy of j's branch
  */
 static void clean(cfg_t* cfg){
+	//For each function in the CFG
+	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+		//Have we seen change(modification) at all?
+		u_int8_t changed;
 
+		//Grab the function block out
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_blocks, _);
+
+		//The postorder traversal array
+		dynamic_array_t* postorder;
+
+		//Now we'll do the actual clean algorithm
+		do {
+			//Compute the new postorder
+			postorder = compute_post_order_traversal(function_entry);
+
+			//Call onepass() for the reduction
+			changed = branch_reduce(postorder);
+
+			//We can free up the old postorder now
+			dynamic_array_dealloc(postorder);
+			
+		//We keep going so long as branch_reduce changes something 
+		} while(changed == TRUE);
+	}
 }
 
 
@@ -431,20 +488,6 @@ static void mark(cfg_t* cfg){
 
 
 /**
- * The mark-and-sweep dead code elimintation algorithm. This helper function will invoke
- * both for us in the correct order, all that we need do is call it
- */
-static void mark_and_sweep(cfg_t* cfg){
-	//First we'll use the mark algorithm to mark all non-essential operations
-	mark(cfg);
-
-	//Now once everything has been marked, we'll invoke sweep to get rid of all
-	//dead operations
-	sweep(cfg);
-}
-
-
-/**
  * The generic optimize function. We have the option to specific how many passes the optimizer
  * runs for in it's current iteration
 */
@@ -453,21 +496,22 @@ cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//that we won't have any issues with the CFG in terms of traversal
 	reset_visited_status(cfg);
 
-	//STEP 1: USELESS CODE ELIMINATION
+	//PASS 1: Mark algorithm
+	//The mark algorithm marks all useful operations. It will perform one full pass of the program
+	mark(cfg);
 
-	//We will first use mark and sweep to eliminate any/all dead code that we can find. Code is dead
-	//if
-	mark_and_sweep(cfg);
-
-	//Now that we're done with that, any/all useless code should be removed
+	//PASS 2: Sweep algorithm
+	//Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
+	//comes across branch ending statements that are unmarked, it will replace them with a jump to the
+	//nearest marked postdominator
+	sweep(cfg);
 	
-	//STEP 2: USELESS CONTROL FLOW ELIMINATION
-	
-	//Next, we will eliminate any/all useless control flow from the function. This is done by the clean()
-	//algorithm
-	
+	//PASS 3: Clean algorithm
+	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
+	//entire block. Clean uses 4 different steps in a specific order to eliminate control flow
+	//that has been made useless by sweep()
+	clean(cfg);
 	
 	return cfg;
-
 }
 
