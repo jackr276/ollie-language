@@ -15,6 +15,127 @@
 
 
 /**
+ * Combine two blocks into one
+ */
+static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
+	//If b is null, we just return a. This in reality should never happen
+	if(b == NULL){
+		return;
+	}
+
+	//What if a was never even assigned?
+	if(a->exit_statement == NULL){
+		a->leader_statement = b->leader_statement;
+		a->exit_statement = b->exit_statement;
+
+	//If the leader statement is NULL - we really don't need to do anything. If it's not however, we
+	//will need to add everything in
+	} else if(b->leader_statement != NULL){
+		//Otherwise it's a "true merge"
+		//The leader statement in b will be connected to a's tail
+		a->exit_statement->next_statement = b->leader_statement;
+		//Connect backwards too
+		b->leader_statement->previous_statement = a->exit_statement;
+		//Now once they're connected we'll set a's exit to be b's exit
+		a->exit_statement = b->exit_statement;
+	}
+
+	//In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
+	//As such, we won't even bother looking at the predecessors
+
+	//Now merge successors
+	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
+		//Add b's successors to be a's successors
+		add_successor_only(a, dynamic_array_get_at(b->successors, i));
+	}
+
+	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
+	//This is now wrong though. So, for each successor of B, it will need
+	//to have A as predecessor
+	for(u_int8_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
+		//Grab the block first
+		basic_block_t* successor_block = b->successors->internal_array[i];
+
+		//Now for each of the predecessors that equals b, it needs to now point to A
+		for(u_int8_t i = 0; successor_block->predecessors != NULL && i < successor_block->predecessors->current_index; i++){
+			//If it's pointing to b, it needs to be updated
+			if(successor_block->predecessors->internal_array[i] == b){
+				//Update it to now be correct
+				successor_block->predecessors->internal_array[i] = a;
+			}
+		}
+	}
+
+	//Also make note of any direct succession
+	a->direct_successor = b->direct_successor;
+
+	//Copy over the block type and terminal type
+	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		a->block_type = b->block_type;
+	}
+
+	//Copy this over too
+	a->block_terminal_type = b->block_terminal_type;
+
+	//For each statement in b, all of it's old statements are now "defined" in a
+	three_addr_code_stmt_t* b_stmt = b->leader_statement;
+
+	//Modify these "block contained in" references to be A
+	while(b_stmt != NULL){
+		b_stmt->block_contained_in = a;
+
+		//Push it up
+		b_stmt = b_stmt->next_statement;
+	}
+	
+	//We'll remove this from the list of created blocks
+	dynamic_array_delete(cfg->created_blocks, b);
+
+	//And finally we'll deallocate b
+	//basic_block_dealloc(b);
+}
+
+
+/**
+ * Delete a statement from the CFG - handling any/all edge cases that may arise
+ */
+static void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt){
+	//If it's the leader statement, we'll just update the references
+	if(block->leader_statement == stmt){
+		//Special case - it's the only statement. We'll just delete it here
+		if(block->leader_statement->next_statement == NULL){
+			//Just remove it entirely
+			block->leader_statement = NULL;
+			block->exit_statement = NULL;
+		//Otherwise it is the leader, but we have more
+		} else {
+			//Update the reference
+			block->leader_statement = stmt->next_statement;
+			//Set this to NULL
+			block->leader_statement->previous_statement = NULL;
+		}
+
+	//What if it's the exit statement?
+	} else if(block->exit_statement == stmt){
+		three_addr_code_stmt_t* previous = stmt->previous_statement;
+		//Nothing at the end
+		previous->next_statement = NULL;
+
+		//This now is the exit statement
+		block->exit_statement = previous;
+		
+	//Otherwise, we have one in the middle
+	} else {
+		//Regular middle deletion here
+		three_addr_code_stmt_t* previous = stmt->previous_statement;
+		three_addr_code_stmt_t* next = stmt->next_statement;
+		previous->next_statement = next;
+		next->previous_statement = previous;
+	}
+}
+
+
+/**
  * Replace all targets that jump to "empty block" with "replacement". This is a helper 
  * function for the "Empty Block Removal" step of clean()
  */
@@ -94,15 +215,35 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 		//Do we end in a jump statement?
 		} else if(current->exit_statement != NULL && current->exit_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+			//The block that we're jumping to
+			basic_block_t* jumping_to_block = current->exit_statement->jumping_to_block;
+			
 			//=============================== EMPTY BLOCK REMOVAL ============================================
 			//If this is the only thing that is in here, then the entire block is redundant and just serves as a branching
 			//point. As such, we'll replace branches to i with branches to whatever it jumps to
 			if(current->leader_statement == current->exit_statement && current->block_type != BLOCK_TYPE_FUNC_ENTRY){
 				//Replace any and all statements that jump to "current" with ones that jump to whichever block it
 				//unconditionally jumps to
-				replace_all_jump_targets(cfg, current, current->exit_statement->jumping_to_block);
+				replace_all_jump_targets(cfg, current, jumping_to_block);
 
 				//This counts as a change
+				changed = TRUE;
+
+			//============================== BLOCK MERGING =================================================
+			//This is another special case -- if the block we're jumping to only has one predecessor, then
+			//we may as well avoid the jump and just merge the two
+			} else if(jumping_to_block->predecessors->current_index == 1){
+				//We will combine(merge) the current block and the one that it's jumping to
+				//Remove the statement that jumps to the one we're about to merge
+				delete_statement(cfg, current, current->exit_statement); 
+
+				//By that same token, we no longer was current to have the jumping to block as a successor
+				dynamic_array_delete(current->successors, jumping_to_block);
+
+				//Now we'll actually merge the blocks
+				combine(cfg, current, jumping_to_block);
+				
+				//This will count as a change
 				changed = TRUE;
 			}
 		}
@@ -170,44 +311,6 @@ static void clean(cfg_t* cfg){
 	}
 }
 
-
-/**
- * Delete a statement from the CFG - handling any/all edge cases that may arise
- */
-static void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt){
-	//If it's the leader statement, we'll just update the references
-	if(block->leader_statement == stmt){
-		//Special case - it's the only statement. We'll just delete it here
-		if(block->leader_statement->next_statement == NULL){
-			//Just remove it entirely
-			block->leader_statement = NULL;
-			block->exit_statement = NULL;
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			block->leader_statement = stmt->next_statement;
-			//Set this to NULL
-			block->leader_statement->previous_statement = NULL;
-		}
-
-	//What if it's the exit statement?
-	} else if(block->exit_statement == stmt){
-		three_addr_code_stmt_t* previous = stmt->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		block->exit_statement = previous;
-		
-	//Otherwise, we have one in the middle
-	} else {
-		//Regular middle deletion here
-		three_addr_code_stmt_t* previous = stmt->previous_statement;
-		three_addr_code_stmt_t* next = stmt->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
-}
 
 
 /**

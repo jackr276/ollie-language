@@ -161,6 +161,12 @@ void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node
 //Add a successor to the block
  void add_successor(basic_block_t* target, basic_block_t* successor);
 
+//Exclusively add a predecessor to a block
+void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
+
+//Exclusively add a successor to a block
+ void add_successor_only(basic_block_t* target, basic_block_t* successor);
+
 //Deallocate our entire cfg structure
 void dealloc_cfg(cfg_t* cfg);
 

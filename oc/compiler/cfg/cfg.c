@@ -3215,7 +3215,7 @@ static basic_block_t* create_and_return_err(){
 /**
  * Exclusively add a successor to target. The predecessors of successor will not be touched
  */
-static void add_successor_only(basic_block_t* target, basic_block_t* successor){
+void add_successor_only(basic_block_t* target, basic_block_t* successor){
 	//If we ever find this - don't add it
 	if(target == successor){
 		return;
@@ -3246,7 +3246,7 @@ static void add_successor_only(basic_block_t* target, basic_block_t* successor){
  * Exclusively add a predecessor to target. Nothing with successors
  * will be touched
  */
-static void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
+void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
 	//If we ever find this - don't add it
 	if(target == predecessor){
 		return;

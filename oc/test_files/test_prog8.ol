@@ -21,7 +21,7 @@ fn main() -> i32{
 	//while(b < 32) do{
 	for(let _:i32 := 0; _ < 838; _++) do{
 		a++;
-		//ret a;
+		ret a;
 	} //while(b < 32);
 
 
