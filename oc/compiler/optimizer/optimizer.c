@@ -6,6 +6,7 @@
 */
 #include "optimizer.h"
 #include "../queue/heap_queue.h"
+#include <stdio.h>
 #include <sys/types.h>
 
 //Standard true and false definitions
@@ -163,14 +164,10 @@ static void sweep(cfg_t* cfg){
 				//and we'll lose the reference if we do
 				basic_block_t* block = stmt->block_contained_in;
 
+
 				//What we'll need to do is delete everythin here that is branch ending
 				//and useless
 				while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
-					//If it's a jump statement, we need to ameliorate the predecessors and successors
-					if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-						//TODO we need a way of figuring this out -- may be done by clean()
-					}
-
 					//Delete it
 					delete_statement(cfg, block, stmt);
 					//Perform the deletion and advancement
@@ -185,12 +182,12 @@ static void sweep(cfg_t* cfg){
 				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
 				//We'll then emit a jump to that node
 				three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
-
+				//Add this statement in
 				add_statement(block, jump_stmt);
 				//It is also now a successor
 				add_successor(block, immediate_postdominator);
 
-				//Now just go onto the next iteration
+				//And go onto the next iteration
 				continue;
 
 			//Otherwise we delete the statement

@@ -109,8 +109,8 @@ u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
 void dynamic_array_add(dynamic_array_t* array, void* ptr){
 	//Let's just double check here
 	if(ptr == NULL){
-		fprintf(stderr, "FATAL ERROR: Attempt to insert a null pointer into a dynamic array");
-		*ptr;
+		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
+		return;
 	}
 	
 	//Now we'll see if we need to reallocate this
@@ -184,7 +184,7 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
  */
 void dynamic_array_delete(dynamic_array_t* array, void* ptr){
 	//If this is NULL or empty we'll just return
-	if(ptr == NULL || array->current_index == 0){
+	if(ptr == NULL || array == NULL || array->current_index == 0){
 		return;
 	}
 
