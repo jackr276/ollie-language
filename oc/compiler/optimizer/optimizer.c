@@ -228,11 +228,12 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 				//This counts as a change
 				changed = TRUE;
+			}
 
 			//============================== BLOCK MERGING =================================================
 			//This is another special case -- if the block we're jumping to only has one predecessor, then
 			//we may as well avoid the jump and just merge the two
-			} else if(jumping_to_block->predecessors->current_index == 1){
+			if(jumping_to_block->predecessors->current_index == 1){
 				//We will combine(merge) the current block and the one that it's jumping to
 				//Remove the statement that jumps to the one we're about to merge
 				delete_statement(cfg, current, current->exit_statement); 
@@ -246,6 +247,19 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//This will count as a change
 				changed = TRUE;
 			}
+
+			//=============================== BRANCH HOISTING ==================================================
+			// The final special case - if we discover a that the block we're jumping to is empty and ends entirely
+			// in a conditional branch, then we can copy all of that conditional branch code into the branch
+			// that we're coming from
+			// If the very first statement is branch ending
+			//} else if(jumping_to_block->leader_statement->is_branch_ending == TRUE){
+				//If it's a direct jump statement, we aren't interested here. We only want to deal with conditional branching
+			//	if(jumping_to_block->leader_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT && jumping_to_block->leader_statement->op == JUMP){
+					//We don't want this case here - just go somewhere else
+			//		continue;
+			//	}
+
 		}
 		//Otherwise we're all set
 
