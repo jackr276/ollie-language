@@ -964,6 +964,35 @@ three_addr_code_stmt_t* emit_cbr_statement_three_addr_code(three_addr_var_t* ass
 	return stmt;
 }
 
+/**
+ * Emit a complete copy of whatever was in here previously
+ */
+three_addr_code_stmt_t* copy_three_addr_code_stmt(three_addr_code_stmt_t* copied){
+	//First we allocate
+	three_addr_code_stmt_t* copy = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Perform a complete memory copy
+	memcpy(copy, copied, sizeof(three_addr_code_stmt_t));
+
+	//Now we'll check for special values. NOTE: if we're using this, we should NOT have
+	//any phi functions OR assembly in here. The only thing that we might have are
+	//function calls
+	
+	//Null these out, better safe than sorry
+	copy->phi_function_parameters = NULL;
+	copy->inlined_assembly = NULL;
+	copy->next_statement = NULL;
+	copy->previous_statement = NULL;
+	
+	//If we have function call parameters, emit a copy of them
+	if(copied->function_parameters != NULL){
+		copy->function_parameters = clone_dynamic_array(copied->function_parameters);
+	}
+
+	//Give back the copied one
+	return copied;
+}
+
 
 /**
  * Deallocate the variable portion of a three address code

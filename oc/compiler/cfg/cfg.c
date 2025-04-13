@@ -3733,7 +3733,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		//A successor to the end block is the block at the top of the loop
 		add_successor(compound_stmt_end, while_statement_entry_block);
 		//His direct successor is the end block
-		add_successor(compound_stmt_end, while_statement_end_block);
+		compound_stmt_end->direct_successor = while_statement_end_block;
 		//The compound statement end will jump right back up to the entry block
 		emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP, TRUE);
 	}

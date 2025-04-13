@@ -7,6 +7,7 @@
 #include "optimizer.h"
 #include "../queue/heap_queue.h"
 #include <stdio.h>
+#include <sys/select.h>
 #include <sys/types.h>
 
 //Standard true and false definitions
@@ -218,12 +219,58 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
-		//Do we end in a jump statement? - this is the precursor to all optimizations
+		//Do we end in a jump statement? - this is the precursor to all optimizations in branch reduce
 		if(current->exit_statement != NULL && current->exit_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT){
 			//============================== REDUNDANT CONDITIONAL REMOVAL(FOLD) =================================
 			// If we have a block that ends in a conditional branch where all targets are the exact same, then
 			// the conditional branch is useless. We can replace the entire conditional with what's called a fold
-			//Does this block end in a conditional branch?	
+			
+			//Do we end in a conditional branch?
+			if(current->ends_in_conditional_branch == TRUE){
+				//So we do end in a conditional branch. Now the question is if we have the same jump target for all of our conditional
+				//jumps. Initially, we're going to assume that we don't
+				u_int8_t redundant_branch = FALSE;
+				
+				//What are we jumping to?
+				basic_block_t* end_branch_target = NULL;
+				
+				//Grab a statement cursor. This time, since we care about what we end with, we'll crawl from the bottom up
+				three_addr_code_stmt_t* stmt = current->exit_statement;
+
+				//So long as we are still branch ending and seeing statements
+				while(stmt != NULL && stmt->is_branch_ending == TRUE){
+					//If it isn't a jump statement, just move along
+					if(stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+						stmt = stmt->previous_statement;
+						continue;
+					}
+
+					//Otherwise it is a jump statement
+					//If we haven't seen one yet, then we'll mark it here
+					if(end_branch_target == NULL){
+						end_branch_target = stmt->jumping_to_block;
+					//Otherwise we have seen one. If these do not match, then we're done
+					//here
+					} else if(end_branch_target != stmt->jumping_to_block) {
+						//If this is the case, we're done. Set the flag to false and get
+						//out
+						redundant_branch = FALSE;
+						break;
+					//If we get alla the way down here, the two matched
+					} else {
+						//As of right now, we've seen a redundant branch
+						redundant_branch = TRUE;
+					}
+
+					//If we made it here, go to the prior statement
+					stmt = stmt->previous_statement;
+				}
+
+				//If we made it all of the way down here and this is true, we've found a redundant branch
+				if(redundant_branch == TRUE){
+					printf("Redundant branch found in .L%d", current->block_id);
+				}
+			}
 
 			//The block that we're jumping to
 			basic_block_t* jumping_to_block = current->exit_statement->jumping_to_block;
@@ -256,6 +303,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				
 				//This will count as a change
 				changed = TRUE;
+
+				//This is an endgame optimization. Once we've done this, there no longer is a branch for branch
+				//hoisting to look at. As such, if this happens, we'll continue to the next iteration
+				continue;
 			}
 
 			//=============================== BRANCH HOISTING ==================================================
@@ -265,23 +316,66 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//
 			// If the leader is branch ending AND the block ends in a conditional, this means that the block itself is entirely
 			// conditional
-			// If the very first statement is branch ending
+			// If the very first statement is branch ending and NOT a direct jump? If it is, we have a candidate for hoisting
 			if(jumping_to_block->leader_statement != NULL && jumping_to_block->leader_statement->is_branch_ending == TRUE
-				&& jumping_to_block->ends_in_conditional_branch == TRUE){
-				//If it's a direct jump statement, we aren't interested here. We only want to deal with conditional branching
-				if(jumping_to_block->leader_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT && jumping_to_block->leader_statement->op == JUMP){
-					//We don't want this case here - just go somewhere else
-					continue;
-				}
+				&& jumping_to_block->leader_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
 				
-				//Otherwise, we have some kind of conditional jump here. We want to copy all of the conditional branching logic into a new
-				//set of statements. We will then "hoist" the branch by replacing the jump statement in "current" with these values themselves
-				printf("HERE with .L%d\n", jumping_to_block->block_id);
+				//We want to remove the current block as a predecessor of this block
+				dynamic_array_delete(jumping_to_block->predecessors, current);
+
+				//Also, we'll want to remove this block as a successor of the current block
+				dynamic_array_delete(current->successors, jumping_to_block);
+
+				//We'll delete the statement that jumps from current to the jumping_to_block(this is the exit statement, remember from above)
+				delete_statement(cfg, current, current->exit_statement);
+
+				//If we make it here we know that we have some kind of conditional branching logic here in the jumping to block, we'll need to create
+				//a complete copy of it. This new copy will then be added into the current block in lieu of the jump statement that we just deleted
+	
+				//The leader of this new string of statement 
+				three_addr_code_stmt_t* head = NULL;
+				//The one that we're currently operating on
+				three_addr_code_stmt_t* tail = NULL;
+
+				//We'll use this cursor to run through the entirety of the jumping to block's code
+				three_addr_code_stmt_t* cursor = jumping_to_block->leader_statement;
+				
+				//So long as we have stuff to add
+				while(cursor != NULL){
+					//Get a complete copy of the statement
+					three_addr_code_stmt_t* new = copy_three_addr_code_stmt(cursor);
+
+					//If we're adding the very first one
+					if(head == NULL){
+						head = new;
+						tail = new;
+					//Otherwise add to the end
+					} else {
+						//Add it in
+						tail->next_statement = new;
+						new->previous_statement = tail;
+						tail = new;
+					}
+
+					//One last thing -- if this is a jump statement, we'll need to update the predecessor and successor
+					//lists accordingly
+					if(cursor->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+						//Whatever we're jumping to is now a successor of cursor
+						add_successor(current, cursor->jumping_to_block);
+					}
+
+					//Advance the cursor up
+					cursor = cursor->next_statement;
+				}
+
+				//When we get to the very end, we now need to add everything into the current block's statement set
+				current->exit_statement->next_statement = head;
+				head->previous_statement = current->exit_statement;
+				//Reassign exit
+				current->exit_statement = tail;
+				//And we're done
 			}
-
 		}
-		//Otherwise we're all set
-
 	}
 
 	//Give back whether or not we changed
@@ -757,6 +851,9 @@ cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//entire block. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
 	clean(cfg);
+
+	//PASS 4: Delte all empty blocks
+	//All blocks that are empty after clean need to be deleted. This will include the updating of successor/predecessor references as well
 
 	//PASS 4: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,

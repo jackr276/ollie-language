@@ -338,6 +338,11 @@ three_addr_code_stmt_t* emit_idle_statement_three_addr_code();
 three_addr_code_stmt_t* emit_cbr_statement_three_addr_code(three_addr_var_t* assignee, void* if_branch_target, void* else_branch_target);
 
 /**
+ * Emit a complete, one-for-one copy of a three address code statement
+ */
+three_addr_code_stmt_t* copy_three_addr_code_stmt(three_addr_code_stmt_t* copied);
+
+/**
  * Pretty print a three address code statement
 */
 void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt);

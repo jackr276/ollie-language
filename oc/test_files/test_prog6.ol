@@ -58,43 +58,24 @@ fn main() -> i32{
 	let test_char:char := my_char;
 
 	//Example asm inline statement
-	defer asm{
-		push %rax \
-		push %rbx \
-		mov $2, %rax \
-		addl $3, %rax \
-		pop %rbx \
-		pop %rax \
-	};
+	//defer asm{
+	//	push %rax \
+	//	push %rbx \
+	//	mov $2, %rax \
+	//	addl $3, %rax \
+	//	pop %rbx \
+	//	pop %rax \
+	//};
 
-	defer x + 3;	
+	defer x++;	
 	
 	if(!x) then {
-
-		$label1:
 		++x;
 	} else {
 		--x;
-		jump $label1;
 		ret x;
 	}
 	
-	let y:i32 := 32;
 
-	let f:f32 := 23.2;
-
-	switch on(x){
-		case 1:
-		case 2:
-		case 3:
-			{
-			x := x + 3;
-			break;
-			}
-		default:
-			x := x + 3;
-
-	}
-
-	ret 0;
+	ret x;
 }
