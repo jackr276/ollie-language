@@ -828,6 +828,53 @@ static void mark(cfg_t* cfg){
 
 
 /**
+ * After mark and sweep and clean run, we'll almost certainly have a litany of blocks in all
+ * of the dominance relations that are now useless. As such, we'll need to completely recompute all
+ * of these key values
+ */
+static void recompute_all_dominance_relations(cfg_t* cfg){
+	//First, we'll go through and completely blow away anything related to
+	//a dominator in the entirety of the cfg
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the given block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+
+		//Now we're going to reset everything about this block
+		block->immediate_dominator = NULL;
+		block->immediate_postdominator = NULL;
+
+		if(block->dominator_set != NULL){
+			dynamic_array_dealloc(block->dominator_set);
+			block->dominator_set = NULL;
+		}
+
+		if(block->postdominator_set != NULL){
+			dynamic_array_dealloc(block->postdominator_set);
+			block->postdominator_set = NULL;
+		}
+
+		if(block->dominance_frontier != NULL){
+			dynamic_array_dealloc(block->dominance_frontier);
+			block->dominance_frontier = NULL;
+		}
+
+		if(block->dominator_children != NULL){
+			dynamic_array_dealloc(block->dominator_children);
+			block->dominator_children = NULL;
+		}
+
+		if(block->reverse_dominance_frontier != NULL){
+			dynamic_array_dealloc(block->reverse_dominance_frontier);
+			block->reverse_dominance_frontier = NULL;
+		}
+	}
+
+	//Now that that's finished, we can go back and calculate all of the control relations again
+	calculate_all_control_relations(cfg, TRUE);
+}
+
+
+/**
  * The generic optimize function. We have the option to specific how many passes the optimizer
  * runs for in it's current iteration
 */
@@ -859,7 +906,7 @@ cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	//etc. So, to remedy this, we will recalculate everything in the CFG
 	//cleanup_all_control_relations(cfg);
-	//calculate_all_control_relations(cfg, TRUE);
+	recompute_all_dominance_relations(cfg);
 	
 	return cfg;
 }
