@@ -182,6 +182,11 @@ void cleanup_all_control_relations(cfg_t* cfg);
 void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh);
 
 /**
+ * Emit a jump statement directly into a block
+ */
+void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending);
+
+/**
  * For DEBUGGING purposes - we will print all of the blocks in the control
  * flow graph. This is meant to be invoked by the programmer, and as such is exposed
  * via the header file

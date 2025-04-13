@@ -6,7 +6,6 @@
 */
 #include "optimizer.h"
 #include "../queue/heap_queue.h"
-#include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -190,6 +189,31 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 
 
 /**
+ * Delete all branching statements in the current block. We know if a statement is branching if it is 
+ * markes as branch ending. 
+ *
+ * NOTE: This should only be called after we have identified this block as a candidate for block folding
+ */
+static void delete_all_branching_statements(cfg_t* cfg, basic_block_t* block){
+	//We'll always start from the end and work our way up
+	three_addr_code_stmt_t* current = block->exit_statement;
+	//To hold while we delete
+	three_addr_code_stmt_t* temp;
+
+	//So long as this is NULL and it's branch ending
+	while(current != NULL && current->is_branch_ending == TRUE){
+		temp = current;
+		//Advance this
+		current = current->previous_statement;
+		//Then we delete
+		delete_statement(cfg, block, temp);
+	}
+
+	//After we've gotten here we're all done
+}
+
+
+/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
@@ -225,8 +249,8 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			// If we have a block that ends in a conditional branch where all targets are the exact same, then
 			// the conditional branch is useless. We can replace the entire conditional with what's called a fold
 			
-			//Do we end in a conditional branch?
-			if(current->ends_in_conditional_branch == TRUE){
+			//Do we end in a conditional branch? We can usually tell if this is the case if we have exactly one successor and more than one jump
+			if(current->successors->current_index == 1 && current->num_jumps > 1){
 				//So we do end in a conditional branch. Now the question is if we have the same jump target for all of our conditional
 				//jumps. Initially, we're going to assume that we don't
 				u_int8_t redundant_branch = FALSE;
@@ -256,7 +280,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 						//out
 						redundant_branch = FALSE;
 						break;
-					//If we get alla the way down here, the two matched
+					//If we get all of the way down here, the two matched
 					} else {
 						//As of right now, we've seen a redundant branch
 						redundant_branch = TRUE;
@@ -266,10 +290,16 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 					stmt = stmt->previous_statement;
 				}
 
-				//If we made it all of the way down here and this is true, we've found a redundant branch
+				//If this is true all of the way down here, we've found one
 				if(redundant_branch == TRUE){
-					printf("Redundant branch found in .L%d", current->block_id);
+					//We'll need to eliminate all of the branch ending statements
+					delete_all_branching_statements(cfg, current);
+					//Once we're done deleting, we'll emit a jump right to that jumping to
+					//block. This constitutes our "fold"
+					emit_jmp_stmt(current, end_branch_target, JUMP_TYPE_JMP, TRUE);
 				}
+
+				//And now we're set, onto the next optimization
 			}
 
 			//The block that we're jumping to

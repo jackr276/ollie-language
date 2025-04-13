@@ -2168,7 +2168,7 @@ static void emit_cbr_stmt(basic_block_t* basic_block, three_addr_var_t* assignee
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
-static void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending){
+void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending){
 	//Use the helper function to emit the statement
 	three_addr_code_stmt_t* stmt = emit_jmp_stmt_three_addr_code(dest_block, type);
 
