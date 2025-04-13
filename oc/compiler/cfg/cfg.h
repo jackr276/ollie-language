@@ -61,8 +61,6 @@ typedef enum{
  * We have a basic CFG structure that holds these references to making freeing
  */
 struct cfg_t{
-	//The current number of blocks
-	u_int32_t num_blocks;
 	//The global variable block. This is where
 	//anything that is not inside of a function is put
 	basic_block_t* global_variables;
@@ -96,6 +94,9 @@ struct basic_block_t{
 	symtab_function_record_t* function_defined_in;
 	//Is this a global variable block?
 	u_int8_t is_global_var_block;
+	//How many jump statements does the block have? This helps us avoid
+	//redundant computation
+	u_int16_t num_jumps;
 	//What is the general classification of this block
 	block_type_t block_type;
 	//How does the block terminate? This is important for CFG drilling

@@ -728,6 +728,12 @@ void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node
 
 	//Save what block we're in
 	statement_node->block_contained_in = target;
+
+	//If this statement is a jump statement, reflect that in the block
+	if(statement_node->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+		//One more jump
+		target->num_jumps += 1;
+	}
 }
 
 
@@ -3460,7 +3466,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If the third one is not blank
 	if(ast_cursor->first_child != NULL){
 		//Emit the update expression
-		emit_expr_code(for_stmt_update_block, ast_cursor->first_child, TRUE);
+		emit_expr_code(for_stmt_update_block, ast_cursor->first_child, FALSE);
 	}
 	
 	//Unconditional jump to condition block
@@ -4070,8 +4076,12 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				starting_block = if_stmt_start;
 				current_block = if_stmt_start;
 			} else {
-				//Add this in as the current block
-				current_block = merge_blocks(current_block, if_stmt_start);
+				//Add this in as a successor to current
+				add_successor(current_block, if_stmt_start);
+				//Emit a jump from current to the start
+				emit_jmp_stmt(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE);
+				//Now reassign current
+				current_block = if_stmt_start;
 			}
 
 			//Now we'll find the end of the if statement block
@@ -4101,6 +4111,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			} else {
 				//Add as a successor
 				add_successor(current_block, while_stmt_entry_block);
+				emit_jmp_stmt(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
 			}
 
 			//Set the current block here
@@ -4131,6 +4142,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//We never merge do-while's, they are strictly successors
 			} else {
 				add_successor(current_block, do_while_stmt_entry_block);
+				emit_jmp_stmt(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
 			}
 
 			//Now we'll need to reach the end-point of this statement
@@ -4163,6 +4175,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Don't merge, just add successors
 			} else {
 				add_successor(current_block, for_stmt_entry_block);
+				emit_jmp_stmt(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
 				current_block = for_stmt_entry_block;
 			}
 			
@@ -4685,8 +4698,11 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				starting_block = if_stmt_start;
 				current_block = if_stmt_start;
 			} else {
-				//Add this in as the current block
-				current_block = merge_blocks(current_block, if_stmt_start);
+				//Add a successor to the current block
+				add_successor(current_block, if_stmt_start);
+				//Emit a jump from current to the start
+				emit_jmp_stmt(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE);
+				current_block = if_stmt_start;
 			}
 
 			//Now we'll find the end of the if statement block
@@ -4715,6 +4731,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			} else {
 				//Add as a successor
 				add_successor(current_block, while_stmt_entry_block);
+				//Emit a direct jump to it
+				emit_jmp_stmt(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
 			}
 
 			//Let's now drill to the bottom
@@ -4744,6 +4762,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We never merge do-while's, they are strictly successors
 			} else {
 				add_successor(current_block, do_while_stmt_entry_block);
+				emit_jmp_stmt(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
 			}
 
 			//Now we'll need to reach the end-point of this statement
@@ -4775,6 +4794,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We don't merge, we'll add successors
 			} else {
 				add_successor(current_block, for_stmt_entry_block);
+				emit_jmp_stmt(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
 				current_block = for_stmt_entry_block;
 			}
 			

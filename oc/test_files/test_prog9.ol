@@ -12,10 +12,9 @@ fn main() -> i32{
 	
 	if(a == 32) then{
 		let k:i32 := 232332222;
-		
 	} else {
-			let p:i32 := -2322;
-		}
+		let p:i32 := -2322;
+	}
 	
 	ret 0;
 }

@@ -69,6 +69,9 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	//Also make note of any direct succession
 	a->direct_successor = b->direct_successor;
 
+	//Make a note of this too
+	//a->ends_in_conditional_branch = b->ends_in_conditional_branch;
+
 	//Copy over the block type and terminal type
 	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
 		a->block_type = b->block_type;
@@ -131,6 +134,12 @@ static void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_s
 		three_addr_code_stmt_t* next = stmt->next_statement;
 		previous->next_statement = next;
 		next->previous_statement = previous;
+	}
+
+	//If this was a jump statement, update the number of jump statements
+	if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+		//Decrement
+		block->num_jumps -= 1;
 	}
 }
 
@@ -209,12 +218,13 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
-		//Does this block end in a conditional branch?	
-		if(current->ends_in_conditional_branch == TRUE){
-			
+		//Do we end in a jump statement? - this is the precursor to all optimizations
+		if(current->exit_statement != NULL && current->exit_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+			//============================== REDUNDANT CONDITIONAL REMOVAL(FOLD) =================================
+			// If we have a block that ends in a conditional branch where all targets are the exact same, then
+			// the conditional branch is useless. We can replace the entire conditional with what's called a fold
+			//Does this block end in a conditional branch?	
 
-		//Do we end in a jump statement?
-		} else if(current->exit_statement != NULL && current->exit_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT){
 			//The block that we're jumping to
 			basic_block_t* jumping_to_block = current->exit_statement->jumping_to_block;
 			
@@ -252,13 +262,22 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			// The final special case - if we discover a that the block we're jumping to is empty and ends entirely
 			// in a conditional branch, then we can copy all of that conditional branch code into the branch
 			// that we're coming from
+			//
+			// If the leader is branch ending AND the block ends in a conditional, this means that the block itself is entirely
+			// conditional
 			// If the very first statement is branch ending
-			//} else if(jumping_to_block->leader_statement->is_branch_ending == TRUE){
+			if(jumping_to_block->leader_statement != NULL && jumping_to_block->leader_statement->is_branch_ending == TRUE
+				&& jumping_to_block->ends_in_conditional_branch == TRUE){
 				//If it's a direct jump statement, we aren't interested here. We only want to deal with conditional branching
-			//	if(jumping_to_block->leader_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT && jumping_to_block->leader_statement->op == JUMP){
+				if(jumping_to_block->leader_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT && jumping_to_block->leader_statement->op == JUMP){
 					//We don't want this case here - just go somewhere else
-			//		continue;
-			//	}
+					continue;
+				}
+				
+				//Otherwise, we have some kind of conditional jump here. We want to copy all of the conditional branching logic into a new
+				//set of statements. We will then "hoist" the branch by replacing the jump statement in "current" with these values themselves
+				printf("HERE with .L%d\n", jumping_to_block->block_id);
+			}
 
 		}
 		//Otherwise we're all set
