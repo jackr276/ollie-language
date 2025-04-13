@@ -3705,6 +3705,9 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	//Otherwise it isn't null, so we can add it as a successor
 	add_successor(while_statement_entry_block, compound_stmt_start);
 
+	//We want to have a direct jump to the body too
+	emit_jmp_stmt(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE);
+
 	//The exit block is also a successor to the entry block
 	add_successor(while_statement_entry_block, while_statement_end_block);
 

@@ -27,7 +27,7 @@ fn my_fn(mut argc:u32, mut argv:char**)->i32{
 
 	--argv;
 	
-	/*
+	
 	while(a <= 32) do {
 		idle;
 		idle;
@@ -41,7 +41,7 @@ fn my_fn(mut argc:u32, mut argv:char**)->i32{
 				a := a + 2;
 			}
 		} else {
-			asn a := 0x23a;
+			a := 0x23a;
 		}
 
 		//Just some junk
@@ -49,15 +49,17 @@ fn my_fn(mut argc:u32, mut argv:char**)->i32{
 
 		a := a + 323;
 	}
-	*/
+	
 
+	/*
 	for(let mut i:u32 := 3; i < 232; i := i + 1) do{
 		idle;
 		a := a + 1;
-		continue when (a == 32);
+		//continue when (a == 32);
 		//break when(a == 32);
 		let masdfasdf:u32 := 232;
 	}
+	*/
 
 	@my_func(i+2, j);
 
