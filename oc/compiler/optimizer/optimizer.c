@@ -434,7 +434,6 @@ static void sweep(cfg_t* cfg){
 
 				//We'll first find the nearest marked postdominator
 				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
-
 				//We'll then emit a jump to that node
 				three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
 				//Add this statement in
@@ -493,6 +492,9 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 						dynamic_array_add(worklist, stmt);
 						//Mark it
 						stmt->mark = TRUE;
+						//Mark it
+						block->contains_mark = TRUE;
+						//Mark the block it's in
 						//And we're done
 						return;
 					}
@@ -516,6 +518,8 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 					dynamic_array_add(worklist, stmt);
 					//Mark it
 					stmt->mark = TRUE;
+					//Mark the block
+					block->contains_mark = TRUE;
 					return;
 				}
 
