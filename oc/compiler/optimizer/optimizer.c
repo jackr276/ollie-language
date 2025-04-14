@@ -446,10 +446,80 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 
 /**
+ * Handle a compound and statement optimization
+ */
+static void optimize_compound_and_jump(){
+
+}
+
+
+
+/**
+ * Hande a compound or statement optimization
+ */
+static void optimize_compound_or_jump(){
+
+}
+
+
+
+/**
  * The compound logic optimizer will go through and look for compound and or or statements
  * that are parts of branch endings and see if they're able to be short-circuited. These
  * statements have been pre-marked by the cfg constructor, so whichever survive until here are going to 
  * be optimized
+ *
+ *
+ * Here is a brief example:
+ * t9 <- 0x2
+ * t10 <- x_0 < t9
+ * t11 <- 0x1
+ * t12 <- x_0 != t11
+ * t13 <- t10 && t12 <-------- COMPOUND JUMP
+ * jnz .L8
+ * jmp .L9
+ *
+ * .L8():
+ * t14 <- 0x2
+ * t15 <- x_0 * t14
+ * x_2 <- t15
+ * jmp .L5
+ *
+ * .L9():
+ * t16 <- 0x3
+ * t17 <- x_0 + t16
+ * x_1 <- t17
+ * jmp .L5	
+ *
+ * We could optimize this statement by realizing that if the first condition fails(t10), there is no chance
+ * for the next one to succeed, and as such we can jump immediately after t10 is defined
+ *
+ * TURNS INTO THIS:
+ *  
+ * t9 <- 0x2
+ * t10 <- x_0 < t9
+ * jz .L9 <--------------------- Optimized jump-to-else
+ * t11 <- 0x1
+ * t12 <- x_0 != t11
+ * jnz .L8 <-------------------- No longer a need for this one
+ * t13 <- t10 && t12 <-------- COMPOUND JUMP
+ * jnz .L8
+ * jmp .L9
+ *
+ * .L8():
+ * t14 <- 0x2
+ * t15 <- x_0 * t14
+ * x_2 <- t15
+ * jmp .L5
+ *
+ * .L9():
+ * t16 <- 0x3
+ * t17 <- x_0 + t16
+ * x_1 <- t17
+ * jmp .L5	
+ *
+ *
+ * TODO: this may need to be a "while change" style algorithm
  */
 static void optimize_compound_logic(cfg_t* cfg){
 	//For every single block in the CFG
@@ -467,7 +537,14 @@ static void optimize_compound_logic(cfg_t* cfg){
 
 		//Let's run through and see if we can find a statement that's eligible for short circuiting.
 		while(cursor != NULL){
+			//If we make it here, then we've found something that is eligible for a compound logic optimization
 			if(cursor->is_short_circuit_eligible == TRUE && cursor->is_branch_ending == TRUE){
+				//Let's look at this statement. It's a compound logic statement for sure, so it will
+				//have an assignee, and two operands that we can use
+				three_addr_var_t* op1 = cursor->op1;
+				three_addr_var_t* op2 = cursor->op2;
+
+
 				printf("ELIGIBLE FOR SHORT CIRCUIT\n");
 				print_three_addr_code_stmt(cursor);
 			}
@@ -638,9 +715,7 @@ static void sweep(cfg_t* cfg){
 			//
 			//
 			//We've encountered a jump statement of some kind
-			//TODO THIS IS WRONG
 			if(stmt->is_branch_ending == TRUE){
-				printf("HERE IN .L%d\n", block->block_id);
 				//Grab the block out. We need to do this here because we're about to be deleting blocks,
 				//and we'll lose the reference if we do
 				basic_block_t* block = stmt->block_contained_in;
