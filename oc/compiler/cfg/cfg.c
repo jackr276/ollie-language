@@ -3817,6 +3817,11 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	//Advance the cursor up to it's next sibling
 	cursor = cursor->next_sibling;
 
+	//We'll need to keep track of the current entry block
+	basic_block_t* current_entry_block = entry_block;
+	//And we'll have a temp for when we switch over
+	basic_block_t* temp;
+
 	//For traversing the else-if tree
 	generic_ast_node_t* else_if_cursor;
 
@@ -3825,8 +3830,21 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//This will be the expression
 		else_if_cursor = cursor->first_child;
 
+		//Since we're already in the else-if region, we know that we'll
+		//need a new temp block. This means that we'll need to jump from the old
+		//entry block to a new one
+		
+		//Save the old one
+		temp = current_entry_block;
+		//Make a new one
+		current_entry_block = basic_block_alloc();
+		//The new one is a successor of the old one
+		add_successor(temp, current_entry_block);
+		//And we'll emit a direct jump from the old one to the new one
+		emit_jmp_stmt(temp, current_entry_block, JUMP_TYPE_JMP, TRUE);
+
 		//So we've seen the else-if clause. Let's grab the expression first
-		package = emit_expr_code(entry_block, else_if_cursor, TRUE);
+		package = emit_expr_code(current_entry_block, else_if_cursor, TRUE);
 
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
@@ -3850,16 +3868,16 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//We'll just set this to jump out of here
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-			emit_jmp_stmt(entry_block, exit_block, jump_to_else_if, TRUE);
-			add_successor(entry_block, exit_block);
+			emit_jmp_stmt(current_entry_block, exit_block, jump_to_else_if, TRUE);
+			add_successor(current_entry_block, exit_block);
 
 		//We expect this to be the most likely option
 		} else {
 			//Add the if statement node in as a direct successor
-			add_successor(entry_block, else_if_compound_stmt_entry);
+			add_successor(current_entry_block, else_if_compound_stmt_entry);
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-			emit_jmp_stmt(entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE);
+			emit_jmp_stmt(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE);
 
 			//Now we'll find the end of this statement
 			else_if_compound_stmt_exit = else_if_compound_stmt_entry;
@@ -3902,14 +3920,14 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			print_cfg_message(WARNING, "Empty else clause in else-statement", cursor->line_number);
 			(*num_warnings_ref)++;
 			//We'll jump to the end here
-			add_successor(entry_block, exit_block);
+			add_successor(current_entry_block, exit_block);
 			//Emit a direct jump here
-			emit_jmp_stmt(entry_block, exit_block, JUMP_TYPE_JMP, TRUE);
+			emit_jmp_stmt(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE);
 		} else {
 			//Add the if statement node in as a direct successor
-			add_successor(entry_block, else_compound_stmt_entry);
+			add_successor(current_entry_block, else_compound_stmt_entry);
 			//We will perform a normal jump to this one
-			emit_jmp_stmt(entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP, TRUE);
+			emit_jmp_stmt(current_entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP, TRUE);
 
 			//Now we'll find the end of this statement
 			else_compound_stmt_exit = else_compound_stmt_entry;
@@ -3931,9 +3949,9 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	//Otherwise the if statement will need to jump directly to the end
 	} else {
 		//We'll jump to the end here
-		add_successor(entry_block, exit_block);
+		add_successor(current_entry_block, exit_block);
 		//Emit a direct jump here
-		emit_jmp_stmt(entry_block, exit_block, JUMP_TYPE_JMP, TRUE);
+		emit_jmp_stmt(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE);
 	}
 
 	//For our convenience - this makes drilling way faster
