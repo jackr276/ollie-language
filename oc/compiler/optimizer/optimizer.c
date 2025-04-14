@@ -6,6 +6,7 @@
 */
 #include "optimizer.h"
 #include "../queue/heap_queue.h"
+#include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -411,6 +412,41 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 	//Give back whether or not we changed
 	return changed;
 }
+
+
+/**
+ * The compound logic optimizer will go through and look for compound and or or statements
+ * that are parts of branch endings and see if they're able to be short-circuited. These
+ * statements have been pre-marked by the cfg constructor, so whichever survive until here are going to 
+ * be optimized
+ */
+static void optimize_compound_logic(cfg_t* cfg){
+	//For every single block in the CFG
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+
+		//If this is the global var block or it has no statements, bail out
+		if(block->is_global_var_block == TRUE || block->leader_statement == NULL){
+			continue;
+		}
+		
+		//Grab a statement cursor
+		three_addr_code_stmt_t* cursor = block->exit_statement;
+
+		//Let's run through and see if we can find a statement that's eligible for short circuiting.
+		while(cursor != NULL){
+			if(cursor->is_short_circuit_eligible == TRUE && cursor->is_branch_ending == TRUE){
+				printf("ELIGIBLE FOR SHORT CIRCUIT\n");
+				print_three_addr_code_stmt(cursor);
+			}
+
+			//move it back
+			cursor = cursor->previous_statement;
+		}
+	}
+}
+
 
 
 /**
@@ -922,22 +958,27 @@ cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//comes across branch ending statements that are unmarked, it will replace them with a jump to the
 	//nearest marked postdominator
 	sweep(cfg);
-	
-	//PASS 3: Clean algorithm
+
+	//PASS 4: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
 	//entire block. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
 	clean(cfg);
-
-	//PASS 4: Delte all empty blocks
-	//All blocks that are empty after clean need to be deleted. This will include the updating of successor/predecessor references as well
 
 	//PASS 4: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	//etc. So, to remedy this, we will recalculate everything in the CFG
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
-	
+
+	//PASS 5: Shortcircuiting logic optimization
+	//Sometimes, we are able avoid extra work by using short-circuiting logic for compound logical statements(&& and ||). This
+	//only works for these kinds of statements, so the optimization is very specific. When the CFG is constructed, compound logic
+	//statements like these are marked as eligible for short-circuiting optimizations. Now that we've gone through and deleted everything
+	//that is useless, it's worth it to look at these statements and optimize them in one special pass
+	optimize_compound_logic(cfg);
+
+
 	return cfg;
 }
 

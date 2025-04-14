@@ -11,6 +11,10 @@
 #include <sys/types.h>
 #include "../cfg/cfg.h"
 
+//For standardization and convenience
+#define TRUE 1
+#define FALSE 0
+
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
 //The current function
@@ -717,6 +721,12 @@ three_addr_code_stmt_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, 
 	stmt->op2 = op2;
 	//What function are we in
 	stmt->function = current_function;
+
+	//If the operator is a || or && operator, then this statement is eligible for short circuiting
+	if(op == DOUBLE_AND || op == DOUBLE_OR){
+		stmt->is_short_circuit_eligible = TRUE;
+	}
+
 	//Give back the newly allocated statement
 	return stmt;
 }

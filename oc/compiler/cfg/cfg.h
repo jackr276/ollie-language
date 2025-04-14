@@ -105,6 +105,8 @@ struct basic_block_t{
 	u_int8_t visited;
 	//Does this block end in a conditional branch?
 	u_int8_t ends_in_conditional_branch;
+	//Does this block have short-circuiting eligibility?
+	u_int8_t is_short_circuit_eligible;
 	//Predecessor nodes
 	dynamic_array_t* predecessors;
 	//Successor nodes
