@@ -308,8 +308,9 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 					//Once we're done deleting, we'll emit a jump right to that jumping to
 					//block. This constitutes our "fold"
 					emit_jmp_stmt(current, end_branch_target, JUMP_TYPE_JMP, TRUE);
+					//This does mean that we've changed
+					changed = TRUE;
 				}
-
 				//And now we're set, onto the next optimization
 			}
 
@@ -377,6 +378,9 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//	2.) A block whose end statements are jumps
 				//	3.) This leads us to believe we can "hoist" the block
 				printf("BLOCK .L%d can be hoisted\n", jumping_to_block->block_id);
+				
+				//Set this flag, we have changed here
+				changed = TRUE;
 	 
 				//We want to remove the current block as a predecessor of this block
 				dynamic_array_delete(jumping_to_block->predecessors, current);
@@ -634,7 +638,9 @@ static void sweep(cfg_t* cfg){
 			//
 			//
 			//We've encountered a jump statement of some kind
+			//TODO THIS IS WRONG
 			if(stmt->is_branch_ending == TRUE){
+				printf("HERE IN .L%d\n", block->block_id);
 				//Grab the block out. We need to do this here because we're about to be deleting blocks,
 				//and we'll lose the reference if we do
 				basic_block_t* block = stmt->block_contained_in;
