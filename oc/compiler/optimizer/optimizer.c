@@ -246,12 +246,22 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 		//Do we end in a jump statement? - this is the precursor to all optimizations in branch reduce
 		if(current->exit_statement != NULL && current->exit_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+			//Now let's do a touch more work to see if we end in a conditional branch. We end in a conditional
+			//branch if the last two statements are jump statements. We already know that the last one 
+			//is, now we just need to check if the other one is
+			u_int8_t ends_in_branch = FALSE;
+
+			//If the prior statement is not NULL and it's a jump, we end in a conditional
+			if(current->exit_statement->previous_statement != NULL && current->exit_statement->previous_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT
+			  && current->exit_statement->previous_statement->op != JUMP){
+				ends_in_branch = TRUE;
+				printf("BLOCK .L%d ends in a branch\n", current->block_id);
+			}
+
 			//============================== REDUNDANT CONDITIONAL REMOVAL(FOLD) =================================
 			// If we have a block that ends in a conditional branch where all targets are the exact same, then
 			// the conditional branch is useless. We can replace the entire conditional with what's called a fold
-			
-			//Do we end in a conditional branch? We can usually tell if this is the case if we have exactly one successor and more than one jump
-			if(current->successors->current_index == 1 && current->num_jumps > 1){
+			if(ends_in_branch == TRUE){
 				//So we do end in a conditional branch. Now the question is if we have the same jump target for all of our conditional
 				//jumps. Initially, we're going to assume that we don't
 				u_int8_t redundant_branch = FALSE;
@@ -309,7 +319,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//=============================== EMPTY BLOCK REMOVAL ============================================
 			//If this is the only thing that is in here, then the entire block is redundant and just serves as a branching
 			//point. As such, we'll replace branches to i with branches to whatever it jumps to
-			if(current->leader_statement == current->exit_statement && current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+			if(ends_in_branch == FALSE && current->leader_statement == current->exit_statement && current->block_type != BLOCK_TYPE_FUNC_ENTRY){
 				//Replace any and all statements that jump to "current" with ones that jump to whichever block it
 				//unconditionally jumps to
 				replace_all_jump_targets(cfg, current, jumping_to_block);
@@ -321,7 +331,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//============================== BLOCK MERGING =================================================
 			//This is another special case -- if the block we're jumping to only has one predecessor, then
 			//we may as well avoid the jump and just merge the two
-			if(jumping_to_block->predecessors->current_index == 1){
+			if(ends_in_branch == FALSE && jumping_to_block->predecessors->current_index == 1){
 				//We will combine(merge) the current block and the one that it's jumping to
 				//Remove the statement that jumps to the one we're about to merge
 				delete_statement(cfg, current, current->exit_statement); 
@@ -348,9 +358,26 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			// If the leader is branch ending AND the block ends in a conditional, this means that the block itself is entirely
 			// conditional
 			// If the very first statement is branch ending and NOT a direct jump? If it is, we have a candidate for hoisting
-			if(jumping_to_block->leader_statement != NULL && jumping_to_block->leader_statement->is_branch_ending == TRUE
+			if(ends_in_branch == FALSE && jumping_to_block->leader_statement != NULL && jumping_to_block->leader_statement->is_branch_ending == TRUE
 				&& jumping_to_block->leader_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+	 			//Let's check now and see if it's truly a conditional branch only
 				
+				//If it's not a jump, we're out here
+	 			if(jumping_to_block->exit_statement == NULL || jumping_to_block->exit_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+	 				continue;
+	 			}
+
+				//Final check: If the statement right before the exit also isn't a jump, we don't have a branch
+				if(jumping_to_block->exit_statement->previous_statement == NULL || jumping_to_block->exit_statement->previous_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+					continue;
+				}
+
+				//If we made it all the way down here, we know that we have:
+				//	1.) A block whose leader statement is branch ending
+				//	2.) A block whose end statements are jumps
+				//	3.) This leads us to believe we can "hoist" the block
+				printf("BLOCK .L%d can be hoisted\n", jumping_to_block->block_id);
+	 
 				//We want to remove the current block as a predecessor of this block
 				dynamic_array_delete(jumping_to_block->predecessors, current);
 
