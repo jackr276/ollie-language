@@ -257,7 +257,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			if(current->exit_statement->previous_statement != NULL && current->exit_statement->previous_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT
 			  && current->exit_statement->previous_statement->op != JUMP){
 				ends_in_branch = TRUE;
-				printf("BLOCK .L%d ends in a branch\n", current->block_id);
 			}
 
 			//============================== REDUNDANT CONDITIONAL REMOVAL(FOLD) =================================
@@ -379,7 +378,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//	1.) A block whose leader statement is branch ending
 				//	2.) A block whose end statements are jumps
 				//	3.) This leads us to believe we can "hoist" the block
-				printf("BLOCK .L%d can be hoisted\n", jumping_to_block->block_id);
 				
 				//Set this flag, we have changed here
 				changed = TRUE;
@@ -497,25 +495,37 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_ad
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
-
 	//Grab a statement cursor
 	three_addr_code_stmt_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL){
-		//If we found the place where op1 is the assignee
-		if(cursor->assignee != NULL && variables_equal(op1, cursor->assignee) == TRUE){
-			printf("Op1 is assigned at: ");
-			print_three_addr_code_stmt(cursor);
-			printf("\n");
-		}
-		
-
-		//Run backwards
+	while(cursor != NULL && variables_equal(op1, cursor->assignee) == FALSE){
+		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
-}
+	
+	//Once we get out here, we have the statement that assigns op1. Since this is an "or" target,
+	//we'll jump to IF we have a good result here(result being not zero) because that would cause
+	//rest of the or to be true
+	//Jump to else here
+	three_addr_code_stmt_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, JUMP_TYPE_JNZ);
+	//Make sure to mark that this is branch ending
+	jump_to_if_stmt->is_branch_ending = TRUE;
 
+	//We'll now need to insert this statement right after where op1 is assigned at cursor
+	three_addr_code_stmt_t* after = cursor->next_statement;
+
+	//The jump statement is now in between the two
+	cursor->next_statement = jump_to_if_stmt;
+	jump_to_if_stmt->previous_statement = cursor;
+
+	//And we'll also update the references for after
+	jump_to_if_stmt->next_statement = after;
+	after->previous_statement = jump_to_if_stmt;
+
+	//And even better, we now don't need the compound and at all. We can delete the whole stmt
+	delete_statement(cfg, block, stmt);
+}
 
 
 /**
@@ -572,9 +582,6 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_ad
  * t17 <- x_0 + t16
  * x_1 <- t17
  * jmp .L5	
- *
- *
- * TODO: this may need to be a "while change" style algorithm
  */
 static void optimize_compound_logic(cfg_t* cfg){
 	//For every single block in the CFG
@@ -600,7 +607,7 @@ static void optimize_compound_logic(cfg_t* cfg){
 		//We made it here, so we know that this is the else target
 		else_target = block->exit_statement->jumping_to_block;
 
-		//Now we need to check for the else target. If it's null, not a jump statement, or a direct jump, we're out of here
+		//Now we need to check for the if target. If it's null, not a jump statement, or a direct jump, we're out of here
 		if(block->exit_statement->previous_statement == NULL || block->exit_statement->previous_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT
 			|| block->exit_statement->previous_statement->jump_type == JUMP_TYPE_JMP){
 			continue;
@@ -609,10 +616,6 @@ static void optimize_compound_logic(cfg_t* cfg){
 		//This will be our if target
 		if_target = block->exit_statement->previous_statement->jumping_to_block;
 
-		printf("IF TARGET: .L%d\n", if_target->block_id);
-		printf("ELSE TARGET: .L%d\n", else_target->block_id);
-
-		
 		//Grab a statement cursor
 		three_addr_code_stmt_t* cursor = block->exit_statement;
 
@@ -626,13 +629,13 @@ static void optimize_compound_logic(cfg_t* cfg){
 			if(cursor->is_short_circuit_eligible == TRUE && cursor->is_branch_ending == TRUE){
 				//For now we'll add this to the list of potential ones
 				if(eligible_statements == NULL){
+					//If we didn't have one of these, make it now
 					eligible_statements = dynamic_array_alloc();
 				}
 
 				//Add the cursor. We will iterate over these statements in the order we found them,
 				//so going through in
 				dynamic_array_add(eligible_statements, cursor);
-
 			}
 
 			//move it back
@@ -643,17 +646,15 @@ static void optimize_compound_logic(cfg_t* cfg){
 		for(u_int16_t i = 0; eligible_statements != NULL && i < eligible_statements->current_index; i++){
 			//Grab the block out
 			three_addr_code_stmt_t* stmt = dynamic_array_get_at(eligible_statements, i);
-			printf("Short Ciruit Eligible: ");
-			print_three_addr_code_stmt(stmt);
-			printf("\n");
 
 			//Make the helper call. These are treated differently based on what their
 			//operators are, so we'll need to use the appropriate call
 			if(stmt->op == DOUBLE_AND){
+				//Invoke the and helper
 				optimize_compound_and_jump(cfg, block, stmt, if_target, else_target);
 			} else {
+				//Invoke the or helper
 				optimize_compound_or_jump(cfg, block, stmt, if_target, else_target);
-				
 			}
 		}
 
