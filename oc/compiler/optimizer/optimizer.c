@@ -96,6 +96,7 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	dynamic_array_delete(cfg->created_blocks, b);
 
 	//And finally we'll deallocate b
+	//TODO FIX - DOES NOT WORK
 	//basic_block_dealloc(b);
 }
 
@@ -185,6 +186,7 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 	dynamic_array_delete(cfg->created_blocks, empty_block);
 
 	//Deallocate this
+	//TODO FIX - DOES NOT WORK
 	//basic_block_dealloc(empty_block);
 }
 
@@ -448,7 +450,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 /**
  * Handle a compound and statement optimization
  */
-static void optimize_compound_and_jump(){
+static void optimize_compound_and_jump(three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 
 }
 
@@ -457,7 +459,7 @@ static void optimize_compound_and_jump(){
 /**
  * Hande a compound or statement optimization
  */
-static void optimize_compound_or_jump(){
+static void optimize_compound_or_jump(three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 
 }
 
@@ -501,8 +503,8 @@ static void optimize_compound_or_jump(){
  * jz .L9 <--------------------- Optimized jump-to-else
  * t11 <- 0x1
  * t12 <- x_0 != t11
- * jnz .L8 <-------------------- No longer a need for this one
- * t13 <- t10 && t12 <-------- COMPOUND JUMP
+ * jnz .L8 <-------------------- Optimized jump-to-if
+ * --------------------------------t13 <- t10 && t12 <-------------------- No longer a need for this one
  * jnz .L8
  * jmp .L9
  *
@@ -531,26 +533,80 @@ static void optimize_compound_logic(cfg_t* cfg){
 		if(block->is_global_var_block == TRUE || block->leader_statement == NULL){
 			continue;
 		}
+
+		//We always have two targets: the if(conditional) target and the else(nonconditional) target
+		basic_block_t* if_target;
+		basic_block_t* else_target;
+
+
+		//If we don't end in two jumps, this isn't going to work. The exit must be a direct jump 
+		if(block->exit_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT || block->exit_statement->jump_type != JUMP_TYPE_JMP){
+			continue;
+		}
+
+		//We made it here, so we know that this is the else target
+		else_target = block->exit_statement->jumping_to_block;
+
+		//Now we need to check for the else target. If it's null, not a jump statement, or a direct jump, we're out of here
+		if(block->exit_statement->previous_statement == NULL || block->exit_statement->previous_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT
+			|| block->exit_statement->previous_statement->jump_type == JUMP_TYPE_JMP){
+			continue;
+		}
+
+		//This will be our if target
+		if_target = block->exit_statement->previous_statement->jumping_to_block;
+
+		printf("IF TARGET: .L%d\n", if_target->block_id);
+		printf("ELSE TARGET: .L%d\n", else_target->block_id);
+
 		
 		//Grab a statement cursor
 		three_addr_code_stmt_t* cursor = block->exit_statement;
+
+		//Store all of our eligible statements in this block. This will be done in a FIFO
+		//fashion
+		dynamic_array_t* eligible_statements = NULL;
 
 		//Let's run through and see if we can find a statement that's eligible for short circuiting.
 		while(cursor != NULL){
 			//If we make it here, then we've found something that is eligible for a compound logic optimization
 			if(cursor->is_short_circuit_eligible == TRUE && cursor->is_branch_ending == TRUE){
-				//Let's look at this statement. It's a compound logic statement for sure, so it will
-				//have an assignee, and two operands that we can use
-				three_addr_var_t* op1 = cursor->op1;
-				three_addr_var_t* op2 = cursor->op2;
+				//For now we'll add this to the list of potential ones
+				if(eligible_statements == NULL){
+					eligible_statements = dynamic_array_alloc();
+				}
 
+				//Add the cursor. We will iterate over these statements in the order we found them,
+				//so going through in
+				dynamic_array_add(eligible_statements, cursor);
 
-				printf("ELIGIBLE FOR SHORT CIRCUIT\n");
-				print_three_addr_code_stmt(cursor);
 			}
 
 			//move it back
 			cursor = cursor->previous_statement;
+		}
+
+		//Now we'll iterate over the array and process what we have
+		for(u_int16_t i = 0; eligible_statements != NULL && i < eligible_statements->current_index; i++){
+			//Grab the block out
+			three_addr_code_stmt_t* stmt = dynamic_array_get_at(eligible_statements, i);
+			printf("Short Ciruit Eligible: ");
+			print_three_addr_code_stmt(stmt);
+			printf("\n");
+
+			//Make the helper call. These are treated differently based on what their
+			//operators are, so we'll need to use the appropriate call
+			if(stmt->op == DOUBLE_AND){
+				optimize_compound_and_jump(stmt, if_target, else_target);
+			} else {
+				optimize_compound_or_jump(stmt, if_target, else_target);
+				
+			}
+		}
+
+		//If we had anything, deallocate it
+		if(eligible_statements != NULL){
+			dynamic_array_dealloc(eligible_statements);
 		}
 	}
 }
