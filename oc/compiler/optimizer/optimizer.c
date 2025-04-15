@@ -450,30 +450,41 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 /**
  * Handle a compound and statement optimization
  */
-static void optimize_compound_and_jump(three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
-
 	//Grab a statement cursor
 	three_addr_code_stmt_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL){
-		//If we found the place where op1 is the assignee
-		if(cursor->assignee != NULL && variables_equal(op1, cursor->assignee) == TRUE){
-			printf("Op1 is assigned at: ");
-			print_three_addr_code_stmt(cursor);
-			printf("\n");
-		}
-		
-
-		//Run backwards
+	while(cursor != NULL && variables_equal(op1, cursor->assignee) == FALSE){
+		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
 	
+	//Once we get out here, we have the statement that assigns op1. Since this is an "and" target,
+	//we'll jump to ELSE if we have a bad result here(result being zero) because that would cause
+	//the rest of the and to be false
+	//Jump to else here
+	three_addr_code_stmt_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, JUMP_TYPE_JZ);
+	//Make sure to mark that this is branch ending
+	jump_to_else_stmt->is_branch_ending = TRUE;
 
+	//We'll now need to insert this statement right after where op1 is assigned at cursor
+	three_addr_code_stmt_t* after = cursor->next_statement;
+
+	//The jump statement is now in between the two
+	cursor->next_statement = jump_to_else_stmt;
+	jump_to_else_stmt->previous_statement = cursor;
+
+	//And we'll also update the references for after
+	jump_to_else_stmt->next_statement = after;
+	after->previous_statement = jump_to_else_stmt;
+
+	//And even better, we now don't need the compound and at all. We can delete the whole stmt
+	delete_statement(cfg, block, stmt);
 }
 
 
@@ -481,7 +492,7 @@ static void optimize_compound_and_jump(three_addr_code_stmt_t* stmt, basic_block
 /**
  * Hande a compound or statement optimization
  */
-static void optimize_compound_or_jump(three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
@@ -639,9 +650,9 @@ static void optimize_compound_logic(cfg_t* cfg){
 			//Make the helper call. These are treated differently based on what their
 			//operators are, so we'll need to use the appropriate call
 			if(stmt->op == DOUBLE_AND){
-				optimize_compound_and_jump(stmt, if_target, else_target);
+				optimize_compound_and_jump(cfg, block, stmt, if_target, else_target);
 			} else {
-				optimize_compound_or_jump(stmt, if_target, else_target);
+				optimize_compound_or_jump(cfg, block, stmt, if_target, else_target);
 				
 			}
 		}
