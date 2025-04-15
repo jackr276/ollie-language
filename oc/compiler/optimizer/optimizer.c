@@ -451,6 +451,28 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
  * Handle a compound and statement optimization
  */
 static void optimize_compound_and_jump(three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+	//Starting off-we're given the and stmt as a parameter, and our two jumps
+	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
+	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
+	three_addr_var_t* op1 = stmt->op1;
+
+	//Grab a statement cursor
+	three_addr_code_stmt_t* cursor = stmt;
+
+	//Run backwards until we find where op1 is the assignee
+	while(cursor != NULL){
+		//If we found the place where op1 is the assignee
+		if(cursor->assignee != NULL && variables_equal(op1, cursor->assignee) == TRUE){
+			printf("Op1 is assigned at: ");
+			print_three_addr_code_stmt(cursor);
+			printf("\n");
+		}
+		
+
+		//Run backwards
+		cursor = cursor->previous_statement;
+	}
+	
 
 }
 
@@ -460,7 +482,27 @@ static void optimize_compound_and_jump(three_addr_code_stmt_t* stmt, basic_block
  * Hande a compound or statement optimization
  */
 static void optimize_compound_or_jump(three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+	//Starting off-we're given the and stmt as a parameter, and our two jumps
+	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
+	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
+	three_addr_var_t* op1 = stmt->op1;
 
+	//Grab a statement cursor
+	three_addr_code_stmt_t* cursor = stmt;
+
+	//Run backwards until we find where op1 is the assignee
+	while(cursor != NULL){
+		//If we found the place where op1 is the assignee
+		if(cursor->assignee != NULL && variables_equal(op1, cursor->assignee) == TRUE){
+			printf("Op1 is assigned at: ");
+			print_three_addr_code_stmt(cursor);
+			printf("\n");
+		}
+		
+
+		//Run backwards
+		cursor = cursor->previous_statement;
+	}
 }
 
 

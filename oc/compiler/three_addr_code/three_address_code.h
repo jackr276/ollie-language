@@ -340,6 +340,11 @@ three_addr_code_stmt_t* emit_idle_statement_three_addr_code();
 three_addr_code_stmt_t* emit_cbr_statement_three_addr_code(three_addr_var_t* assignee, void* if_branch_target, void* else_branch_target);
 
 /**
+ * Are two variables equal? A helper method for searching
+ */
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b);
+
+/**
  * Emit a complete, one-for-one copy of a three address code statement
  */
 three_addr_code_stmt_t* copy_three_addr_code_stmt(three_addr_code_stmt_t* copied);

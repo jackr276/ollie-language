@@ -1005,6 +1005,50 @@ three_addr_code_stmt_t* copy_three_addr_code_stmt(three_addr_code_stmt_t* copied
 
 
 /**
+ * Are two variables equal? A helper method for searching
+ */
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
+	//Easy way to tell here
+	if(a == NULL || b == NULL){
+		return FALSE;
+	}
+
+	//Another easy way to tell
+	if(a->is_temporary != b->is_temporary){
+		return FALSE;
+	}
+
+	//Another way to tell
+	if(a->indirection_level != b->indirection_level){
+		return FALSE;
+	}
+
+	//For temporary variables, the comparison is very easy
+	if(a->is_temporary){
+		if(a->temp_var_number == b->temp_var_number){
+			return TRUE;
+		} else {
+			return FALSE;
+		}
+	//Otherwise, we're comparing two non-temp variables
+	} else {
+		//Do they reference the same overall variable?
+		if(a->linked_var != b->linked_var){
+			return FALSE;
+		}
+
+		//Final check here via string comparison
+		if(strcmp(a->var_name, b->var_name) == 0){
+			return TRUE;
+		}
+	}
+
+	//If we get here it's a no go
+	return FALSE;
+}
+
+
+/**
  * Deallocate the variable portion of a three address code
 */
 void three_addr_var_dealloc(three_addr_var_t* var){
