@@ -862,12 +862,12 @@ static void sweep(cfg_t* cfg){
 				//What we'll need to do is delete everythin here that is branch ending
 				//and useless
 				while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
-					//Delete it
-					delete_statement(cfg, block, stmt);
 					//Perform the deletion and advancement
 					three_addr_code_stmt_t* temp = stmt;
 					//Advance it
 					stmt = stmt->next_statement;
+					//Delete it
+					delete_statement(cfg, block, temp);
 					//Destroy it
 					three_addr_stmt_dealloc(temp);
 				}
@@ -886,7 +886,11 @@ static void sweep(cfg_t* cfg){
 
 			//Otherwise we delete the statement
 			} else {
+				printf("DELETING: ");
+				print_three_addr_code_stmt(stmt);
+				printf(" because it is not marked\n");
 				delete_statement(cfg, stmt->block_contained_in, stmt);
+
 				//Perform the deletion and advancement
 				three_addr_code_stmt_t* temp = stmt;
 				stmt = stmt->next_statement;
@@ -1116,6 +1120,11 @@ static void mark(cfg_t* cfg){
 
 			//Now we'll go through this block and mark all of the operations as needed
 			three_addr_code_stmt_t* rdf_block_stmt = rdf_block->leader_statement;
+
+			/**
+			 * We will look for the trinity of a branch. That is, two jumps preceeded by some other statement. These three 
+			 * things in tandem make up a branch. If we find those, we mark them all
+			 */
 
 			//Run through and mark each statement in the RDF that is flagged as "branch ending". As in, it's 
 			//important to our operations as a whole to get to this important instruction where we currently are

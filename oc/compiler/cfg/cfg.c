@@ -4887,6 +4887,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
 					basic_block_t* successor = current_block->direct_successor;
+					//Add the successor in
 					add_successor(current_block, values->for_loop_update_block);
 					//Restore the direct successor
 					current_block->direct_successor = successor;
