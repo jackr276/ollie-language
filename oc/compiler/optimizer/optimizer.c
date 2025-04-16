@@ -333,23 +333,52 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//============================== BLOCK MERGING =================================================
 			//This is another special case -- if the block we're jumping to only has one predecessor, then
 			//we may as well avoid the jump and just merge the two
-			if(ends_in_branch == FALSE && jumping_to_block->predecessors->current_index == 1){
-				//We will combine(merge) the current block and the one that it's jumping to
-				//Remove the statement that jumps to the one we're about to merge
-				delete_statement(cfg, current, current->exit_statement); 
+			if(jumping_to_block->predecessors->current_index == 1){
+				//We need to check here -- is there only ONE jump to the jumping to block inside of this
+				//block? If there is only one, then we are all set to merge
 
-				//By that same token, we no longer was current to have the jumping to block as a successor
-				dynamic_array_delete(current->successors, jumping_to_block);
+				//Grab a statement cursor
+				three_addr_code_stmt_t* cursor = current->exit_statement->previous_statement;
 
-				//Now we'll actually merge the blocks
-				combine(cfg, current, jumping_to_block);
+				//Are we good to go?
+				u_int8_t good_to_merge = TRUE;
+
+				while(cursor != NULL){
+					//If we have another jump, we are NOT good to merge
+					if(cursor->CLASS == THREE_ADDR_CODE_JUMP_STMT && cursor->jumping_to_block == jumping_to_block){
+						good_to_merge = FALSE;
+						break;
+					}
+
+					//Another option here - if this is short circuit eligible, then merging like this would ruin the
+					//detection of short circuiting. So if we see this, we also will NOT merge
+					if(cursor->is_short_circuit_eligible == TRUE){
+						good_to_merge = FALSE;
+						break;
+					}
+
+					//Otherwise we keep going up
+					cursor = cursor->previous_statement;
+				}
+
+				if(good_to_merge == TRUE){
+					//We will combine(merge) the current block and the one that it's jumping to
+					//Remove the statement that jumps to the one we're about to merge
+					delete_statement(cfg, current, current->exit_statement); 
+
+					//By that same token, we no longer was current to have the jumping to block as a successor
+					dynamic_array_delete(current->successors, jumping_to_block);
+
+					//Now we'll actually merge the blocks
+					combine(cfg, current, jumping_to_block);
 				
-				//This will count as a change
-				changed = TRUE;
+					//This will count as a change
+					changed = TRUE;
 
-				//This is an endgame optimization. Once we've done this, there no longer is a branch for branch
-				//hoisting to look at. As such, if this happens, we'll continue to the next iteration
-				continue;
+					//This is an endgame optimization. Once we've done this, there no longer is a branch for branch
+					//hoisting to look at. As such, if this happens, we'll continue to the next iteration
+					continue;
+				}
 			}
 
 			//=============================== BRANCH HOISTING ==================================================
