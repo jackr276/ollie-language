@@ -7,6 +7,7 @@
 #include "optimizer.h"
 #include "../queue/heap_queue.h"
 #include <stdio.h>
+#include <string.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -853,24 +854,56 @@ static void sweep(cfg_t* cfg){
 			//replace that branch with a jump to it's nearest marked postdominator
 			//
 			//
-			//We've encountered a jump statement of some kind
-			if(stmt->is_branch_ending == TRUE){
+
+			//We've encountered a jump statement of some kind. Now this is interesting. We do NOT delete
+			//solitary jumps. We only delete jumps if they are a part of a conditional branch that has been deemed useless
+			if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+				//If it's not a conditional jump - we don't care. just go onto the next
+				if(stmt->jump_type == JUMP_TYPE_JMP){
+					//Advance and move on
+					stmt = stmt->next_statement;
+					continue;
+				}
+
+				//If we make it down here then we know that this statement is some kind of custom jump. We're assuming	
+				//that whatever conditional it was jumping on has been deleted, simply because we made it this far
+				three_addr_code_stmt_t* jump_to_if = stmt;
+
+				//Let's see if we also have a jump to else here
+				stmt = stmt->next_statement;
+
+				//If this is not some jump to else, we're done here
+				//If it's marked, we definitely don't want it
+				if(stmt->mark == TRUE){
+					stmt = stmt->next_statement;
+					continue;
+				//If it's not a jump, we'll also just delete
+				} else if(stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+					//Perform the deletion and advancement
+					three_addr_code_stmt_t* temp = stmt;
+					stmt = stmt->next_statement;
+					//Delete the statement, now that we know it is not a jump
+					delete_statement(cfg, stmt->block_contained_in, temp);
+					three_addr_stmt_dealloc(temp);
+					continue;
+				//One final snag we could catch - if it's a jump, but a conditional one, we'll also
+				//leave it alone
+				} else if(stmt->jump_type != JUMP_TYPE_JMP){
+					stmt = stmt->next_statement;
+					continue;
+				}
+
 				//Grab the block out. We need to do this here because we're about to be deleting blocks,
 				//and we'll lose the reference if we do
 				basic_block_t* block = stmt->block_contained_in;
 
-				//What we'll need to do is delete everythin here that is branch ending
-				//and useless
-				while(stmt != NULL && stmt->is_branch_ending == TRUE && stmt->mark == FALSE){
-					//Perform the deletion and advancement
-					three_addr_code_stmt_t* temp = stmt;
-					//Advance it
-					stmt = stmt->next_statement;
-					//Delete it
-					delete_statement(cfg, block, temp);
-					//Destroy it
-					three_addr_stmt_dealloc(temp);
-				}
+				//So if we get down here, we know that this statement is unamrked and its a direct jump.
+				//At this point, we have our conditional branch
+				three_addr_code_stmt_t* jump_to_else = stmt;
+
+				//Now we can delete these both
+				delete_statement(cfg, block, jump_to_else);
+				delete_statement(cfg, block, jump_to_if);
 
 				//We'll first find the nearest marked postdominator
 				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
@@ -880,19 +913,17 @@ static void sweep(cfg_t* cfg){
 				add_statement(block, jump_stmt);
 				//It is also now a successor
 				add_successor(block, immediate_postdominator);
-
-				//And go onto the next iteration
-				continue;
+				//We're done with this part
+				break;
 
 			//Otherwise we delete the statement. Jump statements are ALWAYS considered useful
-			} else if(stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT){
-				//Delete the statement, now that we know it is not a jump
-				delete_statement(cfg, stmt->block_contained_in, stmt);
+			} else {
 				//Perform the deletion and advancement
 				three_addr_code_stmt_t* temp = stmt;
 				stmt = stmt->next_statement;
+				//Delete the statement, now that we know it is not a jump
+				delete_statement(cfg, stmt->block_contained_in, temp);
 				three_addr_stmt_dealloc(temp);
-
 			}
 		}
 	}
@@ -1173,6 +1204,9 @@ static void mark(cfg_t* cfg){
 
 			//Mark the jump to else
  			if(jump_to_else->mark == FALSE){
+				printf("Marking else statement: ");
+				print_three_addr_code_stmt(jump_to_else);
+				printf("\n");
 				//Mark
 				jump_to_else->mark = TRUE;
 				//Add to list
@@ -1181,6 +1215,10 @@ static void mark(cfg_t* cfg){
 
 			//Mark the jump to if
 			if(jump_to_if->mark == FALSE){
+				printf("Marking if statement: ");
+				print_three_addr_code_stmt(jump_to_else);
+				printf("\n");
+
 				//Mark
 				jump_to_if->mark = TRUE;
 				//Add to list
@@ -1189,6 +1227,10 @@ static void mark(cfg_t* cfg){
 
 			//And finally the conditional
 			if(conditional_stmt->mark == FALSE){
+				printf("Marking conditional statement: ");
+				print_three_addr_code_stmt(jump_to_else);
+				printf("\n");
+
 				//Mark
 				conditional_stmt->mark = TRUE;
 				//Add to list

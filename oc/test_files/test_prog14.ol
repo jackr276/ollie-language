@@ -14,17 +14,5 @@ fn main(argc:u32, argv:char**) -> i32 {
 		@tester(a--);
 	}
 
-	switch on(@tester(a)){
-		case 2:
-			let a:i32 := 23;
-			idle;
-		case 4:
-			a++;
-			idle;
-			break when(a == 32);
-		default:
-			idle;
-	}
-
 	ret a;
 }
