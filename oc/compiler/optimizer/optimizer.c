@@ -884,13 +884,10 @@ static void sweep(cfg_t* cfg){
 				//And go onto the next iteration
 				continue;
 
-			//Otherwise we delete the statement
-			} else {
-				printf("DELETING: ");
-				print_three_addr_code_stmt(stmt);
-				printf(" because it is not marked\n");
+			//Otherwise we delete the statement. Jump statements are ALWAYS considered useful
+			} else if(stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+				//Delete the statement, now that we know it is not a jump
 				delete_statement(cfg, stmt->block_contained_in, stmt);
-
 				//Perform the deletion and advancement
 				three_addr_code_stmt_t* temp = stmt;
 				stmt = stmt->next_statement;
@@ -1040,6 +1037,7 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
+				//TODO Look at this
 			} else if(current_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && current->block_type == BLOCK_TYPE_FOR_STMT_UPDATE){
 				current_stmt->mark = TRUE;
 				//Add it to the list
@@ -1118,28 +1116,83 @@ static void mark(cfg_t* cfg){
 			//Grab the RDF block out
 			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
 
-			//Now we'll go through this block and mark all of the operations as needed
-			three_addr_code_stmt_t* rdf_block_stmt = rdf_block->leader_statement;
+			/**
+			 * t1 <- a && b <------ condition
+			 * jne .L8 <--------- if
+			 * jmp .L9 <---------- else
+			 */
+
+			//There are three components to a conditional branch and we need all of them:
+			//	1.) The actual condition 
+			//	2.) The jump to if
+			//	3.) The jump to else
+			three_addr_code_stmt_t* jump_to_else;
+			three_addr_code_stmt_t* jump_to_if;
+			three_addr_code_stmt_t* conditional_stmt;
+
+			//Grab the exit statement -- branches will be at the end if they exist
+			three_addr_code_stmt_t* rdf_block_stmt = rdf_block->exit_statement;
 
 			/**
 			 * We will look for the trinity of a branch. That is, two jumps preceeded by some other statement. These three 
 			 * things in tandem make up a branch. If we find those, we mark them all
 			 */
+			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT
+				|| rdf_block_stmt->jump_type != JUMP_TYPE_JMP){
+				//It's not a jump statement, we're done here.
+				continue;
+			}
 
-			//Run through and mark each statement in the RDF that is flagged as "branch ending". As in, it's 
-			//important to our operations as a whole to get to this important instruction where we currently are
-			while(rdf_block_stmt != NULL){
-				//For each statement that has NOT been marked but IS loop ending, we'll flag it
-				if(rdf_block_stmt->mark == FALSE && rdf_block_stmt->is_branch_ending == TRUE){
-					rdf_block_stmt->mark = TRUE;
-					//Add into the worklist
-					dynamic_array_add(worklist, rdf_block_stmt);
-					//Mark the block
-					rdf_block->contains_mark = TRUE;
-				}
+			//If we make it out here, then it is a direct jump. As such, we'll mark the jump to else
+			jump_to_else = rdf_block_stmt;
 
-				//Advance it
-				rdf_block_stmt = rdf_block_stmt->next_statement;
+			//Advance up now. We are now looking for the conditional jump to if
+			rdf_block_stmt = rdf_block_stmt->previous_statement;
+
+			//If it's null, not a jump, or a direct(not conditional) jump, we don't want it
+			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT
+				|| rdf_block_stmt->jump_type == JUMP_TYPE_JMP){
+				continue;
+			}
+
+			//Otherwise we know it's fine, so we'll grab it
+			jump_to_if = rdf_block_stmt;
+
+			//And now we're looking for one last thing - any kind of non-null nonjump
+			rdf_block_stmt = rdf_block_stmt->previous_statement;
+
+			//If it's null or some other jump(that'd be weird) we don't want it
+			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+				continue;
+			}
+
+			//Otherwise this is what we want - we've found a branch
+			conditional_stmt = rdf_block_stmt;
+			
+			//And now we have everything. All that's left to do now is mark all of these statements and add them into the worklist
+
+			//Mark the jump to else
+ 			if(jump_to_else->mark == FALSE){
+				//Mark
+				jump_to_else->mark = TRUE;
+				//Add to list
+				dynamic_array_add(worklist, jump_to_else);
+			}
+
+			//Mark the jump to if
+			if(jump_to_if->mark == FALSE){
+				//Mark
+				jump_to_if->mark = TRUE;
+				//Add to list
+				dynamic_array_add(worklist, jump_to_if);
+			}
+
+			//And finally the conditional
+			if(conditional_stmt->mark == FALSE){
+				//Mark
+				conditional_stmt->mark = TRUE;
+				//Add to list
+				dynamic_array_add(worklist, conditional_stmt);
 			}
 		}
 	}
