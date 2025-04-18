@@ -4556,11 +4556,15 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	}
 
 	//Grab a cursor to the case statements
-	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
+	generic_ast_node_t* case_stmt_cursor = values->initial_node;
 
 	//The very first thing should be an expression telling us what to switch on
 	//There should be some kind of expression here
 	emit_expr_code(starting_block, case_stmt_cursor, TRUE);
+
+	//We should see two children here
+	generic_ast_node_t* lower_bound = case_stmt_cursor->next_sibling;
+	generic_ast_node_t* upper_bound = case_stmt_cursor->next_sibling;
 
 	//Get to the next statement. This is the first actual case 
 	//statement

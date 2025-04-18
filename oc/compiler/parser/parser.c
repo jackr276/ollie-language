@@ -6070,13 +6070,52 @@ static generic_ast_node_t* branch_statement(FILE* fl){
 
 
 /**
+ * Validate the upper and lower bounds provided to a switch statement
+ */
+static u_int8_t validate_switch_statement_bounds(generic_type_t* switching_type, generic_ast_node_t* lower_bound, generic_ast_node_t* upper_bound){
+	//Grab these out for convenience
+	TYPE_CLASS lb_type_class = lower_bound->inferred_type->type_class;
+	TYPE_CLASS ub_type_class = upper_bound->inferred_type->type_class;
+
+	//If it's not enumerated or basic, we're out
+	if(lb_type_class != TYPE_CLASS_ENUMERATED && lb_type_class != TYPE_CLASS_BASIC){
+		print_parse_message(PARSE_ERROR, "Complex types may not be switch statement bounds", lower_bound->line_number);
+		num_errors++;
+		return FALSE;
+	}
+
+	//If it's not enumerated or basic, we're out
+	if(ub_type_class != TYPE_CLASS_ENUMERATED && ub_type_class != TYPE_CLASS_BASIC){
+		print_parse_message(PARSE_ERROR, "Complex types may not be switch statement bounds", lower_bound->line_number);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Get the compatible type out here
+	generic_type_t* type = types_compatible(lower_bound->inferred_type, upper_bound->inferred_type);
+
+	//We need to ensure that the types are compatible here
+	if(type == NULL){
+		print_parse_message(PARSE_ERROR, "Incompatible constants given as bounds", lower_bound->line_number);
+		num_errors++;
+		return FALSE;
+	}
+
+	//TODO MORE VALIDATION
+
+	return TRUE;
+}
+
+
+
+/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
  *
  * NOTE: The caller has already consumed the switch keyword by the time we get here
  *
- * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(bottom, top) { {<case-statement | default-statement>}+ }
+ * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(<constant>, <constant>) { {<case-statement | default-statement>}+ }
  */
 static generic_ast_node_t* switch_statement(FILE* fl){
 	//For error printing
@@ -6218,16 +6257,14 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//We did see this, so push it to the grouping stack
 	push_token(grouping_stack, lookahead);
 
-	//Now we need to see a constant of some kind 
-	lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+	//Now we need to see a constant for the lower bound
+	generic_ast_node_t* lower_bound = constant(fl, SEARCHING_FOR_CONSTANT);
 
-	//If we don't see these kinds of constants, we fail out
-	if(lookahead.tok != CHAR_CONST && lookahead.tok != INT_CONST && lookahead.tok != INT_CONST_FORCE_U
-	   && lookahead.tok != LONG_CONST && lookahead.tok != LONG_CONST_FORCE_U){
-		//Throw an error if we don't see it
-		print_parse_message(PARSE_ERROR, "Only integer, character or long constants are allowed in from declaration", parser_line_num);
+	//If this fails, we fail up the chain
+	if(lower_bound->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid constant provided in from statement", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return lower_bound;
 	}
 
 	//Now we'll hunt for a comma
@@ -6240,18 +6277,27 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
-	
-	//Otherwise we did see one, so now we need the upper bound
-	lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
 
-	//If we don't see these kinds of constants, we fail out
-	if(lookahead.tok != CHAR_CONST && lookahead.tok != INT_CONST && lookahead.tok != INT_CONST_FORCE_U
-	   && lookahead.tok != LONG_CONST && lookahead.tok != LONG_CONST_FORCE_U){
-		//Throw an error if we don't see it
-		print_parse_message(PARSE_ERROR, "Only integer, character or long constants are allowed in from declaration", parser_line_num);
+	//Now we'll look for the upper bound
+	generic_ast_node_t* upper_bound = constant(fl, SEARCHING_FOR_CONSTANT);
+
+	//If this fails, we fail up the chain
+	if(upper_bound->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid constant provided in from statement", parser_line_num);
+		num_errors++;
+		return upper_bound;
+	}
+
+	//Once we have this, we'll want to perform validation on these two before adding them in
+	//If it fails, the whole thing is bunk
+	if(validate_switch_statement_bounds(type, lower_bound, upper_bound) == FALSE){
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
+
+	//Otherwise we know that it was valid, so we'll add these two in as children
+	add_child_node(switch_stmt_node, lower_bound);
+	add_child_node(switch_stmt_node, upper_bound);
 
 	//And finally, we need to see the closing paren
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
