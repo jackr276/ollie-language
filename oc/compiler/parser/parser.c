@@ -7279,18 +7279,26 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 		//This rule relies on if already being consumed, so we won't put it back
 		return if_statement(fl);
 
+	//Continue or break statements - these aren't allows
+	} else if(lookahead.tok == BREAK || lookahead.tok == CONTINUE){
+		print_parse_message(PARSE_ERROR, "Ollie language does not allow continue or break in switch statments", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+
 	//Some kind of branch statement
-	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
-			|| lookahead.tok == RET){
+	} else if(lookahead.tok == JUMP || lookahead.tok == RET){
 		//The branch rule needs these, so we'll put them back
 		push_back_token(lookahead);
 		//return whatever this gives us
 		return branch_statement(fl);
+
 	//Let statement
 	} else if(lookahead.tok == LET){
 		return let_statement(fl, FALSE);
+
 	} else if(lookahead.tok == DECLARE){
 		return declare_statement(fl, FALSE);
+
 	} else {
 		//Otherwise, this is some kind of expression statement. We'll put the token back and
 		//return that

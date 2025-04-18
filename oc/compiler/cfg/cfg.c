@@ -21,11 +21,6 @@
 #define TRUE 1
 #define FALSE 0
 
-//This can always be reupped dynamically
-#define MAX_LIVE_VARS 5
-#define MAX_ASSIGNED_VARS 5
-#define MAX_DF_BLOCKS 5
-
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
 static int32_t current_block_id = 0;
@@ -2799,6 +2794,8 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
 		//What kind of declarative statement do we have here?
+
+		//We could be trying to declare an array
 		//TODO
 
 
@@ -4291,8 +4288,8 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 		//Handle a break out statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_BREAK_STMT){
 			//Let's first see if we're in a loop or not
-			if(values->loop_stmt_start == NULL && values->switch_statement_end == NULL){
-				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop or switch statement", current_node->line_number);
+			if(values->loop_stmt_start == NULL){
+				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop", current_node->line_number);
 				(*num_errors_ref)++;
 				return create_and_return_err();
 			}
@@ -4309,20 +4306,10 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//Mark this for later
 				current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 
-				//There are two options here. If we're in a loop, that takes precedence. If we're in
-				//a switch statement, then that takes precedence
-				if(values->loop_stmt_start != NULL){
-					//Otherwise we need to break out of the loop
-					add_successor(current_block, values->loop_stmt_end);
-					//We will jump to it -- this is always an uncoditional jump
-					emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE);
-				//We must've seen a switch statement then
-				} else {
-					//Save this for later on
-					current_block->case_block_breaks_to = values->switch_statement_end;
-					//We will jump to it -- this is always an uncoditional jump
-					emit_jmp_stmt(current_block, values->switch_statement_end, JUMP_TYPE_JMP, TRUE);
-				}
+				//Otherwise we need to break out of the loop
+				add_successor(current_block, values->loop_stmt_end);
+				//We will jump to it -- this is always an uncoditional jump
+				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE);
 
 				//For a regular break statement, this is it, so we just get out
 				//Give back the starting block
@@ -4336,40 +4323,20 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//We'll also need to emit a jump here - since this is a conditional break
 				basic_block_t* new_block = basic_block_alloc();
 
-				//There are two options here. If we're in a loop, that takes precedence. If we're in
-				//a switch statement, then that takes precedence
-				if(values->loop_stmt_end != NULL){
-					add_successor(current_block, values->loop_stmt_end);
-					//The other successor is the new block
-					add_successor(current_block, new_block);
+				//Add a successor to the end
+				add_successor(current_block, values->loop_stmt_end);
+				//The other successor is the new block
+				add_successor(current_block, new_block);
 
-					//Make sure we mark this properly
-					current_block->direct_successor = new_block;
+				//Make sure we mark this properly
+				current_block->direct_successor = new_block;
 
-					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
-					//Emit our conditional jump now
-					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE);
-					//Emit a jump statement to the new block. This will count as our "else"
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
-
-				//We must've seen a switch statement then
-				} else {
-					//TODO HANDLE FOR BREAK WHEN
-					//We'll save this in for later
-					current_block->case_block_breaks_to = values->switch_statement_end;
-					//The other successor is the new block
-					add_successor(current_block, new_block);
-
-					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
-
-					//Emit our conditional jump now
-					emit_jmp_stmt(current_block, values->switch_statement_end, jump_type, TRUE);			
-					//Emit a jump statement to the new block. This will count as our "else"
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
-				}
-
+				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+				//Emit our conditional jump now
+				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE);
+				//Emit a jump statement to the new block. This will count as our "else"
+				emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 				//And finally - we set the current block to be the new block
 				current_block = new_block;
 			}
@@ -4501,6 +4468,11 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 
 	//Let this take care of it
 	basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
+	
+	//If we have an error
+	if(statement_section_start->block_id == -1){
+		return statement_section_start;
+	}
 
 	//Once we get this back, we'll add it in to the main block
 	merge_blocks(default_stmt, statement_section_start);
@@ -4537,6 +4509,11 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 
 	//Let this take care of it
 	basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
+
+	//If we have an error
+	if(statement_section_start->block_id == -1){
+		return statement_section_start;
+	}
 
 	//Once we get this back, we'll add it in to the main block
 	merge_blocks(case_stmt, statement_section_start);
@@ -4626,11 +4603,6 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 		//Now we'll add this one into the overall structure
 		add_successor(current_block, case_block);
-
-		//We'll also add in what it breaks to, if anything. This MUST come last
-		if(case_block->case_block_breaks_to != NULL){
-			add_successor(current_block, case_block->case_block_breaks_to);
-		}
 
 		//Ensure that the current block points right here
 		current_block->direct_successor = case_block;
@@ -4943,8 +4915,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		//Hand le a break out statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_BREAK_STMT){
 			//Let's first see if we're in a loop or switch statement or not
-			if(values->loop_stmt_start == NULL && values->switch_statement_end == NULL){
-				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop or switch statement", ast_cursor->line_number);
+			if(values->loop_stmt_start == NULL){
+				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop", ast_cursor->line_number);
 				(*num_errors_ref)++;
 				return create_and_return_err();
 			}
@@ -4961,20 +4933,10 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Mark this for later
 				current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 
-				//Loops always take precedence over switching, so we'll break out of that if it isn't null
-				if(values->loop_stmt_end != NULL){
-					//We'll need to break out of the loop
-					add_successor(current_block, values->loop_stmt_end);
-					//We will jump to it -- this is always an uncoditional jump
-					emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE);
-
-				} else {
-					//Save this for later on. We won't add it in now to preserve the
-					//order of block chaining
-					current_block->case_block_breaks_to = values->switch_statement_end;
-					//We will jump to it -- this is always an uncoditional jump
-					emit_jmp_stmt(current_block, values->switch_statement_end, JUMP_TYPE_JMP, TRUE);
-				}
+				//We'll need to break out of the loop
+				add_successor(current_block, values->loop_stmt_end);
+				//We will jump to it -- this is always an uncoditional jump
+				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE);
 
 				//For a regular break statement, this is it, so we just get out
 				//Give back the starting block
@@ -4988,40 +4950,21 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//First let's emit the conditional code
 				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE);
 
-				//There are two options here. If we're in a loop, that takes precedence. If we're in
-				//a switch statement, then that takes precedence
-				if(values->loop_stmt_start != NULL){
-					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
 
-					//Add a successor to the end
-					add_successor(current_block, values->loop_stmt_end);
-					//Add the new block as a successor as well
-					add_successor(current_block, new_block);
+				//Add a successor to the end
+				add_successor(current_block, values->loop_stmt_end);
+				//Add the new block as a successor as well
+				add_successor(current_block, new_block);
 
-					//Make sure we mark this properly
-					current_block->direct_successor = new_block;
+				//Make sure we mark this properly
+				current_block->direct_successor = new_block;
 
-					//We will jump to it -- this jump is decided above
-					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE);
-					//Emit a jump to the new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
-
-				//We must've seen a switch statement then
-				} else {
-					//We'll save this in for later
-					current_block->case_block_breaks_to = values->switch_statement_end;
-
-					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
-					//Add the new block as a successor as well
-					add_successor(current_block, new_block);
-
-					//Emit our conditional jump now
-					emit_jmp_stmt(current_block, values->switch_statement_end, jump_type, TRUE);			
-					//Emit a jump to the new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
-				}
+				//We will jump to it -- this jump is decided above
+				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE);
+				//Emit a jump to the new block
+				emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 
 				//Once we're out here, the current block is now the new one
 				current_block = new_block;
@@ -5099,6 +5042,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			} else {
 				//Otherwise this is a direct successor
 				add_successor(current_block, switch_stmt_entry);
+				//We will also emit a jump from the current block to the entry
+				emit_jmp_stmt(current_block, switch_stmt_entry, JUMP_TYPE_JMP, TRUE);
 			}
 
 			//We need to drill to the end

@@ -13,7 +13,7 @@ fn main(arg:i32, argv:char**) -> i32{
 		if(i == 2) then {
 			i := 3;
 		}
-		//break when(x == 3222);
+		break when(x == 3222);
 		x := x * 37;
 		_++;
 	
