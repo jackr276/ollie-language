@@ -22,6 +22,7 @@ fn main() -> i32{
 		abc := 2;
 	} else {
 		abc := 3;
+		x := 3;
 	}
 
 	if(x == 32) then {

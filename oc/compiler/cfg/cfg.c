@@ -4251,6 +4251,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//Decide the appropriate jump statement -- direct path here
 				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 
+
 				//Two divergent paths here -- whether or not we have a for loop
 				//Not a for loop
 				if(values->for_loop_update_block == NULL){
@@ -4271,6 +4272,12 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//Emit a direct unconditional jump statement to it
 					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE);
 				}
+
+				//We'll need a new block here - this will count as a branch
+				basic_block_t* new_block = basic_block_alloc();
+				
+				//The other end of the conditional continue will be jumping to this new block
+
 			}
 
 		//Handle a break out statement
