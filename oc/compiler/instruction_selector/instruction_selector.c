@@ -5,3 +5,11 @@
 */
 
 #include "instruction_selector.h"
+
+
+/**
+ * Run through and print every instruction in the selector
+*/
+void print_instructions(instructions_t* instructions){
+
+}

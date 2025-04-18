@@ -1216,7 +1216,7 @@ static void mark(cfg_t* cfg){
 			//Mark the jump to if
 			if(jump_to_if->mark == FALSE){
 				printf("Marking if statement: ");
-				print_three_addr_code_stmt(jump_to_else);
+				print_three_addr_code_stmt(jump_to_if);
 				printf("\n");
 
 				//Mark
@@ -1228,7 +1228,7 @@ static void mark(cfg_t* cfg){
 			//And finally the conditional
 			if(conditional_stmt->mark == FALSE){
 				printf("Marking conditional statement: ");
-				print_three_addr_code_stmt(jump_to_else);
+				print_three_addr_code_stmt(conditional_stmt);
 				printf("\n");
 
 				//Mark
