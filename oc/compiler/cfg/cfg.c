@@ -4250,6 +4250,8 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				expr_ret_package_t package = emit_expr_code(current_block, current_node->first_child, TRUE);
 				//Decide the appropriate jump statement -- direct path here
 				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+				//This is a conditional continue - so we have a new block as well
+				basic_block_t* new_block = basic_block_alloc();
 
 
 				//Two divergent paths here -- whether or not we have a for loop
@@ -4257,27 +4259,33 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				if(values->for_loop_update_block == NULL){
 					//Otherwise we are in a loop, so this means that we need to point the continue statement to
 					//the loop entry block
-					basic_block_t* successor = current_block->direct_successor;
 					//Add the successor in
 					add_successor(current_block, values->loop_stmt_start);
+					//The new block is also a successor
+					add_successor(current_block, new_block);
 					//Restore the direct successor
-					current_block->direct_successor = successor;
+					current_block->direct_successor = new_block;
 					//We always jump to the start of the loop statement unconditionally
 					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type, TRUE);
+					//Emit a direct jump to the new block
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
 					add_successor(current_block, values->for_loop_update_block);
+					//The new block is also a successor
+					add_successor(current_block, new_block);
+					//The direct successor of the current block is the new block
+					current_block->direct_successor = new_block;
 					//Emit a direct unconditional jump statement to it
 					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE);
+					//Emit a direct jump to the new block
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 				}
 
-				//We'll need a new block here - this will count as a branch
-				basic_block_t* new_block = basic_block_alloc();
-				
-				//The other end of the conditional continue will be jumping to this new block
-
+				//This is now the current block
+				current_block = new_block;
 			}
 
 		//Handle a break out statement
@@ -4877,30 +4885,41 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Decide the appropriate jump statement -- direct path here
 				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 
+				//We'll need a new block here - this will count as a branch
+				basic_block_t* new_block = basic_block_alloc();
+				
 				//Two divergent paths here -- whether or not we have a for loop
 				//Not a for loop
 				if(values->for_loop_update_block == NULL){
 					//Otherwise we are in a loop, so this means that we need to point the continue statement to
 					//the loop entry block
-					basic_block_t* successor = current_block->direct_successor;
 					//Add the successor in
 					add_successor(current_block, values->loop_stmt_start);
+					//Add this new block in as a successor
+					add_successor(current_block, new_block);
 					//Restore the direct successor
-					current_block->direct_successor = successor;
+					current_block->direct_successor = new_block;
 					//We always jump to the start of the loop statement unconditionally
 					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type, TRUE);
-
+					//The other end of the conditional continue will be jumping to this new block
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
-					basic_block_t* successor = current_block->direct_successor;
 					//Add the successor in
 					add_successor(current_block, values->for_loop_update_block);
+					//Add this new block in as a successor
+					add_successor(current_block, new_block);
 					//Restore the direct successor
-					current_block->direct_successor = successor;
+					current_block->direct_successor = new_block;
 					//Emit a direct unconditional jump statement to it
 					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE);
+					//The other end of the conditional continue will be jumping to this new block
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 				}
+
+				//And as we go forward, this new block will be the current block
+				current_block = new_block;
 			}
 
 		//Hand le a break out statement

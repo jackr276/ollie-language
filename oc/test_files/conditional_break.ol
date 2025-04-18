@@ -10,7 +10,6 @@ fn main(arg:i32, argv:char**) -> i32{
 	//for(let _:u32 := 0; _ < 32; _++) do{
 	while (_ < 33) do {
 		continue when(x == 3222);
-
 		x := x * 37;
 		_++;
 	}
