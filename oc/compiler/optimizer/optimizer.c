@@ -860,8 +860,28 @@ static void sweep(cfg_t* cfg){
 			if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
 				//If it's not a conditional jump - we don't care. just go onto the next
 				if(stmt->jump_type == JUMP_TYPE_JMP){
-					//Advance and move on
+					//One thing we can check for here: if we see an unconditional jump(which means we got here)
+					//followed by another unconditional jump, then the second unconditional jump is useless.
+					//We can as such delete it
+					//Advance the statement
 					stmt = stmt->next_statement;
+
+					/**
+					 * If we get here, this means we have something like:
+					 *  jmp .L8
+					 *  jmp .L9 <---------- USELESS
+					 *
+					 * As such, we'll delete the .L9 jump and update successors
+					 */
+					if(stmt != NULL && stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && stmt->jump_type == JUMP_TYPE_JMP){
+						three_addr_code_stmt_t* temp = stmt;
+						//Advance stmt
+						stmt = stmt->next_statement;
+						//Remove the statement
+						delete_statement(cfg, block, temp);
+						//And we're done
+					}
+
 					continue;
 				}
 
@@ -1063,13 +1083,6 @@ static void mark(cfg_t* cfg){
 				//The block now has a mark
 				current->contains_mark = TRUE;
 			} else if(current_stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-				//TODO Look at this
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && current->block_type == BLOCK_TYPE_FOR_STMT_UPDATE){
 				current_stmt->mark = TRUE;
 				//Add it to the list
 				dynamic_array_add(worklist, current_stmt);
