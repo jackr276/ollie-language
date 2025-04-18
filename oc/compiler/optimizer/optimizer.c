@@ -872,7 +872,6 @@ static void sweep(cfg_t* cfg){
 					 * As such, we'll delete the .L9 jump and update successors
 					 */
 					if(stmt != NULL && stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && stmt->jump_type == JUMP_TYPE_JMP){
-						printf("HERE\n");
 						three_addr_code_stmt_t* temp = stmt;
 						//Advance stmt
 						stmt = stmt->next_statement;
@@ -1156,107 +1155,115 @@ static void mark(cfg_t* cfg){
 		//Now for everything in this statement's block's RDF, we'll mark it's block-ending branches
 		//as useful
 		for(u_int16_t i = 0; block->reverse_dominance_frontier != NULL && i < block->reverse_dominance_frontier->current_index; i++){
-
+			//Grab the block out of the RDF
 			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
 
 			/**
-			 * There are 2 cases that we can look for here. They all revolve around
-			 * conditional jumps, so our first goal is to find said
-			 * conditional jumps
+			 * This is the pattern we are on the lookout for. These kinds of patterns
+			 * always appear at the bottom of a block, and as such we will only search
+			 * from the bottom up
 			 *
-			 * Case 1: Conditional break/jump
-			 * t1 <- a | c
-			 * je .L8
-			 *
-			 *
-			 * Case 2: Important branch
+			 * Important branch
 			 * t1 <- a && b <------ condition
 			 * jne .L8 <--------- if
 			 * jmp .L9 <---------- else
 			 */
 
-			//Grab the leader statement. This statement will eventually hold our
-			//conditional jump
-			three_addr_code_stmt_t* rdf_block_stmt = rdf_block->leader_statement;
+			//Grab the exit statement. We will crawl our way from the bottom up here
+			three_addr_code_stmt_t* rdf_block_stmt = rdf_block->exit_statement;
 			
-			//So long as this statement is not NULL
-			while(rdf_block_stmt != NULL){
-				//If it is NOT a conditional jump, we're not interested in this portion
-				if(rdf_block_stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT || rdf_block_stmt->jump_type == JUMP_TYPE_JMP){
-					rdf_block_stmt = rdf_block_stmt->next_statement;
-					continue;
-				}
-
-				//If we make it here, then we know that we found a conditional jump statement. What happens
-				//next revolves around what we find right after the conditional jump. If we find a direct jump(jmp)
-				//then we know it's a branch, if we don't, then we know it's some kind of conditional break/continue;
-				
-				//The statement that comes directly before this one must be important, because it's a conditional
-				//jump
-				three_addr_code_stmt_t* conditional_stmt = rdf_block_stmt->previous_statement;
-
-				//If it's not already marked, then we mark it
-				if(conditional_stmt->mark == FALSE){
-					printf("Marking conditional statement: ");
-					print_three_addr_code_stmt(conditional_stmt);
-					printf("\n");
-
-					//Mark
-					conditional_stmt->mark = TRUE;
-					//Add to list
-					dynamic_array_add(worklist, conditional_stmt);
-				}
-
-				//Now we'll need to see if we have a true branch or not. We can tell this by looking at the statement
-				//directly after the rdf_block_stmt
-				three_addr_code_stmt_t* jump_to_else = rdf_block_stmt->next_statement;
-
-				//If these are true, then we've found our branch. We'll mark both the conditional jump(rdf_block_stmt)
-				//and the jump_to_else
-				if(jump_to_else != NULL && jump_to_else->CLASS == THREE_ADDR_CODE_JUMP_STMT && jump_to_else->jump_type == JUMP_TYPE_JMP){
-					//Mark the jump to if(rdf_block_stmt)
-					if(rdf_block_stmt->mark == FALSE){
-						printf("Marking if statement: ");
-						print_three_addr_code_stmt(rdf_block_stmt);
-						printf("\n");
-
-						//Mark
-						rdf_block_stmt->mark = TRUE;
-					}
-
-					//Mark the jump to else
-					if(jump_to_else->mark == FALSE){
-						printf("Marking else statement: ");
-						print_three_addr_code_stmt(jump_to_else);
-						printf("\n");
-						//Mark
-						jump_to_else->mark = TRUE;
-					}
-
-					//We can set this to be the one directly after the end statement
-					rdf_block_stmt = jump_to_else->next_statement;
-
-				//Otherwise, we'll only mark the conditional jump
-				} else {
-					//Mark the jump
-					if(rdf_block_stmt->mark == FALSE){
-						printf("Marking conditional break/continue statement: ");
-						print_three_addr_code_stmt(rdf_block_stmt);
-						printf("\n");
-
-						//Mark
-						rdf_block_stmt->mark = TRUE;
-						//Add to list //TODO look at
-						dynamic_array_add(worklist, rdf_block_stmt);
-					}
-
-					//We can set this one to be the jump-to-else, since it ended up not being what we wanted
-					rdf_block_stmt = jump_to_else;
-				}
+			/**
+			 * If the exit statement is:
+			 * 	1.) NULL or
+			 * 	2.) Not a jump statement or
+			 * 	3.) Not a direct(jmp) statement
+			 *
+			 * we don't care to look any further, so we'll continue to the next one
+			 */
+			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT 
+				|| rdf_block_stmt->jump_type != JUMP_TYPE_JMP){
+				continue;
 			}
+
+			//Otherwise, this is a jump statement and it's our "jump to else" statement. 
+			three_addr_code_stmt_t* jump_to_else = rdf_block_stmt;
+
+			//Advance the statement back by one
+			rdf_block_stmt = rdf_block_stmt->previous_statement;
+
+			/**
+			 * Now we're looking for the conditional jump statement. This is where a lot
+			 * of blocks will be disqualified, because most blocks end in a jump, not a
+			 * conditional branch
+			 *
+			 * If this statement:
+			 * 	1.) Is null or
+			 * 	2.) Not a jump statement or
+			 * 	3.) A direct(jmp) statement and not a conditional jump
+			 *
+			 * we don't care to look any further
+			 */
+			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT 
+				|| rdf_block_stmt->jump_type == JUMP_TYPE_JMP){
+				continue;
+			}
+
+			//If we make it here, then we've found the conditional part of our jump. This
+			//will be our jump to if
+			three_addr_code_stmt_t* jump_to_if = rdf_block_stmt;
+
+			/**
+			 * One final thing to check here - our conditional statement. This should really be a foregone
+			 * conclusion - but it never hurts to check
+			 *
+			 * If it's NULL or somehow a jump, we'll bail out. This really should never happen, it's just
+			 * here so it won't crash if something goes terribly wrong
+			 */
+			rdf_block_stmt = rdf_block_stmt->previous_statement;
+			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+				continue;
+			}
+
+			//We survived - so this is our conditional statement
+			three_addr_code_stmt_t* conditional_stmt = rdf_block_stmt;
+
+			//Now we'll go through and mark these statements
+			//Mark the conditional and add it to the worklist
+			if(conditional_stmt->mark == FALSE){
+				printf("Marking conditional statement: ");
+				print_three_addr_code_stmt(conditional_stmt);
+				printf("\n");
+
+				//Mark
+				conditional_stmt->mark = TRUE;
+				//Add to list
+				dynamic_array_add(worklist, conditional_stmt);
+			}
+
+			//Now mark the jump to if. We don't need to add this one to
+			//any list - there's nothing else to mark
+			if(rdf_block_stmt->mark == FALSE){
+				printf("Marking if statement: ");
+				print_three_addr_code_stmt(jump_to_if);
+				printf("\n");
+
+				//Mark
+				jump_to_if->mark = TRUE;
+			}
+
+			//Mark the jump to else. We also don't need to add this one
+			//to any list - there's nothing else to mark
+			if(jump_to_else->mark == FALSE){
+				printf("Marking else statement: ");
+				print_three_addr_code_stmt(jump_to_else);
+				printf("\n");
+				//Mark
+				jump_to_else->mark = TRUE;
+			}
+
+			//And we're done - we'll let this loop to the next statement
 		}
 	}
-
 
 	//And get rid of the worklist
 	dynamic_array_dealloc(worklist);
