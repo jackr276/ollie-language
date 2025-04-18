@@ -4333,27 +4333,45 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//First let's emit the conditional code
 				expr_ret_package_t ret_package = emit_expr_code(current_block, current_node->first_child, TRUE);
 
+				//We'll also need to emit a jump here - since this is a conditional break
+				basic_block_t* new_block = basic_block_alloc();
+
 				//There are two options here. If we're in a loop, that takes precedence. If we're in
 				//a switch statement, then that takes precedence
 				if(values->loop_stmt_end != NULL){
 					add_successor(current_block, values->loop_stmt_end);
+					//The other successor is the new block
+					add_successor(current_block, new_block);
+
+					//Make sure we mark this properly
+					current_block->direct_successor = new_block;
+
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
-
 					//Emit our conditional jump now
 					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE);
+					//Emit a jump statement to the new block. This will count as our "else"
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 
 				//We must've seen a switch statement then
 				} else {
+					//TODO HANDLE FOR BREAK WHEN
 					//We'll save this in for later
 					current_block->case_block_breaks_to = values->switch_statement_end;
+					//The other successor is the new block
+					add_successor(current_block, new_block);
 
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
 
 					//Emit our conditional jump now
 					emit_jmp_stmt(current_block, values->switch_statement_end, jump_type, TRUE);			
+					//Emit a jump statement to the new block. This will count as our "else"
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 				}
+
+				//And finally - we set the current block to be the new block
+				current_block = new_block;
 			}
 
 		//Handle a defer statement. Remember that a defer statment is one monolithic
@@ -4964,8 +4982,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 			} else {
-				//Mark this for later again
-				current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
+				//We'll also need a new block to jump to, since this is a conditional break
+				basic_block_t* new_block = basic_block_alloc();
 
 				//First let's emit the conditional code
 				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE);
@@ -4978,9 +4996,16 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 					//Add a successor to the end
 					add_successor(current_block, values->loop_stmt_end);
+					//Add the new block as a successor as well
+					add_successor(current_block, new_block);
+
+					//Make sure we mark this properly
+					current_block->direct_successor = new_block;
 
 					//We will jump to it -- this jump is decided above
 					emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE);
+					//Emit a jump to the new block
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 
 				//We must've seen a switch statement then
 				} else {
@@ -4989,10 +5014,17 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+					//Add the new block as a successor as well
+					add_successor(current_block, new_block);
 
 					//Emit our conditional jump now
 					emit_jmp_stmt(current_block, values->switch_statement_end, jump_type, TRUE);			
+					//Emit a jump to the new block
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
 				}
+
+				//Once we're out here, the current block is now the new one
+				current_block = new_block;
 			}
 
 		//Handle a defer statement. Remember that a defer statment is one monolithic
