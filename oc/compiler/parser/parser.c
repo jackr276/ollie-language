@@ -6076,7 +6076,7 @@ static generic_ast_node_t* branch_statement(FILE* fl){
  *
  * NOTE: The caller has already consumed the switch keyword by the time we get here
  *
- * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) { {<case-statement | default-statement>}+ }
+ * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(bottom, top) { {<case-statement | default-statement>}+ }
  */
 static generic_ast_node_t* switch_statement(FILE* fl){
 	//For error printing
@@ -6191,6 +6191,88 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	}
 
 	//Now we must see an lcurly to begin the actual block
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Now we need to see the "from" keyword. The from keyword requires the user to specify 
+	//the range of numbers that the switch statement is expected to switch on. Currently the maximum
+	//allowed range is 256 values that can be inside of the jump table. Any more than that will have
+	//an error thrown
+	if(lookahead.tok != FROM){
+		//Throw an error if we don't see it
+		print_parse_message(PARSE_ERROR, "from keyword expected. Ollie lang requires the programmer to specify the range of values", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we need to see a parenthesis
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see a parenthesis, we fail out
+	if(lookahead.tok != L_PAREN){
+		//Throw an error if we don't see it
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We did see this, so push it to the grouping stack
+	push_token(grouping_stack, lookahead);
+
+	//Now we need to see a constant of some kind 
+	lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+	//If we don't see these kinds of constants, we fail out
+	if(lookahead.tok != CHAR_CONST && lookahead.tok != INT_CONST && lookahead.tok != INT_CONST_FORCE_U
+	   && lookahead.tok != LONG_CONST && lookahead.tok != LONG_CONST_FORCE_U){
+		//Throw an error if we don't see it
+		print_parse_message(PARSE_ERROR, "Only integer, character or long constants are allowed in from declaration", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we'll hunt for a comma
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see a comma, we fail out
+	if(lookahead.tok != COMMA){
+		//Throw an error if we don't see it
+		print_parse_message(PARSE_ERROR, "Comma expected after lower bound", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+	
+	//Otherwise we did see one, so now we need the upper bound
+	lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+	//If we don't see these kinds of constants, we fail out
+	if(lookahead.tok != CHAR_CONST && lookahead.tok != INT_CONST && lookahead.tok != INT_CONST_FORCE_U
+	   && lookahead.tok != LONG_CONST && lookahead.tok != LONG_CONST_FORCE_U){
+		//Throw an error if we don't see it
+		print_parse_message(PARSE_ERROR, "Only integer, character or long constants are allowed in from declaration", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//And finally, we need to see the closing paren
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see a parenthesis, we fail out
+	if(lookahead.tok != R_PAREN){
+		//Throw an error if we don't see it
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//One last thing to check - make sure they match
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		//Throw an error if we don't see it
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we need to see a left curly
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Fail case

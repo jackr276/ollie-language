@@ -6,7 +6,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	let mut x:i32 := 32;
 	let mut _:u32 := 2;
 
-	switch on(x){
+	switch on(x) from(1, 16){
 		case 2:
 			x := 32;
 			break;
