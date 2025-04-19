@@ -1,7 +1,7 @@
 /**
  * Author: Jack Robbins
  *
- * This program tests the front end of the compiler only
+ * This program tests the front end(parser, cfg constructor) and middle end(optimizer) of the compiler
 */
 
 #include <stdio.h>
@@ -13,6 +13,8 @@
 #include "../parser/parser.h"
 //Link to cfg
 #include "../cfg/cfg.h"
+//Link to the ollie optimizer
+#include "../optimizer/optimizer.h"
 
 u_int32_t num_warnings;
 u_int32_t num_errors;
@@ -27,7 +29,7 @@ int main(int argc, char** argv){
 	num_errors = 0;
 	num_warnings = 0;
 
-	fprintf(stderr, "==================================== FRONT END TEST ======================================\n");
+	fprintf(stderr, "==================================== MIDDLE END TEST ======================================\n");
 
 	//Just hop out here
 	if(argc < 2){
@@ -79,6 +81,9 @@ int main(int argc, char** argv){
 	//Now we'll invoke the cfg builder
 	cfg_t* cfg = build_cfg(parse_results, &num_errors, &num_warnings);
 
+	//Once we build the CFG, we'll pass this along to the optimizer
+	cfg = optimize(cfg, parse_results.os, 0);
+
 	//And once we're done - for the front end test, we'll want all of this printed
 	print_all_cfg_blocks(cfg);
 
@@ -100,9 +105,9 @@ int main(int argc, char** argv){
 	time_spent = (double)(end - begin)/CLOCKS_PER_SEC;
 
 	//Print out the summary now that we're done
-	printf("\n===================== FRONT END TEST SUMMARY ==========================\n");
+	printf("\n===================== MIDDLE END TEST SUMMARY ==========================\n");
 	printf("Lexer processed %d lines\n", parse_results.lines_processed);
-	printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
+	printf("Parsing and optimizing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
 	printf("=======================================================================\n\n");
 
 final_printout:
