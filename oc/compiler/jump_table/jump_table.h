@@ -23,19 +23,19 @@ struct jump_table_t{
 	//A list of all nodes. This list is guaranteed to always be sorted
 	void** nodes;
 	//The number of nodes that we have
-	u_int32_t num_nodes;
+	u_int16_t num_nodes;
 };
 
 /**
  * Allocate the jump table
  */
-jump_table_t jump_table_alloc(u_int32_t size);
+jump_table_t jump_table_alloc(u_int16_t size);
 
 /**
  * Insert an entry into the jump table. This will be used
  * for adding values from case statements in
  */
-void add_jump_table_entry(jump_table_t* table, u_int32_t index, void* entry);
+void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry);
 
 /**
  * Deallocate the jump table

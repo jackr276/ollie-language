@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../queue/heap_queue.h"
+#include "../jump_table/jump_table.h"
 
 //For magic number removal
 #define TRUE 1
