@@ -5,6 +5,7 @@
 [![Global compiler test](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml)
 [![Dynamic array test](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_array_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_array_test.yml)
 [![Front End Test](https://github.com/jackr276/ollie-language/actions/workflows/front_end_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/front_end_test.yml)
+[![Middle End Test](https://github.com/jackr276/ollie-language/actions/workflows/middle_end_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/middle_end_test.yml)
 
 ## Ollie Language Front-End
 
