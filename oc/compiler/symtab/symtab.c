@@ -10,6 +10,11 @@
 #include "../ast/ast.h"
 
 #define LARGE_PRIME 611593
+//For standardization
+#define TRUE 1
+#define FALSE 0
+
+
 static void print_generic_type(generic_type_t* type);
 
 /**

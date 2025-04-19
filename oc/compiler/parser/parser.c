@@ -3980,6 +3980,8 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
  *
  * This rule also handles everything with identifiers to avoid excessive confusion
  *
+ * TODO: constructs need their own separate construct table. This will be stored alongside it in the type system
+ *
  * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
 static u_int8_t construct_definer(FILE* fl){
@@ -4092,9 +4094,9 @@ static u_int8_t construct_definer(FILE* fl){
 		symtab_variable_record_t* var = cursor->variable;
 
 		//We'll now add this into the parameter list
-		construct_type->construct_type->members[construct_type->construct_type->num_members] = var;
+		//construct_type->construct_type->members[construct_type->construct_type->num_members] = var;
 		//Increment the number of members
-		(construct_type->construct_type->num_members)++;
+		//(construct_type->construct_type->num_members)++;
 		//Store what construct it came from
 		var->struct_defined_in = construct_type;
 

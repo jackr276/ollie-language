@@ -31,6 +31,8 @@ typedef struct pointer_type_t pointer_type_t;
 typedef struct enumerated_type_t enumerated_type_t;
 //A constructed type
 typedef struct constructed_type_t constructed_type_t;
+//A construct member
+typedef struct construct_member_t construct_member_t;
 //An aliased type
 typedef struct aliased_type_t aliased_type_t;
 
@@ -116,11 +118,10 @@ struct pointer_type_t{
  * As such, the type here contains an array of generic types of at most 100
  */
 struct constructed_type_t{
-	//What types do we contain?.
-	//Each pointer in here refers to a variable(in the symtab)
-	void* members[MAX_CONSTRUCT_MEMBERS];
-	//How many members are there?
-	u_int8_t num_members;
+	//We will store internally a pre-aligned construct table. The construct
+	//table itself will be aligned internally, and we'll use the given order of
+	//the construct members to compute it
+	
 };
 
 

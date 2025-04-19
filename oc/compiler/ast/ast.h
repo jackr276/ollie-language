@@ -109,8 +109,6 @@ typedef enum address_specifier_type_t{
 struct generic_ast_node_t{
 	//What is the next created AST NODE? Used for memory deallocation
 	generic_ast_node_t* next_created_ast_node;
-	//What is the next statement? This is used in our CFG
-	generic_ast_node_t* next_statement;
 	//What is the inferred type of the node
 	generic_type_t* inferred_type;
 	//These are the two pointers that make up the whole of the tree
@@ -140,7 +138,7 @@ struct generic_ast_node_t{
 	address_specifier_type_t address_type;
 	//What is the value of this case statement
 	int64_t case_statement_value;
-	//This is where we hold the actual node
+	//This is where we hold the actual node and/or structure table for structs
 	void* node;
 	//What variable do we have?
 	symtab_variable_record_t* variable;

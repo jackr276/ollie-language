@@ -69,7 +69,6 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 	//We don't want to hold onto any of these old references here
 	duplicated->first_child = NULL;
 	duplicated->next_sibling = NULL;
-	duplicated->next_statement = NULL;
 	duplicated->next_created_ast_node = NULL;
 
 	//And now we'll link this in to our linked list here
