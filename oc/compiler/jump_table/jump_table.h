@@ -27,6 +27,22 @@ struct jump_table_t{
 };
 
 /**
+ * Allocate the jump table
+ */
+jump_table_t jump_table_alloc(u_int32_t size);
+
+/**
+ * Insert an entry into the jump table. This will be used
+ * for adding values from case statements in
+ */
+void add_jump_table_entry(jump_table_t* table, u_int32_t index, void* entry);
+
+/**
+ * Deallocate the jump table
+ */
+void jump_table_dealloc(jump_table_t* table);
+
+/**
  * A simple utility function that prints the search table out. It is important to note
 */
 
