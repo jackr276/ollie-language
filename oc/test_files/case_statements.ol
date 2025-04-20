@@ -11,7 +11,7 @@ fn main(arg:i32, argv:char**) -> i32{
 			x := 32;
 		case 1:
 			x := 3;
-		case 33:
+		case 22222:
 			x := 2;
 		default:
 			x := x - 22;

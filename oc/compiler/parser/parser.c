@@ -7740,6 +7740,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	//After we do this, we need to validate that the case statement value is within the range given by the user for switching
+	if(case_stmt->case_statement_value < switch_stmt_node->lower_bound || case_stmt->case_statement_value > switch_stmt_node->upper_bound){
+		sprintf(info, "Value %ld is not within the range %d, %d provided for the switch statement", case_stmt->case_statement_value, switch_stmt_node->lower_bound, switch_stmt_node->upper_bound); 
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

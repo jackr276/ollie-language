@@ -27,9 +27,10 @@ struct jump_table_t{
 };
 
 /**
- * Allocate the jump table
+ * Allocate the jump table. We'll need the default block here, because
+ * every value will be initialized with this for our purposes
  */
-jump_table_t jump_table_alloc(u_int16_t size);
+jump_table_t jump_table_alloc(u_int16_t size, void* default_block);
 
 /**
  * Insert an entry into the jump table. This will be used

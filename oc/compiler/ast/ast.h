@@ -114,6 +114,16 @@ struct generic_ast_node_t{
 	//These are the two pointers that make up the whole of the tree
 	generic_ast_node_t* first_child;
 	generic_ast_node_t* next_sibling;
+	//This is where we hold the actual node and/or structure table for structs
+	void* node;
+	//What variable do we have?
+	symtab_variable_record_t* variable;
+	//The symtab function record
+	symtab_function_record_t* func_record;
+	//Holds the name of the type as a string
+	char* type_name;
+	//The type record that we have
+	symtab_type_record_t* type_record;
 	//What kind of node is it?
 	ast_node_class_t CLASS;
 	//The upper and lower bound for switch statements
@@ -121,6 +131,8 @@ struct generic_ast_node_t{
 	int32_t upper_bound;
 	//What line number is this from
 	u_int16_t line_number;
+	//Number of members - used for enums and constructs
+	u_int16_t num_members;
 	//Store a binary operator(if one exists)
 	Token binary_operator;
 	//Store a unary operator(if one exists)
@@ -135,22 +147,10 @@ struct generic_ast_node_t{
 	u_int8_t is_deferred;
 	//The number of parameters
 	u_int8_t num_params;
-	//Number of members - used for enums and constructs
-	u_int16_t num_members;
 	//The type address specifier - for types
 	address_specifier_type_t address_type;
 	//What is the value of this case statement
 	int64_t case_statement_value;
-	//This is where we hold the actual node and/or structure table for structs
-	void* node;
-	//What variable do we have?
-	symtab_variable_record_t* variable;
-	//The symtab function record
-	symtab_function_record_t* func_record;
-	//Holds the name of the type as a string
-	char* type_name;
-	//The type record that we have
-	symtab_type_record_t* type_record;
 };
 
 

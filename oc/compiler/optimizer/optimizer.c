@@ -71,9 +71,6 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	//Also make note of any direct succession
 	a->direct_successor = b->direct_successor;
 
-	//Make a note of this too
-	//a->ends_in_conditional_branch = b->ends_in_conditional_branch;
-
 	//Copy over the block type and terminal type
 	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
 		a->block_type = b->block_type;

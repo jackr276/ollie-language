@@ -15,7 +15,7 @@
 /**
  * Allocate the jump table
  */
-jump_table_t jump_table_alloc(u_int16_t size){
+jump_table_t jump_table_alloc(u_int16_t size, void* default_block){
 	//Stack allocate
 	jump_table_t table;
 
@@ -23,6 +23,11 @@ jump_table_t jump_table_alloc(u_int16_t size){
 	table.nodes = calloc(sizeof(void*), size);
 	//Now we set the actual value
 	table.num_nodes = size;
+
+	//Populate everything with the default block to start with
+	for(u_int16_t _ = 0; _ < size; _++){
+		table.nodes[_] = default_block;
+	}
 
 	//And return a copy of this stack data
 	return table;

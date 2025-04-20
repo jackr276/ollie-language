@@ -3526,9 +3526,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//Emit a direct jump from the condition block to the compound stmt start
 	emit_jmp_stmt(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE);
 
-		//The conditional block ends in a branch
-	condition_block->ends_in_conditional_branch = TRUE;
-
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
 
@@ -3635,9 +3632,6 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//Also emit a jump statement to the ending block
 	emit_jmp_stmt(compound_stmt_end, do_while_stmt_exit_block, JUMP_TYPE_JMP, TRUE);
 
-	//This ends in a conditional branch
-	compound_stmt_end->ends_in_conditional_branch = TRUE;
-
 	//Always return the entry block
 	return do_while_stmt_entry_block;
 }
@@ -3715,9 +3709,6 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	//The exit block is also a successor to the entry block
 	add_successor(while_statement_entry_block, while_statement_end_block);
 
-	//This ends in a conditional branch
-	while_statement_entry_block->ends_in_conditional_branch = TRUE;
-
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
 
@@ -3752,9 +3743,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	basic_block_t* entry_block = basic_block_alloc();
 	basic_block_t* exit_block = basic_block_alloc();
 	exit_block->block_type = BLOCK_TYPE_IF_STMT_END;
-
-	//An if statement entry block always ends in a conditional branch
-	entry_block->ends_in_conditional_branch = TRUE;
 
 	//Grab the cursor
 	generic_ast_node_t* cursor = values->initial_node->first_child;

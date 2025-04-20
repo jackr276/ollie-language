@@ -84,8 +84,6 @@ struct cfg_t{
 struct basic_block_t{
 	//An integer ID
 	int32_t block_id;
-	//Does this block ever contain an assignment?
-	u_int8_t contains_assignment;
 	//Does this block contain a marked record?
 	u_int8_t contains_mark;
 	//The function record -- we need to store this for printing
@@ -103,8 +101,6 @@ struct basic_block_t{
 	block_terminal_type_t block_terminal_type;
 	//Was this block visited by traverser?
 	u_int8_t visited;
-	//Does this block end in a conditional branch?
-	u_int8_t ends_in_conditional_branch;
 	//Does this block have short-circuiting eligibility?
 	u_int8_t is_short_circuit_eligible;
 	//Predecessor nodes
@@ -114,8 +110,6 @@ struct basic_block_t{
 	//For convenience here. This is the successor that we use to
 	//"drill" to the bottom
 	basic_block_t* direct_successor;
-	//If we have a case block, what does it break to?
-	basic_block_t* case_block_breaks_to;
 	//The array of used variables
 	dynamic_array_t* used_variables;
 	//The array of all assigned variables
