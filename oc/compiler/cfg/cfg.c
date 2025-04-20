@@ -4533,7 +4533,9 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//The starting block for the switch statement - we'll want this in a new
 	//block
 	basic_block_t* starting_block = basic_block_alloc();
+	//Mark that this is a switch statement
 	starting_block->block_type = BLOCK_TYPE_SWITCH;
+
 	//We also need to know the ending block here -- Knowing
 	//this is important for break statements
 	basic_block_t* ending_block = basic_block_alloc();
@@ -4546,9 +4548,9 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//We need a reference to this block ID too
 	u_int16_t jump_table_block_id = starting_block->block_id;
 
-
-	//If this is empty, serious issue
-	if(values->initial_node == NULL){
+	//If this is empty, serious issue. The initial node already is
+	//a switch statement. Its first child is the expression inside of it
+	if(values->initial_node->first_child == NULL){
 		//Print this message
 		print_cfg_message(WARNING, "Empty switch statement detected", values->initial_node->line_number);
 		(*num_warnings_ref)++;
@@ -4557,19 +4559,11 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	}
 
 	//Grab a cursor to the case statements
-	generic_ast_node_t* case_stmt_cursor = values->initial_node;
+	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 
 	//The very first thing should be an expression telling us what to switch on
 	//There should be some kind of expression here
 	emit_expr_code(starting_block, case_stmt_cursor, TRUE);
-
-	//We should see two children here
-	generic_ast_node_t* lower_bound = case_stmt_cursor->next_sibling;
-	generic_ast_node_t* upper_bound = case_stmt_cursor->next_sibling;
-
-	//Get to the next statement. This is the first actual case 
-	//statement
-	case_stmt_cursor = case_stmt_cursor->next_sibling;
 
 	//The values package that we have
 	values_package_t passing_values = *values;
@@ -4584,6 +4578,10 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	
 	//The current block(case or default) that we're on
 	basic_block_t* case_block;
+
+	//Get to the next statement. This is the first actual case 
+	//statement
+	case_stmt_cursor = case_stmt_cursor->next_sibling;
 
 	//So long as this isn't null
 	while(case_stmt_cursor != NULL){
@@ -4604,6 +4602,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		//Otherwise we fail out here
 		} else {
 			print_cfg_message(PARSE_ERROR, "Switch statements are only allowed \"case\" and \"default\" statements", case_stmt_cursor->line_number);
+			exit(0);
 		}
 
 		//Now we'll add this one into the overall structure

@@ -13,11 +13,11 @@
 */
 
 
-#include "parser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "parser.h"
 #include "../stack/lexstack.h"
 #include "../queue/heap_queue.h"
 
@@ -50,10 +50,6 @@ static symtab_function_record_t* current_function = NULL;
 static symtab_variable_record_t* current_var = NULL;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t* current_function_jump_statements = NULL;
-//What is the current switch statement type?
-static generic_type_t* current_switch_statement_type = NULL;
-//Have we found a default clause yet? -- reset for every switch statement
-static u_int8_t found_default_clause = 0;
 
 //Our stack for storing variables, etc
 static lex_stack_t* grouping_stack = NULL;
@@ -85,8 +81,8 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
-static generic_ast_node_t* case_statement(FILE* fl);
-static generic_ast_node_t* default_statement(FILE* fl);
+static generic_ast_node_t* case_statement(FILE* fl, generic_type_t* type);
+static generic_ast_node_t* default_statement(FILE* fl, generic_type_t* type);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
@@ -6093,18 +6089,46 @@ static u_int8_t validate_switch_statement_bounds(generic_type_t* switching_type,
 		return FALSE;
 	}
 
+	//Now that we know that these types are either enums or basic, we need to make sure of what kind of
+	//basic type that they are
+	if(lb_type_class == TYPE_CLASS_BASIC){
+		//What kind of basic type do we have
+		Token lb_basic_type_type = lower_bound->inferred_type->basic_type->basic_type;
+		//Now that we have the type grabbed out, we need to ensure that it's not a float or a void type
+		if(lb_basic_type_type == VOID || lb_basic_type_type == FLOAT32 || lb_basic_type_type == FLOAT64){
+			print_parse_message(PARSE_ERROR, "Floating point and void types may not be switch statement bounds", lower_bound->line_number);
+			return FALSE;
+		}
+
+	}
+
+	//Do the exact same validation for the upper bound
+	if(ub_type_class == TYPE_CLASS_BASIC){
+		//What kind of basic type do we have
+		Token ub_basic_type_type = lower_bound->inferred_type->basic_type->basic_type;
+		if(ub_basic_type_type == VOID || ub_basic_type_type == FLOAT32 || ub_basic_type_type == FLOAT64){
+			print_parse_message(PARSE_ERROR, "Floating point and void types may not be switch statement bounds", upper_bound->line_number);
+			return FALSE;
+		}
+	}
+
 	//Get the compatible type out here
 	generic_type_t* type = types_compatible(lower_bound->inferred_type, upper_bound->inferred_type);
 
 	//We need to ensure that the types are compatible here
 	if(type == NULL){
 		print_parse_message(PARSE_ERROR, "Incompatible constants given as bounds", lower_bound->line_number);
-		num_errors++;
 		return FALSE;
 	}
 
-	//TODO MORE VALIDATION
+	//Now that we've gotten this type, we'll need to make sure that it's compatible with the overall
+	//type given in the switch statement
+	if(types_compatible(type, switching_type) == NULL){
+		print_parse_message(PARSE_ERROR, "Types given for bounds are incompatible with the switching type", parser_line_num);
+		return FALSE;
+	}
 
+	//Otherwise we made it so
 	return TRUE;
 }
 
@@ -6126,15 +6150,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	Lexer_item lookahead;
-	//Wipe this, it's no longer valid
-	found_default_clause = 0;
-
-	//Ollie language does not allow for nested switch statements. If this happens, we fail out
-	if(current_switch_statement_type != NULL){
-		print_parse_message(PARSE_ERROR, "Nested switch statements are not supported", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
+	//By default we have not found one of these
+	u_int8_t found_default_clause = FALSE;
 
 	//We've already seen the switch keyword, so now we have to see the on keyword
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6205,9 +6222,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 	}
-
-	//Otherwise it's fine, set this for statements down the line
-	current_switch_statement_type = type;
 
 	//Since we know it's valid, we can add this in as a child
 	add_child_node(switch_stmt_node, expr_node);
@@ -6349,7 +6363,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Seed our search here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	//Is this statement occupied? Set this flag if no
-	u_int8_t is_empty = 1;
+	u_int8_t is_empty = TRUE;
 	//Handle our statement here
 	generic_ast_node_t* stmt;
 
@@ -6358,7 +6372,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		//We need to see a valid case or default statement
 		if(lookahead.tok == CASE){
 			//Handle a case statement here
-			stmt = case_statement(fl);
+			stmt = case_statement(fl, type);
 
 			//If it fails, then we're done
 			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -6367,12 +6381,15 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 			
 		} else if(lookahead.tok == DEFAULT){
 			//Handle a default statement
-			stmt = default_statement(fl);
+			stmt = default_statement(fl, type);
 
 			//If it fails, then we're done
 			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
 				return stmt;
 			}
+
+			//We've found it
+			found_default_clause = TRUE;
 
 		//We fail out here -- something went wrong
 		} else {
@@ -6385,21 +6402,21 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		add_child_node(switch_stmt_node, stmt);
 
 		//No longer empty
-		is_empty = 0;
+		is_empty = FALSE;
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
 	//If we haven't found a default clause, it's a failure
-	if(found_default_clause == 0){
+	if(found_default_clause == FALSE){
 		print_parse_message(PARSE_ERROR, "Switch statements are required to have a \"default\" clause", current_line);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}	
 
 	//If we have an entirely empty switch statement
-	if(is_empty == 1){
+	if(is_empty == TRUE){
 		print_parse_message(WARNING, "Switch statement is empty, has no effect", current_line);
 		num_warnings++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -6420,8 +6437,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Return the line number
 	switch_stmt_node->line_number = current_line;
-	//Reset this back to NULL for who comes next
-	current_switch_statement_type = NULL;
 
 	//If we make it here, all went well
 	return switch_stmt_node;
@@ -7443,19 +7458,11 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* default_statement(FILE* fl){
+static generic_ast_node_t* default_statement(FILE* fl, generic_type_t* type){
 	//Lookaehad token
 	Lexer_item lookahead;
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
-
-	//So we've found a switch statement, but have we already found a default clause? Let's see to find out
-	if(found_default_clause == 1){
-		print_parse_message(PARSE_ERROR, "Duplicate \"default\" clause found in switch statements. Only one default per statement is allowed", parser_line_num);
-		num_errors++;
-		//Error out
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
 
 	//If we see default, we can just make the default node
 	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT);
@@ -7505,9 +7512,6 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	//Push it back, we're done here
 	push_back_token(lookahead);
 
-	//Mark that we've actually found a default clause
-	found_default_clause = 1;
-
 	//Otherwise it all worked, so we'll just return
 	return default_stmt;
 }
@@ -7519,7 +7523,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* case_statement(FILE* fl){
+static generic_ast_node_t* case_statement(FILE* fl, generic_type_t* type){
 	//For error printing
 	char info[ERROR_SIZE];
 
@@ -7574,12 +7578,12 @@ static generic_ast_node_t* case_statement(FILE* fl){
 
 		//Otherwise we know that it is good, but is it the right type
 		//Are the types here compatible?
-		case_stmt->inferred_type = types_compatible(current_switch_statement_type, enum_ident_node->inferred_type);
+		case_stmt->inferred_type = types_compatible(type, enum_ident_node->inferred_type);
 
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  current_switch_statement_type->type_name, enum_ident_node->inferred_type->type_name);
+						  type->type_name, enum_ident_node->inferred_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -7647,12 +7651,12 @@ static generic_ast_node_t* case_statement(FILE* fl){
 
 		//Otherwise we know that it is good, but is it the right type
 		//Are the types here compatible?
-		case_stmt->inferred_type = types_compatible(current_switch_statement_type, const_node->inferred_type);
+		case_stmt->inferred_type = types_compatible(type, const_node->inferred_type);
 
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  current_switch_statement_type->type_name, const_node->inferred_type->type_name);
+						  type->type_name, const_node->inferred_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);

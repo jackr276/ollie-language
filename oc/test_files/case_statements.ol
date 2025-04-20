@@ -9,13 +9,12 @@ fn main(arg:i32, argv:char**) -> i32{
 	switch on(x) from(1, 16){
 		case 2:
 			x := 32;
-			break;
 		case 1:
 			x := 3;
 		case 33:
 			x := 2;
 		default:
-			break;
+			x := x - 22;
 	}
 
 

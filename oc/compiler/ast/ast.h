@@ -116,6 +116,9 @@ struct generic_ast_node_t{
 	generic_ast_node_t* next_sibling;
 	//What kind of node is it?
 	ast_node_class_t CLASS;
+	//The upper and lower bound for switch statements
+	int32_t lower_bound;
+	int32_t upper_bound;
 	//What line number is this from
 	u_int16_t line_number;
 	//Store a binary operator(if one exists)
