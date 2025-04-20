@@ -4543,11 +4543,6 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//We need a quick reference to the starting block ID
 	u_int16_t starting_block_id = starting_block->block_id;
 
-	//We also need a jump table block
-	basic_block_t* jump_table_block = basic_block_alloc();
-	//We need a reference to this block ID too
-	u_int16_t jump_table_block_id = starting_block->block_id;
-
 	//If this is empty, serious issue. The initial node already is
 	//a switch statement. Its first child is the expression inside of it
 	if(values->initial_node->first_child == NULL){
@@ -4570,8 +4565,6 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Set the ending block here, so that any break statements
 	//know where to point
 	passing_values.switch_statement_end = ending_block;
-	//Send this in as the initial value
-	passing_values.initial_node = case_stmt_cursor;
 
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block = starting_block;
@@ -4606,24 +4599,26 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		}
 
 		//Now we'll add this one into the overall structure
-		add_successor(current_block, case_block);
-
-		//Ensure that the current block points right here
-		current_block->direct_successor = case_block;
+		add_successor(starting_block, case_block);
 
 		//Now we'll drill down to the bottom to prime the next pass
+		current_block = case_block;
 		while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 			current_block = current_block->direct_successor;
 		}
+
+		//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
+		add_successor(current_block, ending_block);
+
+		//We will always emit a direct jump from this block to the ending block
+		emit_jmp_stmt(current_block, ending_block, JUMP_TYPE_JMP, TRUE);
 
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
 	}
 
-	//Once we escape here, we should have a reference to the end of the last case or default statement. We'll
-	//now ensure that this points directly to the switch statement ending block
-	add_successor(current_block, ending_block);
-	current_block->direct_successor = ending_block;
+	//Ensure that the starting block's direct successor is the end block, for convenience
+	starting_block->direct_successor = ending_block;
 
 	//Give back the starting block
 	return starting_block;

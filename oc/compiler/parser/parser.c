@@ -81,8 +81,8 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
-static generic_ast_node_t* case_statement(FILE* fl, generic_type_t* type);
-static generic_ast_node_t* default_statement(FILE* fl, generic_type_t* type);
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node);
+static generic_ast_node_t* default_statement(FILE* fl, generic_ast_node_t* switch_stmt_node);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
@@ -6068,9 +6068,9 @@ static generic_ast_node_t* branch_statement(FILE* fl){
 
 
 /**
- * Validate the upper and lower bounds provided to a switch statement
+ * Validate the upper and lower bounds provided to a switch statement. We'll also populate the values for the switch statement node, should we have them here
  */
-static u_int8_t validate_switch_statement_bounds(generic_type_t* switching_type, generic_ast_node_t* lower_bound, generic_ast_node_t* upper_bound){
+static u_int8_t validate_switch_statement_bounds(generic_ast_node_t* switch_stmt_node, generic_type_t* switching_type, generic_ast_node_t* lower_bound, generic_ast_node_t* upper_bound){
 	//Grab these out for convenience
 	TYPE_CLASS lb_type_class = lower_bound->inferred_type->type_class;
 	TYPE_CLASS ub_type_class = upper_bound->inferred_type->type_class;
@@ -6127,6 +6127,9 @@ static u_int8_t validate_switch_statement_bounds(generic_type_t* switching_type,
 		print_parse_message(PARSE_ERROR, "Types given for bounds are incompatible with the switching type", parser_line_num);
 		return FALSE;
 	}
+
+	//If we make it all the way down here, we know that we're good. We'll now add these values into the switch statement
+	
 
 	//Otherwise we made it so
 	return TRUE;
@@ -6226,6 +6229,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Since we know it's valid, we can add this in as a child
 	add_child_node(switch_stmt_node, expr_node);
 
+	//Assign this to be the switch statement's inferred type, because it's what we'll be switching on
+	switch_stmt_node->inferred_type = type;
+
 	//Now we must see a closing paren
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -6306,14 +6312,10 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Once we have this, we'll want to perform validation on these two before adding them in
 	//If it fails, the whole thing is bunk
-	if(validate_switch_statement_bounds(type, lower_bound, upper_bound) == FALSE){
+	if(validate_switch_statement_bounds(switch_stmt_node, type, lower_bound, upper_bound) == FALSE){
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
-
-	//Otherwise we know that it was valid, so we'll add these two in as children
-	add_child_node(switch_stmt_node, lower_bound);
-	add_child_node(switch_stmt_node, upper_bound);
 
 	//And finally, we need to see the closing paren
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6372,7 +6374,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		//We need to see a valid case or default statement
 		if(lookahead.tok == CASE){
 			//Handle a case statement here
-			stmt = case_statement(fl, type);
+			stmt = case_statement(fl, switch_stmt_node);
 
 			//If it fails, then we're done
 			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -6381,7 +6383,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 			
 		} else if(lookahead.tok == DEFAULT){
 			//Handle a default statement
-			stmt = default_statement(fl, type);
+			stmt = default_statement(fl, switch_stmt_node);
 
 			//If it fails, then we're done
 			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7458,7 +7460,7 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* default_statement(FILE* fl, generic_type_t* type){
+static generic_ast_node_t* default_statement(FILE* fl, generic_ast_node_t* switch_stmt_node){
 	//Lookaehad token
 	Lexer_item lookahead;
 	//Freeze the line number
@@ -7523,7 +7525,7 @@ static generic_ast_node_t* default_statement(FILE* fl, generic_type_t* type){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* case_statement(FILE* fl, generic_type_t* type){
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node){
 	//For error printing
 	char info[ERROR_SIZE];
 
@@ -7578,12 +7580,12 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_type_t* type){
 
 		//Otherwise we know that it is good, but is it the right type
 		//Are the types here compatible?
-		case_stmt->inferred_type = types_compatible(type, enum_ident_node->inferred_type);
+		case_stmt->inferred_type = types_compatible(switch_stmt_node->inferred_type, enum_ident_node->inferred_type);
 
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  type->type_name, enum_ident_node->inferred_type->type_name);
+						  switch_stmt_node->inferred_type->type_name, enum_ident_node->inferred_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -7651,12 +7653,12 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_type_t* type){
 
 		//Otherwise we know that it is good, but is it the right type
 		//Are the types here compatible?
-		case_stmt->inferred_type = types_compatible(type, const_node->inferred_type);
+		case_stmt->inferred_type = types_compatible(switch_stmt_node->inferred_type, const_node->inferred_type);
 
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  type->type_name, const_node->inferred_type->type_name);
+						  switch_stmt_node->inferred_type->type_name, const_node->inferred_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
