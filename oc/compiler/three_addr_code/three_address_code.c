@@ -139,6 +139,27 @@ three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee
 	return stmt;
 }
 
+
+/**
+ * Emit an indirect jump calculation that includes a block label in three address code form
+ */
+three_addr_code_stmt_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size){
+	//First we allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Now we'll make our populations
+	stmt->CLASS = THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT;
+	stmt->assignee = assignee;
+	//We store the jumping to block as our operand
+	stmt->jumping_to_block = op1;
+	stmt->op2 = op2;
+	stmt->lea_multiplicator = type_size;
+
+	//And now we'll give it back
+	return stmt;
+}
+
+
 /**
  * Emit a copy of this statement
  */
@@ -803,6 +824,25 @@ three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, ju
 	//What function are we in
 	stmt->function = current_function;
 	//Give the statement back
+	return stmt;
+}
+
+
+/**
+ * Emit an indirect jump statement. The jump statement can take on several different types of jump
+ */
+three_addr_code_stmt_t* emit_indirect_jmp_stmt_three_addr_code(three_addr_var_t* address, jump_type_t jump_type){
+	//First we allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
+	//The address we're jumping to is in op1
+	stmt->op1 = address;
+	stmt->jump_type = jump_type;
+	//What function we're in
+	stmt->function = current_function;
+	//And give it back
 	return stmt;
 }
 

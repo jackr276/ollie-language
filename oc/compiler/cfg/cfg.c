@@ -11,6 +11,7 @@
 */
 
 #include "cfg.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2170,6 +2171,24 @@ void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_t
 
 	//Add this into the first block
 	add_statement(basic_block, stmt);
+}
+
+
+/**
+ * Emit an indirect jump statement
+ *
+ * Indirect jumps are written in the form:
+ * 	jump *__var__, where var holds the address that we need
+ */
+void emit_indirect_jump_stmt(basic_block_t* basic_block, three_addr_var_t* dest_addr, jump_type_t type, u_int8_t is_branch_ending){
+	//Use the helper function to create it
+	three_addr_code_stmt_t* indirect_jump = emit_indirect_jmp_stmt_three_addr_code(dest_addr, type);
+
+	//Is it branch ending?
+	indirect_jump->is_branch_ending = is_branch_ending;
+
+	//Now we'll add it into the block
+	add_statement(basic_block, indirect_jump);
 }
 
 
@@ -4551,7 +4570,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
 	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
-	u_int32_t adjustment = values->initial_node->lower_bound - 0;
+	u_int32_t offset = values->initial_node->lower_bound - 0;
 
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
@@ -4586,7 +4605,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 			//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 			//that we start down at 0 as the lowest value
-			add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val - adjustment, case_block);
+			add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val - offset, case_block);
 
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
@@ -4660,6 +4679,17 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	emit_jmp_stmt(starting_block, default_block, jump_greater_than, TRUE);
 
 	//Now that all this is done, we can use our jump table for the rest
+	//We'll now need to cut the value down by whatever our offset was	
+	three_addr_var_t* input = emit_binary_op_with_constant_code(starting_block, emit_temp_var(expression_node->inferred_type), package.assignee, MINUS, emit_int_constant_direct(offset), TRUE);
+
+	/**
+	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
+	 * 	base address(.JT1) + input * 8 
+	 * 	
+	 *
+	 * 	TODO an idea: we could replace this is a right shift by 3(just a thought)
+	 */
+
 	
 
 	//Ensure that the starting block's direct successor is the end block, for convenience

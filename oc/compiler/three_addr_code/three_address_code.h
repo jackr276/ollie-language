@@ -87,6 +87,8 @@ typedef enum{
 	THREE_ADDR_CODE_RET_STMT,
 	//A jump statement -- used for control flow
 	THREE_ADDR_CODE_JUMP_STMT,
+	//An indirect jump statement -- used for switch statement jump tables
+	THREE_ADDR_CODE_INDIRECT_JUMP_STMT,
 	//A direct to label jump statement
 	THREE_ADDR_CODE_DIR_JUMP_STMT,
 	//A label statement
@@ -103,6 +105,8 @@ typedef enum{
 	THREE_ADDR_CODE_SWITCH_STMT,
 	//A "Load effective address(lea)" instruction
 	THREE_ADDR_CODE_LEA_STMT,
+	//An indirect jump address calculation instruction, very similar to lea
+	THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT,
 	//A phi function - for SSA analysis only
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A conditional branch OIR statement
@@ -247,6 +251,11 @@ three_addr_const_t* emit_int_constant_direct(int int_const);
 three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
+ * Emit an indirect jump calculation that includes a block label in three address code form
+ */
+three_addr_code_stmt_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size);
+
+/**
  * Emit a statement using three vars and a binary operator
  * ALL statements are of the form: assignee <- op1 operator op2
 */
@@ -307,6 +316,11 @@ three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* 
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
 three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, jump_type_t jump_type);
+
+/**
+ * Emit an indirect jump statement. The jump statement can take on several different types of jump
+ */
+three_addr_code_stmt_t* emit_indirect_jmp_stmt_three_addr_code(three_addr_var_t* address, jump_type_t jump_type);
 
 /**
  * Emit a direct jump statement. This is used only with jump statements the user has made
