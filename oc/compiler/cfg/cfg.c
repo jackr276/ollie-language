@@ -3160,6 +3160,11 @@ void basic_block_dealloc(basic_block_t* block){
 		dynamic_array_dealloc(block->predecessors);
 	}
 
+	//If this is a switch statement entry block, then it will have a jump table
+	if(block->block_type == BLOCK_TYPE_SWITCH){
+		jump_table_dealloc(&(block->jump_table));
+	}
+
 	//Grab a statement cursor here
 	three_addr_code_stmt_t* cursor = block->leader_statement;
 	//We'll need a temp block too
@@ -4541,6 +4546,10 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		return starting_block;
 	}
 
+	//Let's also allocate our jump table. We know how large the jump table needs to be from
+	//data passed in by the parser
+	starting_block->jump_table = jump_table_alloc(values->initial_node->upper_bound - values->initial_node->lower_bound);
+
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 
@@ -4560,6 +4569,9 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//The current block(case or default) that we're on
 	basic_block_t* case_block;
 
+	//We'll need to save the default block for our purposes later
+	basic_block_t* default_block;
+
 	//Get to the next statement. This is the first actual case 
 	//statement
 	case_stmt_cursor = case_stmt_cursor->next_sibling;
@@ -4573,12 +4585,18 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 			//Visit our case stmt here
 			case_block = visit_case_statement(&passing_values);
 
+			//We'll now need to add this into the jump table
+			add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val, case_block);
+
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
 			//Update this
 			passing_values.initial_node = case_stmt_cursor;
 			//Visit the default statement
 			case_block = visit_default_statement(&passing_values);
+
+			//This is the default block, so save for now
+			default_block = case_block;
 
 		//Otherwise we fail out here
 		} else {
@@ -4603,6 +4621,15 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
+	}
+
+	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
+	//with the default value
+	for(u_int16_t _ = 0; _ < starting_block->jump_table.num_nodes; _++){
+		//If it's null, we'll make it the default
+		if(starting_block->jump_table.nodes[_] == NULL){
+			starting_block->jump_table.nodes[_] = default_block;
+		}
 	}
 
 	//Ensure that the starting block's direct successor is the end block, for convenience

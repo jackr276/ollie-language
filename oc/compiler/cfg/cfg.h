@@ -10,6 +10,7 @@
 #include "../stack/heapstack.h"
 #include "../three_addr_code/three_address_code.h"
 #include "../dynamic_array/dynamic_array.h"
+#include "../jump_table/jump_table.h"
 
 #define INITIAL_STATEMENT_SIZE 2000
 
@@ -139,6 +140,8 @@ struct basic_block_t{
 	basic_block_t* immediate_dominator;
 	//The immediate postdominator reference
 	basic_block_t* immediate_postdominator;
+	//The reference to a jump table. This is often not used at all
+	jump_table_t jump_table;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//There are consecutive statements(declare, define, let, assign, alias)

@@ -6,28 +6,39 @@
 
 //Link to header
 #include "jump_table.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <sys/types.h>
+#include "../cfg/cfg.h"
+
+//If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
+static int32_t current_jump_block_id = 0;
+
+/**
+ * Increment and get the ID for the jump table
+ */
+static int32_t increment_and_get_id(){
+	current_jump_block_id++;
+	return current_jump_block_id;
+}
 
 
 /**
  * Allocate the jump table
  */
-jump_table_t jump_table_alloc(u_int16_t size, void* default_block){
+jump_table_t jump_table_alloc(u_int16_t size){
 	//Stack allocate
 	jump_table_t table;
+
+	//Grab the ID for the table
+	table.jump_table_id = increment_and_get_id();
 
 	//Now we dynamically allocate the array
 	table.nodes = calloc(sizeof(void*), size);
 	//Now we set the actual value
 	table.num_nodes = size;
-
-	//Populate everything with the default block to start with
-	for(u_int16_t _ = 0; _ < size; _++){
-		table.nodes[_] = default_block;
-	}
 
 	//And return a copy of this stack data
 	return table;
@@ -48,6 +59,12 @@ void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry){
 	table->nodes[index] = entry;
 }
 
+/**
+ * Print a jump table in a stylized fashion
+ */
+void print_jump_table(jump_table_t* table){
+
+}
 
 /**
  * Deallocate a jump table. Really all we do here is deallocate the
