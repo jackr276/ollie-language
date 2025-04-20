@@ -253,7 +253,7 @@ three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
-three_addr_code_stmt_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size);
+three_addr_code_stmt_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* jump_table, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit a statement using three vars and a binary operator

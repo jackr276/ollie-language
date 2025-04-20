@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../cfg/cfg.h"
+#include "../jump_table/jump_table.h"
 
 //For standardization and convenience
 #define TRUE 1
@@ -150,7 +151,7 @@ three_addr_code_stmt_t* emit_indir_jump_address_calc_three_addr_code(three_addr_
 	//Now we'll make our populations
 	stmt->CLASS = THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT;
 	stmt->assignee = assignee;
-	//We store the jumping to block as our operand
+	//We store the jumping to block as our operand. It's really a jump table
 	stmt->jumping_to_block = op1;
 	stmt->op2 = op2;
 	stmt->lea_multiplicator = type_size;
@@ -619,6 +620,59 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		basic_block_t* if_target = stmt->if_branch_target;
 		basic_block_t* else_target = stmt->else_branch_target;
 		printf(", .L%d, .L%d)\n", if_target->block_id, else_target->block_id);
+	//Print out an indirect jump statement
+	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+
+		//Print out the jump block ID
+		printf(" <- .JT%d + ", ((jump_table_t*)(stmt->jumping_to_block))->jump_table_id);
+		
+		//Now print out the variable
+		print_variable(stmt->op2, PRINTING_VAR_INLINE);
+
+		//Finally the multiplicator
+		printf(" * %ld\n", stmt->lea_multiplicator);
+	//Print out an indirect jump statement
+	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
+		switch(stmt->jump_type){
+			case JUMP_TYPE_JE:
+				printf("je");
+				break;
+			case JUMP_TYPE_JNE:
+				printf("jne");
+				break;
+			case JUMP_TYPE_JG:
+				printf("jg");
+				break;
+			case JUMP_TYPE_JL:
+				printf("jl");
+				break;
+			case JUMP_TYPE_JNZ:
+				printf("jnz");
+				break;
+			case JUMP_TYPE_JZ:
+				printf("jz");
+				break;
+			case JUMP_TYPE_JMP:
+				printf("jmp");
+				break;
+			case JUMP_TYPE_JGE:
+				printf("jge");
+				break;
+			case JUMP_TYPE_JLE:
+				printf("jle");
+				break;
+			default:
+				printf("jmp");
+				break;
+		}
+
+		//Indirection
+		printf(" *");
+
+		//Now the variable
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+		printf("\n");
 	}
 }
 

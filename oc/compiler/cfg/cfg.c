@@ -2040,6 +2040,32 @@ static three_addr_var_t* emit_lea_stmt(basic_block_t* basic_block, three_addr_va
 
 
 /**
+ * Emit an indirect jump statement
+ */
+static three_addr_var_t* emit_indirect_jump_addr_calc_stmt(basic_block_t* basic_block, jump_table_t* initial_address, three_addr_var_t* mutliplicand, u_int8_t is_branch_ending){
+	//We'll need a new temp var for the assignee
+	three_addr_var_t* assignee = emit_temp_var(lookup_type(type_symtab, "label")->type);
+
+	//If the multiplicand is not temporary we have a new used variable
+	if(mutliplicand->is_temporary == FALSE){
+		add_used_variable(basic_block, mutliplicand);
+	}
+
+	//Use the helper to emit it - type size is 8 because it's an address
+	three_addr_code_stmt_t* stmt = emit_indir_jump_address_calc_three_addr_code(assignee, initial_address, mutliplicand, 8);
+
+	//Mark it as branch ending
+	stmt->is_branch_ending = is_branch_ending;
+
+	//Add it in
+	add_statement(basic_block, stmt);
+
+	//Give back the assignee
+	return assignee;
+}
+
+
+/**
  * Directly emit the assembly nop instruction
  */
 static void emit_idle_stmt(basic_block_t* basic_block, u_int8_t is_branch_ending){
@@ -4685,12 +4711,17 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
 	 * 	base address(.JT1) + input * 8 
+	 *
+	 * We have a special kind of statement for doing this
 	 * 	
 	 *
 	 * 	TODO an idea: we could replace this is a right shift by 3(just a thought)
 	 */
+	//Emit the address first
+	three_addr_var_t* address = emit_indirect_jump_addr_calc_stmt(starting_block, &(starting_block->jump_table), input, TRUE);
 
-	
+	//Now we'll emit the indirect jump to the address
+	emit_indirect_jump_stmt(starting_block, address, JUMP_TYPE_JMP, TRUE);
 
 	//Ensure that the starting block's direct successor is the end block, for convenience
 	starting_block->direct_successor = ending_block;

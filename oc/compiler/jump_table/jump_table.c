@@ -67,7 +67,7 @@ void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry){
 void print_jump_table(jump_table_t* table){
 	//First thing that we'll print is the header info
 	//This is in the read only data section and we want to align by 8 bytes
-	printf(".section .rodata\n\t.align 8\n.JT%d\n", table->jump_table_id);
+	printf(".section .rodata\n\t.align 8\n.JT%d:\n", table->jump_table_id);
 
 	//Now we'll run through and print out everything in the table's values
 	for(u_int16_t _ = 0; _ < table->num_nodes; _++){
