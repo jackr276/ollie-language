@@ -1244,7 +1244,7 @@ static void mark(cfg_t* cfg){
 
 			//Now mark the jump to if. We don't need to add this one to
 			//any list - there's nothing else to mark
-			if(rdf_block_stmt->mark == FALSE){
+			if(jump_to_if->mark == FALSE){
 				printf("Marking if statement: ");
 				print_three_addr_code_stmt(jump_to_if);
 				printf("\n");

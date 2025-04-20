@@ -18,7 +18,7 @@ fn main() -> i32{
 	defer @println(abc);
 
 	//100% useless
-	if(abc == 1) then {
+	if(abc) then {
 		abc := 2;
 	} else {
 		abc := 3;

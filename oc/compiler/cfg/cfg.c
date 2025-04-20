@@ -45,8 +45,6 @@ typedef struct {
 	basic_block_t* loop_stmt_start;
 	//For break statements
 	basic_block_t* loop_stmt_end;
-	//For break statements as well
-	basic_block_t* switch_statement_end;
 	//For any time we need to do for-loop operations
 	basic_block_t* for_loop_update_block;
 } values_package_t;
@@ -116,7 +114,7 @@ static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, gen
 /**
  * This is a very simple helper function that will pack values for us. This is done to avoid repeated code
  */
-static values_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* switch_statement_end, basic_block_t* for_loop_update_block){
+static values_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* for_loop_update_block){
 	//Allocate it
 	values_package_t values;
 
@@ -124,7 +122,6 @@ static values_package_t pack_values(generic_ast_node_t* initial_node, basic_bloc
 	values.initial_node = initial_node;
 	values.loop_stmt_start = loop_stmt_start;
 	values.loop_stmt_end = loop_stmt_end;
-	values.switch_statement_end = switch_statement_end;
 	values.for_loop_update_block = for_loop_update_block;
 
 	//And give the copy back
@@ -2783,7 +2780,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending){
+static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
@@ -2792,6 +2789,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	//By default, last seen op is blank
 	ret_package.operator = BLANK;
 
+	
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
 		//What kind of declarative statement do we have here?
@@ -2870,9 +2868,22 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		ret_package.assignee = emit_function_call_code(basic_block, expr_node, is_branch_ending);
 		return ret_package;
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
-		//Let this rule handle it
-		ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, PRESERVE_ORIG_VAR, SIDE_TYPE_RIGHT, is_branch_ending);
-		return ret_package;
+		/**
+	 	* This is a very special check where we look for any if(x) kind of statements that just require a
+	 	* left hand temp assignment
+	 	*/
+		if(check_for_coniditional == TRUE && expr_node->first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
+			//For now - just to make sure we aren't using this wrongly
+			printf("========HERE============\n");
+			//If this is the case, then we need to just emit the temporary value and be done with it
+			ret_package.assignee =  emit_ident_expr_code(basic_block, expr_node->first_child, USE_TEMP_VAR, SIDE_TYPE_LEFT, TRUE);
+			return ret_package;
+		} else {
+			//Let this rule handle it
+			ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, PRESERVE_ORIG_VAR, SIDE_TYPE_RIGHT, is_branch_ending);
+			return ret_package;
+		}
+
 	} else {
 		return ret_package;
 
@@ -2920,7 +2931,7 @@ static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, gen
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
-		expr_ret_package_t package = emit_expr_code(basic_block, param_cursor, is_branch_ending);
+		expr_ret_package_t package = emit_expr_code(basic_block, param_cursor, is_branch_ending, FALSE);
 		
 		//Add the parameter in
 		dynamic_array_add(func_call_stmt->function_parameters, package.assignee);
@@ -3424,7 +3435,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If the very first one is not blank
 	if(ast_cursor->first_child != NULL){
 		//Add it's child in as a statement to the entry block
-		emit_expr_code(for_stmt_entry_block, ast_cursor->first_child, TRUE);
+		emit_expr_code(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
 	}
 
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
@@ -3449,7 +3460,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If the second one is not blank
 	if(ast_cursor->first_child != NULL){
 		//This is always the first part of the repeating block
-		condition_block_vals = emit_expr_code(condition_block, ast_cursor->first_child, TRUE);
+		condition_block_vals = emit_expr_code(condition_block, ast_cursor->first_child, TRUE, TRUE);
 	//It is impossible for the second one to be blank
 	} else {
 		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Should not have gotten here if blank", for_stmt_node->line_number);
@@ -3469,7 +3480,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If the third one is not blank
 	if(ast_cursor->first_child != NULL){
 		//Emit the update expression
-		emit_expr_code(for_stmt_update_block, ast_cursor->first_child, FALSE);
+		emit_expr_code(for_stmt_update_block, ast_cursor->first_child, FALSE, FALSE);
 	}
 	
 	//Unconditional jump to condition block
@@ -3492,7 +3503,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	condition_block, //Loop statement start -- for loops start at their condition
 													 	for_stmt_exit_block, //Exit block of loop
-													 	NULL, 
 													 	for_stmt_update_block); //For loop update block
 
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
@@ -3584,7 +3594,6 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	do_while_stmt_entry_block, //Loop statement start
 													 	do_while_stmt_exit_block, //Exit block of loop
-													 	NULL, //Switch statement end
 													 	NULL); //For loop update block
 
 	//We go right into the compound statement here
@@ -3615,7 +3624,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	}
 
 	//Add the conditional check into the end here
-	expr_ret_package_t package = emit_expr_code(compound_stmt_end, ast_cursor->next_sibling, TRUE);
+	expr_ret_package_t package = emit_expr_code(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -3664,7 +3673,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
 	//The entry block contains our expression statement
-	expr_ret_package_t package = emit_expr_code(while_statement_entry_block, ast_cursor, TRUE);
+	expr_ret_package_t package = emit_expr_code(while_statement_entry_block, ast_cursor, TRUE, TRUE);
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -3679,7 +3688,6 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	while_statement_entry_block, //Loop statement start
 													 	while_statement_end_block, //Exit block of loop
-													 	NULL, //Switch statement end
 													 	NULL); //For loop update block
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
@@ -3753,7 +3761,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	generic_ast_node_t* cursor = values->initial_node->first_child;
 
 	//Add whatever our conditional is into the starting block
-	expr_ret_package_t package = emit_expr_code(entry_block, cursor, TRUE);
+	expr_ret_package_t package = emit_expr_code(entry_block, cursor, TRUE, TRUE);
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
@@ -3762,7 +3770,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	values_package_t if_compound_stmt_values = pack_values(cursor, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
-													 	values->switch_statement_end, //Switch statement end
 													 	values->for_loop_update_block); //For loop update block
 
 	//Visit the compound statement that we're required to have here
@@ -3835,7 +3842,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		emit_jmp_stmt(temp, current_entry_block, JUMP_TYPE_JMP, TRUE);
 
 		//So we've seen the else-if clause. Let's grab the expression first
-		package = emit_expr_code(current_entry_block, else_if_cursor, TRUE);
+		package = emit_expr_code(current_entry_block, else_if_cursor, TRUE, TRUE);
 
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
@@ -3844,7 +3851,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		values_package_t else_if_compound_stmt_values = pack_values(else_if_cursor, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
-													 	values->switch_statement_end, //Switch statement end
 													 	values->for_loop_update_block); //For loop update block
 
 		//Let this handle the compound statement
@@ -3899,7 +3905,6 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		values_package_t else_compound_stmt_values = pack_values(cursor, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
-													 	values->switch_statement_end, //Switch statement end
 													 	values->for_loop_update_block); //For loop update block
 
 		//Grab the compound statement
@@ -3977,7 +3982,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			values_package_t decl_values = pack_values(current_node, //Initial Node
 													 	NULL, //Loop statement start
 													 	NULL, //Exit block of loop
-													 	NULL, //Switch statement end
 													 	NULL); //For loop update block
 			//We'll visit the block here
 			basic_block_t* decl_block = visit_declaration_statement(&decl_values, VARIABLE_SCOPE_LOCAL);
@@ -3990,7 +3994,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			values_package_t let_values = pack_values(current_node, //Initial Node
 													 	NULL, //Loop statement start
 													 	NULL, //Exit block of loop
-													 	NULL, //Switch statement end
 													 	NULL); //For loop update block
 
 
@@ -4045,7 +4048,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			values_package_t compound_stmt_values = pack_values(current_node, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
-													 	values->switch_statement_end, //Switch statement end
 													 	values->for_loop_update_block); //For loop update block
 			
 			//We'll simply recall this function and let it handle it
@@ -4074,7 +4076,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			values_package_t if_stmt_values = pack_values(current_node, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
-													 	values->switch_statement_end, //Switch statement end
 													 	values->for_loop_update_block); //For loop update block
 			
 			//We'll now enter the if statement
@@ -4107,7 +4108,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			while_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			while_stmt_values.loop_stmt_start = NULL;
 			while_stmt_values.loop_stmt_end = NULL;
-			while_stmt_values.switch_statement_end = values->switch_statement_end;
 
 			//Visit the while statement
 			basic_block_t* while_stmt_entry_block = visit_while_statement(&while_stmt_values);
@@ -4139,7 +4139,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			do_while_values.loop_stmt_start = NULL;
 			do_while_values.loop_stmt_end = NULL;
 			do_while_values.for_loop_update_block = values->for_loop_update_block;
-			do_while_values.switch_statement_end = values->switch_statement_end;
 
 			//Visit the statement
 			basic_block_t* do_while_stmt_entry_block = visit_do_while_statement(&do_while_values);
@@ -4172,7 +4171,6 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
 			for_stmt_values.loop_stmt_start = NULL;
 			for_stmt_values.loop_stmt_end = NULL;
-			for_stmt_values.switch_statement_end = values->switch_statement_end;
 
 			//First visit the statement
 			basic_block_t* for_stmt_entry_block = visit_for_statement(&for_stmt_values);
@@ -4238,7 +4236,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Otherwise, we have a conditional continue here
 			} else {
 				//Emit the expression code into the current statement
-				expr_ret_package_t package = emit_expr_code(current_block, current_node->first_child, TRUE);
+				expr_ret_package_t package = emit_expr_code(current_block, current_node->first_child, TRUE, TRUE);
 				//Decide the appropriate jump statement -- direct path here
 				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 				//This is a conditional continue - so we have a new block as well
@@ -4312,7 +4310,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 			} else {
 				//First let's emit the conditional code
-				expr_ret_package_t ret_package = emit_expr_code(current_block, current_node->first_child, TRUE);
+				expr_ret_package_t ret_package = emit_expr_code(current_block, current_node->first_child, TRUE, TRUE);
 
 				//We'll also need to emit a jump here - since this is a conditional break
 				basic_block_t* new_block = basic_block_alloc();
@@ -4361,7 +4359,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//expr codes
 				while(defer_stmt_cursor != NULL){
 					//Let the helper deal with it
-					emit_expr_code(current_block, defer_stmt_cursor, FALSE);
+					emit_expr_code(current_block, defer_stmt_cursor, FALSE, FALSE);
 					//Move this up
 					defer_stmt_cursor = defer_stmt_cursor->next_sibling;
 				}			
@@ -4424,7 +4422,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 			
 			//Also emit the simplified machine code
-			emit_expr_code(current_block, current_node, FALSE);
+			emit_expr_code(current_block, current_node, FALSE, FALSE);
 		}
 
 		//Advance to the next child
@@ -4556,16 +4554,12 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
-
-	//The very first thing should be an expression telling us what to switch on
-	//There should be some kind of expression here
-	emit_expr_code(starting_block, case_stmt_cursor, TRUE);
+	
+	//Save the expression node for now, we won't use this until later on
+	generic_ast_node_t* expression_node = case_stmt_cursor;
 
 	//The values package that we have
 	values_package_t passing_values = *values;
-	//Set the ending block here, so that any break statements
-	//know where to point
-	passing_values.switch_statement_end = ending_block;
 
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block = starting_block;
@@ -4636,6 +4630,12 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 			starting_block->jump_table.nodes[_] = default_block;
 		}
 	}
+
+	//Now that everything has been situated, we can start emitting the values in the initial node
+
+	//The very first thing should be an expression telling us what to switch on
+	//There should be some kind of expression here
+	expr_ret_package_t package = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
 
 	//Ensure that the starting block's direct successor is the end block, for convenience
 	starting_block->direct_successor = ending_block;
@@ -4890,7 +4890,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Otherwise, we have a conditional continue here
 			} else {
 				//Emit the expression code into the current statement
-				expr_ret_package_t package = emit_expr_code(current_block, ast_cursor->first_child, TRUE);
+				expr_ret_package_t package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
 				//Decide the appropriate jump statement -- direct path here
 				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 
@@ -4967,7 +4967,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				basic_block_t* new_block = basic_block_alloc();
 
 				//First let's emit the conditional code
-				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE);
+				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
 
 				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
@@ -5015,7 +5015,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//expr codes
 				while(defer_stmt_cursor != NULL){
 					//Let the helper deal with it
-					emit_expr_code(current_block, defer_stmt_cursor, FALSE);
+					emit_expr_code(current_block, defer_stmt_cursor, FALSE, FALSE);
 					//Move this up
 					defer_stmt_cursor = defer_stmt_cursor->next_sibling;
 				}			
@@ -5133,7 +5133,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 			
 			//Also emit the simplified machine code
-			emit_expr_code(current_block, ast_cursor, FALSE);
+			emit_expr_code(current_block, ast_cursor, FALSE, FALSE);
 		}
 
 		//Advance to the next child
@@ -5187,7 +5187,6 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	values_package_t compound_stmt_values = pack_values(func_cursor, //Initial Node
 											 		NULL, //Loop statement start
 											 		NULL, //Exit block of loop
-											 		NULL, //Switch statement end
 											 		NULL); //For loop update block
 
 	//Once we get here, we know that func cursor is the compound statement that we want
@@ -5250,7 +5249,7 @@ static basic_block_t* visit_declaration_statement(values_package_t* values, vari
 	}
 
 	//Emit the expression code
-	emit_expr_code(emittance_block, values->initial_node, FALSE);
+	emit_expr_code(emittance_block, values->initial_node, FALSE, FALSE);
 
 	//Give the block back
 	return emittance_block;
@@ -5273,7 +5272,7 @@ static basic_block_t* visit_let_statement(values_package_t* values, variable_sco
 	}
 
 	//Add the expresssion into the node
-	emit_expr_code(emittance_block, values->initial_node, is_branch_ending);
+	emit_expr_code(emittance_block, values->initial_node, is_branch_ending, FALSE);
 
 	//Give the block back
 	return emittance_block;
@@ -5311,7 +5310,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			values_package_t values = pack_values(ast_cursor, //Initial Node
 											 	NULL, //Loop statement start
 											 	NULL, //Exit block of loop
-											 	NULL, //Switch statement end
 											 	NULL); //For loop update block
 
 			//If the cfg's global block is empty, we'll add it in here
@@ -5330,7 +5328,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			values_package_t values = pack_values(ast_cursor, //Initial Node
 											 	NULL, //Loop statement start
 											 	NULL, //Exit block of loop
-											 	NULL, //Switch statement end
 											 	NULL); //For loop update block
 			
 			//If the cfg's global block is empty, we'll add it in here
