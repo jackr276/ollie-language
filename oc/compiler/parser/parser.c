@@ -12,6 +12,7 @@
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -6066,135 +6067,6 @@ static generic_ast_node_t* branch_statement(FILE* fl){
 
 
 /**
- * Grab the bound out for a switch statement constant. The are guaranteed to only be of type
- * char, int or long
- */
-static void emit_constant_switch_bound(generic_ast_node_t* switch_stmt_node, generic_ast_node_t* lower_bound, generic_ast_node_t* upper_bound){
-	//Grab a reference to the const node for convenience
-	constant_ast_node_t* lb_const_node_raw = (constant_ast_node_t*)(lower_bound->node);
-
-	//Now we'll assign the appropriate values
-	Token lb_type = lb_const_node_raw->constant_type;
-
-	//Now based on what type we have we'll make assignments
-	switch(lb_type){
-		case CHAR_CONST:
-			switch_stmt_node->lower_bound = lb_const_node_raw->char_val;
-			break;
-		case INT_CONST:
-			switch_stmt_node->lower_bound = lb_const_node_raw->int_val;
-			break;
-		case LONG_CONST:
-			switch_stmt_node->lower_bound = lb_const_node_raw->long_val;
-			break;
-		case HEX_CONST:
-			switch_stmt_node->lower_bound = lb_const_node_raw->long_val;
-			break;
-		//Some very weird error here
-		default:
-			fprintf(stderr, "Unrecognizable constant type found in constant\n");
-			exit(0);
-	}
-
-	//Grab a reference to the const node for convenience
-	constant_ast_node_t* ub_const_node_raw = (constant_ast_node_t*)(upper_bound->node);
-
-	//Now we'll assign the appropriate values
-	Token ub_type = ub_const_node_raw->constant_type;
-
-	//Now based on what type we have we'll make assignments
-	switch(ub_type){
-		case CHAR_CONST:
-			switch_stmt_node->upper_bound = ub_const_node_raw->char_val;
-			break;
-		case INT_CONST:
-			switch_stmt_node->upper_bound = ub_const_node_raw->int_val;
-			break;
-		case LONG_CONST:
-			switch_stmt_node->upper_bound = ub_const_node_raw->long_val;
-			break;
-		case HEX_CONST:
-			switch_stmt_node->upper_bound = ub_const_node_raw->long_val;
-			break;
-		//Some very weird error here
-		default:
-			fprintf(stderr, "Unrecognizable constant type found in constant\n");
-			exit(0);
-	}
-}
-
-
-/**
- * Validate the upper and lower bounds provided to a switch statement. We'll also populate the values for the switch statement node, should we have them here
- */
-static u_int8_t validate_switch_statement_bounds(generic_ast_node_t* switch_stmt_node, generic_type_t* switching_type, generic_ast_node_t* lower_bound, generic_ast_node_t* upper_bound){
-	//Grab these out for convenience
-	TYPE_CLASS lb_type_class = lower_bound->inferred_type->type_class;
-	TYPE_CLASS ub_type_class = upper_bound->inferred_type->type_class;
-
-	//If it's not enumerated or basic, we're out
-	if(lb_type_class != TYPE_CLASS_ENUMERATED && lb_type_class != TYPE_CLASS_BASIC){
-		print_parse_message(PARSE_ERROR, "Complex types may not be switch statement bounds", lower_bound->line_number);
-		num_errors++;
-		return FALSE;
-	}
-
-	//If it's not enumerated or basic, we're out
-	if(ub_type_class != TYPE_CLASS_ENUMERATED && ub_type_class != TYPE_CLASS_BASIC){
-		print_parse_message(PARSE_ERROR, "Complex types may not be switch statement bounds", lower_bound->line_number);
-		num_errors++;
-		return FALSE;
-	}
-
-	//Now that we know that these types are either enums or basic, we need to make sure of what kind of
-	//basic type that they are
-	if(lb_type_class == TYPE_CLASS_BASIC){
-		//What kind of basic type do we have
-		Token lb_basic_type_type = lower_bound->inferred_type->basic_type->basic_type;
-		//Now that we have the type grabbed out, we need to ensure that it's not a float or a void type
-		if(lb_basic_type_type == VOID || lb_basic_type_type == FLOAT32 || lb_basic_type_type == FLOAT64){
-			print_parse_message(PARSE_ERROR, "Floating point and void types may not be switch statement bounds", lower_bound->line_number);
-			return FALSE;
-		}
-
-	}
-
-	//Do the exact same validation for the upper bound
-	if(ub_type_class == TYPE_CLASS_BASIC){
-		//What kind of basic type do we have
-		Token ub_basic_type_type = lower_bound->inferred_type->basic_type->basic_type;
-		if(ub_basic_type_type == VOID || ub_basic_type_type == FLOAT32 || ub_basic_type_type == FLOAT64){
-			print_parse_message(PARSE_ERROR, "Floating point and void types may not be switch statement bounds", upper_bound->line_number);
-			return FALSE;
-		}
-	}
-
-	//Get the compatible type out here
-	generic_type_t* type = types_compatible(lower_bound->inferred_type, upper_bound->inferred_type);
-
-	//We need to ensure that the types are compatible here
-	if(type == NULL){
-		print_parse_message(PARSE_ERROR, "Incompatible constants given as bounds", lower_bound->line_number);
-		return FALSE;
-	}
-
-	//Now that we've gotten this type, we'll need to make sure that it's compatible with the overall
-	//type given in the switch statement
-	if(types_compatible(type, switching_type) == NULL){
-		print_parse_message(PARSE_ERROR, "Types given for bounds are incompatible with the switching type", parser_line_num);
-		return FALSE;
-	}
-
-	//If we make it all the way down here, we know that we're good. We'll now add these values into the switch statement
-	
-
-	//Otherwise we made it so
-	return TRUE;
-}
-
-
-
-/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
@@ -6226,6 +6098,12 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Once we get here, we can allocate the root level node
 	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_CLASS_SWITCH_STMT);
+
+	//We will find these throughout our search
+	//Set the upper bound to be int_min
+	switch_stmt_node->upper_bound = INT_MIN;
+	//Set the lower bound to be int_max 
+	switch_stmt_node->lower_bound = INT_MAX;
 
 	//Now we must see an lparen
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6311,102 +6189,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Now we must see an lcurly to begin the actual block
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//Now we need to see the "from" keyword. The from keyword requires the user to specify 
-	//the range of numbers that the switch statement is expected to switch on. Currently the maximum
-	//allowed range is 256 values that can be inside of the jump table. Any more than that will have
-	//an error thrown
-	if(lookahead.tok != FROM){
-		//Throw an error if we don't see it
-		print_parse_message(PARSE_ERROR, "from keyword expected. Ollie lang requires the programmer to specify the range of values", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Now we need to see a parenthesis
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we don't see a parenthesis, we fail out
-	if(lookahead.tok != L_PAREN){
-		//Throw an error if we don't see it
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//We did see this, so push it to the grouping stack
-	push_token(grouping_stack, lookahead);
-
-	//Now we need to see a constant for the lower bound
-	generic_ast_node_t* lower_bound = constant(fl, SEARCHING_FOR_CONSTANT);
-
-	//If this fails, we fail up the chain
-	if(lower_bound->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid constant provided in from statement", parser_line_num);
-		num_errors++;
-		return lower_bound;
-	}
-
-	//Now we'll hunt for a comma
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we don't see a comma, we fail out
-	if(lookahead.tok != COMMA){
-		//Throw an error if we don't see it
-		print_parse_message(PARSE_ERROR, "Comma expected after lower bound", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Now we'll look for the upper bound
-	generic_ast_node_t* upper_bound = constant(fl, SEARCHING_FOR_CONSTANT);
-
-	//If this fails, we fail up the chain
-	if(upper_bound->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid constant provided in from statement", parser_line_num);
-		num_errors++;
-		return upper_bound;
-	}
-
-	//Once we have this, we'll want to perform validation on these two before adding them in
-	//If it fails, the whole thing is bunk
-	if(validate_switch_statement_bounds(switch_stmt_node, type, lower_bound, upper_bound) == FALSE){
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Once we're done validating, we can emit the constants into the actual switch statement
-	emit_constant_switch_bound(switch_stmt_node, lower_bound, upper_bound);
-
-	//Now one last thing - once we've emitted this, we'll need to verify that the difference between
-	//these two is no more than 256(max jump table size)
-	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= 256){
-		print_parse_message(PARSE_ERROR, "Switch statement ranges must vary no more than 256 values between upper and lower bounds", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}	
-
-	//And finally, we need to see the closing paren
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we don't see a parenthesis, we fail out
-	if(lookahead.tok != R_PAREN){
-		//Throw an error if we don't see it
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//One last thing to check - make sure they match
-	if(pop_token(grouping_stack).tok != L_PAREN){
-		//Throw an error if we don't see it
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Now we need to see a left curly
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
 	//Fail case
 	if(lookahead.tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Left curly brace expected after expression", current_line);
@@ -6489,6 +6271,14 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	if(is_empty == TRUE){
 		print_parse_message(WARNING, "Switch statement is empty, has no effect", current_line);
 		num_warnings++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//If these are too far apart, we won't go for it
+	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= 256){
+		sprintf(info, "Range from %d to %d exceeds 256, too large for a switch statement. Use a compound if statement instead", switch_stmt_node->lower_bound, switch_stmt_node->upper_bound);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
@@ -7740,12 +7530,14 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//After we do this, we need to validate that the case statement value is within the range given by the user for switching
-	if(case_stmt->case_statement_value < switch_stmt_node->lower_bound || case_stmt->case_statement_value > switch_stmt_node->upper_bound){
-		sprintf(info, "Value %ld is not within the range %d, %d provided for the switch statement", case_stmt->case_statement_value, switch_stmt_node->lower_bound, switch_stmt_node->upper_bound); 
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	//If it's higher than the upper bound, it now is the upper bound
+	if(case_stmt->case_statement_value > switch_stmt_node->upper_bound){
+		switch_stmt_node->upper_bound = case_stmt->case_statement_value;
+	}
+
+	//If it's lower than the lower bound, it is now the lower bound
+	if(case_stmt->case_statement_value < switch_stmt_node->lower_bound){
+		switch_stmt_node->lower_bound = case_stmt->case_statement_value;
 	}
 
 	//One last thing to check -- we need a colon

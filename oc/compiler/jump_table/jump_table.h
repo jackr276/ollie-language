@@ -22,6 +22,8 @@ typedef struct jump_table_t jump_table_t;
 struct jump_table_t{
 	//A list of all nodes. This list is guaranteed to always be sorted
 	void** nodes;
+	//The default block
+	void* default_block;
 	//The number of nodes that we have
 	u_int16_t num_nodes;
 	//The ID of the jump table. Jump tables get IDs just like blocks, although

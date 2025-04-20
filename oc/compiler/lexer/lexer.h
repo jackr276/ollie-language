@@ -51,7 +51,6 @@ typedef enum {
 	CONTINUE,
 	DEFAULT,
 	SWITCH,
-	FROM,
 	TRUE,
 	FALSE,
 	FN,

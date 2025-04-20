@@ -384,11 +384,11 @@ static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* 
  * Print a block our for reading
 */
 static void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
-	//If this is empty, don't print anything
-	//For now only, this probably won't stay
-	if(block->leader_statement == NULL && block->block_type != BLOCK_TYPE_CASE){
-		//return;
+	//If this is some kind of switch block, we first print the jump table
+	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
+		print_jump_table(&(block->jump_table));
 	}
+
 	//Print the block's ID or the function name
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		printf("%s", block->func_record->func_name);
@@ -4548,7 +4548,11 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//Let's also allocate our jump table. We know how large the jump table needs to be from
 	//data passed in by the parser
-	starting_block->jump_table = jump_table_alloc(values->initial_node->upper_bound - values->initial_node->lower_bound);
+	starting_block->jump_table = jump_table_alloc(values->initial_node->upper_bound - values->initial_node->lower_bound + 1);
+
+	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
+	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
+	u_int32_t adjustment = values->initial_node->lower_bound - 0;
 
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
@@ -4585,8 +4589,9 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 			//Visit our case stmt here
 			case_block = visit_case_statement(&passing_values);
 
-			//We'll now need to add this into the jump table
-			add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val, case_block);
+			//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
+			//that we start down at 0 as the lowest value
+			add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val - adjustment, case_block);
 
 		//Handle a default statement
 		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){

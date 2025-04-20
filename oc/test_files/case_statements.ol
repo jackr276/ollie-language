@@ -4,15 +4,16 @@
 
 fn main(arg:i32, argv:char**) -> i32{
 	let mut x:i32 := 32;
-	let mut _:u32 := 2;
 
-	switch on(x + 1) from(1, 223){
+	switch on(x + 1){
 		case 2:
 			x := 32;
 		case 1:
-			x := 3;
-		case 1:
-			x := 2;
+			x := -3;
+		case 3:
+			x := 211;
+		case 10:
+			x := 22;
 		default:
 			x := x - 22;
 	}

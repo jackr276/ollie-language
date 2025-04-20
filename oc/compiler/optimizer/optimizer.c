@@ -76,6 +76,11 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 		a->block_type = b->block_type;
 	}
 
+	//If b is a switch statment start block, we'll copy the jump table
+	if(b->block_type == BLOCK_TYPE_SWITCH){
+		a->jump_table = b->jump_table;
+	}
+
 	//Copy this over too
 	a->block_terminal_type = b->block_terminal_type;
 

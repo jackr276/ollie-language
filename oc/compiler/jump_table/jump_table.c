@@ -59,12 +59,29 @@ void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry){
 	table->nodes[index] = entry;
 }
 
+
 /**
- * Print a jump table in a stylized fashion
+ * Print a jump table in a stylized fashion. This jump table will be printed
+ * out in full assembly ready order, as no optimization takes place on it
  */
 void print_jump_table(jump_table_t* table){
+	//First thing that we'll print is the header info
+	//This is in the read only data section and we want to align by 8 bytes
+	printf(".section .rodata\n\t.align 8\n.JT%d\n", table->jump_table_id);
 
+	//Now we'll run through and print out everything in the table's values
+	for(u_int16_t _ = 0; _ < table->num_nodes; _++){
+		//Each node is a basic block
+		basic_block_t* node = table->nodes[_];
+
+		//Now we'll print it
+		printf("\t.quad\t.L%d\n", node->block_id);
+	}
+
+	//Extra newline for readability
+	printf("\n");
 }
+
 
 /**
  * Deallocate a jump table. Really all we do here is deallocate the
@@ -78,5 +95,3 @@ void jump_table_dealloc(jump_table_t* table){
 	table->nodes = NULL;
 	table->num_nodes = 0;
 }
-
-
