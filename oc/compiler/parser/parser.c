@@ -11,8 +11,6 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6068,6 +6066,65 @@ static generic_ast_node_t* branch_statement(FILE* fl){
 
 
 /**
+ * Grab the bound out for a switch statement constant. The are guaranteed to only be of type
+ * char, int or long
+ */
+static void emit_constant_switch_bound(generic_ast_node_t* switch_stmt_node, generic_ast_node_t* lower_bound, generic_ast_node_t* upper_bound){
+	//Grab a reference to the const node for convenience
+	constant_ast_node_t* lb_const_node_raw = (constant_ast_node_t*)(lower_bound->node);
+
+	//Now we'll assign the appropriate values
+	Token lb_type = lb_const_node_raw->constant_type;
+
+	//Now based on what type we have we'll make assignments
+	switch(lb_type){
+		case CHAR_CONST:
+			switch_stmt_node->lower_bound = lb_const_node_raw->char_val;
+			break;
+		case INT_CONST:
+			switch_stmt_node->lower_bound = lb_const_node_raw->int_val;
+			break;
+		case LONG_CONST:
+			switch_stmt_node->lower_bound = lb_const_node_raw->long_val;
+			break;
+		case HEX_CONST:
+			switch_stmt_node->lower_bound = lb_const_node_raw->long_val;
+			break;
+		//Some very weird error here
+		default:
+			fprintf(stderr, "Unrecognizable constant type found in constant\n");
+			exit(0);
+	}
+
+	//Grab a reference to the const node for convenience
+	constant_ast_node_t* ub_const_node_raw = (constant_ast_node_t*)(upper_bound->node);
+
+	//Now we'll assign the appropriate values
+	Token ub_type = ub_const_node_raw->constant_type;
+
+	//Now based on what type we have we'll make assignments
+	switch(ub_type){
+		case CHAR_CONST:
+			switch_stmt_node->upper_bound = ub_const_node_raw->char_val;
+			break;
+		case INT_CONST:
+			switch_stmt_node->upper_bound = ub_const_node_raw->int_val;
+			break;
+		case LONG_CONST:
+			switch_stmt_node->upper_bound = ub_const_node_raw->long_val;
+			break;
+		case HEX_CONST:
+			switch_stmt_node->upper_bound = ub_const_node_raw->long_val;
+			break;
+		//Some very weird error here
+		default:
+			fprintf(stderr, "Unrecognizable constant type found in constant\n");
+			exit(0);
+	}
+}
+
+
+/**
  * Validate the upper and lower bounds provided to a switch statement. We'll also populate the values for the switch statement node, should we have them here
  */
 static u_int8_t validate_switch_statement_bounds(generic_ast_node_t* switch_stmt_node, generic_type_t* switching_type, generic_ast_node_t* lower_bound, generic_ast_node_t* upper_bound){
@@ -6316,6 +6373,17 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
+
+	//Once we're done validating, we can emit the constants into the actual switch statement
+	emit_constant_switch_bound(switch_stmt_node, lower_bound, upper_bound);
+
+	//Now one last thing - once we've emitted this, we'll need to verify that the difference between
+	//these two is no more than 256(max jump table size)
+	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= 256){
+		print_parse_message(PARSE_ERROR, "Switch statement ranges must vary no more than 256 values between upper and lower bounds", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}	
 
 	//And finally, we need to see the closing paren
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
