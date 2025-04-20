@@ -1160,6 +1160,30 @@ static void mark(cfg_t* cfg){
 			//Grab the block out of the RDF
 			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
 
+			//If this is a switch statement block, then we'll simply mark everything
+			if(rdf_block->block_type == BLOCK_TYPE_SWITCH){
+				//Run through and mark everything in it
+				three_addr_code_stmt_t* cursor = rdf_block->leader_statement;
+
+				//Keep going through and marking
+				while(cursor != NULL){
+					if(cursor->mark == FALSE){
+						cursor->mark = TRUE;
+						//If it's not a jump, add to worklist
+						if(cursor->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+							dynamic_array_add(worklist, cursor);
+						}
+					}
+
+					//Advance to the next
+					cursor = cursor->next_statement;
+				}
+
+				//Go to the next iteration, this block is done
+				continue;
+			}
+
+
 			/**
 			 * This is the pattern we are on the lookout for. These kinds of patterns
 			 * always appear at the bottom of a block, and as such we will only search

@@ -2193,8 +2193,6 @@ static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_
 
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
- *
- * No live variables can be generated from here, because everything that we use is a temp
  */
 static three_addr_var_t* emit_constant_code_direct(basic_block_t* basic_block, three_addr_const_t* constant, generic_type_t* inferred_type, u_int8_t is_branch_ending){
 	//We'll use the constant var feature here
@@ -4459,15 +4457,18 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 	statement_values.initial_node = default_stmt_cursor->first_child;
 
 	//Let this take care of it
-	basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
-	
-	//If we have an error
-	if(statement_section_start->block_id == -1){
-		return statement_section_start;
-	}
+	if(statement_values.initial_node != NULL){
+		basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
+		
+		//If we have an error
+		if(statement_section_start->block_id == -1){
+			return statement_section_start;
+		}
 
-	//Once we get this back, we'll add it in to the main block
-	merge_blocks(default_stmt, statement_section_start);
+		//Once we get this back, we'll add it in to the main block
+		merge_blocks(default_stmt, statement_section_start);
+	}
+	
 
 	//Give the block back
 	return default_stmt;
@@ -4636,6 +4637,30 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//The very first thing should be an expression telling us what to switch on
 	//There should be some kind of expression here
 	expr_ret_package_t package = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
+
+	//We'll need both of these as constants for our computation
+	three_addr_const_t* lower_bound = emit_int_constant_direct(values->initial_node->lower_bound);
+	three_addr_const_t* upper_bound = emit_int_constant_direct(values->initial_node->upper_bound);
+
+	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
+	//range or above the upper range. If it is, we jump to the very end
+	
+	//First step -> if we're below the minimum, we jump to default 
+	emit_binary_op_with_constant_code(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package.assignee, L_THAN, lower_bound, TRUE);
+	//If we are lower than this(regular jump), we will go to the default block
+	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL);
+	//Now we'll emit our jump
+	emit_jmp_stmt(starting_block, default_block, jump_lower_than, TRUE);
+
+	//Next step -> if we're above the maximum, jump to default
+	emit_binary_op_with_constant_code(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package.assignee, G_THAN, upper_bound, TRUE);
+	//If we are lower than this(regular jump), we will go to the default block
+	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL);
+	//Now we'll emit our jump
+	emit_jmp_stmt(starting_block, default_block, jump_greater_than, TRUE);
+
+	//Now that all this is done, we can use our jump table for the rest
+	
 
 	//Ensure that the starting block's direct successor is the end block, for convenience
 	starting_block->direct_successor = ending_block;
