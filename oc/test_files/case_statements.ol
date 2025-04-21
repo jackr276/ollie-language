@@ -7,11 +7,8 @@ fn main(arg:i32, argv:char**) -> i32{
 
 	switch on(x){
 		case 2:
-			if(x == 333) then {
-				x := 32;
-			} else {
-				x := 18;
-			}
+			x := 32;
+			//++x;
 		case 1:
 			x := -3;
 		case 3:
@@ -19,7 +16,7 @@ fn main(arg:i32, argv:char**) -> i32{
 		case 5:
 			x := 22;
 		default:
-		//	x := x - 22;
+			x := x - 22;
 	}
 
 	idle;

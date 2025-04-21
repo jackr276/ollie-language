@@ -4718,9 +4718,6 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Now we'll emit the indirect jump to the address
 	emit_indirect_jump_stmt(starting_block, address, JUMP_TYPE_JMP, TRUE);
 
-	//Now that we have the indirect jump statement, we'll add the ending block in as a successor to the starting block
-	add_successor(starting_block, ending_block);
-
 	//Ensure that the starting block's direct successor is the end block, for convenience
 	starting_block->direct_successor = ending_block;
 
