@@ -31,6 +31,8 @@ typedef struct pointer_type_t pointer_type_t;
 typedef struct enumerated_type_t enumerated_type_t;
 //A constructed type
 typedef struct constructed_type_t constructed_type_t;
+//A constructed type field
+typedef struct constructed_type_field_t constructed_type_field_t;
 //A construct member
 typedef struct construct_member_t construct_member_t;
 //An aliased type
@@ -114,14 +116,32 @@ struct pointer_type_t{
 
 
 /**
+ * The constructed type's individual members
+ */
+struct constructed_type_field_t{
+	//What variable is stored in here?
+	void* variable;
+	//What kind of padding do we need to ensure alignment?
+	u_int16_t padding;
+};
+
+
+/**
  * A constructed type contains a list of other types that are inside of it.
  * As such, the type here contains an array of generic types of at most 100
  */
 struct constructed_type_t{
 	//We will store internally a pre-aligned construct table. The construct
 	//table itself will be aligned internally, and we'll use the given order of
-	//the construct members to compute it
-	
+	//the construct members to compute it. Due to this, it would be advantageous for
+	//the programmer to order the structure table with larger elements first
+	constructed_type_field_t construct_table[MAX_CONSTRUCT_MEMBERS];
+	//The current number of members
+	u_int8_t num_members;
+	//The overall size in bytes of the struct
+	u_int32_t size;
+	//The size of the largest element in the structure
+	u_int32_t largest_member;
 };
 
 
@@ -130,8 +150,7 @@ struct constructed_type_t{
  * are positionally encoded and this encoding is fixed at declaration
 */
 struct enumerated_type_t{
-	//We need an array of enumerated type tokens
-	//We can have at most 500 of these. They are in reality variables
+	//The number of enumerated types
 	void* tokens[MAX_ENUMERATED_MEMBERS];
 	//The current number of tokens
 	u_int8_t token_num;
@@ -192,6 +211,13 @@ generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number);
  * Dynamically allocate and create a constructed type
  */
 generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
+
+
+/**
+ * Add a value into a construct's table
+ */
+u_int8_t add_construct_member(constructed_type_t* type, void* member_var);
+
 
 /**
  * Dynamically allocate and create an array type

@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+//Link to the symtab for variable storage
+#include "../symtab/symtab.h"
 
 
 /**
@@ -395,6 +397,14 @@ generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number){
 	type->construct_type = calloc(1, sizeof(constructed_type_t));
 
 	return type;
+}
+
+
+/**
+ * Add a value to a constructed type
+ */
+u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
+
 }
 
 

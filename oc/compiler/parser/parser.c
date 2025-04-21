@@ -3769,9 +3769,9 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  *
  * As a reminder, type specifier will give us an error if the type is not defined
  *
- * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> 
+ * BNF Rule: <construct-member> ::= {mut}? <identifier> : <type-specifier> 
  */
-static generic_ast_node_t* construct_member(FILE* fl){
+static u_int8_t construct_member(FILE* fl, constructed_type_t* construct){
 	//The error printing string
 	char info[ERROR_SIZE];
 	//The lookahead token
@@ -3786,7 +3786,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as construct member name", parser_line_num);
 		num_errors++;
 		//It's an error, so we'll propogate it up
-		return ident;
+		return FAILURE;
 	}
 
 	//Grab this for convenience
@@ -3797,21 +3797,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return FAILURE;
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -3825,7 +3811,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 		print_variable_name(found_var);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return FAILURE;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -3839,7 +3825,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return FAILURE;
 	}
 
 	//After the ident, we need to see a colon
@@ -3850,7 +3836,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Colon required between ident and type specifier in construct member declaration", parser_line_num);
 		num_errors++;
 		//Error out
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return FAILURE;
 	}
 
 	//Now we are required to see a valid type specifier
@@ -3861,7 +3847,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in construct member", parser_line_num);
 		num_errors++;
 		//It's already an error, so just send it up
-		return type_spec;
+		return FAILURE;
 	}
 
 
@@ -3894,7 +3880,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
 	member_node->line_number = parser_line_num;
 
 	//All went well so we can send this up the chain
-	return member_node;
+	return SUCCESS;
 }
 
 
@@ -3904,7 +3890,7 @@ static generic_ast_node_t* construct_member(FILE* fl){
  *
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
-static generic_ast_node_t* construct_member_list(FILE* fl){
+static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -3920,18 +3906,15 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 		push_back_token(lookahead);
 
 		//We must first see a valid construct member
-		generic_ast_node_t* member_node = construct_member(fl);
+		u_int8_t status = construct_member(fl, construct->construct_type);
 
 		//If it's an error, we'll fail right out
-		if(member_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(status == FAILURE){
 			print_parse_message(PARSE_ERROR, "Invalid construct member declaration", parser_line_num);
 			//It's already an error node so just let it propogate
-			return member_node;
+			return FAILURE;
 		}
 		
-		//Otherwise, we'll add it in as one of the children
-		add_child_node(member_list, member_node);
-
 		//Now we will refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -3939,7 +3922,7 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 		if(lookahead.tok != SEMICOLON){
 			print_parse_message(PARSE_ERROR, "Construct members must be delimited by ;", parser_line_num);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return FAILURE;
 		}
 
 		//Refresh it once more
@@ -3953,7 +3936,7 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 	if(lookahead.tok != R_CURLY){
 		print_parse_message(PARSE_ERROR, "Construct members must be delimited by ;", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return FAILURE;
 	}
 
 	//If we get here we know that it's right, but we'll still allow the other rule to handle it
@@ -3962,7 +3945,7 @@ static generic_ast_node_t* construct_member_list(FILE* fl){
 	member_list->line_number = parser_line_num;
 
 	//Give the member list back
-	return member_list;
+	return SUCCESS;
 }
 
 
@@ -4040,11 +4023,14 @@ static u_int8_t construct_definer(FILE* fl){
 	//Otherwise we'll push onto the stack for later matching
 	push_token(grouping_stack, lookahead);
 
+	//If we make it here, we've made it far enough to know what we need to build our type for this construct
+	generic_type_t* construct_type = create_constructed_type(type_name, current_line);
+
 	//We are now required to see a valid construct member list
-	generic_ast_node_t* mem_list = construct_member_list(fl);
+	u_int8_t success = construct_member_list(fl, construct_type);
 
 	//Automatic fail case here
-	if(mem_list->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(success == FAILURE){
 		print_parse_message(PARSE_ERROR, "Invalid construct member list given in construct definition", parser_line_num);
 		//We'll destroy it first
 		return FAILURE;
@@ -4069,36 +4055,6 @@ static u_int8_t construct_definer(FILE* fl){
 		return FAILURE;
 	}
 	
-	//If we make it here, we've made it far enough to know what we need to build our type for this construct
-	generic_type_t* construct_type = create_constructed_type(type_name, current_line);
-
-	//Now we're going to have to walk the members of the member list, and add in their references to the type.
-	//Doing this work now saves us a lot of steps later on for not much duplicated space
-	//Start off with the first child
-	generic_ast_node_t* cursor = mem_list->first_child;
-
-	//As long as there are more children
-	while(cursor != NULL){
-		//Sanity check
-		if(cursor->CLASS != AST_NODE_CLASS_CONSTRUCT_MEMBER){
-			print_parse_message(PARSE_ERROR, "Fatal internal parse error. Found non-construct member in member list", parser_line_num);
-			return FAILURE;
-		}
-
-		//Pick out the variable record
-		symtab_variable_record_t* var = cursor->variable;
-
-		//We'll now add this into the parameter list
-		//construct_type->construct_type->members[construct_type->construct_type->num_members] = var;
-		//Increment the number of members
-		//(construct_type->construct_type->num_members)++;
-		//Store what construct it came from
-		var->struct_defined_in = construct_type;
-
-		//Now that we've added it in, advance the cursor
-		cursor = cursor->next_sibling;
-	}
-
 	//Once we're here, the construct type is fully defined. We can now add it into the symbol table
 	insert_type(type_symtab, create_type_record(construct_type));
 
