@@ -18,6 +18,19 @@ fn main(arg:i32, argv:char**) -> i32{
 		//	x := x - 22;
 	}
 
+	idle;
+	
+	
+	switch on(x){
+		default:
+			let i:i32 := 2;
+		case 0:
+			let a:i32 := 2;
+		case 1:
+			let y:i32 := 3;
+	}
+	
+	
 
 	//So it isn't optimized away
 	ret x;

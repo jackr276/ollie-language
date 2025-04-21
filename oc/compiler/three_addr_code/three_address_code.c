@@ -58,7 +58,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	emitted_vars = var;
 
 	//Mark this as temporary
-	var->is_temporary = 1;
+	var->is_temporary = TRUE;
 	//Store the type info
 	var->type = type;
 	//Store the temp var number
@@ -87,7 +87,7 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
 	emitted_vars = emitted_var;
 
 	//This is not temporary
-	emitted_var->is_temporary = 0;
+	emitted_var->is_temporary = FALSE;
 	//Store the type info
 	emitted_var->type = var->type;
 	//And store the symtab record
@@ -114,6 +114,8 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	emitted_var->next_created = emitted_vars;
 	emitted_vars = emitted_var;
 
+	//Transfer this status over
+	emitted_var->is_temporary = var->is_temporary;
 
 	return emitted_var;
 }

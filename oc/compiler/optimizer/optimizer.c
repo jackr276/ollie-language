@@ -937,7 +937,7 @@ static void sweep(cfg_t* cfg){
 				break;
 
 			//Otherwise we delete the statement. Jump statements are ALWAYS considered useful
-			} else if(stmt->CLASS != THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
+			} else {
 				//Perform the deletion and advancement
 				three_addr_code_stmt_t* temp = stmt;
 				stmt = stmt->next_statement;

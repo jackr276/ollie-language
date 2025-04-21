@@ -2293,20 +2293,15 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), type, is_branch_ending);
 
 	} else {
+		printf("IN HERE\n");
 		//First we'll create the non-temp var here
 		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
 
 		//THis has been live
 		ident_node->variable->has_ever_been_live = TRUE;
 
-		//This variable has been assigned to, so we'll add that too
-		if(side == SIDE_TYPE_LEFT){
-			//We only do this if it's the LHS
-			add_assigned_variable(basic_block, non_temp_var);
-		} else {
-			//Add it as a live variable to the block, because we've used it
-			add_used_variable(basic_block, non_temp_var);
-		}
+		//Add this in as a used variable
+		add_used_variable(basic_block, non_temp_var);
 
 		//Let's first create the assignment statement
 		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), non_temp_var);
@@ -2918,6 +2913,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		if(check_for_coniditional == TRUE && expr_node->first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 			//For now - just to make sure we aren't using this wrongly
 			printf("========HERE============\n");
+			print_variable_name(expr_node->first_child->variable);
 			//If this is the case, then we need to just emit the temporary value and be done with it
 			ret_package.assignee =  emit_ident_expr_code(basic_block, expr_node->first_child, USE_TEMP_VAR, SIDE_TYPE_LEFT, TRUE);
 			return ret_package;
@@ -4722,6 +4718,9 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//Now we'll emit the indirect jump to the address
 	emit_indirect_jump_stmt(starting_block, address, JUMP_TYPE_JMP, TRUE);
+
+	//Now that we have the indirect jump statement, we'll add the ending block in as a successor to the starting block
+	add_successor(starting_block, ending_block);
 
 	//Ensure that the starting block's direct successor is the end block, for convenience
 	starting_block->direct_successor = ending_block;
