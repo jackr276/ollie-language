@@ -6200,15 +6200,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Push to stack for later matching
 	push_token(grouping_stack, lookahead);
 
-	/**
-	 * IMPORTANT NOTE: Once we get here, we have officially reached a new lexical scope. To officiate this, 
-	 * we will initialize a new scope for both the variable and type symtabs. This scope will be finalized once
-	 * we leave the switch statement
-	 */
-	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab);
-
-	//Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
+		//Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
 	//our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
 	//that switch statements have at least one thing in them
 
@@ -6231,6 +6223,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 				return stmt;
 			}
 			
+			//No longer empty
+			is_empty = FALSE;
+
 		} else if(lookahead.tok == DEFAULT){
 			//Handle a default statement
 			stmt = default_statement(fl, switch_stmt_node);
@@ -6252,10 +6247,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 		//If we get here we know it worked, so we can add it in as a child
 		add_child_node(switch_stmt_node, stmt);
-
-		//No longer empty
-		is_empty = FALSE;
-
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
@@ -6269,8 +6260,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//If we have an entirely empty switch statement
 	if(is_empty == TRUE){
-		print_parse_message(WARNING, "Switch statement is empty, has no effect", current_line);
-		num_warnings++;
+		print_parse_message(PARSE_ERROR, "Switch statements with no cases are not allowed", current_line);
+		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
@@ -6290,10 +6281,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		//Return an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
-
-	//Now once we get here, we will finalize the variable and type scopes that we had initialized beforehand
-	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
 
 	//Return the line number
 	switch_stmt_node->line_number = current_line;
@@ -7338,6 +7325,14 @@ static generic_ast_node_t* default_statement(FILE* fl, generic_ast_node_t* switc
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	/**
+	 * IMPORTANT NOTE: Once we get here, we have officially reached a new lexical scope. To officiate this, 
+	 * we will initialize a new scope for both the variable and type symtabs. This scope will be finalized once
+	 * we leave the switch statement
+	 */
+	initialize_type_scope(type_symtab);
+	initialize_variable_scope(variable_symtab);
+
 	//Seed the search
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -7371,6 +7366,10 @@ static generic_ast_node_t* default_statement(FILE* fl, generic_ast_node_t* switc
 
 	//Push it back, we're done here
 	push_back_token(lookahead);
+
+	//We can now finalize these scopes 
+	finalize_type_scope(type_symtab);
+	finalize_variable_scope(variable_symtab);
 
 	//Otherwise it all worked, so we'll just return
 	return default_stmt;
@@ -7551,6 +7550,14 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
+	/**
+	 * IMPORTANT NOTE: Once we get here, we have officially reached a new lexical scope. To officiate this, 
+	 * we will initialize a new scope for both the variable and type symtabs. This scope will be finalized once
+	 * we leave the switch statement
+	 */
+	initialize_type_scope(type_symtab);
+	initialize_variable_scope(variable_symtab);
+
 	//Now we get to the main part of our case statement. We can keep seeing extra tokens so long as they are not 
 	//"case", "default" or "}"(indicates end of switch statement)
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7593,6 +7600,10 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 	//Push it back, we're done here
 	push_back_token(lookahead);
+
+	//We can now finalize these scopes 
+	finalize_type_scope(type_symtab);
+	finalize_variable_scope(variable_symtab);
 
 	//Finally give this back
 	return case_stmt;

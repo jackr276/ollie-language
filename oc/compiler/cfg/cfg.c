@@ -2293,7 +2293,6 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), type, is_branch_ending);
 
 	} else {
-		printf("IN HERE\n");
 		//First we'll create the non-temp var here
 		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
 
