@@ -12,6 +12,10 @@ fn main(arg:i32, argv:char**) -> i32{
 
 	declare structure:my_struct;
 
+	declare x_arr:i32[2];
+
+	x_arr[1] := 3;
+
 	structure:x := 3;
 	structure:y := 5;
 	structure:z := 3.0;
@@ -19,5 +23,5 @@ fn main(arg:i32, argv:char**) -> i32{
 	let x:i32 := 3;
 
 	//So it isn't optimized away
-	ret x;
+	ret x_arr[1];
 }

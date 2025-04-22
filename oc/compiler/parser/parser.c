@@ -1216,6 +1216,16 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 			//Put it back for the rule to deal with
 			push_back_token(lookahead);
 
+			//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
+			if(current_type->type_class != TYPE_CLASS_CONSTRUCT){
+				sprintf(info, "Type \"%s\" is not a construct. First declared here:", current_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				//Print it out
+				print_type_name(lookup_type(type_symtab, current_type->type_name));
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
 			//Let's have the rule do it.
 			generic_ast_node_t* constr_acc = construct_accessor(fl, current_type);
 

@@ -2629,15 +2629,31 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 
 		//If we get to down here, we know that this is a construct accessor
 		} else if(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR){
+			if(current_var == NULL) printf("ITS NULL\n\n");
+
 			//What we'll do first is grab the associated fields that we need out
 			symtab_variable_record_t* var = cursor->variable;
 
-			//Now we'll grab the associated construct record
-			
+			//Remember - when we get here, current var will hold the base address of the construct
 
-			print_parse_message(PARSE_ERROR, "THIS HAS NOT BEEN IMPLEMENTED", cursor->line_number);
-			//exit(0);
-		//We have hit something unknown here
+			//Now we'll grab the associated construct record
+			constructed_type_field_t* field = get_construct_member(current_var->type->construct_type, var->var_name);
+
+			//The constant that represents the offset
+			three_addr_const_t* offset = emit_int_constant_direct(field->offset);
+
+			//Now that we have the construct field, we can calculate what we need by grabbing the offset
+			three_addr_code_stmt_t* address_calc = emit_bin_op_with_const_three_addr_code(emit_temp_var(lookup_type(type_symtab, "label")->type), current_var, PLUS, offset);
+
+			//Add this into the block
+			add_statement(basic_block, address_calc);
+
+			//The address is what we'll need for memory
+			current_var = emit_mem_code(basic_block, address_calc->assignee);
+
+			//and now we're all set
+			
+		//We have hit something unknown here - this should never happen
 		} else {
 			print_parse_message(PARSE_ERROR, "UNKOWN EXPRESSION TYPE DETECTED", cursor->line_number);
 			exit(0);
