@@ -136,6 +136,8 @@ struct symtab_variable_record_t{
 	u_int8_t is_function_paramater;
 	//Is this mutable?
 	u_int8_t is_mutable;
+	//Is this a construct member
+	u_int8_t is_construct_member;
 	//Is it an enumeration member?
 	u_int8_t is_enumeration_member;
 	//What is the enum member value

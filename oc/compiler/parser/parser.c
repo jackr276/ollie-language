@@ -912,7 +912,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  * BNF Rule: <construct-accessor> ::= => <variable-identifier> 
  * 								    | : <variable-identifier>
  */
-static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current_type){
+static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_type){
 	//For error printing
 	char info[ERROR_SIZE];
 	//Freeze the current line
@@ -922,14 +922,6 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 
 	//We'll first grab whatever token that we have here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//This would be incredibly bizarre, as we know that they are already here
-	if(lookahead.tok != ARROW_EQ && lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Fatal internal parser error at construct accessor", parser_line_num);
-		num_errors++;
-		//Error out
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
 
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR);
@@ -942,7 +934,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 	const_access_node->construct_accessor_tok = lookahead.tok;
 
 	//Grab a convenient reference to the type that we're working with
-	generic_type_t* working_type = dealias_type(*current_type);
+	generic_type_t* working_type = dealias_type(current_type);
 
 	//What is the type that we're referencing here
 	generic_type_t* referenced_type;
@@ -971,9 +963,6 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//The working type is whatever we reference here
-		working_type = referenced_type;
-
 	//Otherwise we know that we have some kind of non-pointer here(or so we hope)
 	} else {
 		//We need to specifically see a struct here
@@ -990,10 +979,10 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 		referenced_type = working_type;
 	}
 
-	//Now we are required to see a valid variable identifier. TODO TYPE CHECKING
+	//Now we are required to see a valid variable identifier.
 	generic_ast_node_t* ident = identifier(fl); 
 
-	//For now we're just doing error checking TODO TYPE AND EXISTENCE CHECKING
+	//For now we're just doing error checking
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Construct accessor could not find valid identifier", current_line);
 		num_errors++;
@@ -1004,44 +993,21 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t** current
 	//Grab this for nicety
 	char* member_name = ident->identifier;
 
-	//Let's find this type
-	symtab_variable_record_t* var_record = lookup_variable(variable_symtab, member_name); 
+	//Let's see if we can look this up inside of the type
+	symtab_variable_record_t* var_record = get_construct_member(referenced_type->construct_type, member_name);
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of any construct", member_name);
+		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, referenced_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Otherwise we've found it, but is it a part of our struct?
-	if(var_record->struct_defined_in == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of any construct. First defined here:", member_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(var_record);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}	
-
-	//If we get here we know that it was defined in a struct, but is it in our struct?
-	if(strcmp(var_record->struct_defined_in->type_name, working_type->type_name) != 0){
-		sprintf(info, "Construct \"%s\" does not have a member named \"%s\". First defined here:", working_type->type_name, member_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_type_name(lookup_type(type_symtab, working_type->type_name));
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Otherwise, we finally know that its correct. As such, we'll update the current type to be whatever this is
-	*current_type = var_record->type;
+	//TODO MORE MUST HAPPEN HERE
 
 	//Mark the current variable too
 	current_var = var_record;
-
-	//Otherwise we know that it worked, so we'll add this guy in as a child of the overall construct
-	//accessor
-	add_child_node(const_access_node, ident);
 
 	//And now we're all done, so we'll just give back the root reference
 	return const_access_node;
@@ -1248,8 +1214,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 			//Put it back for the rule to deal with
 			push_back_token(lookahead);
 
-			//Let's have the rule do it. (This will update current_type for us)
-			generic_ast_node_t* constr_acc = construct_accessor(fl, &current_type);
+			//Let's have the rule do it.
+			generic_ast_node_t* constr_acc = construct_accessor(fl, current_type);
 
 			//We have our fail case here
 			if(constr_acc->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3773,7 +3739,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  *
  * BNF Rule: <construct-member> ::= {mut}? <identifier> : <type-specifier> 
  */
-static u_int8_t construct_member(FILE* fl, constructed_type_t* construct){
+static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
 	//The error printing string
 	char info[ERROR_SIZE];
 	//The lookahead token
@@ -3811,6 +3777,17 @@ static u_int8_t construct_member(FILE* fl, constructed_type_t* construct){
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
 		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	symtab_variable_record_t* duplicate;
+
+	//Is this a duplicate? If so, we fail out
+	if((duplicate = get_construct_member(construct->construct_type, name)) != NULL){
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(duplicate);
 		num_errors++;
 		return FAILURE;
 	}
@@ -3858,10 +3835,18 @@ static u_int8_t construct_member(FILE* fl, constructed_type_t* construct){
 	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
+	//Mark that this is a construct member
+	member_record->is_construct_member = TRUE;
 	//Store what the type is
 	member_record->type = type_spec->inferred_type;
 	//Is it mutable or not
 	member_record->is_mutable = is_mutable;
+
+	//Add it to the construct
+	add_construct_member(construct->construct_type, member_record);
+
+	//Insert into the variable symtab
+	insert_variable(variable_symtab, member_record);
 
 	//All went well so we can send this up the chain
 	return SUCCESS;
@@ -3878,6 +3863,9 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 	//Lookahead token
 	Lexer_item lookahead;
 
+	//Initiate a new variable scope here
+	initialize_variable_scope(variable_symtab);
+
 	//This is just to seed our search
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -3887,7 +3875,7 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 		push_back_token(lookahead);
 
 		//We must first see a valid construct member
-		u_int8_t status = construct_member(fl, construct->construct_type);
+		u_int8_t status = construct_member(fl, construct);
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
@@ -3923,6 +3911,9 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 
 	//If we get here we know that it's right, but we'll still allow the other rule to handle it
 	push_back_token(lookahead);
+
+	//Once we're done we can escape this scope
+	finalize_variable_scope(variable_symtab);
 
 	//Give the member list back
 	return SUCCESS;

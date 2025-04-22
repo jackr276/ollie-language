@@ -215,12 +215,15 @@ generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number);
  */
 generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
 
-
 /**
  * Add a value into a construct's table
  */
 u_int8_t add_construct_member(constructed_type_t* type, void* member_var);
 
+/**
+ * Does a constructed type contain a given member variable?
+ */
+void* get_construct_member(constructed_type_t* construct, char* name);
 
 /**
  * Dynamically allocate and create an array type

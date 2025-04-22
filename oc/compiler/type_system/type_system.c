@@ -498,11 +498,28 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
 
 
 /**
- * Does this construct contain said member? Return true if yes, false if no
+ * Does this construct contain said member? Return the variable if yes, NULL if not
  */
-u_int8_t does_construct_contain_member(){
-	//FOR NOW
-	return FALSE;
+void* get_construct_member(constructed_type_t* construct, char* name){
+	//Run through and do a simple search, comparing the names.
+	
+	//The current variable that we have
+	symtab_variable_record_t* var;
+
+	//Run through everything here
+	for(u_int16_t _ = 0; _ < construct->next_index; _++){
+		//Grab the variable out
+		var = construct->construct_table[_].variable;
+
+		//Now we'll do a simple comparison. If they match, we're set
+		if(strcmp(var->var_name, name) == 0){
+			//Return the variable if we find it
+			return var;
+		}
+	}
+
+	//Otherwise if we get down here, it didn't work
+	return NULL;
 }
 
 

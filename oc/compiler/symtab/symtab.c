@@ -786,7 +786,6 @@ void print_function_name(symtab_function_record_t* record){
  * Intended for error messages
  */
 void print_variable_name(symtab_variable_record_t* record){
-	printf("In file with token %s:\n", record->module_defined_in);
 	//If it's part of a function we'll just print that
 	if(record->is_function_paramater == 1){
 		print_function_name(record->parent_function);
@@ -794,7 +793,7 @@ void print_variable_name(symtab_variable_record_t* record){
 	} else if (record->is_label == 1){
 		printf("\n---> %d | %s:\n", record->line_number, record->var_name);
 		return;
-	} else if(record->is_enumeration_member){
+	} else if(record->is_enumeration_member == TRUE || record->is_construct_member == TRUE){
 		//The var name
 		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name, record->type->type_name);
 	} else {
@@ -977,7 +976,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			}
 
 			//If it's a label, don't bother with it
-			if(record->is_label == 1){
+			if(record->is_label == 1 || record->is_construct_member == TRUE){
 				continue;;
 			}
 
