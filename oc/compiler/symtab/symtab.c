@@ -794,7 +794,7 @@ void print_variable_name(symtab_variable_record_t* record){
 	} else if (record->is_label == 1){
 		printf("\n---> %d | %s:\n", record->line_number, record->var_name);
 		return;
-	} else if(record->is_enumeration_member || record->is_construct_member){
+	} else if(record->is_enumeration_member){
 		//The var name
 		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name, record->type->type_name);
 	} else {

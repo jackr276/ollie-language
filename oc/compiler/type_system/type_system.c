@@ -498,6 +498,15 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
 
 
 /**
+ * Does this construct contain said member? Return true if yes, false if no
+ */
+u_int8_t does_construct_contain_member(){
+	//FOR NOW
+	return FALSE;
+}
+
+
+/**
  * Dynamically allocate and create an aliased type
  */
 generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_type, u_int32_t line_number){

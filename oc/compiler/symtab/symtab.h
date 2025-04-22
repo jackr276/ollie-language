@@ -140,8 +140,6 @@ struct symtab_variable_record_t{
 	u_int8_t is_enumeration_member;
 	//What is the enum member value
 	u_int16_t enum_member_value;
-	//Is it a struct member?
-	u_int8_t is_construct_member;
 	//Is this a label?
 	u_int8_t is_label;
 	//Is this a global variable?

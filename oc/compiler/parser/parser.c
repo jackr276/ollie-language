@@ -3764,8 +3764,10 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 
 
 /**
- * A construct member is something like a variable declaration. Like all rules in the parser,
- * the construct member will return a reference to the root node of the subtree it creates
+ * A construct member declares a variable within a struct. Structs have their own tables
+ * that store variables within. Because these variables are unique to structs, we don't need to
+ * do any validation on duplicates. All references to these variables will be by default
+ * unambiguous
  *
  * As a reminder, type specifier will give us an error if the type is not defined
  *
@@ -3776,6 +3778,19 @@ static u_int8_t construct_member(FILE* fl, constructed_type_t* construct){
 	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
+	//Is this mutable? False by default
+	u_int8_t is_mutable = FALSE;
+
+	//Get the first token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We could first see the mutable keyword, indicating that this field can be changed
+	if(lookahead.tok == MUT){
+		is_mutable = TRUE;
+	} else {
+		//Otherwise put it back
+		push_back_token(lookahead);
+	}
 
 	//Otherwise we know that it worked here
 	//Now we need to see a valid ident and check it for duplication
@@ -3797,20 +3812,6 @@ static u_int8_t construct_member(FILE* fl, constructed_type_t* construct){
 		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
-		return FAILURE;
-	}
-
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Return a fresh error node
 		return FAILURE;
 	}
 
@@ -3850,34 +3851,17 @@ static u_int8_t construct_member(FILE* fl, constructed_type_t* construct){
 		return FAILURE;
 	}
 
-
 	//Now if we finally make it all of the way down here, we are actually set. We'll construct the
 	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record
 	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
-	member_record->is_construct_member = 1;
+	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
 	member_record->type = type_spec->inferred_type;
 	//Is it mutable or not
-	member_record->is_mutable = 0;
-	
-	//We can now add this into the symbol table
-	insert_variable(variable_symtab, member_record);
-
-	//We can now also construct the entire subtree
-	generic_ast_node_t* member_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_MEMBER);
-	//Store the variable record here
-	member_node->variable = member_record;
-
-	//The second child will be the ident node
-	add_child_node(member_node, ident);
-
-	//Destory the type spec node when here
-
-	//Store the line number
-	member_node->line_number = parser_line_num;
+	member_record->is_mutable = is_mutable;
 
 	//All went well so we can send this up the chain
 	return SUCCESS;
@@ -3894,9 +3878,6 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 	//Lookahead token
 	Lexer_item lookahead;
 
-	//Let's first declare the root node. This node will have children that are each construct members
-	generic_ast_node_t* member_list = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_MEMBER_LIST);
-
 	//This is just to seed our search
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -3911,6 +3892,7 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
 			print_parse_message(PARSE_ERROR, "Invalid construct member declaration", parser_line_num);
+			num_errors++;
 			//It's already an error node so just let it propogate
 			return FAILURE;
 		}
@@ -3941,8 +3923,6 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 
 	//If we get here we know that it's right, but we'll still allow the other rule to handle it
 	push_back_token(lookahead);
-	//Store the parser line number
-	member_list->line_number = parser_line_num;
 
 	//Give the member list back
 	return SUCCESS;
