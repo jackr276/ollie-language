@@ -10,6 +10,12 @@
 //Link to the symtab for variable storage
 #include "../symtab/symtab.h"
 
+//For standardization across modules
+#define SUCCESS 1
+#define FAILURE 0
+#define TRUE 1
+#define FALSE 0 
+
 
 /**
  * Are two types equivalent(as in, the exact same)
@@ -17,17 +23,17 @@
 u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 	//If they are not in the same type class, then they are not equivalent
 	if(typeA->type_class != typeB->type_class){
-		return 0;
+		return FALSE;
 	}
 
 	//Now that we know they are in the same class, we need to check if they're the exact same
 	//If they are the exact same, return 1. Otherwise, return 0
 	if(strcmp(typeA->type_name, typeB->type_name) == 0){
-		return 1;
+		return TRUE;
 	}
 
 	//Otherwise they aren't the exact same, so
-	return 0;
+	return FALSE;
 }
 
 
@@ -401,10 +407,93 @@ generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number){
 
 
 /**
- * Add a value to a constructed type
+ * Add a value to a constructed type. The void* here is a 
+ * symtab variable record
  */
 u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
+	//Check for size constraints
+	if(type->next_index >= MAX_CONSTRUCT_MEMBERS){
+		return OUT_OF_BOUNDS;
+	}
 
+	//If this is the very first one, then we'll 
+	if(type->next_index == 0){
+		constructed_type_field_t entry;	
+		//Currently, we don't need any padding
+		entry.padding = 0;
+		entry.variable = member_var;
+		//This if the very first struct member, so its offset is 0
+		entry.offset = 0;
+
+		//Also by defualt, this is currently the largest variable that we've seen
+		type->largest_member = member_var;
+
+		//Just grab this as a reference to avoid the need to cast
+		symtab_variable_record_t* member = member_var;
+
+		type->size += member->type->type_size;
+
+		//Add this into the construct table
+		type->construct_table[type->next_index] = entry;
+
+		//Increment the index for the next go around
+		type->next_index += 1;
+
+		//This worked, so return success
+		return SUCCESS;
+	}
+	
+	//Otherwise, if we make it down here, it means that we'll need to pay a bit more
+	//attention to alignment as there is more than one field
+	constructed_type_field_t entry;
+	//Grab this reference out, for convenience
+	symtab_variable_record_t* var = member_var;
+
+	//We'll update the largest member, if applicable
+	if(var->type->type_size > ((symtab_variable_record_t*)(type->largest_member))->type->type_size){
+		//Update the largest member if this happens
+		type->largest_member = var;
+	}
+
+	//For right now let's just have this added in
+	entry.variable = var;
+	//And currently, we don't need any padding
+	entry.padding = 0;
+	
+	//Let's now see where the ending address of the struct is. We can find
+	//this ending address by calculating the offset of the latest field plus
+	//the size of the latest variable
+	
+	//The prior variable
+	symtab_variable_record_t* prior_variable = type->construct_table[type->next_index - 1].variable;
+	//And the offset of this entry
+	u_int32_t offset = type->construct_table[type->next_index - 1].offset;
+	
+	//The current ending address is the offset of the last variable plus its size
+	u_int32_t current_end = offset + prior_variable->type->type_size;
+
+	//Now for alignment, we need the offset of this new variable to be a multiple of the new variable's
+	//size
+	u_int32_t new_entry_size = var->type->type_size;
+
+	//We will satisfy this by adding the remainder of the division of the new variable with the current
+	//end in as padding to the previous entry
+	u_int32_t needed_padding = current_end % new_entry_size;
+
+	//This needed padding will go as padding on the prior entry
+	type->construct_table[type->next_index - 1].padding = needed_padding;
+
+	//Now we can update the current end
+	current_end = current_end + needed_padding;
+
+	//And now we can add in the new variable's offset
+	entry.offset = current_end;
+
+	//Finally, we can add this new entry in
+	type->construct_table[type->next_index] = entry;
+	type->next_index += 1;
+
+	return SUCCESS;
 }
 
 

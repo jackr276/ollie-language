@@ -11,6 +11,9 @@
 #include "../lexer/lexer.h"
 #include <sys/types.h>
 
+//A random value that we can use to determine if we're out of bounds
+#define OUT_OF_BOUNDS 3
+
 //Type names may not exceed 200 characters in length
 #define MAX_TYPE_NAME_LENGTH 200
 //The maximum number of members in a construct
@@ -33,8 +36,6 @@ typedef struct enumerated_type_t enumerated_type_t;
 typedef struct constructed_type_t constructed_type_t;
 //A constructed type field
 typedef struct constructed_type_field_t constructed_type_field_t;
-//A construct member
-typedef struct construct_member_t construct_member_t;
 //An aliased type
 typedef struct aliased_type_t aliased_type_t;
 
@@ -123,6 +124,8 @@ struct constructed_type_field_t{
 	void* variable;
 	//What kind of padding do we need to ensure alignment?
 	u_int16_t padding;
+	//What is the offset(address) in bytes from the start of this field
+	u_int16_t offset;
 };
 
 
@@ -136,12 +139,12 @@ struct constructed_type_t{
 	//the construct members to compute it. Due to this, it would be advantageous for
 	//the programmer to order the structure table with larger elements first
 	constructed_type_field_t construct_table[MAX_CONSTRUCT_MEMBERS];
-	//The current number of members
-	u_int8_t num_members;
+	//The next index
+	u_int8_t next_index;
 	//The overall size in bytes of the struct
 	u_int32_t size;
-	//The size of the largest element in the structure
-	u_int32_t largest_member;
+	//The largest variable in the entirety of the structure
+	void* largest_member;
 };
 
 
