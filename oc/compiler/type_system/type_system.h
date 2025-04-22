@@ -223,7 +223,7 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var);
 /**
  * Does a constructed type contain a given member variable?
  */
-void* get_construct_member(constructed_type_t* construct, char* name);
+constructed_type_field_t* get_construct_member(constructed_type_t* construct, char* name);
 
 /**
  * Dynamically allocate and create an array type

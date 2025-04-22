@@ -2626,11 +2626,17 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				//Update the current bar too
 				current_var = deref_stmt->assignee;
 			}
-	
-		//Fail out here, not yet implemented
+
+		//If we get to down here, we know that this is a construct accessor
 		} else if(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR){
+			//What we'll do first is grab the associated fields that we need out
+			symtab_variable_record_t* var = cursor->variable;
+
+			//Now we'll grab the associated construct record
+			
+
 			print_parse_message(PARSE_ERROR, "THIS HAS NOT BEEN IMPLEMENTED", cursor->line_number);
-			exit(0);
+			//exit(0);
 		//We have hit something unknown here
 		} else {
 			print_parse_message(PARSE_ERROR, "UNKOWN EXPRESSION TYPE DETECTED", cursor->line_number);

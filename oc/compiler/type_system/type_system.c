@@ -500,7 +500,7 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
 /**
  * Does this construct contain said member? Return the variable if yes, NULL if not
  */
-void* get_construct_member(constructed_type_t* construct, char* name){
+constructed_type_field_t* get_construct_member(constructed_type_t* construct, char* name){
 	//Run through and do a simple search, comparing the names.
 	
 	//The current variable that we have
@@ -513,8 +513,8 @@ void* get_construct_member(constructed_type_t* construct, char* name){
 
 		//Now we'll do a simple comparison. If they match, we're set
 		if(strcmp(var->var_name, name) == 0){
-			//Return the variable if we find it
-			return var;
+			//Return the whole record if we find it
+			return &(construct->construct_table[_]);
 		}
 	}
 

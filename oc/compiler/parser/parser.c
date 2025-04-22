@@ -925,8 +925,6 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR);
-	//Is assignable
-	const_access_node->is_assignable = ASSIGNABLE;
 	//Add the line number
 	const_access_node->line_number = current_line;
 
@@ -994,7 +992,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	char* member_name = ident->identifier;
 
 	//Let's see if we can look this up inside of the type
-	symtab_variable_record_t* var_record = get_construct_member(referenced_type->construct_type, member_name);
+	symtab_variable_record_t* var_record = get_construct_member(referenced_type->construct_type, member_name)->variable;
 
 	//If we can't find it we're out
 	if(var_record == NULL){
@@ -1003,10 +1001,14 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
+	
+	//Add the variable record into the node
+	const_access_node->is_assignable = TRUE;
 
-	//TODO MORE MUST HAPPEN HERE
+	//Store the variable in here
+	const_access_node->variable = var_record;
 
-	//Mark the current variable too
+	//Update the current variable as well, as this is a new variable
 	current_var = var_record;
 
 	//And now we're all done, so we'll just give back the root reference
@@ -1224,6 +1226,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 				//It's already an error so send it up
 				return constr_acc;
 			}
+
+			//Update the current type to be whatever came out of here
+			current_type = constr_acc->variable->type;
 
 			//Otherwise we know it's good, so we'll add it in as a child
 			add_child_node(postfix_expr_node, constr_acc);
@@ -3781,13 +3786,14 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
 		return FAILURE;
 	}
 
-	symtab_variable_record_t* duplicate;
+	//The field, if we can find it
+	constructed_type_field_t* duplicate;
 
 	//Is this a duplicate? If so, we fail out
 	if((duplicate = get_construct_member(construct->construct_type, name)) != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(duplicate);
+		print_variable_name(duplicate->variable);
 		num_errors++;
 		return FAILURE;
 	}

@@ -4,7 +4,7 @@
 
 fn main(arg:i32, argv:char**) -> i32{
 	define construct my_struct{
-		mut x:i8;
+		mut x:i32;
 		mut y:i32;
 		mut z:f64;
 
