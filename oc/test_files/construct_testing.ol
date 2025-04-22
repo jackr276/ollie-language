@@ -4,24 +4,23 @@
 
 fn main(arg:i32, argv:char**) -> i32{
 	define construct my_struct{
+		mut ch:char;
 		mut x:i32;
+		mut lch:char;
 		mut y:i32;
-		mut z:f64;
 
 	} as my_struct;
 
 	declare structure:my_struct;
 
-	declare x_arr:i32[2];
-
-	x_arr[1] := 3;
-
+	structure:ch := 'a';
 	structure:x := 3;
+	structure:lch := 'b';
 	structure:y := 5;
-	structure:z := 3.0;
 
+	//structure:x := 7;
 	let x:i32 := 3;
 
 	//So it isn't optimized away
-	ret x_arr[1];
+	ret x;
 }

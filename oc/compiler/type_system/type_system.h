@@ -139,12 +139,12 @@ struct constructed_type_t{
 	//the construct members to compute it. Due to this, it would be advantageous for
 	//the programmer to order the structure table with larger elements first
 	constructed_type_field_t construct_table[MAX_CONSTRUCT_MEMBERS];
-	//The next index
-	u_int8_t next_index;
 	//The overall size in bytes of the struct
 	u_int32_t size;
-	//The largest variable in the entirety of the structure
-	void* largest_member;
+	//The size of the largest member
+	u_int32_t largest_member_size;
+	//The next index
+	u_int8_t next_index;
 };
 
 
@@ -218,7 +218,12 @@ generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
 /**
  * Add a value into a construct's table
  */
-u_int8_t add_construct_member(constructed_type_t* type, void* member_var);
+u_int8_t add_construct_member(generic_type_t* type, void* member_var);
+
+/**
+ * Finalize the construct alignment
+ */
+void finalize_construct_alignment(generic_type_t* type);
 
 /**
  * Does a constructed type contain a given member variable?

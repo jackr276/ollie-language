@@ -410,14 +410,20 @@ generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number){
  * Add a value to a constructed type. The void* here is a 
  * symtab variable record
  */
-u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
+u_int8_t add_construct_member(generic_type_t* type, void* member_var){
+	//Grab this out for convenience
+	constructed_type_t* construct = type->construct_type;
+
 	//Check for size constraints
-	if(type->next_index >= MAX_CONSTRUCT_MEMBERS){
+	if(construct->next_index >= MAX_CONSTRUCT_MEMBERS){
 		return OUT_OF_BOUNDS;
 	}
 
+	//Grab this reference out, for convenience
+	symtab_variable_record_t* var = member_var;
+
 	//If this is the very first one, then we'll 
-	if(type->next_index == 0){
+	if(construct->next_index == 0){
 		constructed_type_field_t entry;	
 		//Currently, we don't need any padding
 		entry.padding = 0;
@@ -426,18 +432,19 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
 		entry.offset = 0;
 
 		//Also by defualt, this is currently the largest variable that we've seen
-		type->largest_member = member_var;
+		construct->largest_member_size = var->type->type_size;
 
 		//Just grab this as a reference to avoid the need to cast
 		symtab_variable_record_t* member = member_var;
 
-		type->size += member->type->type_size;
+		//Increment the size by the amount of the type
+		construct->size += member->type->type_size;
 
 		//Add this into the construct table
-		type->construct_table[type->next_index] = entry;
+		construct->construct_table[construct->next_index] = entry;
 
 		//Increment the index for the next go around
-		type->next_index += 1;
+		construct->next_index += 1;
 
 		//This worked, so return success
 		return SUCCESS;
@@ -446,13 +453,10 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
 	//Otherwise, if we make it down here, it means that we'll need to pay a bit more
 	//attention to alignment as there is more than one field
 	constructed_type_field_t entry;
-	//Grab this reference out, for convenience
-	symtab_variable_record_t* var = member_var;
-
 	//We'll update the largest member, if applicable
-	if(var->type->type_size > ((symtab_variable_record_t*)(type->largest_member))->type->type_size){
+	if(var->type->type_size > construct->largest_member_size){
 		//Update the largest member if this happens
-		type->largest_member = var;
+		construct->largest_member_size = var->type->type_size;
 	}
 
 	//For right now let's just have this added in
@@ -461,13 +465,13 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
 	entry.padding = 0;
 	
 	//Let's now see where the ending address of the struct is. We can find
-	//this ending address by calculating the offset of the latest field plus
+	//this ending dress by calculating the offset of the latest field plus
 	//the size of the latest variable
 	
 	//The prior variable
-	symtab_variable_record_t* prior_variable = type->construct_table[type->next_index - 1].variable;
+	symtab_variable_record_t* prior_variable = construct->construct_table[construct->next_index - 1].variable;
 	//And the offset of this entry
-	u_int32_t offset = type->construct_table[type->next_index - 1].offset;
+	u_int32_t offset = construct->construct_table[construct->next_index - 1].offset;
 	
 	//The current ending address is the offset of the last variable plus its size
 	u_int32_t current_end = offset + prior_variable->type->type_size;
@@ -478,10 +482,18 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
 
 	//We will satisfy this by adding the remainder of the division of the new variable with the current
 	//end in as padding to the previous entry
-	u_int32_t needed_padding = current_end % new_entry_size;
+	
+	//What padding is needed?
+	u_int32_t needed_padding;
+	
+	if(current_end < new_entry_size){
+		needed_padding = new_entry_size - current_end;
+	} else {
+		needed_padding = current_end % new_entry_size;
+	}
 
 	//This needed padding will go as padding on the prior entry
-	type->construct_table[type->next_index - 1].padding = needed_padding;
+	construct->construct_table[construct->next_index - 1].padding = needed_padding;
 
 	//Now we can update the current end
 	current_end = current_end + needed_padding;
@@ -489,9 +501,12 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
 	//And now we can add in the new variable's offset
 	entry.offset = current_end;
 
+	//Increment the size by the amount of the type and the padding we're adding in
+	construct->size += var->type->type_size + needed_padding;
+
 	//Finally, we can add this new entry in
-	type->construct_table[type->next_index] = entry;
-	type->next_index += 1;
+	construct->construct_table[construct->next_index] = entry;
+	construct->next_index += 1;
 
 	return SUCCESS;
 }
@@ -501,8 +516,6 @@ u_int8_t add_construct_member(constructed_type_t* type, void* member_var){
  * Does this construct contain said member? Return the variable if yes, NULL if not
  */
 constructed_type_field_t* get_construct_member(constructed_type_t* construct, char* name){
-	//Run through and do a simple search, comparing the names.
-	
 	//The current variable that we have
 	symtab_variable_record_t* var;
 
@@ -520,6 +533,27 @@ constructed_type_field_t* get_construct_member(constructed_type_t* construct, ch
 
 	//Otherwise if we get down here, it didn't work
 	return NULL;
+}
+
+
+/**
+ * Finalize the construct alignment. This should only be invoked 
+ * when we're done processing members
+ *
+ * The struct's end address needs to be a multiple of the size
+ * of it's largest field. We keep track of the largest field
+ * throughout the entirety of construction, so this should be easy
+ */
+void finalize_construct_alignment(generic_type_t* type){
+	//Let's see how far off we are from being a multiple of the
+	//final address
+	u_int32_t needed_padding = type->type_size % type->construct_type->largest_member_size;
+
+	//Whatever this needed padding may be, we'll add it to the end as the final padding for our construct
+	type->construct_type->construct_table[type->construct_type->next_index - 1].padding = needed_padding;
+
+	//Increment the size accordingly
+	type->type_size += needed_padding;
 }
 
 
