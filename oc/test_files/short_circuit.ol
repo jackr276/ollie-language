@@ -13,6 +13,14 @@ fn main(arg:i32, argv:char**) -> i32{
 	 	x := x + 3;
 	}
 
+	//Assign B a start
+	let mut b:i32 := 33;
+
+	while(b >= 9 && b <= 32) do{
+		b--;
+		x := x - 1;
+	}
+
 	//So it isn't optimized away
 	ret x;
 }

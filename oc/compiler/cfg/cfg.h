@@ -37,6 +37,13 @@ typedef enum {
 	BLOCK_TERM_TYPE_RET, //The block ends in a return statement
 } block_terminal_type_t;
 
+/**
+ * What kind of jump do we want to select
+ */
+typedef enum{
+	JUMP_CATEGORY_INVERSE,
+	JUMP_CATEGORY_NORMAL,
+} jump_category_t;
 
 /**
  * What is the general type of the block. Again most
@@ -159,7 +166,12 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node);
 
 //Add a successor to the block
- void add_successor(basic_block_t* target, basic_block_t* successor);
+void add_successor(basic_block_t* target, basic_block_t* successor);
+
+/**
+ * Select the appropriate jump type given the circumstances
+ */
+jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type);
 
 //Exclusively add a predecessor to a block
 void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor);

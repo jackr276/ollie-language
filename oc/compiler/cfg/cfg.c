@@ -58,13 +58,6 @@ typedef struct{
 } expr_ret_package_t;
 
 
-//An enum for jump types
-typedef enum{
-	JUMP_CATEGORY_INVERSE,
-	JUMP_CATEGORY_NORMAL,
-} jump_category_t;
-
-
 //Are we emitting the dominance frontier or not?
 typedef enum{
 	EMIT_DOMINANCE_FRONTIER,
@@ -134,9 +127,9 @@ static values_package_t pack_values(generic_ast_node_t* initial_node, basic_bloc
  * Select the appropriate jump type to use. We can either use
  * inverse jumps or direct jumps
  */
-static jump_type_t select_appropriate_jump_stmt(Token operator, jump_category_t jump_type){
+jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type){
 	//Let's see what we have here
-	switch(operator){
+	switch(op){
 		case G_THAN:
 			if(jump_type == JUMP_CATEGORY_INVERSE){
 				return JUMP_TYPE_JLE;

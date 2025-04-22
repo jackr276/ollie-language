@@ -497,8 +497,13 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_a
 	//Once we get out here, we have the statement that assigns op1. Since this is an "and" target,
 	//we'll jump to ELSE if we have a bad result here(result being zero) because that would cause
 	//the rest of the and to be false
+	
+	//We need to select the appropriate jump type for our statement. We want an inverse jump, 
+	//because we're jumping if this condition fails
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE);
+	
 	//Jump to else here
-	three_addr_code_stmt_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, JUMP_TYPE_JZ);
+	three_addr_code_stmt_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_else_stmt->is_branch_ending = TRUE;
 
@@ -513,8 +518,29 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_a
 	jump_to_else_stmt->next_statement = after;
 	after->previous_statement = jump_to_else_stmt;
 
+	//Hang onto these
+	three_addr_code_stmt_t* previous = stmt->previous_statement;
+	three_addr_code_stmt_t* next = stmt->next_statement;
+	three_addr_code_stmt_t* final_jump = next->next_statement;
+
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
 	delete_statement(cfg, block, stmt);
+
+	//We also no longer need the following jump statement
+	delete_statement(cfg, block, next);
+
+	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
+	//We'll do a direct jump here - if it's affirmative
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL);
+
+	//Now we'll emit the jump to if
+	three_addr_code_stmt_t* final_cond_jump = emit_jmp_stmt_three_addr_code(if_target, jump);
+
+	//We'll now add this one in right as the previous one
+	previous->next_statement = final_cond_jump;
+	final_cond_jump->previous_statement = previous;
+	final_cond_jump->next_statement = final_jump;
+	final_jump->previous_statement = final_cond_jump;
 }
 
 
@@ -535,12 +561,16 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_ad
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
-	
+
+	//We need to select the appropriate jump type for our statement. We want a regular jump, 
+	//because we're jumping if this condition succeeds
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL);
+
 	//Once we get out here, we have the statement that assigns op1. Since this is an "or" target,
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
 	//rest of the or to be true
 	//Jump to else here
-	three_addr_code_stmt_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, JUMP_TYPE_JNZ);
+	three_addr_code_stmt_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_if_stmt->is_branch_ending = TRUE;
 
@@ -555,8 +585,29 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_ad
 	jump_to_if_stmt->next_statement = after;
 	after->previous_statement = jump_to_if_stmt;
 
+	//Hang onto these
+	three_addr_code_stmt_t* previous = stmt->previous_statement;
+	three_addr_code_stmt_t* next = stmt->next_statement;
+	three_addr_code_stmt_t* final_jump = next->next_statement;
+
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
 	delete_statement(cfg, block, stmt);
+
+	//We also no longer need the following jump statement
+	delete_statement(cfg, block, next);
+
+	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
+	//We'll do a direct jump here - if it's affirmative
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL);
+
+	//Now we'll emit the jump to if
+	three_addr_code_stmt_t* final_cond_jump = emit_jmp_stmt_three_addr_code(if_target, jump);
+
+	//We'll now add this one in right as the previous one
+	previous->next_statement = final_cond_jump;
+	final_cond_jump->previous_statement = previous;
+	final_cond_jump->next_statement = final_jump;
+	final_jump->previous_statement = final_cond_jump;
 }
 
 
