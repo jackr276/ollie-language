@@ -2612,12 +2612,16 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//an array or pointer type. We'll need to extract the base type here
 
 			generic_type_t* base_type;
+			//Is this an array or a pointer
+			TYPE_CLASS class;
 
 			//We can either have an array or pointer, extract either or accordingly
 			if(current_var->type->type_class == TYPE_CLASS_ARRAY){
 				base_type = current_var->type->array_type->member_type;
+				class = TYPE_CLASS_ARRAY;
 			} else {
 				base_type = current_var->type->pointer_type->points_to;
+				class = TYPE_CLASS_POINTER;
 			}
 
 			/**
@@ -2643,10 +2647,15 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				current_var = deref_stmt->assignee;
 			}
 
+			//If this is on the left hand side, then we have a write. Otherwise it's a read
+			if(side == SIDE_TYPE_LEFT){
+				current_var->access_type = MEMORY_ACCESS_WRITE;
+			} else {
+				current_var->access_type = MEMORY_ACCESS_READ;
+			}
+
 		//If we get to down here, we know that this is a construct accessor
 		} else if(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR){
-			if(current_var == NULL) printf("ITS NULL\n\n");
-
 			//What we'll do first is grab the associated fields that we need out
 			symtab_variable_record_t* var = cursor->variable;
 
@@ -2667,6 +2676,13 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//The address is what we'll need for memory
 			current_var = emit_mem_code(basic_block, address_calc->assignee);
 
+			//If this is on the left hand side, then we have a write. Otherwise it's a read
+			if(side == SIDE_TYPE_LEFT){
+				current_var->access_type = MEMORY_ACCESS_WRITE;
+			} else {
+				current_var->access_type = MEMORY_ACCESS_READ;
+			}
+		
 			//and now we're all set
 			
 		//We have hit something unknown here - this should never happen
@@ -2738,6 +2754,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 				//We really just have an "inc" instruction here
 				return emit_dec_code(basic_block, assignee, is_branch_ending);
 			}
+		//Dereferencing here
 		} else if (unary_operator->unary_operator == STAR){
 			//Memory address
 			return emit_mem_code(basic_block, assignee);

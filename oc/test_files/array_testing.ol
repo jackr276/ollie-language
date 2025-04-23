@@ -10,7 +10,10 @@ fn main(arg:i32, argv:char**) -> i32{
 	arr[5] := 3;
 	arr[7] := 2;
 
+	let mut i:i32 := 3;
+	let mut j:i32* := &i;
+
 
 	//So it isn't optimized away
-	ret arr[7];
+	ret arr[7] + *j;
 }

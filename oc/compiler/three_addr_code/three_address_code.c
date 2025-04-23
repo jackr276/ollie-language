@@ -849,6 +849,23 @@ three_addr_code_stmt_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assigne
 
 
 /**
+ * Emit a memory access statement
+ */
+three_addr_code_stmt_t* emit_mem_access_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type){
+	//First we allocate
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_MEM_ACCESS_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//Record the function that we're in
+	stmt->function = current_function;
+	return stmt;
+}
+
+
+/**
  * Emit an assignment "three" address code statement
  */
 three_addr_code_stmt_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_const_t* constant){

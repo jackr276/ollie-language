@@ -118,7 +118,9 @@ typedef enum{
 	//A phi function - for SSA analysis only
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A conditional branch OIR statement
-	THREE_ADDR_CODE_COND_BRANCH_STMT
+	THREE_ADDR_CODE_COND_BRANCH_STMT,
+	//A memory access statement
+	THREE_ADDR_CODE_MEM_ACCESS_STMT
 } three_addr_code_stmt_class_t;
 
 /**
@@ -148,6 +150,8 @@ struct three_addr_var_t{
 	generic_type_t* type;
 	//For memory management
 	three_addr_var_t* next_created;
+	//Memory access type, if one exists
+	memory_access_type_t access_type;
 };
 
 
@@ -220,6 +224,7 @@ struct three_addr_code_stmt_t{
 	char* inlined_assembly;
 	//The phi function parameters - stored in a dynamic array
 	void* phi_function_parameters;
+	TYPE_CLASS access_class;
 };
 
 

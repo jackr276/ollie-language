@@ -190,7 +190,7 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 
 /**
  * Delete all branching statements in the current block. We know if a statement is branching if it is 
- * markes as branch ending. 
+ * marks as branch ending. 
  *
  * NOTE: This should only be called after we have identified this block as a candidate for block folding
  */
@@ -1002,13 +1002,56 @@ static void sweep(cfg_t* cfg){
 
 
 /**
+ * Mark all memory location that write to a given array. We are unable
+ * to be discriminating here. If one array write is marked as important,
+ * then every other write to that same array is going to be marked as important
+ */
+static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
+
+}
+
+
+
+static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, three_addr_code_stmt_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+	printf("We read from variable: %s with type %s\n", variable->var_name, variable->type->type_name);
+
+	//Let's see what kind of statement preceeds this one. If it's a LEA statement, we could have either a pointer or an array
+	three_addr_code_stmt_t* previous = stmt->previous_statement;
+
+	//We know that we have an array if the previous statement's operand is one
+	if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_ARRAY){
+		printf("We read from the array: %s\n", previous->op1->var_name);
+		//Now that we've made it here, we need to mark all times that this "op1" has been
+		//written to. Since we are unable to determine *which* array addresses are written
+		//to at compile time, we need to indiscriminantly mark all times that this array is written
+		//to
+		mark_and_add_all_array_writes(cfg, worklist, variable);
+
+	} else if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_CONSTRUCT){
+		printf("We read from the construct: %s\n", previous->op1->var_name);
+		
+		//mark_and_add_all_array_writes(cfg, worklist, variable);
+	}
+}
+
+
+/**
  * Mark definitions(assignment) of a three address variable within
  * the current function. If a definition is not marked, it must be added to the worklist
  */
-static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_definition(cfg_t* cfg, three_addr_code_stmt_t* stmt, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
 	if(variable == NULL || current_function == NULL){
 		return;
+	}
+
+	//If this variable is a memory access, we'll need to do a bit more
+	//than just mark all of it's definitions. Rather, we'll need to
+	//mark all of the times that we write to this location
+	//in memory as important
+	if(variable->access_type == MEMORY_ACCESS_READ){
+		printf("HERE\n");
+		handle_memory_address_marking(cfg, variable, stmt, current_function, worklist);
 	}
 
 	//Run through everything here
@@ -1074,25 +1117,6 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 }
 
 
-/**
- * Mark all memory location that write to a given array. We are unable
- * to be discriminating here. If one array write is marked as important,
- * then every other write to that same array is going to be marked as important
- */
-static void mark_and_add_all_array_writes(dynamic_array_t* worklist, three_addr_var_t* var){
-
-}
-
-
-/**
- * For constructs, we are able to be much more specific because their entire 
- * structure is determined at compile time by the parser. So, if we know that
- * a specific field in a struct is important, we can mark all writes
- * to the given construct variable at that specific offset
- */
-static void mark_and_add_all_construct_field_writes(dynamic_array_t* worklist, three_addr_var_t* construct_var, three_addr_const_t* offset){
-
-}
 
 
 /**
@@ -1204,7 +1228,7 @@ static void mark(cfg_t* cfg){
 				three_addr_var_t* phi_func_param = dynamic_array_get_at(phi_function_parameters, i);
 
 				//Add the definitions in
-				mark_and_add_definition(cfg, phi_func_param, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt, phi_func_param, stmt->function, worklist);
 			}
 
 		//Otherwise if we have a function call, every single thing in that function call is important
@@ -1214,18 +1238,12 @@ static void mark(cfg_t* cfg){
 
 			//Run through them all and mark them
 			for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-				mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
 			}
-
-		//INITIAL IDEA - we can probably get more specific here
-		//} else if(stmt->op1 != NULL && stmt->op1->type != NULL){
-		//	if(stmt->op1->type->type_class == TYPE_CLASS_POINTER || stmt->op1->type->type_class == TYPE_CLASS_ARRAY){
-//
-//			}
 		} else {
 			//We need to mark the place where each definition is set
-			mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
-			mark_and_add_definition(cfg, stmt->op2, stmt->function, worklist);
+			mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
+			mark_and_add_definition(cfg, stmt, stmt->op2, stmt->function, worklist);
 		}
 
 		//Grab this out for convenience
