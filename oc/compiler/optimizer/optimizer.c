@@ -47,23 +47,17 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 
 	//Now merge successors
 	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
-		//Add b's successors to be a's successors
-		add_successor_only(a, dynamic_array_get_at(b->successors, i));
-	}
+		basic_block_t* successor = dynamic_array_get_at(b->successors, i);
 
-	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
-	//This is now wrong though. So, for each successor of B, it will need
-	//to have A as predecessor
-	for(u_int8_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
-		//Grab the block first
-		basic_block_t* successor_block = b->successors->internal_array[i];
+		//Add b's successors to be a's successors
+		add_successor_only(a, successor);
 
 		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int8_t i = 0; successor_block->predecessors != NULL && i < successor_block->predecessors->current_index; i++){
+		for(u_int16_t j = 0; successor->predecessors != NULL && j < successor->predecessors->current_index; j++){
 			//If it's pointing to b, it needs to be updated
-			if(successor_block->predecessors->internal_array[i] == b){
+			if(successor->predecessors->internal_array[j] == b){
 				//Update it to now be correct
-				successor_block->predecessors->internal_array[i] = a;
+				successor->predecessors->internal_array[j] = a;
 			}
 		}
 	}
@@ -331,6 +325,12 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 				//This counts as a change
 				changed = TRUE;
+
+				//There is no point in sticking around here. In getting to this area, we know that there was
+				//only one statement in here. As such, any attempt to block merge this would be in error and not desirable, because
+				//the block merging algorithm requires that there be more than one statement.
+				//We'll continue here, and allow the next iteration to go forward
+				continue;
 			}
 
 			//============================== BLOCK MERGING =================================================
@@ -344,16 +344,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				three_addr_code_stmt_t* cursor = current->exit_statement->previous_statement;
 
 				//Are we good to merge?
-				u_int8_t good_to_merge;
-
-				//Default to false if NULL
-				if(cursor == NULL){
-					good_to_merge = FALSE;
-					//We're completely done here - this block is now dead
-					continue;
-				} else {
-					good_to_merge = TRUE;
-				}
+				u_int8_t good_to_merge = TRUE;
 
 				while(cursor != NULL){
 					//If we have another jump, we are NOT good to merge
@@ -1227,10 +1218,10 @@ static void mark(cfg_t* cfg){
 			}
 
 		//INITIAL IDEA - we can probably get more specific here
-		} else if(stmt->op1 != NULL && stmt->op1->type != NULL){
-			if(stmt->op1->type->type_class == TYPE_CLASS_POINTER || stmt->op1->type->type_class == TYPE_CLASS_ARRAY){
-
-			}
+		//} else if(stmt->op1 != NULL && stmt->op1->type != NULL){
+		//	if(stmt->op1->type->type_class == TYPE_CLASS_POINTER || stmt->op1->type->type_class == TYPE_CLASS_ARRAY){
+//
+//			}
 		} else {
 			//We need to mark the place where each definition is set
 			mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
