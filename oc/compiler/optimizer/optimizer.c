@@ -343,8 +343,17 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//Grab a statement cursor
 				three_addr_code_stmt_t* cursor = current->exit_statement->previous_statement;
 
-				//Are we good to go?
-				u_int8_t good_to_merge = TRUE;
+				//Are we good to merge?
+				u_int8_t good_to_merge;
+
+				//Default to false if NULL
+				if(cursor == NULL){
+					good_to_merge = FALSE;
+					//We're completely done here - this block is now dead
+					continue;
+				} else {
+					good_to_merge = TRUE;
+				}
 
 				while(cursor != NULL){
 					//If we have another jump, we are NOT good to merge
