@@ -60,6 +60,14 @@ typedef enum{
 	PRINTING_VAR_BLOCK_HEADER,
 } variable_printing_mode_t;
 
+/**
+ * For a given statement, are we writing to or reading from memory?
+ */
+typedef enum {
+	MEMORY_ACCESS_NONE = 0,
+	MEMORY_ACCESS_WRITE,
+	MEMORY_ACCESS_READ,
+} memory_access_type_t;
 
 /**
  * What kind of three address code statement do we have?
@@ -133,6 +141,8 @@ struct three_addr_var_t{
 	u_int16_t indirection_level;
 	//What is the size of this variable
 	variable_size_t variable_size;
+	//Is this variable used for memory access?(only for temp vars)
+	memory_access_type_t mem_access;
 	//Store the type info for faster access
 	//Types will be used for eventual register assignment
 	generic_type_t* type;

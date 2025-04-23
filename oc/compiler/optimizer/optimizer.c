@@ -1084,10 +1084,22 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 
 /**
- * Mark all statements where a structure is read from. This will come about
- * when we need 
+ * Mark all memory location that write to a given array. We are unable
+ * to be discriminating here. If one array write is marked as important,
+ * then every other write to that same array is going to be marked as important
  */
-static void mark_and_add_construct_memory_access_locations(generic_type_t* construct_type){
+static void mark_and_add_all_array_writes(dynamic_array_t* worklist, three_addr_var_t* var){
+
+}
+
+
+/**
+ * For constructs, we are able to be much more specific because their entire 
+ * structure is determined at compile time by the parser. So, if we know that
+ * a specific field in a struct is important, we can mark all writes
+ * to the given construct variable at that specific offset
+ */
+static void mark_and_add_all_construct_field_writes(dynamic_array_t* worklist, three_addr_var_t* construct_var, three_addr_const_t* offset){
 
 }
 
@@ -1214,6 +1226,11 @@ static void mark(cfg_t* cfg){
 				mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
 			}
 
+		//INITIAL IDEA - we can probably get more specific here
+		} else if(stmt->op1 != NULL && stmt->op1->type != NULL){
+			if(stmt->op1->type->type_class == TYPE_CLASS_POINTER || stmt->op1->type->type_class == TYPE_CLASS_ARRAY){
+
+			}
 		} else {
 			//We need to mark the place where each definition is set
 			mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
