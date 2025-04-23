@@ -117,8 +117,6 @@ typedef enum{
 	THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT,
 	//A phi function - for SSA analysis only
 	THREE_ADDR_CODE_PHI_FUNC,
-	//A conditional branch OIR statement
-	THREE_ADDR_CODE_COND_BRANCH_STMT,
 	//A memory access statement
 	THREE_ADDR_CODE_MEM_ACCESS_STMT
 } three_addr_code_stmt_class_t;
@@ -133,23 +131,21 @@ struct three_addr_var_t{
 	char var_name[MAX_IDENT_LENGTH + 10];
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
-	//Is this a temp variable?
-	u_int8_t is_temporary;
-	//What's the temp var number
-	u_int32_t temp_var_number;
-	//Is this a constant?
-	u_int8_t is_constant;
-	//What is the indirection level
-	u_int16_t indirection_level;
-	//What is the size of this variable
-	variable_size_t variable_size;
-	//Is this variable used for memory access?(only for temp vars)
-	memory_access_type_t mem_access;
-	//Store the type info for faster access
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//For memory management
 	three_addr_var_t* next_created;
+	//What's the temp var number
+	u_int32_t temp_var_number;
+	//What is the indirection level
+	u_int16_t indirection_level;
+	//Is this a temp variable?
+	u_int8_t is_temporary;
+	//Is this a constant?
+	u_int8_t is_constant;
+	//What is the size of this variable
+	variable_size_t variable_size;
+	//Store the type info for faster access
 	//Memory access type, if one exists
 	memory_access_type_t access_type;
 };
@@ -159,18 +155,18 @@ struct three_addr_var_t{
  * A three address constant always holds the value of the constant
  */
 struct three_addr_const_t{
+	char str_const[MAX_TOKEN_LENGTH];
+	//For memory management
+	three_addr_const_t* next_created;
 	//We hold the type info
 	generic_type_t* type;
 	//What kind of constant is it
 	Token const_type;
 	//And we hold everything relevant about the constant
 	long long_const;
-	char str_const[MAX_TOKEN_LENGTH];
 	char char_const;
 	float float_const;
 	int int_const;
-	//For memory management
-	three_addr_const_t* next_created;
 };
 
 
@@ -191,13 +187,25 @@ struct three_addr_code_stmt_t{
 	three_addr_const_t* op1_const;
 	three_addr_var_t* op2;
 	three_addr_var_t* assignee;
-	three_addr_code_stmt_class_t CLASS;
-	//The LEA addition
-	u_int64_t lea_multiplicator;
-	//The actual operator, stored as a token for size requirements
-	Token op;
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;
+	//The LEA addition
+	u_int64_t lea_multiplicator;
+	//The function called
+	symtab_function_record_t* func_record;
+	//The variable record
+	symtab_variable_record_t* var_record;
+	//What function are we currently in?
+	symtab_function_record_t* function;
+	//Very special case, only for inlined assembly
+	char* inlined_assembly;
+	//The phi function parameters - stored in a dynamic array
+	void* phi_function_parameters;
+	//The list of temp variable parameters at most 6
+	void* function_parameters;
+	three_addr_code_stmt_class_t CLASS;
+	//The actual operator, stored as a token for size requirements
+	Token op;
 	//Is this a jump table? -- for use in switch statements
 	u_int8_t is_jump_table;
 	//Is this operation critical?
@@ -207,23 +215,9 @@ struct three_addr_code_stmt_t{
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
-	//These are both for conditional branch statements
-	void* if_branch_target;
-	void* else_branch_target;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
-	//The function called
-	symtab_function_record_t* func_record;
-	//The variable record
-	symtab_variable_record_t* var_record;
-	//What function are we currently in?
-	symtab_function_record_t* function;
-	//The list of temp variable parameters at most 6
-	void* function_parameters;
-	//Very special case, only for inlined assembly
-	char* inlined_assembly;
-	//The phi function parameters - stored in a dynamic array
-	void* phi_function_parameters;
+	//Memory access type
 	TYPE_CLASS access_class;
 };
 
@@ -362,11 +356,6 @@ three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable);
  * Emit an idle statement
  */
 three_addr_code_stmt_t* emit_idle_statement_three_addr_code();
-
-/**
- * Emit a conditional branch statement
- */
-three_addr_code_stmt_t* emit_cbr_statement_three_addr_code(three_addr_var_t* assignee, void* if_branch_target, void* else_branch_target);
 
 /**
  * Are two variables equal? A helper method for searching

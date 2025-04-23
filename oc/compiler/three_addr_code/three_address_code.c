@@ -612,16 +612,6 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		}
 
 		printf(")\n");
-	//Print out a conditional branch statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_COND_BRANCH_STMT){
-		printf("CBR(");
-
-		//Print out the assignee
-		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-
-		basic_block_t* if_target = stmt->if_branch_target;
-		basic_block_t* else_target = stmt->else_branch_target;
-		printf(", .L%d, .L%d)\n", if_target->block_id, else_target->block_id);
 	//Print out an indirect jump statement
 	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
 		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
@@ -1064,28 +1054,6 @@ three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable){
 	return stmt;
 }
 
-
-/**
- * Emit a conditional branch statement
- */
-three_addr_code_stmt_t* emit_cbr_statement_three_addr_code(three_addr_var_t* assignee, void* if_branch_target, void* else_branch_target){
-	//First we allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
-	
-	//Store these all
-	stmt->assignee = assignee;
-	stmt->if_branch_target = if_branch_target;
-	stmt->else_branch_target = else_branch_target;
-
-	//Mark the type
-	stmt->CLASS = THREE_ADDR_CODE_COND_BRANCH_STMT;
-
-	//Mark the function
-	stmt->function = current_function;
-
-	//And give it back
-	return stmt;
-}
 
 /**
  * Emit a complete copy of whatever was in here previously

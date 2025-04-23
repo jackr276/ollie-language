@@ -174,6 +174,10 @@ struct symtab_variable_record_t{
  * will keep references to all created types like structs, enums, etc
  */
 struct symtab_type_record_t{
+	//The next hashtable record
+	symtab_type_record_t* next;
+	//What type is it?
+	generic_type_t* type;
 	u_int16_t hash;
 	//The lexical level of it
 	int16_t lexical_level;
@@ -181,10 +185,6 @@ struct symtab_type_record_t{
 	u_int16_t line_number;
 	//Was it initialized? This is usually for forward-declared structs
 	u_int8_t initialized;
-	//What type is it?
-	generic_type_t* type;
-	//The next hashtable record
-	symtab_type_record_t* next;
 };
 
 
@@ -193,9 +193,6 @@ struct symtab_type_record_t{
  * how we will keep references to constants as they're defined by the user
  */
 struct symtab_constant_record_t{
-	u_int16_t hash;
-	//Line number
-	u_int16_t line_number;
 	//The name
 	char name[MAX_IDENT_LENGTH];
 	//The module it was defined in
@@ -204,6 +201,9 @@ struct symtab_constant_record_t{
 	void* constant_node;
 	//For linked list functionality
 	symtab_constant_record_t* next;
+	u_int16_t hash;
+	//Line number
+	u_int16_t line_number;
 };
 
 
@@ -239,16 +239,12 @@ struct symtab_type_sheaf_t{
 struct variable_symtab_t{
 	//A global storage array for all symtab "sheaths"
 	symtab_variable_sheaf_t** sheafs;
-	
-	//The number of sheafs that we currently have
-	u_int16_t num_sheafs;
-
-	//The current maximum number of sheafs
-	u_int16_t max_sheafs;
-	
 	//The current symtab sheaf
 	symtab_variable_sheaf_t* current;
-
+	//The number of sheafs that we currently have
+	u_int16_t num_sheafs;
+	//The current maximum number of sheafs
+	u_int16_t max_sheafs;
 	//The current lexical scope
 	u_int16_t current_lexical_scope;
 };
@@ -260,16 +256,12 @@ struct variable_symtab_t{
 struct type_symtab_t{
 	//A global storage array for all symtab "sheaths"
 	symtab_type_sheaf_t** sheafs;
-	
-	//The number of sheafs that we currently have
-	u_int16_t num_sheafs;
-
-	//The current maximum number of sheafs
-	u_int16_t max_sheafs;
-
 	//The current symtab sheaf
 	symtab_type_sheaf_t* current;
-
+	//The number of sheafs that we currently have
+	u_int16_t num_sheafs;
+	//The current maximum number of sheafs
+	u_int16_t max_sheafs;
 	//The current lexical scope
 	u_int16_t current_lexical_scope;
 };

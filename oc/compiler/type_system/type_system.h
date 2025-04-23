@@ -62,13 +62,6 @@ typedef enum TYPE_CLASS{
 struct generic_type_t{
 	//The name of the type
 	char type_name[MAX_TYPE_NAME_LENGTH];
-	//What class of type is it
-	TYPE_CLASS type_class;
-	//When was it defined: -1 = generic type
-	int32_t line_number;
-	//All generic types have a size
-	u_int32_t type_size;
-
 	/**
 	 * The following pointers will be null except for the one that the type class
 	 * specifies this type belongs to
@@ -79,6 +72,12 @@ struct generic_type_t{
 	constructed_type_t* construct_type;
 	enumerated_type_t* enumerated_type;
 	aliased_type_t* aliased_type;
+	//When was it defined: -1 = generic type
+	int32_t line_number;
+	//All generic types have a size
+	u_int32_t type_size;
+	//What class of type is it
+	TYPE_CLASS type_class;
 };
 
 

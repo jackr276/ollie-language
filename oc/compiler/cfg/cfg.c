@@ -2179,21 +2179,6 @@ static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* 
 
 
 /**
- * Emit the abstract machine code for a conditional branch statement
- */
-static void emit_cbr_stmt(basic_block_t* basic_block, three_addr_var_t* assignee, basic_block_t* if_target, basic_block_t* else_target, u_int8_t is_branch_ending){
-	//Invoke the helper
-	three_addr_code_stmt_t* stmt = emit_cbr_statement_three_addr_code(assignee, if_target, else_target);
-
-	//Mark this as branch ending
-	stmt->is_branch_ending = is_branch_ending;
-
-	//Add it into the block
-	add_statement(basic_block, stmt);
-}
-
-
-/**
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
