@@ -1084,6 +1084,15 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 
 /**
+ * Mark all statements where a structure is read from. This will come about
+ * when we need 
+ */
+static void mark_and_add_construct_memory_access_locations(generic_type_t* construct_type){
+
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values

@@ -19,7 +19,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	structure:y := 5;
 
 	//structure:x := 7;
-	let x:i32 := 3;
+	let x:i32 := structure:x;
 
 	//So it isn't optimized away
 	ret x;

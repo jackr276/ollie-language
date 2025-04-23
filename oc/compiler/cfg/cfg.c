@@ -2103,14 +2103,30 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 	//Is null by default
 	package.assignee = NULL;
 
+	//This is what we'll be using to return
+	three_addr_var_t* return_variable = NULL;
+
 	//If the ret node's first child is not null, we'll let the expression rule
 	//handle it
 	if(ret_node->first_child != NULL){
 		package = emit_binary_op_expr_code(basic_block, ret_node->first_child, is_branch_ending);
+
+		//If the assignee here is an indirect(memory access) variable, we'll do a quick temp assignment for
+		//it that way we aren't trying to dereference in the return statement
+		if(package.assignee->indirection_level > 0){
+			//Emit the temp assignment
+			three_addr_code_stmt_t* assn_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(package.assignee->type), package.assignee);
+			//Add it into the block
+			add_statement(basic_block, assn_stmt);
+			//The return variable is now what was assigned
+			return_variable	= assn_stmt->assignee;
+		} else {
+			return_variable = package.assignee;
+		}
 	}
 
 	//We'll use the ret stmt feature here
-	three_addr_code_stmt_t* ret_stmt = emit_ret_stmt_three_addr_code(package.assignee);
+	three_addr_code_stmt_t* ret_stmt = emit_ret_stmt_three_addr_code(return_variable);
 
 	//Mark this with whatever was passed through
 	ret_stmt->is_branch_ending = is_branch_ending;
