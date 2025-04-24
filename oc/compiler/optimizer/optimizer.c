@@ -1002,14 +1002,87 @@ static void sweep(cfg_t* cfg){
 
 
 /**
- * Mark all memory location that write to a given array. We are unable
- * to be discriminating here. If one array write is marked as important,
- * then every other write to that same array is going to be marked as important
+ * A special helper function that we use for dynamic arrays of variables. Since variables
+ * can be duplicated, we need to compare the symtab variable record, not the three address
+ * variable itself
  */
-static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
+static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, three_addr_var_t* variable){
+	//No question here -- we won't be finding it
+	if(variable_array == NULL){
+		return NOT_FOUND;
+	}
+
+	//We assume that everything in here is a variable and will cast as such
+	three_addr_var_t* current_var;
+
+	//Run through every record in here
+	for(u_int16_t i = 0; i < variable_array->current_index; i++){
+		//Grab a reference
+		current_var = variable_array->internal_array[i];
+
+		//If we found it, give back the index
+		if(current_var->linked_var == variable->linked_var){
+			return i;
+		}
+	}
+
+	//We couldn't find this one, so give back not found
+	return NOT_FOUND;
+}
+
+
+/**
+ * Mark all statements that write to a given field in a structure. We're able to be more specific
+ * here because a construct's layout is determined when the parser hits it. As such, if we're only
+ * ever using a certain field, we need only worry about writes to that given field
+ *
+ */
+static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
 
 }
 
+
+/**
+ * Mark all statements that write to a given array. We are unable
+ * to be discriminating here. If one array write is marked as important,
+ * then every other write to that same array is going to be marked as important
+ *
+ * NOTE: var is the base address of the array that we're writing to
+ */
+static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
+	//Is this a global array variable? This is an important optimization that will allow us to rule a lot
+	//of blocks out without much searching
+	u_int8_t is_global_var = var->linked_var->is_global;
+
+	//Run through every single block in the CFG
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the given block out
+		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, _);	
+
+		//If this block does not match the function that we're currently in, and the variable
+		//itself is not global, we'll skip it
+		if(is_global_var == FALSE && var->linked_var->function_declared_in != current->function_defined_in){
+			//Skip to the next one, this can't possibly be what we want
+			continue;
+		}
+		
+		//Check to see if this blocks assigns said variable
+		if(var->is_temporary == FALSE && variable_dynamic_array_contains(current->assigned_variables, var) == NOT_FOUND){
+			continue;
+		}
+
+		//If we make it down here, we know that this block is writing to said memory address. Now we just need to figure
+		//out the statements that are doing it
+		
+		printf("Block .L%d writes to array: %s\n", current->block_id, var->var_name);
+		
+		//Grab a cursor out		
+		
+
+
+	}
+
+}
 
 
 static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, three_addr_code_stmt_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
@@ -1021,16 +1094,18 @@ static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable
 	//We know that we have an array if the previous statement's operand is one
 	if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_ARRAY){
 		printf("We read from the array: %s\n", previous->op1->var_name);
+
 		//Now that we've made it here, we need to mark all times that this "op1" has been
 		//written to. Since we are unable to determine *which* array addresses are written
 		//to at compile time, we need to indiscriminantly mark all times that this array is written
 		//to
-		mark_and_add_all_array_writes(cfg, worklist, variable);
+		//When calling here, we know that op1 is the array base address that we're writing to
+		mark_and_add_all_array_writes(cfg, worklist, previous->op1);
 
 	} else if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_CONSTRUCT){
 		printf("We read from the construct: %s\n", previous->op1->var_name);
 		
-		//mark_and_add_all_array_writes(cfg, worklist, variable);
+		mark_and_add_all_construct_field_writes(cfg, worklist, variable);
 	}
 }
 

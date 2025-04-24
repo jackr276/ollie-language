@@ -7597,7 +7597,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 	//Let's now check to see if it's mutable or not
 	if(lookahead.tok == MUT){
-		is_mutable = 1;
+		is_mutable = TRUE;
 	} else {
 		//Push the token back
 		push_back_token(lookahead);
@@ -7731,6 +7731,8 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	declared_var->initialized = FALSE;
 	//It was declared
 	declared_var->declare_or_let = 0;
+	//What function are we in?
+	declared_var->function_declared_in = current_function;
 	//The line_number
 	declared_var->line_number = current_line;
 	//Is it global? This speeds up optimization down the line
@@ -7977,7 +7979,9 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Is it mutable
 	declared_var->is_mutable = is_mutable;
 	//It was initialized
-	declared_var->initialized = 1;
+	declared_var->initialized = TRUE;
+	//Mark where it was declared
+	declared_var->function_declared_in = current_function;
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
 	//Is it a global var or not? This speeds up optimization
