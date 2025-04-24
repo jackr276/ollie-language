@@ -489,7 +489,7 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_a
 	three_addr_code_stmt_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL && variables_equal(op1, cursor->assignee) == FALSE){
+	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
@@ -557,7 +557,7 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_ad
 	three_addr_code_stmt_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL && variables_equal(op1, cursor->assignee) == FALSE){
+	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
@@ -1076,12 +1076,73 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 		
 		printf("Block .L%d writes to array: %s\n", current->block_id, var->var_name);
 		
-		//Grab a cursor out		
+		//Grab a cursor out	of this block. We'll need to traverse to see which statements in here are important
+		three_addr_code_stmt_t* cursor = current->leader_statement;
 		
+		//Run through every statement in here
+		while(cursor != NULL){
+			//The statements that really matter here are lea statements
+			if(cursor->CLASS != THREE_ADDR_CODE_LEA_STMT){
+				//Move onto the next one, this isn't what we want
+				cursor = cursor->next_statement;
+				continue;
+			}
 
+			//If we get here, we know that we have a lea statement. First, we need to check if the lea statement's "op1" is
+			//the same as our variable
+			if(cursor->op1->linked_var != var->linked_var){
+				//Move onto the next one, this isn't one that we want
+				cursor = cursor->next_statement;
+				continue;
+			}
 
+			//Save this lea statement for later
+			three_addr_code_stmt_t* lea_stmt = cursor;
+
+			//If we make it here, we know that we have a lea statement whose assignee is an address within or array of interest
+			//Let's save that assignee for searching
+			three_addr_var_t* address = lea_stmt->assignee;
+
+			//Let's see what this is
+			print_variable(address, PRINTING_VAR_INLINE);
+			printf("\n");
+
+			//Now that we know we're good, we need to advance until this variable is used in some way. That could either happen
+			//in a read or a write. Either way, we need to keep searching until it does happen
+
+			//Grab another cursor
+			three_addr_code_stmt_t* assignee_used = cursor->next_statement;
+
+			//So long as this isn't NULL
+			while(assignee_used != NULL){
+				//If we're writing to this address, we need to mark that statement
+				if(variables_equal(assignee_used->assignee, address, TRUE) == TRUE){
+					//Mark the LEA too
+					if(lea_stmt->mark == FALSE){
+						//Mark it
+						lea_stmt->mark = TRUE;
+						//Add to the list
+						dynamic_array_add(worklist, lea_stmt);
+					}
+
+					//If it's not marked
+					if(assignee_used->mark == FALSE){
+						//Mark it
+						assignee_used->mark = TRUE;
+						//Add to the worklist
+						dynamic_array_add(worklist, assignee_used);
+					}
+				}
+				
+				//Just becuase we found one doesn't mean there aren't more. The search must continue.
+				//Advance it
+				assignee_used = assignee_used->next_statement;
+			}
+
+			//Advance up
+			cursor = cursor->next_statement;
+		}
 	}
-
 }
 
 
@@ -1125,7 +1186,7 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_code_stmt_t* stmt, th
 	//mark all of the times that we write to this location
 	//in memory as important
 	if(variable->access_type == MEMORY_ACCESS_READ){
-		printf("HERE\n");
+		//Use the helper for memory address marking
 		handle_memory_address_marking(cfg, variable, stmt, current_function, worklist);
 	}
 

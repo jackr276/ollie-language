@@ -1088,7 +1088,7 @@ three_addr_code_stmt_t* copy_three_addr_code_stmt(three_addr_code_stmt_t* copied
 /**
  * Are two variables equal? A helper method for searching
  */
-u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level){
 	//Easy way to tell here
 	if(a == NULL || b == NULL){
 		return FALSE;
@@ -1100,7 +1100,7 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 	}
 
 	//Another way to tell
-	if(a->indirection_level != b->indirection_level){
+	if(a->indirection_level != b->indirection_level && ignore_indirect_level == FALSE){
 		return FALSE;
 	}
 

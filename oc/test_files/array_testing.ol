@@ -23,5 +23,5 @@ fn main(arg:i32, argv:char**) -> i32{
 
 
 	//So it isn't optimized away
-	ret arr[7] + *j + l;
+	ret arr[7] + *j;
 }
