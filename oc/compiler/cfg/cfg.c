@@ -2799,6 +2799,9 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 		//Return the temporary character from here
 		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, USE_TEMP_VAR, SIDE_TYPE_RIGHT, is_branch_ending);
 		return package;
+	} else if(logical_or_expr->CLASS == AST_NODE_CLASS_CONSTANT){
+		package.assignee = emit_constant_code(basic_block, logical_or_expr, is_branch_ending);
+		return package;
 	}
 
 	//Otherwise we actually have a binary operation of some kind

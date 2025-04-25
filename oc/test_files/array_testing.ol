@@ -11,17 +11,17 @@ fn main(arg:i32, argv:char**) -> i32{
 	arr[7] := 2;
 
 	let mut i:i32 := 3;
-	let mut j:i32* := &i;
-	let mut l:i32 := 3;
+	let mut j:i32* := arr;
+	//j := j + 1;
 	
 	if(arg == 2) then {
 		arr[2] := 3;
 	} else {
-		l := arr[1];
+		i := arr[1];
 	}
 
 
 
 	//So it isn't optimized away
-	ret arr[7] + *j;
+	ret arr[7] + *(j + 1);
 }

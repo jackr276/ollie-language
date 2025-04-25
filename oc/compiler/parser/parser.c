@@ -2422,7 +2422,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		TYPE_CLASS temp_holder_type_class = temp_holder->inferred_type->type_class;
 
 		//Fail case right here
-		if(temp_holder_type_class == TYPE_CLASS_CONSTRUCT || temp_holder_type_class == TYPE_CLASS_ARRAY){
+		if(temp_holder_type_class == TYPE_CLASS_CONSTRUCT){
 			sprintf(info, "Type %s cannot be added or subtracted from", temp_holder->inferred_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
@@ -2458,7 +2458,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		TYPE_CLASS right_child_type_class = right_child->inferred_type->type_class;
 
 		//Fail case right here
-		if(right_child_type_class == TYPE_CLASS_CONSTRUCT || right_child_type_class == TYPE_CLASS_ARRAY){
+		if(right_child_type_class == TYPE_CLASS_CONSTRUCT){
 			sprintf(info, "Type %s cannot be added or subtracted from", right_child->inferred_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
@@ -2477,22 +2477,10 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			//One other basic check here. If the right child is also a pointer but they're different pointer types, we
 			//can't add them
 			if(right_child_type_class == TYPE_CLASS_POINTER){
-				//Let's see if they're the exact same pointer type
-				u_int8_t same = strcmp(temp_holder->inferred_type->type_name, right_child->inferred_type->type_name);
-
-				//We're attempting to add different pointer types
-				if(same != 0){
-					sprintf(info, "Attempt to add differnet pointer types of %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name);
-					print_parse_message(PARSE_ERROR, info, parser_line_num);
-					num_errors++;
-					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-				}
-
-				//Otherwise they are the same, but pointer addition is a real bad idea. We'll throw a warning
-				sprintf(info, "Adding two pointers of type %s will likely lead to segmentation faults", right_child->inferred_type->type_name);
-				print_parse_message(WARNING, info, parser_line_num);
-				num_warnings++;
-
+				sprintf(info, "Invalid operands %s and %s in a binary expression", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 			//If it's a basic type
 			} else if(right_child_type_class == TYPE_CLASS_BASIC){
 				//We cannot add pointers and floating point numbers
@@ -2502,6 +2490,37 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 					num_errors++;
 					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 				}
+			}
+
+			//We need to now do any adjustment. Whenever we add to a pointer, we inherently need to add the additive TIMES the
+			//size of the underlying object
+			if(strcmp(temp_holder->inferred_type->pointer_type->points_to->type_name, "void") != 0){
+				//what is this size of what this thing points to?
+				u_int16_t points_to_size = temp_holder->inferred_type->pointer_type->points_to->type_size; 
+
+				//We'll multiply the right hand side by this, so we'll need a new binary expression node
+				generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+
+				//Multiplication here
+				adjustment->binary_operator = STAR;
+
+				//Add the right child as the first adjustment
+				add_child_node(adjustment, right_child);
+
+				//Write out our constant multplicand
+				generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+				//Grab the constant out
+				constant_ast_node_t* const_node = constant_multiplicand->node;
+				//Add this size in
+				const_node->int_val = points_to_size;
+				//Mark the type too
+				const_node->constant_type = INT_CONST;
+
+				//Now we'll need to add the constant node as the other child
+				add_child_node(adjustment, constant_multiplicand);
+
+				//We'll just make this our right child
+				right_child = adjustment;
 			}
 
 			//If we make it all the way down here, we know that we have a pointer + int or pointer + pointer. Either way, 
