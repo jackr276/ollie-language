@@ -5,10 +5,13 @@
 fn main(arg:i32, argv:char**) -> i32{
 	//The array that we have
 	declare mut arr:i32[14][2];
+	declare mut oneD:i64[2];
 	
 	arr[3][1] := 3;
 	arr[5][1] := 3;
 	arr[7][0] := 2;
+
+	oneD[1] := 3;
 
 	let mut i:i32 := 3;
 	//let mut j:i32* := arr;

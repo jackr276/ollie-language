@@ -2603,6 +2603,10 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//We can either have an array or pointer, extract either or accordingly
 			if(current_var->type->type_class == TYPE_CLASS_ARRAY){
 				base_type = current_var->type->array_type->member_type;
+				//if(base_type->type_class == TYPE_CLASS_ARRAY){
+				//	base_type = base_type->array_type->member_type;
+				//}
+				printf("Member type size is: %d\n", base_type->type_size);
 				class = TYPE_CLASS_ARRAY;
 			} else {
 				base_type = current_var->type->pointer_type->points_to;

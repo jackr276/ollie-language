@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -73,7 +74,8 @@ static char* current_file_name = NULL;
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl);
-static generic_ast_node_t* type_specifier(FILE* fl);
+//What type are we given?
+static generic_type_t* type_specifier(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl);
 static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global);
@@ -1518,18 +1520,18 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Now we need to see a valid type-specifier. It is important to note that the type
 		//specifier requires that a type has actually been defined. If it wasn't defined,
 		//then this will return an error node
-		generic_ast_node_t* type_spec = type_specifier(fl);
+		generic_type_t* type_spec = type_specifier(fl);
 
 		//If it's an error
-		if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(type_spec == NULL){
 			print_parse_message(PARSE_ERROR, "Unable to use typesize on undefined type",  parser_line_num);
 			num_errors++;
 			//It's already an error, so give it back that way
-			return type_spec;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
 		//Once we've done this, we can grab the actual size of the type-specifier
-		u_int32_t type_size = type_spec->inferred_type->type_size;
+		u_int32_t type_size = type_spec->type_size;
 
 		//And then we no longer need the type-spec node, we can just remove it
 
@@ -1949,14 +1951,14 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	push_token(grouping_stack, lookahead);
 
 	//Grab the type specifier
-	generic_ast_node_t* type_spec = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(fl);
 
 	//If it's an error, we'll print and propagate it up
-	if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(type_spec == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given to cast expression", parser_line_num);
 		num_errors++;
 		//It is the error, so we can return it
-		return type_spec;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//We now have to see the closing braces that we need
@@ -1989,7 +1991,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 
 	//No we'll need to determine if we can actually cast here
 	//What we're trying to cast to
-	generic_type_t* casting_to_type = dealias_type(type_spec->inferred_type);
+	generic_type_t* casting_to_type = dealias_type(type_spec);
 	//What is being casted
 	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
 
@@ -2028,7 +2030,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	}
 
 	//These types are now inferenced
-	right_hand_unary->inferred_type = type_spec->inferred_type;
+	right_hand_unary->inferred_type = type_spec;
 
 	//Once we get here, we no longer need the type specifier
 
@@ -3859,10 +3861,10 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//Now we are required to see a valid type specifier
-	generic_ast_node_t* type_spec = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(fl);
 
 	//If this is an error, the whole thing fails
-	if(type_spec->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(type_spec == NULL){
 		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in construct member", parser_line_num);
 		num_errors++;
 		//It's already an error, so just send it up
@@ -3879,7 +3881,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
 	//Mark that this is a construct member
 	member_record->is_construct_member = TRUE;
 	//Store what the type is
-	member_record->type = type_spec->inferred_type;
+	member_record->type = type_spec;
 	//Is it mutable or not
 	member_record->is_mutable = is_mutable;
 
@@ -4562,95 +4564,6 @@ static u_int8_t enum_definer(FILE* fl){
 
 
 /**
- * A type address specifier allows us to specify that a type is actually an address(&) or some kind of array of these types.
- * For type safety, ollie lang requires array bounds to be known at comptime. Like all other rules in the language, this 
- * function returns a reference to the root node that it created
- *
- * As a reminder, we will assume that the caller has put back everything for us(the tokens and such) before they call
- *
- * BNF Rule: {type-address-specifier} ::= [<constant>]
- * 										| * 
- */
-static generic_ast_node_t* type_address_specifier(FILE* fl){
-	//The lookahead token
-	Lexer_item lookahead;
-	//The node that we'll be giving back
-	generic_ast_node_t* type_addr_node = ast_node_alloc(AST_NODE_CLASS_TYPE_ADDRESS_SPECIFIER);
-
-	//Let's see what we have as the address specifier
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//Very easy to handle this, we'll just construct the node and give it back
-	if(lookahead.tok == STAR){
-		//This is an address specifier
-		type_addr_node->address_type = ADDRESS_SPECIFIER_ADDRESS;
-		//And we're done, just give it back
-		return type_addr_node;
-	}
-
-	//If we get here, we know that this has to be the case, so if it's not we're out
-	if(lookahead.tok != L_BRACKET){
-		print_parse_message(PARSE_ERROR, "Array [] or address & required in type address specifier", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Otherwise if we get here we know that it was an L_BRACKET, so we'll push to the stack for matching
-	push_token(grouping_stack, lookahead);
-
-	//Now once we end up here, we need to see a valid constant that is an integer
-	generic_ast_node_t* constant_node = constant(fl, SEARCHING_FOR_CONSTANT);
-
-	//If we fail here it's an automatic out
-	if(constant_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid constant given to array specifier", parser_line_num);
-		num_errors++;
-		//It's already an error so we'll just give it back
-		return constant_node;
-	}
-
-	//Now if we make it here, we must also check that it's an integer
-	if(((constant_ast_node_t*)(constant_node->node))->constant_type != INT_CONST){
-		print_parse_message(PARSE_ERROR, "Array bounds must be an integer constant", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Now we've seen a valid integer, so the only other thing that we need syntactically is the closing brace
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we don't see an R_BRACKET
-	if(lookahead.tok != R_BRACKET){
-		print_parse_message(PARSE_ERROR, "Array specifier must have enclosed square brackets", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Now we must also check for matching
-	if(pop_token(grouping_stack).tok != L_BRACKET){
-		print_parse_message(PARSE_ERROR, "Unmatched square brackets detected in array specifier", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-	
-	//Once we get here, we know that everything is syntactically valid. We'll now build and return our node
-	//Declare what kind of node this is
-	type_addr_node->address_type = ADDRESS_SPECIFIER_ARRAY;
-	//Since it's an array, it will have a child that is the constant node
-	add_child_node(type_addr_node, constant_node);
-	//Store the line number
-	type_addr_node->line_number = parser_line_num;
-	
-	//Finally we'll give the node back
-	return type_addr_node;
-}
-
-
-/**
  * A type name node is always a child of a type specifier. It consists
  * of all of our primitive types and any defined construct or
  * aliased types that we may have. It is important to note that any
@@ -4871,7 +4784,6 @@ static generic_ast_node_t* type_name(FILE* fl){
 }
 
 
-
 /**
  * A type specifier is a type name that is then followed by an address specifier, this being  
  * the array brackets or address indicator. Like all rules, the type specifier rule will
@@ -4882,15 +4794,13 @@ static generic_ast_node_t* type_name(FILE* fl){
  * NOTE: This rule REQUIRES that the name actually be defined. This rule is not used for the 
  * definition of names itself
  *
+ * We do not need to return any nodes here, just the type we get out
+ *
  * BNF Rule: <type-specifier> ::= <type-name>{<type-address-specifier>}*
  */
-static generic_ast_node_t* type_specifier(FILE* fl){
+static generic_type_t* type_specifier(FILE* fl){
 	//Lookahead var
 	Lexer_item lookahead;
-
-	//We'll first create and attach the type specifier node
-	//At this point the node will be entirely blank
-	generic_ast_node_t* type_spec_node = ast_node_alloc(AST_NODE_CLASS_TYPE_SPECIFIER);
 
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has. If the type name function could not
@@ -4899,12 +4809,9 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 
 	//We'll just fail here, no need for any error printing
 	if(name_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		//It's already and error so just give it back
-		return name_node;
+		//It's already in error so just NULL out
+		return NULL;
 	}
-
-	//The name node will always be a child of the specifier node, so we'll add it now
-	add_child_node(type_spec_node, name_node);
 
 	//Now once we make it here, we know that we have a name that actually exists in the symtab
 	//The current type record is what we will eventually point our node to
@@ -4913,107 +4820,131 @@ static generic_ast_node_t* type_specifier(FILE* fl){
 	//Let's see where we go from here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//As long as we are seeing address specifiers
-	while(lookahead.tok == STAR || lookahead.tok == L_BRACKET){
-		//Put the token back
-		push_back_token( lookahead);
-		//We'll now let the other rule handle it
-		generic_ast_node_t* address_specifier = type_address_specifier(fl);
+	//As long as we are seeing pointer specifiers
+	while(lookahead.tok == STAR){
+		//We keep seeing STARS, so we have a pointer type
+		//Let's create the pointer type. This pointer type will point to the current type
+		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num);
 
-		//If it's invalid for some reason, we'll fail out here
-		if(address_specifier->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid address specifier given in type specifier", parser_line_num);
-			num_errors++;
-			//It's already an error so just send it up
-			return address_specifier;
-		}
+		//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
+		//also not an issue
+		symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer->type_name);
 
-		//Now we know that we have a valid address specifier. We'll first add it as a child to the
-		//parent node
-		add_child_node(type_spec_node, address_specifier);
-
-		//We'll now create a type that represents either a pointer or an array. This type may or may not
-		//currently be in the symbol table, but that doesn't matter. These are not truly new types, as they
-		//are only aggregate types
-		
-		//If it's a pointer type
-		if(address_specifier->address_type == ADDRESS_SPECIFIER_ADDRESS){
-			//Let's create the pointer type. This pointer type will point to the current type
-			generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num);
-
-			//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
-			//also not an issue
-			symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer->type_name);
-
-			//If we did not find it, we will add it into the symbol table
-			if(found_pointer == NULL){
-				//Create the type record
-				symtab_type_record_t* created_pointer = create_type_record(pointer);
-				//Insert it into the symbol table
-				insert_type(type_symtab, created_pointer);
-				//We'll also set the current type record to be this
-				current_type_record = created_pointer;
-			} else {
-				//Otherwise, just set the current type record to be what we found
-				current_type_record = found_pointer;
-				//We don't need the other ponter if this is the case
-				type_dealloc(pointer);
-			}
-
-		//Otherwise we know that we found an array pointer
+		//If we did not find it, we will add it into the symbol table
+		if(found_pointer == NULL){
+			//Create the type record
+			symtab_type_record_t* created_pointer = create_type_record(pointer);
+			//Insert it into the symbol table
+			insert_type(type_symtab, created_pointer);
+			//We'll also set the current type record to be this
+			current_type_record = created_pointer;
 		} else {
-			//Let's grab the constant node out
-			generic_ast_node_t* constant_node = address_specifier->first_child;
-
-			//Sanity check here
-			if(constant_node == NULL || constant_node->CLASS != AST_NODE_CLASS_CONSTANT){
-				print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Could not find constant node in array specifier", parser_line_num);
-				//Get out if this happens
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
-
-			//Let's now grab the number of members
-			u_int32_t num_members = ((constant_ast_node_t*)(constant_node->node))->int_val;
-
-			//Lets create the array type
-			generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_members);
-
-			//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
-			//also not an issue
-			symtab_type_record_t* found_array = lookup_type(type_symtab, array_type->type_name);
-
-			//If we did not find it, we will add it into the symbol table
-			if(found_array == NULL){
-				//Create the type record
-				symtab_type_record_t* created_array = create_type_record(array_type);
-				//Insert it into the symbol table
-				insert_type(type_symtab, created_array);
-				//We'll also set the current type record to be this
-				current_type_record = created_array;
-			} else {
-				//Otherwise, just set the current type record to be what we found
-				current_type_record = found_array;
-				//We don't need the other one if this is the case
-				type_dealloc(array_type);
-			}
+			//Otherwise, just set the current type record to be what we found
+			current_type_record = found_pointer;
+			//We don't need the other ponter if this is the case
+			type_dealloc(pointer);
 		}
 
-		//Refresh the lookahead
+		//Refresh the search, keep hunting
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Once we get here we stopped seeing the type specifiers, so we'll give the token back
+	//Now we've processed all possible pointer types. It is now time to process the
+	//array types, if any exist. We'll know that they exist if we see any brackets
+
+	//As long as we are seeing L_BRACKETS
+	while(lookahead.tok == L_BRACKET){
+		//The next thing that we absolutely must see is a constant. If we don't, we're
+		//done here
+		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT);
+
+		//If it failed, then we're done here
+		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid constant given in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//One last thing before we do expensive validation - what if there's no closing bracket? If there's not, this
+		//is an easy fail case 
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail case here 
+		if(lookahead.tok != R_BRACKET){
+			print_parse_message(PARSE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Grab this guy out for convenience
+		constant_ast_node_t* constant_value = const_node->node;
+
+		//If it's not a certain kind of constant, we also don't want it
+		if(constant_value->constant_type == FLOAT_CONST || constant_value->constant_type == CHAR_CONST ||
+			constant_value->constant_type == HEX_CONST || constant_value->constant_type == STR_CONST){
+			print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+			num_errors++;
+			return NULL;
+		} 
+
+		//The constant value
+		int64_t constant_numeric_value;
+
+		//What is the value of our constant here
+		if(constant_value->constant_type == INT_CONST || constant_value->constant_type == INT_CONST_FORCE_U){
+			constant_numeric_value = constant_value->int_val;
+		//We know it's a long if we get here
+		} else {
+			constant_numeric_value = constant_value->long_val;
+		}
+
+		//What if this is a negative or zero?
+		//If it's negative we fail like this
+		if(constant_numeric_value < 0){
+			print_parse_message(PARSE_ERROR, "Array bounds may not be negative", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//If it's zero we fail like this
+		if(constant_numeric_value == 0){
+			print_parse_message(PARSE_ERROR, "Array bounds may not be zero", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+		
+		//If we get here though, we know that this one is good
+		//Lets create the array type
+		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, constant_numeric_value);
+		
+		//Let's see if we can find this one
+		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type->type_name);
+
+		//If we did not find it, we will add it into the symbol table
+		if(found_array == NULL){
+			//Create the type record
+			symtab_type_record_t* created_array = create_type_record(array_type);
+			//Insert it into the symbol table
+			insert_type(type_symtab, created_array);
+			//We'll also set the current type record to be this
+			current_type_record = created_array;
+		} else {
+			//Otherwise, just set the current type record to be what we found
+			current_type_record = found_array;
+			//We don't need the other one if this is the case
+			type_dealloc(array_type);
+		}
+
+
+		//Refresh the search
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//Since we made it down here, we need to push the token back
 	push_back_token(lookahead);
 
-	//The type specifier node has already been fully created, so we just need to add the type reference
-	//and return it
-	//This will store a reference to whatever the type record is
-	type_spec_node->inferred_type =  current_type_record->type;
-	//Store the line number
-	type_spec_node->line_number = parser_line_num;
-
-	//Finally we can give back the node
-	return type_spec_node;
+	//Give back whatever the current type may be
+	return current_type_record->type;
 }
 
 
@@ -5125,13 +5056,14 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	}
 
 	//We are now required to see a valid type specifier node
-	generic_ast_node_t* type_spec_node = type_specifier(fl);
+	generic_type_t* type = type_specifier(fl);
 	
 	//If the node fails, we'll just send the error up the chain
-	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(type == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier gien to function parameter", parser_line_num);
+		num_errors++;
 		//It's already an error, just propogate it up
-		return type_spec_node;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Once we get here, we have actually seen an entire valid parameter 
@@ -5149,7 +5081,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//If it is mutable
 	param_record->is_mutable = is_mut;
 	//Store the type as well, very important
-	param_record->type = type_spec_node->inferred_type;
+	param_record->type = type;
 
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
@@ -7718,17 +7650,17 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 	
 	//Now we are required to see a valid type specifier
-	generic_ast_node_t* type_spec_node = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(fl);
 
 	//If this fails, the whole thing is bunk
-	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(type_spec == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given in declaration", parser_line_num);
 		//It's already an error, so we'll just send it back up
-		return type_spec_node;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//One thing here, we aren't allowed to see void
-	if(strcmp(type_spec_node->inferred_type->type_name, "void") == 0){
+	if(strcmp(type_spec->type_name, "void") == 0){
 		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -7751,7 +7683,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Store its constant status
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
-	declared_var->type = dealias_type(type_spec_node->inferred_type);
+	declared_var->type = dealias_type(type_spec);
 	//It was not initialized
 	declared_var->initialized = FALSE;
 	//It was declared
@@ -7912,17 +7844,17 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Now we are required to see a valid type specifier
-	generic_ast_node_t* type_spec_node = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(fl);
 
 	//If this fails, the whole thing is bunk
-	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(type_spec == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given in let statement", parser_line_num);
 		//It's already an error, so we'll just send it back up
-		return type_spec_node;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 	
 	//One thing here, we aren't allowed to see void
-	if(strcmp(type_spec_node->inferred_type->type_name, "void") == 0){
+	if(strcmp(type_spec->type_name, "void") == 0){
 		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -7968,7 +7900,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Extract the two types here
-	generic_type_t* left_hand_type = type_spec_node->inferred_type;
+	generic_type_t* left_hand_type = type_spec;
 	generic_type_t* right_hand_type = expr_node->inferred_type;
 
 	generic_type_t* return_type = types_compatible(left_hand_type, right_hand_type);
@@ -8000,7 +7932,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Store it's mutability status
 	declared_var->is_mutable = is_mutable;
 	//Store the type
-	declared_var->type = type_spec_node->inferred_type;
+	declared_var->type = type_spec;
 	//Is it mutable
 	declared_var->is_mutable = is_mutable;
 	//It was initialized
@@ -8049,18 +7981,15 @@ static u_int8_t alias_statement(FILE* fl){
 	Lexer_item lookahead;
 
 	//We need to first see a valid type specifier
-	generic_ast_node_t* type_spec_node = type_specifier(fl);
+	generic_type_t* type_spec= type_specifier(fl);
 
 	//If it is bad, we'll bail out
-	if(type_spec_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(type_spec == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given to alias statement", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
 	}
-
-	//Let's grab this now
-	generic_type_t* type = type_spec_node->inferred_type;
 
 	//Once we have the reference, the actual node is useless so we'll free it
 
@@ -8152,7 +8081,7 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//If we get here, we know that it actually worked, so we can create the alias
-	generic_type_t* aliased_type = create_aliased_type(ident_name, type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(ident_name, type_spec, parser_line_num);
 
 	//Let's now create the aliased record
 	symtab_type_record_t* aliased_record = create_type_record(aliased_type);
@@ -8652,19 +8581,19 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Now if we get here, we must see a valid type specifier
 	//The type specifier rule already does existence checking for us
-	generic_ast_node_t* return_type_node = type_specifier(fl);
+	generic_type_t* return_type = type_specifier(fl);
 
 	//If we failed, bail out
-	if(return_type_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(return_type == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
 		num_errors++;
 		//It's already an error, just send it back
-		return return_type_node;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
 	//Grab the type record. A reference to this will be stored in the function symbol table. Make sure
 	//that we first dealias it
-	generic_type_t* type = dealias_type(return_type_node->inferred_type);
+	generic_type_t* type = dealias_type(return_type);
 
 	//SPECIAL CASE : The main function must return a type of s_int32
 	if(is_main_function == 1){
