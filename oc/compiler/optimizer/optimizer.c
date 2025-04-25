@@ -1103,10 +1103,6 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 			//Let's save that assignee for searching
 			three_addr_var_t* address = lea_stmt->assignee;
 
-			//Let's see what this is
-			print_variable(address, PRINTING_VAR_INLINE);
-			printf("\n");
-
 			//Now that we know we're good, we need to advance until this variable is used in some way. That could either happen
 			//in a read or a write. Either way, we need to keep searching until it does happen
 
@@ -1151,6 +1147,19 @@ static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable
 
 	//Let's see what kind of statement preceeds this one. If it's a LEA statement, we could have either a pointer or an array
 	three_addr_code_stmt_t* previous = stmt->previous_statement;
+
+	//We first need to crawl back to where this variable was assigned
+	while(previous != NULL){
+		if(variables_equal(previous->assignee, variable, TRUE) == TRUE){
+			break;
+		}
+
+		//Keep going backwards
+		previous = previous->previous_statement;
+	}
+
+	//Now that we get here, we know that previous holds the statement where this variable, which is an address,
+	//was assigned
 
 	//We know that we have an array if the previous statement's operand is one
 	if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_ARRAY){

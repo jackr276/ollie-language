@@ -12,7 +12,6 @@ fn main(arg:i32, argv:char**) -> i32{
 
 	let mut i:i32 := 3;
 	let mut j:i32* := arr;
-	//j := j + 1;
 	
 	if(arg == 2) then {
 		arr[2] := 3;
@@ -23,5 +22,5 @@ fn main(arg:i32, argv:char**) -> i32{
 
 
 	//So it isn't optimized away
-	ret arr[7] + *(j + 1);
+	ret arr[7] + *(j+1);
 }
