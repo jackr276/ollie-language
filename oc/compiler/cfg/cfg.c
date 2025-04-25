@@ -2616,28 +2616,38 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			 */
 			three_addr_var_t* address = emit_lea_stmt(basic_block, current_var, offset, base_type, is_branch_ending);
 
-			//Now to actually access this address, we need to emit the memory access
-			current_var = emit_mem_code(basic_block, address);
+			//The current var is always updated to be the address
+			current_var = address;
 
 			//Do we need to do more memoery work? We can tell if the array accessor node is next
-			if(cursor->next_sibling != NULL && cursor->next_sibling->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
-				//We will perform the deref here, as we can't do it in the lea 
-				three_addr_code_stmt_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
-				//Is this branch ending?
-				deref_stmt->is_branch_ending = is_branch_ending;
-				//And add it in
-				add_statement(basic_block, deref_stmt);
+			if(cursor->next_sibling == NULL || cursor->next_sibling->CLASS != AST_NODE_CLASS_ARRAY_ACCESSOR){
+				printf("HERE\n");
 
-				//Update the current bar too
-				current_var = deref_stmt->assignee;
+				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
+				if(side == SIDE_TYPE_LEFT){
+					//Emit the indirection for this one
+					current_var = emit_mem_code(basic_block, current_var);
+					//It's a write
+					current_var->access_type = MEMORY_ACCESS_WRITE;
+				//Otherwise we're dealing with a read
+				} else {
+					//Still emit the memory code
+					current_var = emit_mem_code(basic_block, address);
+					//It's a read
+					current_var->access_type = MEMORY_ACCESS_READ;
+
+					//We will perform the deref here, as we can't do it in the lea 
+					three_addr_code_stmt_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
+					//Is this branch ending?
+					deref_stmt->is_branch_ending = is_branch_ending;
+					//And add it in
+					add_statement(basic_block, deref_stmt);
+
+					//Update the current bar too
+					current_var = deref_stmt->assignee;
+				}
 			}
 
-			//If this is on the left hand side, then we have a write. Otherwise it's a read
-			if(side == SIDE_TYPE_LEFT){
-				current_var->access_type = MEMORY_ACCESS_WRITE;
-			} else {
-				current_var->access_type = MEMORY_ACCESS_READ;
-			}
 
 		//If we get to down here, we know that this is a construct accessor
 		} else if(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR){

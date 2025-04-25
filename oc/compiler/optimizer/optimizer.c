@@ -1038,6 +1038,9 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
  *
  */
 static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
+	//Is this a global variable? This is an important optimization that will allows us to rule a lot of 
+	//blocks out without much searching
+	//u_int8_t is_global_var = var->linked_var->is_global;
 
 }
 
@@ -1050,10 +1053,6 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
  * NOTE: var is the base address of the array that we're writing to
  */
 static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
-	//Is this a global array variable? This is an important optimization that will allow us to rule a lot
-	//of blocks out without much searching
-	u_int8_t is_global_var = var->linked_var->is_global;
-
 	//Run through every single block in the CFG
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the given block out
@@ -1061,7 +1060,8 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 
 		//If this block does not match the function that we're currently in, and the variable
 		//itself is not global, we'll skip it
-		if(is_global_var == FALSE && var->linked_var->function_declared_in != current->function_defined_in){
+		if(var->linked_var != NULL && var->linked_var->function_declared_in != NULL &&
+			var->linked_var->function_declared_in != current->function_defined_in){
 			//Skip to the next one, this can't possibly be what we want
 			continue;
 		}
@@ -1142,6 +1142,14 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 }
 
 
+/**
+ * Handle marking in the event that we're reading from a memory address. If we're reading from a memory address, there are two options that we need to consider:
+ * 	1.) We are reading from an array: Since an array is just a contiguous chunk of memory, it is not possible for us to determine *which* area of that
+ * 	memory we are reading from at compile time reliably. As such, if a read from an array is marked as important, than any/all writes to that array are also important
+ *
+ * 	2.) We are reading from a construct member: Since the location of the fields in a construct *are* known at compile time, we can optimize this one further by only
+ * 	marking writes to that specific field as important
+ */
 static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, three_addr_code_stmt_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	printf("We read from variable: %s with type %s\n", variable->var_name, variable->type->type_name);
 
@@ -1260,8 +1268,6 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_code_stmt_t* stmt, th
 		}
 	}
 }
-
-
 
 
 /**
