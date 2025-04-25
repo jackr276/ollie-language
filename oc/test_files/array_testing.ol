@@ -12,6 +12,7 @@ fn main(arg:i32, argv:char**) -> i32{
 
 	let mut i:i32 := 3;
 	let mut j:i32* := arr;
+	j := j + 1;
 	
 	if(arg == 2) then {
 		arr[2] := 3;

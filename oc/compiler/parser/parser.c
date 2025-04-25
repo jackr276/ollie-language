@@ -19,6 +19,7 @@
 #include "parser.h"
 #include "../stack/lexstack.h"
 #include "../queue/heap_queue.h"
+#include "../dynamic_array/dynamic_array.h"
 
 //For code clarity
 #define SUCCESS 1
@@ -754,6 +755,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Probably way too much, just to be safe
 	Lexer_item items[200];
+	
 	//How many we have
 	u_int16_t idx = 0;
 
@@ -833,11 +835,11 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 
 	//If it was already intialized, this means that it's been "assigned to"
-	if(current_var->initialized == 1){
-		current_var->assigned_to = 1;
+	if(current_var->initialized == TRUE){
+		current_var->assigned_to = TRUE;
 	} else {
 		//Mark that this var was in fact initialized
-		current_var->initialized = 1;
+		current_var->initialized = TRUE;
 	}
 
 	//Now we are required to see the := terminal
@@ -856,6 +858,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Now that we're here we must see a valid conditional expression
 	generic_ast_node_t* expr = logical_or_expression(fl);
 
+
 	//Fail case here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid right hand side given to assignment expression", current_line);
@@ -866,8 +869,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Let's now see if we have compatible types
 	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
-	generic_type_t* right_hand_type =  expr->inferred_type;
-
+	generic_type_t* right_hand_type = expr->inferred_type;
+	
 	//Final type here
 	generic_type_t* final_type = types_compatible(left_hand_type, right_hand_type);
 	
@@ -881,7 +884,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-		if(expr->variable->is_mutable == 0 && left_hand_unary->variable->is_mutable == 1){
+		if(expr->variable->is_mutable == FALSE && left_hand_unary->variable->is_mutable == TRUE){
 			print_parse_message(PARSE_ERROR, "Mutable references to immutable variables are forbidden", parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -890,7 +893,6 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Otherwise the overall type is the final type
 	asn_expr_node->inferred_type = final_type;
-
 
 	//Otherwise we know it worked, so we'll add the conditional in as the right child
 	add_child_node(asn_expr_node, expr);
@@ -2515,6 +2517,8 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 				const_node->int_val = points_to_size;
 				//Mark the type too
 				const_node->constant_type = INT_CONST;
+				//Save the variable that temp holder has
+				adjustment->variable = temp_holder->variable;
 
 				//Now we'll need to add the constant node as the other child
 				add_child_node(adjustment, constant_multiplicand);
@@ -2768,6 +2772,8 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		
 		//Now we can finally assign the sub tree type
 		sub_tree_root->inferred_type = return_type;
+
+		sub_tree_root->variable = right_child->variable;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
