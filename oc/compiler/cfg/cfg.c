@@ -2623,10 +2623,8 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//The current var is always updated to be the address
 			current_var = address;
 
-			//Do we need to do more memoery work? We can tell if the array accessor node is next
+			//Do we need to do more memory work? We can tell if the array accessor node is next
 			if(cursor->next_sibling == NULL || cursor->next_sibling->CLASS != AST_NODE_CLASS_ARRAY_ACCESSOR){
-				printf("HERE\n");
-
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
 				if(side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
@@ -2663,25 +2661,48 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//Now we'll grab the associated construct record
 			constructed_type_field_t* field = get_construct_member(current_var->type->construct_type, var->var_name);
 
+			//The field we have
+			symtab_variable_record_t* member = field->variable;
+
 			//The constant that represents the offset
 			three_addr_const_t* offset = emit_int_constant_direct(field->offset);
 
 			//Now that we have the construct field, we can calculate what we need by grabbing the offset
-			three_addr_code_stmt_t* address_calc = emit_bin_op_with_const_three_addr_code(emit_temp_var(lookup_type(type_symtab, "label")->type), current_var, PLUS, offset);
+			three_addr_code_stmt_t* address_calc = emit_bin_op_with_const_three_addr_code(emit_temp_var(member->type), current_var, PLUS, offset);
 
 			//Add this into the block
 			add_statement(basic_block, address_calc);
 
-			//The address is what we'll need for memory
-			current_var = emit_mem_code(basic_block, address_calc->assignee);
+			//The current var is the address we've created
+			current_var = address_calc->assignee;
 
-			//If this is on the left hand side, then we have a write. Otherwise it's a read
-			if(side == SIDE_TYPE_LEFT){
-				current_var->access_type = MEMORY_ACCESS_WRITE;
-			} else {
-				current_var->access_type = MEMORY_ACCESS_READ;
+			//Do we need to do more memory work? We can tell if the array accessor node is next
+			if(cursor->next_sibling == NULL || cursor->next_sibling->CLASS != AST_NODE_CLASS_ARRAY_ACCESSOR){
+				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
+				if(side == SIDE_TYPE_LEFT){
+					//Emit the indirection for this one
+					current_var = emit_mem_code(basic_block, current_var);
+					//It's a write
+					current_var->access_type = MEMORY_ACCESS_WRITE;
+				//Otherwise we're dealing with a read
+				} else {
+					//Still emit the memory code
+					current_var = emit_mem_code(basic_block, current_var);
+					//It's a read
+					current_var->access_type = MEMORY_ACCESS_READ;
+
+					//We will perform the deref here, as we can't do it in the lea 
+					three_addr_code_stmt_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
+					//Is this branch ending?
+					deref_stmt->is_branch_ending = is_branch_ending;
+					//And add it in
+					add_statement(basic_block, deref_stmt);
+
+					//Update the current bar too
+					current_var = deref_stmt->assignee;
+				}
 			}
-		
+
 			//and now we're all set
 			
 		//We have hit something unknown here - this should never happen

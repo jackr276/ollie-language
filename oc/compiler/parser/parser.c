@@ -1264,7 +1264,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		//Assign the type
 		postfix_expr_node->inferred_type = return_type;
 		//This was assigned to
-		result->variable->assigned_to = 1;
+		result->variable->assigned_to = TRUE;
 		//And we'll give back what we had constructed so far
 		return postfix_expr_node;
 	}
@@ -4963,6 +4963,8 @@ static generic_type_t* type_specifier(FILE* fl){
 
 	//We're done with it, so deallocate
 	lightstack_dealloc(&lightstack);
+
+	printf("Type size of %s is %d\n", current_type_record->type->type_name, current_type_record->type->type_size);
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
