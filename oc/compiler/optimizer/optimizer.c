@@ -1066,7 +1066,76 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
 		printf("Block .L%d writes to construct: %s\n", current->block_id, construct_base_address->var_name);
 
 		//Now, we know that the current block writes to this construct. What remains is to identify the statements, if any,
-		//that write to the exact location in memory that we want
+		//that write to the exact location in memory that we want. 
+
+		//Grab a cursor
+		three_addr_code_stmt_t* cursor = current->leader_statement;
+
+		//So long as this isn't NULL
+		while(cursor != NULL){
+			//If it's not a "binary op with const" statement, then it can't be what we want
+			if(cursor->CLASS != THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+				//Advance the pointer and get out
+				cursor = cursor->next_statement;
+				continue;
+			}
+
+			//Now that we know it's the kind of statement that we want, we'll see if we have the
+			//right operands
+			//If these operands don't match, we're done
+			if(cursor->op1->linked_var != construct_base_address->linked_var){
+				//Advance the pointer and get out
+				cursor = cursor->next_statement;
+				continue;
+			}
+
+			//And if the constants don't have the same offset, we're also done
+			if(cursor->op1_const->int_const != offset){
+				//Advance the pointer and get out
+				cursor = cursor->next_statement;
+				continue;
+			}
+
+			//At this point, we know this is the statement that we're after
+			three_addr_code_stmt_t* address_calc = cursor;
+			printf("Statement wanted is:\n");
+			print_three_addr_code_stmt(address_calc);
+
+			//Following this, we'll need to see where this is used. Let's keep crawling through to find out
+			three_addr_code_stmt_t* assignee_used = cursor->next_statement;
+
+			//So long as this isn't NULL, we'll hunt for where this assignee is used
+			while(assignee_used != NULL){
+				//If these are the same, we've gotten what we're after
+				if(variables_equal(assignee_used->assignee, address_calc->assignee, TRUE) == TRUE){
+					//Mark the address calculation
+					if(address_calc->mark == FALSE){
+						//Add it
+						address_calc->mark = TRUE;
+						//This goes in our worklist
+						dynamic_array_add(worklist, address_calc);
+					}
+
+					//Same treatment for where we use this
+					if(assignee_used->mark == FALSE){
+						//Add it
+						assignee_used->mark = TRUE;
+						//This goes into our worklist
+						dynamic_array_add(worklist, assignee_used);
+					}
+
+					//We're done here. Remember these temporary address calc variables
+					//are single use in OIR
+					break;
+				}
+
+				//Otherwise advance the search, keep going
+				assignee_used = assignee_used->next_statement;
+			}
+
+			//There may be more here, so we need to keep going
+			cursor = cursor->next_statement;
+		}
 	}
 }
 
@@ -1154,6 +1223,9 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 						//Add to the worklist
 						dynamic_array_add(worklist, assignee_used);
 					}
+
+					//We're done here, we've already used it
+					break;
 				}
 				
 				//Just becuase we found one doesn't mean there aren't more. The search must continue.
