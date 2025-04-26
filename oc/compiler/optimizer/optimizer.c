@@ -1063,8 +1063,6 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
 			continue;
 		}
 
-		printf("Block .L%d writes to construct: %s\n", current->block_id, construct_base_address->var_name);
-
 		//Now, we know that the current block writes to this construct. What remains is to identify the statements, if any,
 		//that write to the exact location in memory that we want. 
 
@@ -1098,8 +1096,6 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
 
 			//At this point, we know this is the statement that we're after
 			three_addr_code_stmt_t* address_calc = cursor;
-			printf("Statement wanted is:\n");
-			print_three_addr_code_stmt(address_calc);
 
 			//Following this, we'll need to see where this is used. Let's keep crawling through to find out
 			three_addr_code_stmt_t* assignee_used = cursor->next_statement;
@@ -1168,8 +1164,6 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 
 		//If we make it down here, we know that this block is writing to said memory address. Now we just need to figure
 		//out the statements that are doing it
-		
-		printf("Block .L%d writes to array: %s\n", current->block_id, var->var_name);
 		
 		//Grab a cursor out	of this block. We'll need to traverse to see which statements in here are important
 		three_addr_code_stmt_t* cursor = current->leader_statement;
@@ -1249,8 +1243,6 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
  * 	marking writes to that specific field as important
  */
 static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, three_addr_code_stmt_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	printf("We read from variable: %s with type %s\n", variable->var_name, variable->type->type_name);
-
 	//Let's see what kind of statement preceeds this one. If it's a LEA statement, we could have either a pointer or an array
 	three_addr_code_stmt_t* previous = stmt->previous_statement;
 
@@ -1269,8 +1261,6 @@ static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable
 
 	//We know that we have an array if the previous statement's operand is one
 	if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_ARRAY){
-		printf("We read from the array: %s\n", previous->op1->var_name);
-
 		//Now that we've made it here, we need to mark all times that this "op1" has been
 		//written to. Since we are unable to determine *which* array addresses are written
 		//to at compile time, we need to indiscriminantly mark all times that this array is written
@@ -1281,8 +1271,6 @@ static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable
 	//If we get here, we know that we're doing an address calculation for a construct field. As such, we'll
 	//mark it as important
 	} else if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_CONSTRUCT){
-		printf("We read from the construct: %s with offset %d\n", previous->op1->var_name, previous->op1_const->int_const);
-		
 		//We'll pass in the entire statement here, just because we'll end up using both op1 and the op1 const
 		mark_and_add_all_construct_field_writes(cfg, worklist, previous);
 	}
