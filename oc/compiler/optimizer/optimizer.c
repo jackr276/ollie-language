@@ -1037,11 +1037,37 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
  * ever using a certain field, we need only worry about writes to that given field
  *
  */
-static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
-	//Is this a global variable? This is an important optimization that will allows us to rule a lot of 
-	//blocks out without much searching
-	//u_int8_t is_global_var = var->linked_var->is_global;
+static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_code_stmt_t* stmt){
+	//Grab these out for quick access
+	three_addr_var_t* construct_base_address = stmt->op1;
+	//And the offset
+	u_int32_t offset = stmt->op1_const->int_const;
+	
+	//Run through every single block in the CFG. We're looking for areas that calculate
+	//this value with a certain op1
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, _);
 
+		//Optimization - if this block does not match the one that we're in, and the variable
+		//itself is not global, we'll skip it
+		if(construct_base_address->linked_var != NULL && construct_base_address->linked_var->function_declared_in != NULL
+		   && construct_base_address->linked_var->function_declared_in != current->function_defined_in){
+			//Skip to the next one, this block can't be what we want
+			continue;
+		}
+
+		//If this block does not assign to the given variable, we don't want it
+		if(construct_base_address->is_temporary == FALSE && variable_dynamic_array_contains(current->assigned_variables, construct_base_address) == NOT_FOUND){
+			//Not in here so we don't want it
+			continue;
+		}
+
+		printf("Block .L%d writes to construct: %s\n", current->block_id, construct_base_address->var_name);
+
+		//Now, we know that the current block writes to this construct. What remains is to identify the statements, if any,
+		//that write to the exact location in memory that we want
+	}
 }
 
 
@@ -1180,10 +1206,13 @@ static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable
 		//When calling here, we know that op1 is the array base address that we're writing to
 		mark_and_add_all_array_writes(cfg, worklist, previous->op1);
 
+	//If we get here, we know that we're doing an address calculation for a construct field. As such, we'll
+	//mark it as important
 	} else if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_CONSTRUCT){
-		printf("We read from the construct: %s\n", previous->op1->var_name);
+		printf("We read from the construct: %s with offset %d\n", previous->op1->var_name, previous->op1_const->int_const);
 		
-		mark_and_add_all_construct_field_writes(cfg, worklist, variable);
+		//We'll pass in the entire statement here, just because we'll end up using both op1 and the op1 const
+		mark_and_add_all_construct_field_writes(cfg, worklist, previous);
 	}
 }
 

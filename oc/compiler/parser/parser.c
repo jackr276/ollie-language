@@ -85,7 +85,7 @@ static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
 static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node);
-static generic_ast_node_t* default_statement(FILE* fl, generic_ast_node_t* switch_stmt_node);
+static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
@@ -6141,7 +6141,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	while(lookahead.tok != R_CURLY){
 		//We need to see a valid case or default statement
 		if(lookahead.tok == CASE){
-			//Handle a case statement here
+			//Handle a case statement here. We'll need to pass
+			//the node in because of the type checking that we do
 			stmt = case_statement(fl, switch_stmt_node);
 
 			//If it fails, then we're done
@@ -6154,7 +6155,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 		} else if(lookahead.tok == DEFAULT){
 			//Handle a default statement
-			stmt = default_statement(fl, switch_stmt_node);
+			stmt = default_statement(fl);
 
 			//If it fails, then we're done
 			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7231,7 +7232,7 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* default_statement(FILE* fl, generic_ast_node_t* switch_stmt_node){
+static generic_ast_node_t* default_statement(FILE* fl){
 	//Lookaehad token
 	Lexer_item lookahead;
 	//Freeze the line number

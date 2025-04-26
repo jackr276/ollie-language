@@ -18,6 +18,14 @@ fn main(arg:i32, argv:char**) -> i32{
 	structure:lch := 'b';
 	structure:y := 5;
 
+	if(arg == 0) then {
+		structure:x := 2;
+		structure:y := 1;
+		structure:lch := 'c';
+	} else{
+		structure:y := 5;
+	}
+
 	//structure:x := 7;
 	let x:i32 := structure:x;
 
