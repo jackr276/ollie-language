@@ -15,15 +15,33 @@
 #define TRUE 1
 #define FALSE 0
 
+
+/**
+ * Initialize a lightstack
+ */
+lightstack_t lightstack_initialize(){
+	//Stack allocate
+	lightstack_t lighstack;
+
+	//We just need to null all of these fields out
+	lighstack.stack = NULL;
+	lighstack.current_size = 0;
+	lighstack.top_index = 0;
+
+	//And give it back
+	return lighstack;
+}
+
+
 /**
  * Push the "value" onto the stack
 */
-void lightstack_push(lightstack_t* stack, u_int16_t value){
+void lightstack_push(lightstack_t* stack, u_int32_t value){
 	//Let's see if the stack was initialized. If it wasn't we'll
 	//do that right now
 	if(stack->stack == NULL){
 		//Allocate enough space for 10 16-bit integers
-		stack->stack = calloc(sizeof(u_int16_t), DEFAULT_STACK_SIZE);
+		stack->stack = calloc(sizeof(u_int32_t), DEFAULT_STACK_SIZE);
 		//Update the current size too
 		stack->current_size = 10;
 
@@ -33,7 +51,7 @@ void lightstack_push(lightstack_t* stack, u_int16_t value){
 		//Double the current size
 		stack->current_size *= 2;
 		//Perform our reallocation
-		stack->stack = realloc(stack->stack, stack->current_size * sizeof(u_int16_t));
+		stack->stack = realloc(stack->stack, stack->current_size * sizeof(u_int32_t));
 	}
 
 	//Now that any needed updates are out of the way, we can actually push
@@ -46,7 +64,7 @@ void lightstack_push(lightstack_t* stack, u_int16_t value){
 /**	
  * Pop and return a value off of the stack
 */
-u_int16_t lightstack_pop(lightstack_t* stack){
+u_int32_t lightstack_pop(lightstack_t* stack){
 	//We assume that the user has checked this before calling
 	if(lightstack_is_empty(stack) == TRUE){
 		fprintf(stderr, "ATTEMPT TO POP AN EMPTY LIGHTSTACK\n");

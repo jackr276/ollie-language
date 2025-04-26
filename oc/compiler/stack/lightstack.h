@@ -23,21 +23,26 @@ struct lightstack_t{
 	//The current size
 	u_int16_t current_size;
 	//The actual stack array
-	u_int16_t* stack;
+	u_int32_t* stack;
 };
 
 //Due to the way a lightstack works, there is NO dedicated initialization. Any/all initialization
 //happens on the first push
 
 /**
+ * Initialize a lightstack
+ */
+lightstack_t lightstack_initialize();
+
+/**
  * Push the "value" onto the stack
 */
-void lightstack_push(lightstack_t* stack, u_int16_t value);
+void lightstack_push(lightstack_t* stack, u_int32_t value);
 
 /**	
  * Pop and return a value off of the stack
 */
-u_int16_t lightstack_pop(lightstack_t* stack);
+u_int32_t lightstack_pop(lightstack_t* stack);
 
 /**
  * Deallocate the lightstack

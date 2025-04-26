@@ -20,6 +20,7 @@
 #include "parser.h"
 #include "../stack/lexstack.h"
 #include "../queue/heap_queue.h"
+#include "../stack/lightstack.h"
 #include "../dynamic_array/dynamic_array.h"
 
 //For code clarity
@@ -4849,8 +4850,17 @@ static generic_type_t* type_specifier(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Now we've processed all possible pointer types. It is now time to process the
-	//array types, if any exist. We'll know that they exist if we see any brackets
+	//If we don't see an array here, we can just leave now
+	if(lookahead.tok != L_BRACKET){
+		//Put it back
+		push_back_token(lookahead);
+		//We're done here
+		return current_type_record->type;
+	}
+
+	//Otherwise, we know we're in for the array
+	//We'll use a lightstack for the bounds reversal
+	lightstack_t lightstack = lightstack_initialize();
 
 	//As long as we are seeing L_BRACKETS
 	while(lookahead.tok == L_BRACKET){
@@ -4912,11 +4922,26 @@ static generic_type_t* type_specifier(FILE* fl){
 			num_errors++;
 			return NULL;
 		}
-		
+
+		//We're all set, push this onto the lightstack
+		lightstack_push(&lightstack, constant_numeric_value);
+
+		//Refresh the search
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//Since we made it down here, we need to push the token back
+	push_back_token(lookahead);
+
+	//Now we'll go back through and unwind the lightstack
+	while(lightstack_is_empty(&lightstack) == FALSE){
+		//Grab the number of bounds out
+		u_int32_t num_bounds = lightstack_pop(&lightstack);
+
 		//If we get here though, we know that this one is good
 		//Lets create the array type
-		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, constant_numeric_value);
-		
+		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds);
+
 		//Let's see if we can find this one
 		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type->type_name);
 
@@ -4934,14 +4959,10 @@ static generic_type_t* type_specifier(FILE* fl){
 			//We don't need the other one if this is the case
 			type_dealloc(array_type);
 		}
-
-
-		//Refresh the search
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Since we made it down here, we need to push the token back
-	push_back_token(lookahead);
+	//We're done with it, so deallocate
+	lightstack_dealloc(&lightstack);
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
