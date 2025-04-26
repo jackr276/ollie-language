@@ -58,14 +58,6 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 		memcpy(duplicated->identifier, node->identifier, MAX_IDENT_LENGTH);
 	}
 	
-	//If it's a type name, we'll need to duplicate as well
-	if(node->CLASS == AST_NODE_CLASS_TYPE_NAME){
-		//Allocate this
-		duplicated->type_name = calloc(MAX_TYPE_NAME_LENGTH, sizeof(char));
-		//Copy the string over
-		memcpy(duplicated->type_name, node->type_name, MAX_TYPE_NAME_LENGTH);
-	}
-
 	//We don't want to hold onto any of these old references here
 	duplicated->first_child = NULL;
 	duplicated->next_sibling = NULL;
@@ -124,8 +116,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	} else if(CLASS == AST_NODE_CLASS_CONSTANT){
 		node->node = calloc(1, sizeof(constant_ast_node_t));
 	//Type and ident nodes make use of the internal string pointers
-	} else if(CLASS == AST_NODE_CLASS_TYPE_NAME){
-		node->type_name = calloc(MAX_TYPE_NAME_LENGTH, sizeof(char));
 	} else if(CLASS == AST_NODE_CLASS_IDENTIFIER){
 		node->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
 	}
@@ -195,9 +185,6 @@ void ast_dealloc(){
 		//Free this if needed
 		if(temp->CLASS == AST_NODE_CLASS_IDENTIFIER){
 			free(temp->identifier);
-		}
-		if(temp->CLASS == AST_NODE_CLASS_TYPE_NAME){
-			free(temp->type_name);
 		}
 
 		//Destroy temp here

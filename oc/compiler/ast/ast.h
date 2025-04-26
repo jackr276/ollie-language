@@ -30,8 +30,6 @@
 typedef struct generic_ast_node_t generic_ast_node_t;
 //A constant node. Can represent any of the four kinds of constant
 typedef struct constant_ast_node_t constant_ast_node_t;
-//A type name node
-typedef struct type_name_ast_node_t type_name_ast_node_t;
 //An AST node for assembly inline statements
 typedef struct asm_inline_stmt_ast_node_t asm_inline_stmt_ast_node_t;
 
@@ -56,7 +54,6 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_CONSTANT,
 	AST_NODE_CLASS_PARAM_DECL,
 	AST_NODE_CLASS_IDENTIFIER,
-	AST_NODE_CLASS_TYPE_NAME,
 	AST_NODE_CLASS_ASNMNT_EXPR,
 	AST_NODE_CLASS_BINARY_EXPR,
 	AST_NODE_CLASS_POSTFIX_EXPR,

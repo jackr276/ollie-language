@@ -613,10 +613,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	printf("}\n");
 
-	if(block->block_type == BLOCK_TYPE_IF_STMT_END){
-		printf("If statement end block\n");
-	}
-
 	//Now grab a cursor and print out every statement that we 
 	//have
 	three_addr_code_stmt_t* cursor = block->leader_statement;

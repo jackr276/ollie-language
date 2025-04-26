@@ -21,7 +21,6 @@
 #include "../stack/lexstack.h"
 #include "../queue/heap_queue.h"
 #include "../stack/lightstack.h"
-#include "../dynamic_array/dynamic_array.h"
 
 //For code clarity
 #define SUCCESS 1
@@ -4569,10 +4568,12 @@ static u_int8_t enum_definer(FILE* fl){
  * of all of our primitive types and any defined construct or
  * aliased types that we may have. It is important to note that any
  * non-primitive type needs to have been previously defined for it to be
- * valid. Like all rules in the language, this rule returns a root reference 
- * of the subtree that it creates
+ * valid. 
  * 
  * If we are using this rule, we are assuming that this type exists in the system
+ *
+ * This rule will NOT return a node. Instead, we just return the type record that we found.
+ * If we have an error, we will return NULL
  * 
  * BNF Rule: <type-name> ::= void 
  * 						   | u8 
@@ -4590,16 +4591,13 @@ static u_int8_t enum_definer(FILE* fl){
  * 						   | construct <identifier>
  * 						   | <identifier>
  */
-static generic_ast_node_t* type_name(FILE* fl){
+static symtab_type_record_t* type_name(FILE* fl){
 	//For error printing
 	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//A temporary holder for the type name
 	char type_name[MAX_TYPE_NAME_LENGTH];
-
-	//Let's create the type name node
-	generic_ast_node_t* type_name_node = ast_node_alloc(AST_NODE_CLASS_TYPE_NAME);
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4609,9 +4607,6 @@ static generic_ast_node_t* type_name(FILE* fl){
 	   || lookahead.tok == S_INT16 || lookahead.tok == U_INT32 || lookahead.tok == S_INT32 || lookahead.tok == U_INT64
 	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == FLOAT64 || lookahead.tok == CHAR){
 
-		//Copy the lexeme into the node, no need for intermediaries here
-		strcpy(type_name_node->type_name, lookahead.lexeme);
-
 		//We will now grab this record from the symtable to make our life easier
 		symtab_type_record_t* record = lookup_type(type_symtab, lookahead.lexeme);
 
@@ -4619,14 +4614,11 @@ static generic_ast_node_t* type_name(FILE* fl){
 		if(record == NULL){
 			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
 			//Create and give back an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return NULL;
 		}
 
-		//Link this record in with the actual node
-		type_name_node->type_record = record;
-
 		//This one is now all set to send up. We will not store any children if this is the case
-		return type_name_node;
+		return record;
 
 	//There's also a chance that we see an enum type
 	} else if(lookahead.tok == ENUM){
@@ -4640,7 +4632,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 			print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
 			//It's already an error so just give it back
-			return type_ident;
+			return NULL;
 		}
 
 		//Array bounds checking
@@ -4648,7 +4640,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return NULL;
 		}
 
 		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
@@ -4663,19 +4655,11 @@ static generic_ast_node_t* type_name(FILE* fl){
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return NULL;
 		}
 
-		//Otherwise we were able to find the record, so we'll add in to the node
-		type_name_node->type_record = record;
-		//Copy the name over here for convenience later
-		strcpy(type_name_node->type_name, type_name);
-
-		//We can also add in the type ident as a child node of the type name node
-		add_child_node(type_name_node, type_ident);
-
 		//Once we make it here, we should be all set to get out
-		return type_name_node;
+		return record;
 
 	//Construct names are pretty much the same as enumerated names
 	} else if(lookahead.tok == CONSTRUCT){
@@ -4689,7 +4673,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 			print_parse_message(PARSE_ERROR, "Invalid identifier given as construct type name", parser_line_num);
 			//It's already an error so just give it back
-			return type_ident;
+			return NULL;
 		}
 
 		//Array bounds checking
@@ -4697,7 +4681,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return NULL;
 		}
 
 		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
@@ -4712,19 +4696,11 @@ static generic_ast_node_t* type_name(FILE* fl){
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return NULL;
 		}
 
-		//Otherwise we were able to find the record, so we'll add in to the node
-		type_name_node->type_record = record;
-		//Copy the name over here for convenience later
-		strcpy(type_name_node->type_name, type_name);
-
-		//We can also add in the type ident as a child node of the type name node
-		add_child_node(type_name_node, type_ident);
-
 		//Once we make it here, we should be all set to get out
-		return type_name_node;
+		return record;
 
 	//If this is the case then we have to see some user defined name, which is an ident
 	} else {
@@ -4737,8 +4713,10 @@ static generic_ast_node_t* type_name(FILE* fl){
 		//If we fail, we'll bail out
 		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 			print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
+			//Error increase here
+			num_errors++;
 			//It's already an error so just give it back
-			return type_ident;
+			return NULL;
 		}
 
 		//Array bounds checking
@@ -4746,7 +4724,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return NULL;
 		}
 
 		//Grab a pointer for it for convenience
@@ -4761,7 +4739,7 @@ static generic_ast_node_t* type_name(FILE* fl){
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return NULL;
 		}
 		
 		//Dealias the type here
@@ -4770,17 +4748,8 @@ static generic_ast_node_t* type_name(FILE* fl){
 		//The true type record
 		symtab_type_record_t* true_type = lookup_type(type_symtab, dealiased_type->type_name);
 
-		//Otherwise if we get here we were able to find it, so we're good to move on
-		type_name_node->type_record = true_type;
-		//Copy the name over here for convenience later
-		strcpy(type_name_node->type_name, dealiased_type->type_name);
-		//We can also add in the type ident as a child node of the type name node
-		add_child_node(type_name_node, type_ident);
-		//Store the line number
-		type_name_node->line_number = parser_line_num;
-
 		//Once we make it here, we should be all set to get out
-		return type_name_node;
+		return true_type;
 	}
 }
 
@@ -4806,17 +4775,17 @@ static generic_type_t* type_specifier(FILE* fl){
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has. If the type name function could not
 	//find the name, then it will send back an error that we can handle here
-	generic_ast_node_t* name_node = type_name(fl);
+	symtab_type_record_t* type = type_name(fl);
 
 	//We'll just fail here, no need for any error printing
-	if(name_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(type == NULL){
 		//It's already in error so just NULL out
 		return NULL;
 	}
 
 	//Now once we make it here, we know that we have a name that actually exists in the symtab
 	//The current type record is what we will eventually point our node to
-	symtab_type_record_t* current_type_record = name_node->type_record;
+	symtab_type_record_t* current_type_record = type;
 	
 	//Let's see where we go from here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
