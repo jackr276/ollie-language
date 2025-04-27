@@ -124,6 +124,10 @@ int main(int argc, char** argv){
 	print_all_cfg_blocks(cfg);
 	printf("============================================= AFTER OPTIMIZATION =======================================\n");
 
+	printf("============================================= INSTRUCTION SELECTION ====================================\n");
+	select_all_instructions(cfg);
+	printf("============================================= INSTRUCTION SELECTION ====================================\n");
+
 
 	//Grab bfore freeing
 	CLASS = results.root->CLASS;

@@ -44,13 +44,13 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
  */
 basic_block_t* order_blocks(cfg_t* cfg){
 	//We'll first wipe the visited status on this CFG
-	reset_visited_status(cfg);
+	reset_visited_status(cfg, TRUE);
 	
 	//We will perform a breadth first search and use the "direct successor" area
 	//of the blocks to store them all in one chain
 	
 	//The current block
-	basic_block_t* current_block = NULL;
+	basic_block_t* previous = NULL;
 	//The starting point that all traversals will use
 	basic_block_t* head_block;
 	//TODO Global var block
@@ -71,16 +71,16 @@ basic_block_t* order_blocks(cfg_t* cfg){
 			//Grab this block off of the queue
 			basic_block_t* current = dequeue(queue);
 
-			//If current is NULL, this is the first block
-			if(current == NULL){
-				current_block = current;
+			//If previous is NULL, this is the first block
+			if(previous == NULL){
+				previous = current;
 				//This is also the head block then
-				head_block = current;
+				head_block = previous;
 			} else {
 				//We'll add this in as a direct successor
-				current_block->direct_successor = current;
+				previous->direct_successor = current;
 				//Add this in as well
-				current_block = current;
+				previous = current;
 			}
 
 			//Make sure that we flag this as visited
@@ -101,7 +101,7 @@ basic_block_t* order_blocks(cfg_t* cfg){
 				//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
 
 				//Grab the successor
-				basic_block_t* successor = dynamic_array_get_at(current->successors, _);
+				basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
 
 				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
 				if(successor == direct_end_jump){
@@ -124,8 +124,52 @@ basic_block_t* order_blocks(cfg_t* cfg){
 }
 
 
-static void print_ordered_blocks(){
+/**
+ * Print a block our for reading
+*/
+static void print_ordered_block(basic_block_t* block){
+	//If this is some kind of switch block, we first print the jump table
+	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
+		print_jump_table(&(block->jump_table));
+	}
 
+	//If it's a function entry block, we need to print this out
+	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		printf("%s:\n", block->func_record->func_name);
+	} else {
+		printf(".L%d:\n", block->block_id);
+	}
+
+	//Now grab a cursor and print out every statement that we 
+	//have
+	three_addr_code_stmt_t* cursor = block->leader_statement;
+
+	//So long as it isn't null
+	while(cursor != NULL){
+		//Hand off to printing method
+		print_three_addr_code_stmt(cursor);
+		//Move along to the next one
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
+ * Run through using the direct successor strategy and print all ordered blocks.
+ * We print much less here than the debug printer in the CFG, because all dominance
+ * relations are now useless
+ */
+static void print_ordered_blocks(basic_block_t* head_block){
+	//Run through the direct successors so long as the block is not null
+	basic_block_t* current = head_block;
+
+	//So long as this one isn't NULL
+	while(current != NULL){
+		//Print it
+		print_ordered_block(current);
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
 }
 
 
@@ -137,4 +181,15 @@ void print_instructions(dynamic_array_t* instructions){
 }
 
 
+/**
+ * A function that selects all instructions, via the peephole method. This kind of 
+ * operation completely translates the CFG out of a CFG. When done, we have a straight line
+ * of code that we print out
+ */
+dynamic_array_t* select_all_instructions(cfg_t* cfg){
+	//print_ordered_blocks(order_blocks(cfg));
+
+	//FOR NOW
+	return NULL;
+}
 

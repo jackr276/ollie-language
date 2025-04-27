@@ -283,7 +283,7 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
  */
 dynamic_array_t* compute_post_order_traversal(basic_block_t* entry){
 	//Reset the visited status
-	reset_visited_status(cfg_ref);
+	reset_visited_status(cfg_ref, FALSE);
 
 	//Create our dynamic array
 	dynamic_array_t* post_order_traversal = dynamic_array_alloc();
@@ -1113,7 +1113,7 @@ static void add_dominated_block(basic_block_t* dominator, basic_block_t* dominat
  */
 static void calculate_postdominator_sets(cfg_t* cfg){
 	//Reset the visited status
-	reset_visited_status(cfg);
+	reset_visited_status(cfg, FALSE);
 	//The current block
 	basic_block_t* current;
 
@@ -1511,7 +1511,7 @@ static void variable_dynamic_array_add(dynamic_array_t* array, three_addr_var_t*
  */
 static void calculate_liveness_sets(cfg_t* cfg){
 	//Reset the visited status
-	reset_visited_status(cfg);
+	reset_visited_status(cfg, FALSE);
 	//Did we find a difference
 	u_int8_t difference_found;
 
@@ -1987,7 +1987,7 @@ static void rename_block(basic_block_t* entry){
  */
 static void rename_all_variables(cfg_t* cfg){
 	//Before we do this - let's reset the entire CFG
-	reset_visited_status(cfg);
+	reset_visited_status(cfg, FALSE);
 
 	//We will call the rename block function on the first block
 	//for each of our functions. The rename block function is 
@@ -3104,7 +3104,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 	}
 
 	//First, we'll reset every single block here
-	reset_visited_status(cfg);
+	reset_visited_status(cfg, FALSE);
 
 	//For holding our blocks
 	basic_block_t* block;
@@ -5522,7 +5522,7 @@ void print_all_cfg_blocks(cfg_t* cfg){
 /**
  * Reset the visited status of the CFG
  */
-void reset_visited_status(cfg_t* cfg){
+void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
 	//For each block in the CFG
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the block out
@@ -5530,6 +5530,11 @@ void reset_visited_status(cfg_t* cfg){
 
 		//Set it's visited status to 0
 		block->visited = FALSE;
+
+		//If we want to reset this, we'll null it out
+		if(reset_direct_successor == TRUE){
+			block->direct_successor = NULL;
+		}
 	}
 }
 

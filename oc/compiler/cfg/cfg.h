@@ -207,7 +207,7 @@ void print_all_cfg_blocks(cfg_t* cfg);
 /**
  * Reset the visited status of the CFG
  */
-void reset_visited_status(cfg_t* cfg);
+void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);
 
 /**
  * Deallocate a block

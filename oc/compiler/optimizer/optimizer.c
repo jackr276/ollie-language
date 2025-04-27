@@ -819,7 +819,7 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 	heap_queue_t* queue = heap_queue_alloc();
 
 	//First, we'll reset every single block here
-	reset_visited_status(cfg);
+	reset_visited_status(cfg, FALSE);
 
 	//Seed the search with B
 	enqueue(queue, B);
@@ -1684,7 +1684,7 @@ static void recompute_all_dominance_relations(cfg_t* cfg){
 cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//First thing we'll do is reset the visited status of the CFG. This just ensures
 	//that we won't have any issues with the CFG in terms of traversal
-	reset_visited_status(cfg);
+	reset_visited_status(cfg, FALSE);
 
 	//PASS 1: Mark algorithm
 	//The mark algorithm marks all useful operations. It will perform one full pass of the program
