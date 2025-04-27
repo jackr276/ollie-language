@@ -76,7 +76,10 @@ basic_block_t* order_blocks(cfg_t* cfg){
 				previous = current;
 				//This is also the head block then
 				head_block = previous;
-			} else {
+			//We need to handle the rare case where we reach two of the same blocks(maybe the block points
+			//to itself) but neither have been visited. We make sure that, in this event, we do not set the
+			//block to be it's own direct successor
+			} else if(previous != current && current->visited == FALSE){
 				//We'll add this in as a direct successor
 				previous->direct_successor = current;
 				//Add this in as well
@@ -105,6 +108,12 @@ basic_block_t* order_blocks(cfg_t* cfg){
 
 				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
 				if(successor == direct_end_jump){
+					continue;
+				}
+
+				//If the block is completely empty(function end block), we'll also skip
+				if(successor->leader_statement == NULL){
+					successor->visited = TRUE;
 					continue;
 				}
 
@@ -151,6 +160,9 @@ static void print_ordered_block(basic_block_t* block){
 		//Move along to the next one
 		cursor = cursor->next_statement;
 	}
+
+	//For spacing
+	printf("\n");
 }
 
 
@@ -187,7 +199,7 @@ void print_instructions(dynamic_array_t* instructions){
  * of code that we print out
  */
 dynamic_array_t* select_all_instructions(cfg_t* cfg){
-	//print_ordered_blocks(order_blocks(cfg));
+	print_ordered_blocks(order_blocks(cfg));
 
 	//FOR NOW
 	return NULL;
