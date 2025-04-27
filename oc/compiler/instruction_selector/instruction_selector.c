@@ -82,6 +82,17 @@ basic_block_t* order_blocks(cfg_t* cfg){
 			} else if(previous != current && current->visited == FALSE){
 				//We'll add this in as a direct successor
 				previous->direct_successor = current;
+
+				//Do we end in a jump?
+				basic_block_t* end_jumps_to = does_block_end_in_jump(previous);
+
+				//If we do AND what we're jumping to is the direct successor, then we'll
+				//delete the jump statement as it is now unnecessary
+				if(end_jumps_to == previous->direct_successor){
+					//Get rid of this jump as it's no longer needed
+					delete_statement(cfg, previous, previous->exit_statement);
+				}
+
 				//Add this in as well
 				previous = current;
 			}
@@ -95,6 +106,7 @@ basic_block_t* order_blocks(cfg_t* cfg){
 
 			//If this is the case, we'll add it in first
 			if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
+				//Add it into the queue
 				enqueue(queue, direct_end_jump);
 			}
 

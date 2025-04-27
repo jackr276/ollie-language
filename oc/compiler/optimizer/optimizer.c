@@ -99,51 +99,6 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 
 
 /**
- * Delete a statement from the CFG - handling any/all edge cases that may arise
- */
-static void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt){
-	//If it's the leader statement, we'll just update the references
-	if(block->leader_statement == stmt){
-		//Special case - it's the only statement. We'll just delete it here
-		if(block->leader_statement->next_statement == NULL){
-			//Just remove it entirely
-			block->leader_statement = NULL;
-			block->exit_statement = NULL;
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			block->leader_statement = stmt->next_statement;
-			//Set this to NULL
-			block->leader_statement->previous_statement = NULL;
-		}
-
-	//What if it's the exit statement?
-	} else if(block->exit_statement == stmt){
-		three_addr_code_stmt_t* previous = stmt->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		block->exit_statement = previous;
-		
-	//Otherwise, we have one in the middle
-	} else {
-		//Regular middle deletion here
-		three_addr_code_stmt_t* previous = stmt->previous_statement;
-		three_addr_code_stmt_t* next = stmt->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
-
-	//If this was a jump statement, update the number of jump statements
-	if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-		//Decrement
-		block->num_jumps -= 1;
-	}
-}
-
-
-/**
  * Replace all targets that jump to "empty block" with "replacement". This is a helper 
  * function for the "Empty Block Removal" step of clean()
  */

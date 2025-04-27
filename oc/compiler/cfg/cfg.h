@@ -165,6 +165,11 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 //Add a statement to the basic block
 void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node);
 
+/**
+ * Delete a statement from the CFG - handling any/all edge cases that may arise
+ */
+void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt);
+
 //Add a successor to the block
 void add_successor(basic_block_t* target, basic_block_t* successor);
 
