@@ -4607,16 +4607,19 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 	//Only difference here is the starting place
 	statement_values.initial_node = case_stmt_cursor->first_child;
 
-	//Let this take care of it
-	basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
+	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
+	if(statement_values.initial_node != NULL){
+		//Let this take care of it
+		basic_block_t* statement_section_start = visit_statement_sequence(&statement_values);
 
-	//If we have an error
-	if(statement_section_start->block_id == -1){
-		return statement_section_start;
+		//If we have an error
+		if(statement_section_start->block_id == -1){
+			return statement_section_start;
+		}
+
+		//Once we get this back, we'll add it in to the main block
+		merge_blocks(case_stmt, statement_section_start);
 	}
-
-	//Once we get this back, we'll add it in to the main block
-	merge_blocks(case_stmt, statement_section_start);
 
 	//Give the block back
 	return case_stmt;

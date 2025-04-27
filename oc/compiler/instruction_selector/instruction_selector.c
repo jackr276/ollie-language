@@ -10,6 +10,9 @@
 /**
  * Run through and print every instruction in the selector
 */
-void print_instructions(instructions_t* instructions){
+void print_instructions(dynamic_array_t* instructions){
 
 }
+
+
+

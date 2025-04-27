@@ -1398,7 +1398,6 @@ static void mark(cfg_t* cfg){
 				dynamic_array_add(worklist, current_stmt);
 				//The block now has a mark
 				current->contains_mark = TRUE;
-
 			//Is it a function call? Always useful as well
 			} else if(current_stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
 				current_stmt->mark = TRUE;

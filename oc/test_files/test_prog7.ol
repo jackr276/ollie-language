@@ -3,21 +3,12 @@
 * TEST: Missing #dependencies end directive
 */
 
-#dependencies
-//============================================
-require "test_prog4.ol";
-require "test_prog3.ol";
-//Require a library file. These files are stored
-//in "TBD" and are not in the local directory
-require lib "stdlib.ol";
-//============================================
 
 #replace TEST_INT with -1;
 #replace my_char with 'c';
 /**
  * Additiong of two's complement ints that saturates to TMAX or TMIN
  * as opposed to creating a positive or negative overflow
-*/
 fn saturating_add(x:i32, y:i32) -> i32{
 	//Find the regular sum
 	let mut sum:i32 := x + y;
@@ -45,6 +36,7 @@ fn saturating_add(x:i32, y:i32) -> i32{
 	ret (~was_overflow & sum) + (was_overflow & maxint_or_minint);
 }
 
+*/
 
 fn tester() -> void{
 	let mut x:i32 := !3;
@@ -58,11 +50,6 @@ fn tester() -> void{
 fn main() -> i32{
 
 	let mut x:i32 := -2U;
-	let mut my_float:f32 := -0.23;
-	let mut aa:i32 := --3;
-	let mut my_val:i32 := x + -32;
-	let mut teste:i32 := TEST_INT;
-	let test_char:char := my_char;
 
 	//Example asm inline statement
 	defer asm{
@@ -77,12 +64,9 @@ fn main() -> i32{
 	defer x + 3;	
 	
 	if(!x) then {
-
-		$label1:
 		++x;
 	} else {
 		--x;
-		jump $label1;
 		ret x;
 	}
 	
@@ -90,18 +74,18 @@ fn main() -> i32{
 
 	let f:f32 := 23.2;
 
+	//Empty case statement testing
 	switch on(x){
 		case 1:
 		case 2:
 		case 3:
 			{
 			x := x + 3;
-			break;
 			}
 		default:
 			x := x + 3;
 
 	}
 
-	ret 0;
+	ret x;
 }

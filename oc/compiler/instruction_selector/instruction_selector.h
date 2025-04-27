@@ -16,18 +16,48 @@
  * that consists of one large, straight line of
  * OIR statements. 
  */
-typedef struct instructions_t instructions_t;
+typedef struct instruction_t instruction_t;
 
-struct instructions_t{
-	dynamic_array_t* statements;
-	//TODO will add more
+
+/**
+ * What type of instruction do we have? This saves us a lot of space
+ * as opposed to storing strings
+ */
+typedef enum{
+	MOVW,
+	MOVL,
+	MOVQ,
+	JMP,
+	JNE,
+	JE,
+	JNZ,
+	JZ,
+	JGE,
+	JG,
+	JLE,
+	JL,
+	ADDW,
+	ADDL,
+	ADDQ,
+	SUBW,
+	SUBL,
+	SUBQ,
+	
+} intructions_type_t;
+
+
+/**
+ * Each individual instruction has an operand and
+ * several variable areas
+ */
+struct instruction_t{
 };
 
 
 /**
  * Print out all instructions
  */
-void print_instructions(instructions_t* instructions);
+void print_instructions(dynamic_array_t* instructions);
 
 
 /**
@@ -35,11 +65,11 @@ void print_instructions(instructions_t* instructions);
  * operation completely translates the CFG out of a CFG. When done, we have a straight line
  * of code that we print out
  */
-instructions_t* select_all_instructions(cfg_t* cfg);
+dynamic_array_t* select_all_instructions(cfg_t* cfg);
 
 /**
  * Deallocate an instruction line
  */
-void instructions_dealloc(instructions_t* line);
+void instructions_dealloc(instruction_t* line);
 
 #endif /* INTSTRUCTION_SELECTOR_H */
