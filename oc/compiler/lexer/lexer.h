@@ -51,8 +51,6 @@ typedef enum {
 	CONTINUE,
 	DEFAULT,
 	SWITCH,
-	TRUE,
-	FALSE,
 	FN,
 	REGISTER,
 	WITH,

@@ -23,6 +23,10 @@
 //Default error size
 #define DEFAULT_ERROR_SIZE 1000
 
+//For standardization across all modules
+#define TRUE 1
+#define FALSE 0
+
 /**
  * This dictates any errors that we print out
  */
