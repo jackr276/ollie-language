@@ -4,14 +4,12 @@
 */
 
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
 #include "parser/parser.h"
-#include "preprocessor/preprocessor.h"
 #include "instruction_selector/instruction_selector.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"

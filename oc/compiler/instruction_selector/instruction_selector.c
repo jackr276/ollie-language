@@ -10,6 +10,7 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
+#include <stdio.h>
 #include <sys/types.h>
 
 //For standardization across all modules
@@ -21,13 +22,28 @@ typedef struct instruction_window_t instruction_window_t;
 
 
 /**
+ * What is the status of our sliding window? Are we at the beginning,
+ * middle or end of the sequence?
+ */
+typedef enum {
+	WINDOW_AT_START,
+	WINDOW_AT_MIDDLE,
+	WINDOW_AT_END,
+} window_status_t;
+
+
+/**
  * The widow that we have here will store three instructions at once. This allows
  * us to look at three instruction patterns at any given time.
  */
 struct instruction_window_t{
+	//We store three instructions and a status
 	three_addr_code_stmt_t* instruction1;
 	three_addr_code_stmt_t* instruction2;
 	three_addr_code_stmt_t* instruction3;
+	//This will tell us, at a quick glance, whether we're at the beginning,
+	//middle or end of a sequence
+	window_status_t status;
 };
 
 
@@ -52,11 +68,61 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 
 /**
+ * Simple utility for us to print out an instruction window
+ */
+static void print_instruction_window(instruction_window_t* window){
+	printf("----------- Instruction Window ------------\n");
+	//We'll just print out all three instructions
+	if(window->instruction1 != NULL){
+		print_three_addr_code_stmt(window->instruction1);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	if(window->instruction2 != NULL){
+		print_three_addr_code_stmt(window->instruction2);
+	} else {
+		printf("EMPTY\n");
+	}
+	
+	if(window->instruction3 != NULL){
+		print_three_addr_code_stmt(window->instruction3);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	printf("-------------------------------------------\n");
+}
+
+
+/**
  * Advance the window up by 1 instruction. This means that the lowest instruction slides
  * out of our window, and the one next to the highest instruction slides into it
  */
-static void slide_window(instruction_window_t* window){
+static instruction_window_t* slide_window(instruction_window_t* window){
+	//It should be fairly easy to slide -- except in the case
+	//where we're at the end of a block. In that case, we need to slide to that
+	//new block or we'll need an entirely new window if we end in a discrete jump
+	//to said block
+	
+	//If the third operation is not the end, then we're good to just bump everything up
+	//This is the simplest case, and allows us to just bump everything up and get out
+	if(window->instruction3->next_statement != NULL){
+		window->instruction1 = window->instruction1->next_statement;
+		window->instruction2 = window->instruction2->next_statement;
+		window->instruction3 = window->instruction3->next_statement;
+		//We're in the thick of it here
+		window->status = WINDOW_AT_MIDDLE;
+		
+		//Nowhere else to go here
+		return window;
+	}
 
+	//Otherwise this is NULL, so that means we're at the end of a block. Luckily, each
+	//instruction stores exactly where it came from, so we can see where the 3rd instruction
+	//came from and make the appropriate choice based on the state of that block
+
+	return window;
 }
 
 
@@ -83,9 +149,24 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	//No such checks are needed for instruction 3, we have no possibility of a null pointer
 	//error here
 	window.instruction3 = window.instruction2->next_statement;
+
+	//We're at the beginning here by default
+	window.status = WINDOW_AT_START;
 	
 	//And now we give back the window
 	return window;
+}
+
+
+/**
+ * Make one pass through the sliding window for simplification. This could include folding,
+ * etc. Simplification happens first over the entirety of the OIR using the sliding window
+ * technique. Following this, the instruction selector runs over the same area
+ */
+static void simplify(basic_block_t* head){
+	//Initialize the sliding window(very basic, more to come)
+	instruction_window_t window = initialize_instruction_window(head);
+
 }
 
 
