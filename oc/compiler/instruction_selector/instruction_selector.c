@@ -10,6 +10,7 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
+#include <math.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -174,22 +175,19 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
  */
-static void simplify_window(instruction_window_t* window){
-	//Print the window that we're given
-	print_instruction_window(window);
-
+static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//Let's perform some quick checks. If we see a window where the first instruction
 	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
 	//case
 	if(window->instruction1 == NULL || window->instruction2 == NULL){
-		return;
+		return TRUE;
 	}
 
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
 	//see, we perform one small optimization
 	
 	/**
-	 * ================== FOLDING ==========================
+	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
 	 *
 	 * If we see something like this
 	 * t2 <- 0x8
@@ -200,16 +198,46 @@ static void simplify_window(instruction_window_t* window){
 	 * 
 	 * This will also result in the deletion of the first statement
 	 */
+
 	//If we see a constant assingment first and then we see a an assignment
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
 	 	&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 		
 		//If the first assignee is what we're assigning to the next one, we can fold
 		if(variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-			//We have an opportunity to fold
-			printf("HERE\n");
+			//Grab this out for convenience
+			three_addr_code_stmt_t* constant_assingment = window->instruction2;
+
+			//Now we'll modify this to be an assignment const statement
+			constant_assingment->op1_const = window->instruction1->op1_const;
+
+			//Modify the type of the assignment
+			constant_assingment->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Once we've done this, the first statement is entirely useless
+			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+
+			//Once we've deleted the statement, we'll need to completely rewire the block
+			
+			//The second instruction is now the first one
+			window->instruction1 = constant_assingment;
+			//Now instruction 2 becomes instruction 3
+			window->instruction2 = window->instruction3;
+
+			//We could have a case where instruction 3 is NULL here, let's account for that
+			if(window->instruction2 == NULL || window->instruction2->next_statement == NULL){
+				window->instruction3 = NULL;
+				//We're at the end if this happens
+				window->status = WINDOW_AT_END;
+			} else {
+				window->instruction3 = window->instruction2->next_statement;
+			}
+
+			return FALSE;
 		}
 	}
+
+	return TRUE;
 }
 
 
@@ -218,7 +246,7 @@ static void simplify_window(instruction_window_t* window){
  * etc. Simplification happens first over the entirety of the OIR using the sliding window
  * technique. Following this, the instruction selector runs over the same area
  */
-static void simplify(basic_block_t* head){
+static void simplify(cfg_t* cfg, basic_block_t* head){
 	//First we'll grab the head
 	basic_block_t* current = head;
 
@@ -228,15 +256,20 @@ static void simplify(basic_block_t* head){
 		instruction_window_t window = initialize_instruction_window(current);
 
 		//Simplify it
-		simplify_window(&window);
+		simplify_window(cfg, &window);
+
+		//Do we need to slide?
+		u_int8_t needs_to_slide;
 
 		//So long as the window status is not end
 		while(window.status != WINDOW_AT_END) {
 			//Simplify the window
-			simplify_window(&window);
+			needs_to_slide = simplify_window(cfg, &window);
 
 			//And slide it
-			slide_window(&window);
+			if(needs_to_slide == TRUE){
+				slide_window(&window);
+			}
 		} 
 
 		//Advance to the direct successor
@@ -429,12 +462,17 @@ dynamic_array_t* select_all_instructions(cfg_t* cfg){
 	basic_block_t* head_block = order_blocks(cfg);
 
 	//DEBUG
+	//We'll first print before we simplify
+	printf("============================== BEFORE SIMPLIFY ========================================\n");
 	print_ordered_blocks(head_block);
 
+	printf("============================== AFTER SIMPLIFY ========================================\n");
 	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
 	//format that is used in the optimization phase. Now, we need to take that expanded IR and
 	//recognize any redundant operations, dead values, unnecessary loads, etc.
-	simplify(head_block);
+	simplify(cfg, head_block);
+
+	print_ordered_blocks(head_block);
 
 	//FOR NOW
 	return NULL;
