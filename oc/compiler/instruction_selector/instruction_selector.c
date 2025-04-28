@@ -104,6 +104,7 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 	//where we're at the end of a block. In that case, we need to slide to that
 	//new block or we'll need an entirely new window if we end in a discrete jump
 	//to said block
+
 	
 	//If the third operation is not the end, then we're good to just bump everything up
 	//This is the simplest case, and allows us to just bump everything up and get out
@@ -116,13 +117,17 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 		
 		//Nowhere else to go here
 		return window;
+	
+	//This means that we don't have a full block, and are likely reaching the end
+	} else {
+		window->instruction1 = window->instruction1->next_statement;
+		window->instruction2 = window->instruction2->next_statement;
+		window->instruction3 = window->instruction3->next_statement;
+		//We're in the thick of it here
+		window->status = WINDOW_AT_END;
+
+		return window;
 	}
-
-	//Otherwise this is NULL, so that means we're at the end of a block. Luckily, each
-	//instruction stores exactly where it came from, so we can see where the 3rd instruction
-	//came from and make the appropriate choice based on the state of that block
-
-	return window;
 }
 
 
@@ -132,6 +137,9 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	//Grab the window
 	instruction_window_t window;
+	window.instruction1 = NULL;
+	window.instruction2 = NULL;
+	window.instruction3 = NULL;
 
 	//The first instruction is the leader statement
 	window.instruction1 = head->leader_statement;
@@ -141,17 +149,20 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	if(window.instruction1->next_statement == NULL){
 		window.instruction2 = NULL;
 		window.instruction3 = NULL;
+	} else {
+		//Otherwise we know we have a second instruction
+		window.instruction2 = window.instruction1->next_statement;
+		//No such checks are needed for instruction 3, we have no possibility of a null pointer
+		//error here
+		window.instruction3 = window.instruction2->next_statement;
 	}
 
-	//Otherwise we know we have a second instruction
-	window.instruction2 = window.instruction1->next_statement;
-
-	//No such checks are needed for instruction 3, we have no possibility of a null pointer
-	//error here
-	window.instruction3 = window.instruction2->next_statement;
-
 	//We're at the beginning here by default
-	window.status = WINDOW_AT_START;
+	if(window.instruction2 == NULL || window.instruction3 == NULL){
+		window.status = WINDOW_AT_END;
+	} else {
+		window.status = WINDOW_AT_START;
+	}
 	
 	//And now we give back the window
 	return window;
@@ -164,9 +175,31 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
  * technique. Following this, the instruction selector runs over the same area
  */
 static void simplify(basic_block_t* head){
-	//Initialize the sliding window(very basic, more to come)
-	instruction_window_t window = initialize_instruction_window(head);
+	//First we'll grab the head
+	basic_block_t* current = head;
 
+	//So long as this isn't NULL
+	while(current != NULL){
+		//Initialize the sliding window(very basic, more to come)
+		instruction_window_t window = initialize_instruction_window(current);
+
+		//Print the initial one
+		print_instruction_window(&window);
+
+		printf("\n\n");
+
+		//So long as the window status is not end
+		while(window.status != WINDOW_AT_END) {
+			//Print the window out
+			print_instruction_window(&window);
+
+			//And slide it
+			slide_window(&window);
+		} 
+
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
 }
 
 
@@ -359,6 +392,7 @@ dynamic_array_t* select_all_instructions(cfg_t* cfg){
 	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
 	//format that is used in the optimization phase. Now, we need to take that expanded IR and
 	//recognize any redundant operations, dead values, unnecessary loads, etc.
+	simplify(head_block);
 
 	//FOR NOW
 	return NULL;
