@@ -2,6 +2,10 @@
  * Author: Jack Robbins
  *
  * This file contains the implementation for the APIs defined in the header file of the same name
+ *
+ * The instruction selector for Ollie is what's known as a peephole selector. We crawl the entirety
+ * of the generated LLIR(OIR) that we're given. We then simplify various known patterns and finally we convert the resultant 
+ * simplified OIR into assembly using a variety of patten matching
 */
 
 #include "instruction_selector.h"
@@ -11,6 +15,20 @@
 //For standardization across all modules
 #define TRUE 1
 #define FALSE 0
+
+//The window for our "sliding window" optimizer
+typedef struct instruction_window_t instruction_window_t;
+
+
+/**
+ * The widow that we have here will store three instructions at once. This allows
+ * us to look at three instruction patterns at any given time.
+ */
+struct instruction_window_t{
+	three_addr_code_stmt_t* instruction1;
+	three_addr_code_stmt_t* instruction2;
+	three_addr_code_stmt_t* instruction3;
+};
 
 
 /**
@@ -34,6 +52,44 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 
 /**
+ * Advance the window up by 1 instruction. This means that the lowest instruction slides
+ * out of our window, and the one next to the highest instruction slides into it
+ */
+static void slide_window(instruction_window_t* window){
+
+}
+
+
+/**
+ * Initialize the instruction window by taking in the first 3 values in the head block
+ */
+static instruction_window_t initialize_instruction_window(basic_block_t* head){
+	//Grab the window
+	instruction_window_t window;
+
+	//The first instruction is the leader statement
+	window.instruction1 = head->leader_statement;
+
+	//If the next one is NULL, we have 2 NULL instructions
+	//following this. This is very rare, but it could happen
+	if(window.instruction1->next_statement == NULL){
+		window.instruction2 = NULL;
+		window.instruction3 = NULL;
+	}
+
+	//Otherwise we know we have a second instruction
+	window.instruction2 = window.instruction1->next_statement;
+
+	//No such checks are needed for instruction 3, we have no possibility of a null pointer
+	//error here
+	window.instruction3 = window.instruction2->next_statement;
+	
+	//And now we give back the window
+	return window;
+}
+
+
+/**
  * The first step in our instruction selector is to get the instructions stored in
  * a straight line in the exact way that we want them to be. This is done with a breadth-first
  * search traversal of the simplified CFG that has been optimized. 
@@ -42,7 +98,7 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
  * For example, if block .L15 ends in a direct jump to .L16, we'll endeavor to have .L16 right
  * after .L15 so that in a later stage, we can eliminate that jump.
  */
-basic_block_t* order_blocks(cfg_t* cfg){
+static basic_block_t* order_blocks(cfg_t* cfg){
 	//We'll first wipe the visited status on this CFG
 	reset_visited_status(cfg, TRUE);
 	
@@ -211,7 +267,17 @@ void print_instructions(dynamic_array_t* instructions){
  * of code that we print out
  */
 dynamic_array_t* select_all_instructions(cfg_t* cfg){
-	print_ordered_blocks(order_blocks(cfg));
+	//Our very first step in the instruction selector is to order all of the blocks in one 
+	//straight line. This step is also able to recognize and exploit some early optimizations,
+	//such as when a block ends in a jump to the block right below it
+	basic_block_t* head_block = order_blocks(cfg);
+
+	//DEBUG
+	print_ordered_blocks(head_block);
+
+	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
+	//format that is used in the optimization phase. Now, we need to take that expanded IR and
+	//recognize any redundant operations, dead values, unnecessary loads, etc.
 
 	//FOR NOW
 	return NULL;
