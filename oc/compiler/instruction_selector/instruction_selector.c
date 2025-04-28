@@ -170,6 +170,50 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 
 
 /**
+ * The pattern optimizer takes in a window and performs hyperlocal optimzations
+ * on passing instructions. If we do end up deleting instructions, we'll need
+ * to take care with how that affects the window that we take in
+ */
+static void simplify_window(instruction_window_t* window){
+	//Print the window that we're given
+	print_instruction_window(window);
+
+	//Let's perform some quick checks. If we see a window where the first instruction
+	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
+	//case
+	if(window->instruction1 == NULL || window->instruction2 == NULL){
+		return;
+	}
+
+	//Now we'll match based off of a series of patterns. Depending on the pattern that we
+	//see, we perform one small optimization
+	
+	/**
+	 * ================== FOLDING ==========================
+	 *
+	 * If we see something like this
+	 * t2 <- 0x8
+	 * x0 <- t2
+	 *
+	 * We can "fold" to result in:
+	 * x0 <- 0x8
+	 * 
+	 * This will also result in the deletion of the first statement
+	 */
+	//If we see a constant assingment first and then we see a an assignment
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
+	 	&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+		
+		//If the first assignee is what we're assigning to the next one, we can fold
+		if(variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+			//We have an opportunity to fold
+			printf("HERE\n");
+		}
+	}
+}
+
+
+/**
  * Make one pass through the sliding window for simplification. This could include folding,
  * etc. Simplification happens first over the entirety of the OIR using the sliding window
  * technique. Following this, the instruction selector runs over the same area
@@ -183,15 +227,13 @@ static void simplify(basic_block_t* head){
 		//Initialize the sliding window(very basic, more to come)
 		instruction_window_t window = initialize_instruction_window(current);
 
-		//Print the initial one
-		print_instruction_window(&window);
-
-		printf("\n\n");
+		//Simplify it
+		simplify_window(&window);
 
 		//So long as the window status is not end
 		while(window.status != WINDOW_AT_END) {
-			//Print the window out
-			print_instruction_window(&window);
+			//Simplify the window
+			simplify_window(&window);
 
 			//And slide it
 			slide_window(&window);
