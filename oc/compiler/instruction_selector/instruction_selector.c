@@ -10,7 +10,6 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
-#include <math.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -176,11 +175,14 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
  * to take care with how that affects the window that we take in
  */
 static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
+	//By default, we didn't change anything
+	u_int8_t changed = FALSE;
+
 	//Let's perform some quick checks. If we see a window where the first instruction
 	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
 	//case
 	if(window->instruction1 == NULL || window->instruction2 == NULL){
-		return TRUE;
+		return changed;
 	}
 
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
@@ -203,8 +205,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
 	 	&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 		
-		//If the first assignee is what we're assigning to the next one, we can fold
-		if(variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+		//we deal with temp variables. At this point in the program, all non-temp variables have been
+		//deemed important, so we wouldn't want to remove their assignments
+		if(window->instruction1->assignee->is_temporary == TRUE &&
+			variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 			//Grab this out for convenience
 			three_addr_code_stmt_t* constant_assingment = window->instruction2;
 
@@ -233,11 +238,52 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				window->instruction3 = window->instruction2->next_statement;
 			}
 
-			return FALSE;
+			//Whatever happened here, we did change something
+			changed = TRUE;
 		}
 	}
 
-	return TRUE;
+	//This is the same case as above, we'll just now check instructions 2 and 3
+	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
+	 	&& window->instruction3 != NULL && window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+
+		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+		//we deal with temp variables. At this point in the program, all non-temp variables have been
+		//deemed important, so we wouldn't want to remove their assignments
+		if(window->instruction2->assignee->is_temporary == TRUE &&
+			variables_equal(window->instruction2->assignee, window->instruction3->op1, FALSE) == TRUE){
+			//Grab this out for convenience
+			three_addr_code_stmt_t* constant_assingment = window->instruction3;
+
+			//Now we'll modify this to be an assignment const statement
+			constant_assingment->op1_const = window->instruction2->op1_const;
+
+			//Modify the type of the assignment
+			constant_assingment->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Once we've done this, the first statement is entirely useless
+			delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+
+			//Once we've deleted the statement, we'll need to completely rewire the block
+			
+			//The second instruction is now the first one
+			window->instruction2 = constant_assingment;
+			//Now instruction 2 becomes instruction 3
+			window->instruction3 = window->instruction3->next_statement;
+
+			//We could have a case where instruction 3 is NULL here, let's account for that
+			if(window->instruction3 == NULL){
+				//We're at the end if this happens
+				window->status = WINDOW_AT_END;
+			}
+
+			//Whatever happened here, we did change something
+			changed = TRUE;
+		}
+	}
+
+	//Return whether or not we changed the block
+	return changed;
 }
 
 
@@ -258,16 +304,16 @@ static void simplify(cfg_t* cfg, basic_block_t* head){
 		//Simplify it
 		simplify_window(cfg, &window);
 
-		//Do we need to slide?
-		u_int8_t needs_to_slide;
+		//Did we change the block? If not, we need to slide
+		u_int8_t changed;
 
 		//So long as the window status is not end
 		while(window.status != WINDOW_AT_END) {
 			//Simplify the window
-			needs_to_slide = simplify_window(cfg, &window);
+			changed = simplify_window(cfg, &window);
 
 			//And slide it
-			if(needs_to_slide == TRUE){
+			if(changed == FALSE){
 				slide_window(&window);
 			}
 		} 
