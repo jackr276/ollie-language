@@ -565,8 +565,11 @@ dynamic_array_t* select_all_instructions(cfg_t* cfg){
 	//format that is used in the optimization phase. Now, we need to take that expanded IR and
 	//recognize any redundant operations, dead values, unnecessary loads, etc.
 	simplify(cfg, head_block);
-
 	print_ordered_blocks(head_block);
+
+	printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
+	//Once we're done simplifying, we'll use the same sliding window technique to select instructions
+	
 
 	//FOR NOW
 	return NULL;
