@@ -2038,6 +2038,11 @@ static void rename_all_variables(cfg_t* cfg){
 	//for each of our functions. The rename block function is 
 	//recursive, so that should in theory take care of everything for us
 	
+	//If the global variable block is not null, we'll need to rename it
+	if(cfg->global_variables != NULL){
+		rename_block(cfg->global_variables);
+	}
+	
 	//For each function block
 	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
 		//Invoke the rename function on it

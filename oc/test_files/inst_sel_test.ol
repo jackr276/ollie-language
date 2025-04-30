@@ -12,6 +12,7 @@ fn main(arg:i32, argv:char**) -> i32 {
 	x := y;
 
 	x := x + y * 8;
+	a := x - 1;
 
 	ret x + y + a;
 }
