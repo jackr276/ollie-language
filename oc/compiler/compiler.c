@@ -10,7 +10,7 @@
 #include <time.h>
 #include "ast/ast.h"
 #include "parser/parser.h"
-#include "instruction_selector/instruction_selector.h"
+#include "code_generator/code_generator.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
 #include "optimizer/optimizer.h"
@@ -122,9 +122,8 @@ int main(int argc, char** argv){
 	print_all_cfg_blocks(cfg);
 	printf("============================================= AFTER OPTIMIZATION =======================================\n");
 
-	printf("============================================= INSTRUCTION SELECTION ====================================\n");
-	select_all_instructions(cfg);
-	printf("============================================= INSTRUCTION SELECTION ====================================\n");
+	//Invoke the back end
+	generate_assembly_code(cfg);
 
 
 	//Grab bfore freeing
