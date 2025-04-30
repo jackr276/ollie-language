@@ -111,6 +111,17 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 		//We'll firstly remove the empty block as a successor
 		dynamic_array_delete(predecessor->successors, empty_block); 
 		//We won't even bother modifying the empty block's predecessors -- it's being deleted anyways
+		
+		//Run through the jump table and replace all of those targets as well. Most of the time,
+		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
+		//what will ensure that switch statements are not corrupted by the optimization process
+		for(u_int16_t idx = 0; idx < predecessor->jump_table.num_nodes; idx++){
+			//If this equals the other node, we'll need to replace it
+			if(predecessor->jump_table.nodes[idx] == empty_block){
+				//This now points to the replacement
+				predecessor->jump_table.nodes[idx] = replacement;
+			}
+		}
 
 		//Now we'll go through every single statement in this block. If it's a jump statement whose target
 		//is the empty block, we'll replace that reference with the replacement
