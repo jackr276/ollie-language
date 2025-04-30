@@ -343,9 +343,66 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
 		if(window->instruction1->assignee->is_temporary == TRUE &&
 	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
-			//Here we have our case for a lea optimization
-		}
 
+			//What we can do is rewrite the LEA statement all together as a simple addition statement. We'll
+			//evaluate the multiplication of the constant and lea multiplicator at comptime
+			u_int64_t address_offset = window->instruction2->lea_multiplicator;
+
+			//Let's now grab what the constant is
+			three_addr_const_t* constant = window->instruction1->op1_const;
+			
+			//What kind of constant do we have?
+			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST
+			   || constant->const_type == INT_CONST_FORCE_U){
+				//If this is a the case, we'll multiply the address const by the int value
+				address_offset *= constant->int_const;
+			//Otherwise, this has to be a long const
+			} else {
+				address_offset *= constant->long_const;
+			}
+
+			//Once we've done this, the address offset is now properly multiplied. We'll reuse
+			//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
+			//statement. This saves a lot of loading and arithmetic operations
+		
+			//This is now a long const
+			constant->const_type = LONG_CONST;
+
+			//Set this to be the address offset
+			constant->long_const = address_offset;
+
+			//Add it into instruction 2
+			window->instruction2->op1_const = constant;
+
+			//We'll now transfrom instruction 2 into a bin op with const
+			window->instruction2->op2 = NULL;
+			window->instruction2->op = PLUS;
+			window->instruction2->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//We can now scrap the first instruction entirely
+			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+
+			//And now, we'll shift everything to the left
+			window->instruction1 = window->instruction2;
+			window->instruction2 = window->instruction3;
+			
+			//If this is NULL, avoid a null pointer reference
+			if(window->instruction2 == NULL){
+				window->instruction3 = NULL;
+				window->status = WINDOW_AT_END;
+			} else {
+				//Otherwise we'll set it to be the next one
+				window->instruction3 = window->instruction2->next_statement;
+
+				//If appropriate, flag that we're at the end
+				if(window->instruction3 == NULL){
+					window->status = WINDOW_AT_END;
+				}
+			}
+
+			//This counts as a change 
+			changed = TRUE;
+		}
 	}
 
 	/**
