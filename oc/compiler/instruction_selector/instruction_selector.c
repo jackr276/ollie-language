@@ -330,6 +330,31 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
+	/**
+	 * --------------------- Folding constant assingments in LEA statements ----------------------
+	 *  In cases where we have a lea statement that uses a constant which is assigned to a temporary
+	 *  variable right before it, we should eliminate that unnecessary assingment by folding that constant
+	 *  into the lea statement.
+	 *
+	 *  We can also go one further by performing the said multiplication to get out the value that we want
+	 */
+	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
+		if(window->instruction1->assignee->is_temporary == TRUE &&
+	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+			//Here we have our case for a lea optimization
+		}
+
+	}
+
+	/**
+	 * ------------------------ Optimizing adjacent statements into LEA statements ----------------
+	 *  In cases where we have a multiplication statement next to an addition statement, or vice versa,
+	 *  odds are we can write it as a lea statement
+	 *
+	 */
+
 	//Return whether or not we changed the block
 	return changed;
 }
@@ -389,10 +414,18 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 	//of the blocks to store them all in one chain
 	
 	//The current block
-	basic_block_t* previous = NULL;
+	basic_block_t* previous;
 	//The starting point that all traversals will use
 	basic_block_t* head_block;
-	//TODO Global var block
+
+	//If the global variables are not null, then these
+	//are the global variables
+	if(cfg->global_variables != NULL){
+		head_block = cfg->global_variables;
+		previous = head_block;
+	} else {
+		previous = head_block = NULL;
+	}
 	
 	//We'll need to use a queue every time, we may as well just have one big one
 	heap_queue_t* queue = heap_queue_alloc();

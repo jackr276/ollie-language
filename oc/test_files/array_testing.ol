@@ -13,12 +13,14 @@ fn main(arg:i32, argv:char**) -> i32{
 
 	oneD[1] := 3;
 
+	let mut x:i32 := 33;
+
 	let mut i:i32 := 3;
 	//let mut j:i32* := arr;
 	//j := j + 1;
 	
 	if(arg == 2) then {
-		arr[2][1] := 3;
+		arr[x][1] := 3;
 	} else {
 		i := arr[0][0];
 	}
