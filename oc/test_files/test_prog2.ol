@@ -3,7 +3,9 @@ fn test_func() -> i32 {
 	let mut i:u32 := 232;
 	let mut j:u32 := 32;
 
-	defer i++;
+	defer {
+	i++;
+	};
 
 	while(i >= 232) do{
 		if(i == 2) then{ 
@@ -18,7 +20,9 @@ fn test_func() -> i32 {
 		}
 	}
 
-	defer i++;
+	defer{
+	i++;
+	}; 
 
 	while(i >= 0) do{
 		i--;
@@ -68,8 +72,9 @@ fn main(argc:u32, argv:char**)->i32{
 		let j_copy:u32 := i;
 	}
 
-	defer @test_func();
-	defer @test_func();
+	defer {
+		@test_func();
+	};
 
 	ret j + a;
 }

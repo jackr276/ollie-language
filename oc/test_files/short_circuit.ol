@@ -2,8 +2,17 @@
 * This program is made for the purposes of testing short circuiting logic
 */
 
+fn tester(arg:i32) -> void{
+	arg++;
+}
+
 fn main(arg:i32, argv:char**) -> i32{
 	let mut x:u32 := 232;
+
+	defer {
+		x := x + 3;
+		@tester(x);
+	};
 
 	if(x >= 3 && x <= 32) then{
 		x := x - 3;
@@ -11,6 +20,7 @@ fn main(arg:i32, argv:char**) -> i32{
 		x := x * 2;
 	} else {
 	 	x := x + 3;
+		ret x;
 	}
 
 	//Assign B a start

@@ -60,16 +60,20 @@ fn main() -> i32{
 	jump $label1;
 
 	//Example asm inline statement
-	defer asm{
+	defer {
+		asm{
 		push %rax \
 		push %rbx \
 		mov $2, %rax \
 		addl $3, %rax \
 		pop %rbx \
 		pop %rax \
+		};
 	};
 
-	defer x + 3;	
+	defer {
+		x + 3;	
+	};
 	
 	if(!x) then {
 

@@ -67,7 +67,9 @@ fn main() -> i32{
 	//	pop %rax \
 	//};
 
-	defer x++;	
+	defer {
+		x++;	
+	};
 	
 	if(!x) then {
 		++x;

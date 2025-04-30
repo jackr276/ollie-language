@@ -52,16 +52,21 @@ fn main() -> i32{
 	let mut x:i32 := -2U;
 
 	//Example asm inline statement
-	defer asm{
+	defer {
+		asm{
 		push %rax \
 		push %rbx \
 		mov $2, %rax \
 		addl $3, %rax \
 		pop %rbx \
 		pop %rax \
+		};
 	};
 
-	defer x + 3;	
+	defer { 
+		x := x + 3;	
+		@tester();
+	};
 	
 	if(!x) then {
 		++x;

@@ -15,7 +15,9 @@ fn main() -> i32{
 
 	let mut abc:i32 := 3232;
 
-	defer @println(abc);
+	defer{
+	@println(abc);
+	}; 
 
 	//100% useless
 	if(abc) then {

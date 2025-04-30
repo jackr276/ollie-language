@@ -13,8 +13,6 @@ fn my_func(mut args:u32, mut my_float:f32) -> u32{
 		args++;
 	}
 
-	defer args++;
-	defer args--;
 	
 	if(args == 0) then {
 		ret args;

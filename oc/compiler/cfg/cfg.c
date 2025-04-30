@@ -4491,33 +4491,39 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 		//Handle a defer statement. Remember that a defer statment is one monolithic
 		//node with a bunch of sub-nodes underneath that are all handleable by "expr"
 		} else if(current_node->CLASS == AST_NODE_CLASS_DEFER_STMT){
-			//This really shouldn't happen, but it can't hurt
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
-				current_block = starting_block;
-			}
-
 			//Grab a cursor here
 			generic_ast_node_t* defer_stmt_cursor = current_node->first_child;
 
-			//Ollie lang uniquely allows the user to defer assembly statements. 
-			//This can be useful IF you know what you're doing when it comes to assembly.
-			//Since, if you defer assembly, that is the entire statement, we only
-			//need to worry about emitting it once
-			if(defer_stmt_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-				//Emit the inline assembly that we need here
-				emit_asm_inline_stmt(current_block, defer_stmt_cursor, FALSE);
+			//So long as this cursor is not null, we'll keep processing and adding
+			//compound statements
+			while(defer_stmt_cursor != NULL){
+				//Package the values
+				values_package_t values = pack_values(defer_stmt_cursor, NULL, NULL, NULL);
 
-			//Otherwise it's just a regular deferral
-			} else {
-				//Run through all of the children, emitting their respective
-				//expr codes
-				while(defer_stmt_cursor != NULL){
-					//Let the helper deal with it
-					emit_expr_code(current_block, defer_stmt_cursor, FALSE, FALSE);
-					//Move this up
-					defer_stmt_cursor = defer_stmt_cursor->next_sibling;
-				}			
+				//Let the helper process this
+				basic_block_t* compound_stmt_block = visit_compound_statement(&values);
+
+				//The successor to the current block is this block
+				//If it's null then this is this block
+				if(starting_block == NULL){
+					starting_block = compound_stmt_block;
+				} else {
+					//Otherwise it's a successor
+					add_successor(current_block, compound_stmt_block);
+					//Jump to it - important for optimizer
+					emit_jmp_stmt(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE);
+				}
+
+				//Regardless, the current block now is the compound statement
+				current_block = compound_stmt_block;
+
+				//Once we're here the start is in current, we'll need to drill to the end
+				while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
+					current_block = current_block->direct_successor;
+				}
+
+				//Advance this to the next one
+				defer_stmt_cursor = defer_stmt_cursor->next_sibling;
 			}
 
 		//Handle a labeled statement
@@ -5193,33 +5199,39 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		//Handle a defer statement. Remember that a defer statment is one monolithic
 		//node with a bunch of sub-nodes underneath that are all handleable by "expr"
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DEFER_STMT){
-			//This really shouldn't happen, but it can't hurt
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
-				current_block = starting_block;
-			}
-
 			//Grab a cursor here
 			generic_ast_node_t* defer_stmt_cursor = ast_cursor->first_child;
 
-			//Ollie lang uniquely allows the user to defer assembly statements. 
-			//This can be useful IF you know what you're doing when it comes to assembly.
-			//Since, if you defer assembly, that is the entire statement, we only
-			//need to worry about emitting it once
-			if(defer_stmt_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-				//Emit the inline assembly that we need here
-				emit_asm_inline_stmt(current_block, defer_stmt_cursor, FALSE);
+			//So long as this cursor is not null, we'll keep processing and adding
+			//compound statements
+			while(defer_stmt_cursor != NULL){
+				//Package the values
+				values_package_t values = pack_values(defer_stmt_cursor, NULL, NULL, NULL);
 
-			//Otherwise it's just a regular deferral
-			} else {
-				//Run through all of the children, emitting their respective
-				//expr codes
-				while(defer_stmt_cursor != NULL){
-					//Let the helper deal with it
-					emit_expr_code(current_block, defer_stmt_cursor, FALSE, FALSE);
-					//Move this up
-					defer_stmt_cursor = defer_stmt_cursor->next_sibling;
-				}			
+				//Let the helper process this
+				basic_block_t* compound_stmt_block = visit_compound_statement(&values);
+
+				//The successor to the current block is this block
+				//If it's null then this is this block
+				if(starting_block == NULL){
+					starting_block = compound_stmt_block;
+				} else {
+					//Otherwise it's a successor
+					add_successor(current_block, compound_stmt_block);
+					//Jump to it - important for optimizer
+					emit_jmp_stmt(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE);
+				}
+
+				//Regardless, the current block now is the compound statement
+				current_block = compound_stmt_block;
+
+				//Once we're here the start is in current, we'll need to drill to the end
+				while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
+					current_block = current_block->direct_successor;
+				}
+
+				//Advance this to the next one
+				defer_stmt_cursor = defer_stmt_cursor->next_sibling;
 			}
 
 
