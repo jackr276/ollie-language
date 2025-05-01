@@ -14,5 +14,7 @@ fn main(arg:i32, argv:char**) -> i32 {
 	x := x + y * 8;
 	a := x - 0;
 
+	a := x * 0;
+
 	ret x + y + a;
 }
