@@ -10,6 +10,7 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -64,6 +65,43 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 	//Give back whatever we found
 	return jumps_to;
+}
+
+
+/**
+ * Let's determine if a value is a positive power of 2.
+ * Here's how this will work. In binary, powers of 2 look like:
+ * 0010
+ * 0100
+ * 1000
+ * ....
+ *
+ * In other words, they have exactly 1 on bit that is not in the LSB position
+ *
+ * Here's an example: 5 = 0101, so 5-1 = 0100
+ *
+ * 0101 & (0100) = 0100 which is 4, not 0
+ *
+ * How about 8?
+ * 8 is 1000
+ * 8 - 1 = 0111
+ *
+ * 1000 & 0111 = 0, so 8 is a power of 2
+ *
+ * Therefore, the formula we will use is value & (value - 1) == 0
+ */
+static u_int8_t is_power_of_2(int64_t value){
+	//If it's negative or 0, we're done here
+	if(value <= 0){
+		return FALSE;
+	}
+
+	//Using the bitwise formula described above
+	if((value & (value - 1)) == 0){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
 }
 
 
@@ -408,16 +446,21 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 
 	/**
-	 * ================== Arithmetix Operation Simplifying ==========================
+	 * ================== Arithmetic Operation Simplifying ==========================
 	 * After we do all of this folding, we can stand to ask the question of if we 
 	 * have any simple arithmetic operations that can be folded together. Our first
-	 * example of this is division by 0
+	 * example of this is arithmetic operations with 0
 	 *
 	 * There are many cases here which allow simplification. Here are the first
 	 * few with zero:
 	 *
 	 * t2 <- t4 + 0 can just become t2 <- t4
 	 * t2 <- t4 - 0 can just become t2 <- t4
+	 * t2 <- t4 * 0 can just become t2 <- 0 
+	 * t2 <- t4 / 0 will stay the same, but we will produce an error
+	 * 
+	 *
+	 *
 	 *
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
 	 */
@@ -440,6 +483,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//By default, we assume it's not 0
 			u_int8_t const_is_0 = FALSE;
+			//Is the const a 1?
+			u_int8_t const_is_1 = FALSE;
+			//Is the const a power of 2?
+			u_int8_t const_is_power_of_2 = FALSE;
 
 			//What kind of constant do we have?
 			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST
@@ -447,6 +494,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				//Set the flag if we find anything
 				if(constant->int_const == 0){
 					const_is_0 = TRUE;
+				} else if (constant->int_const == 1){
+					const_is_1 = TRUE;
+				} else {
+					const_is_power_of_2 = is_power_of_2(constant->int_const);
 				}
 
 			//Otherwise, this has to be a long const
@@ -454,12 +505,21 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				//Set the flag if we find zero
 				if(constant->long_const == 0){
 					const_is_0 = TRUE;
+				} else if(constant->long_const == 1){
+					const_is_1 = TRUE;
+				} else {
+					const_is_power_of_2 = is_power_of_2(constant->long_const);
 				}
+
 			//If we have a character constant, this is also a candidate
 			} else if(constant->const_type == CHAR_CONST){
 				//Set the flag if we find zero
 				if(constant->char_const == 0){
 					const_is_0 = TRUE;
+				} else if(constant->char_const == 1){
+					const_is_1 = TRUE;
+				} else {
+					const_is_power_of_2 = is_power_of_2(constant->long_const);
 				}
 			}
 		
