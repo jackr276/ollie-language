@@ -188,6 +188,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
 	//see, we perform one small optimization
 	
+	
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
 	 *
@@ -405,6 +406,79 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * ================== Arithmetix Operation Simplifying ==========================
+	 * After we do all of this folding, we can stand to ask the question of if we 
+	 * have any simple arithmetic operations that can be folded together. Our first
+	 * example of this is division by 0
+	 *
+	 * There are many cases here which allow simplification. Here are the first
+	 * few with zero:
+	 *
+	 * t2 <- t4 + 0 can just become t2 <- t4
+	 * t2 <- t4 - 0 can just become t2 <- t4
+	 *
+	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
+	 */
+	//If we have a bin op with const statement, we have an opportunity
+	//Let's first check instruction 1
+	three_addr_code_stmt_t* current_instruction = window->instruction1;
+	
+	if(current_instruction != NULL && current_instruction->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		//Grab this out for convenience
+		three_addr_const_t* constant = current_instruction->op1_const;
+
+		//By default, we assume it's not 0
+		u_int8_t const_is_0 = FALSE;
+
+		//What kind of constant do we have?
+		if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST
+		   || constant->const_type == INT_CONST_FORCE_U){
+			//Set the flag if we find anything
+			if(constant->int_const == 0){
+				const_is_0 = TRUE;
+			}
+
+		//Otherwise, this has to be a long const
+		} else if(constant->const_type == LONG_CONST || constant->const_type == LONG_CONST_FORCE_U){
+			//Set the flag if we find zero
+			if(constant->long_const == 0){
+				const_is_0 = TRUE;
+			}
+		//If we have a character constant, this is also a candidate
+		} else if(constant->const_type == CHAR_CONST){
+			//Set the flag if we find zero
+			if(constant->char_const == 0){
+				const_is_0 = TRUE;
+			}
+		}
+	
+		//If this is 0, then we can optimize
+		if(const_is_0 == TRUE){
+			//If we made it out of this conditional with the flag being set, we can simplify.
+			//If this is the case, then this just becomes a regular assignment expression
+			if(current_instruction->op == PLUS || current_instruction->op == MINUS){
+				//We're just assigning here
+				current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+				//Wipe the values out
+				current_instruction->op1_const = NULL;
+				current_instruction->op2 = NULL;
+			//If this is a multiplication, we'll turn this into a 0 assignment
+			} else if(current_instruction->op == STAR){
+				//Now we're assigning a const
+				current_instruction->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				//The constant is still the same thing(0), let's just wipe out the ops
+				current_instruction->op1 = NULL;
+				current_instruction->op2 = NULL;
+			//We'll need to throw a warning here about 0 division
+			} else {
+
+			}
+		}
+	}
+
+	
 	/**
 	 * ------------------------ Optimizing adjacent statements into LEA statements ----------------
 	 *  In cases where we have a multiplication statement next to an addition statement, or vice versa,
