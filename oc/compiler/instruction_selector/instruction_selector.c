@@ -541,6 +541,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					current_instruction->op1 = NULL;
 					current_instruction->op2 = NULL;
 				//We'll need to throw a warning here about 0 division
+				// TODO ADD MORE
 				} else {
 
 				}
@@ -549,6 +550,35 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				//did change the instructions, the sliding window itself did not change at all. This is
 				//an important note as if we did mark a change, there are cases where this could
 				//cause an infinite loop
+			
+			//What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
+			//if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
+			//or division
+			} else if(const_is_1 == TRUE){
+				//If it's an addition statement, turn it into an inc statement
+				if(current_instruction->op == PLUS){
+					//Now turn it into an inc statement
+					current_instruction->CLASS = THREE_ADDR_CODE_INC_STMT;
+					//Wipe the values out
+					current_instruction->op1_const = NULL;
+					current_instruction->op = BLANK;
+				//Otherwise if we have a minus, we can turn this into a dec statement
+				} else if(current_instruction->op == MINUS){
+					//Change what the class is
+					current_instruction->CLASS = THREE_ADDR_CODE_DEC_STMT;
+					//Wipe the values out
+					current_instruction->op1_const = NULL;
+					current_instruction->op = BLANK;
+				//What if we have multiplication or division? If so, multiplying/dividing by 1
+				//is idempotent, so we can transform these into assignment statements
+				} else if(current_instruction->op == STAR || current_instruction->op == F_SLASH){
+					//Change it to a regular assignment statement
+					current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+					//Wipe the operator out
+					current_instruction->op1_const = NULL;
+					current_instruction->op = BLANK;
+				}
+				//TODO Add more
 			}
 		}
 	}
