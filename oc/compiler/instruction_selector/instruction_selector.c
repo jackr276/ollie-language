@@ -443,6 +443,64 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			changed = TRUE;
 		}
 	}
+	
+	/**
+	 * =================== Adjacent assignment statement folding ====================
+	 * If we have a binary operation or a bin op with const statement followed by an
+	 * assignment of that result to a non-temporary variable, we have an opportunity
+	 * to simplify. This would lead nicely into the following optimizations below
+	 *
+	 * Example: 
+	 * t12 <- a_2 + 0x1
+	 * a_3 <- t12
+	 * could become
+	 * a_3 <- a_2 + 0x1
+	 */
+
+	//If the first instruction is a binary operation and the immediately following instruction is an assignment
+	//operation, this is a potential match
+	if((window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		|| window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT)
+		&& window->instruction2 != NULL
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+		//For convenience/memory ease
+		three_addr_code_stmt_t* first = window->instruction1;
+		three_addr_code_stmt_t* second = window->instruction2;
+		three_addr_code_stmt_t* third = window->instruction3;
+
+		//If we have a temporary start variable, a non temp end variable, and the variables
+		//match in the corresponding spots, we have our opportunity
+		if(first->assignee->is_temporary == TRUE && second->assignee->is_temporary == FALSE
+			&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
+			//Special no-ssa comparison, we expect that the ssa would be different due to assignment levels
+			&& variables_equal_no_ssa(second->assignee, first->op1, FALSE) == TRUE){
+
+			//We will now take the second variables assignee to be the first statements assignee
+			first->assignee = second->assignee;
+
+			//That's really all we need to do for the first one. Now, we need to delete the second
+			//statement entirely
+			delete_statement(cfg, second->block_contained_in, second);
+
+			//Once it's been deleted, we'll need to take the appropriate steps to update the window
+			window->instruction2 = third;
+
+			//If this one is already NULL, we know we're at the end
+			if(third == NULL){
+				window->instruction3 = NULL;
+				window->status = WINDOW_AT_END;
+			} else {
+				window->instruction3 = third->next_statement;
+				//If this is the case, set the flag
+				if(window->instruction3 == NULL){
+					window->status = WINDOW_AT_END;
+				}
+			}
+
+			//Regardless of what happened here, we did change the window so we'll set the flag
+			changed = TRUE;
+		}
+	}
 
 
 	/**
@@ -556,14 +614,19 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//or division
 			} else if(const_is_1 == TRUE){
 				//If it's an addition statement, turn it into an inc statement
-				if(current_instruction->op == PLUS){
+				/**
+				 * NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
+				 * want to first make sure that the assignees are not temporary variables. If they are temporary variables,
+				 * then doing this would mess the whole operation up
+				 */
+				if(current_instruction->op == PLUS && current_instruction->assignee->is_temporary == FALSE){
 					//Now turn it into an inc statement
 					current_instruction->CLASS = THREE_ADDR_CODE_INC_STMT;
 					//Wipe the values out
 					current_instruction->op1_const = NULL;
 					current_instruction->op = BLANK;
 				//Otherwise if we have a minus, we can turn this into a dec statement
-				} else if(current_instruction->op == MINUS){
+				} else if(current_instruction->op == MINUS && current_instruction->assignee->is_temporary == FALSE){
 					//Change what the class is
 					current_instruction->CLASS = THREE_ADDR_CODE_DEC_STMT;
 					//Wipe the values out

@@ -363,6 +363,12 @@ three_addr_code_stmt_t* emit_idle_statement_three_addr_code();
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection_level);
 
 /**
+ * Are two variables equal regardless of their SSA status? This function should only ever be used
+ * by the instruction selector, under very careful circumstances
+ */
+u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level);
+
+/**
  * Emit a complete, one-for-one copy of a three address code statement
  */
 three_addr_code_stmt_t* copy_three_addr_code_stmt(three_addr_code_stmt_t* copied);
