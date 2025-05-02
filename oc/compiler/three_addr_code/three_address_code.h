@@ -91,6 +91,10 @@ typedef enum{
 	THREE_ADDR_CODE_ASSN_STMT,
 	//Assigning a constant to a variable
 	THREE_ADDR_CODE_ASSN_CONST_STMT,
+	//A right shift statement
+	THREE_ADDR_CODE_RSHIFT_STMT,
+	//A left shift statement
+	THREE_ADDR_CODE_LSHIFT_STMT,
 	//A return statement
 	THREE_ADDR_CODE_RET_STMT,
 	//A jump statement -- used for control flow
@@ -315,6 +319,16 @@ three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var);
  * Emit a label statement here
  */
 three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* var);
+
+/**
+ * Emit a left shift statement
+ */
+three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount);
+
+/**
+ * Emit a right shift statement
+ */
+three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount);
 
 /**
  * Emit a logical not instruction

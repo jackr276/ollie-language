@@ -182,6 +182,52 @@ three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* label)
 
 
 /**
+ * Emit a left shift statement
+ */
+three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount){
+	//First we allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's assign the label
+	stmt->CLASS = THREE_ADDR_CODE_LSHIFT_STMT;
+
+	//And we'll assign the values. The var is the assignee, and the shift amount is always op2
+	stmt->assignee = assignee;
+	stmt->op1 = var;
+	stmt->op2 = shift_amount;
+	//Note the function we're in
+	stmt->function = current_function;
+
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a right shift statement
+ */
+three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount){
+	//First we allocate it
+	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+
+	//Let's assign the label
+	stmt->CLASS = THREE_ADDR_CODE_RSHIFT_STMT;
+
+	//And we'll assign the values. The var is the assignee, and the shift amount is always op2
+	stmt->assignee = assignee;
+	stmt->op1 = var;
+	stmt->op2 = shift_amount;
+	//Note the function we're in
+	stmt->function = current_function;
+
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
  * Emit a direct jump statement. This is used only with jump statements the user has made
  */
 three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jumping_to){
@@ -684,6 +730,67 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 
 		//Now the variable
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+		printf("\n");
+	} else if(stmt->CLASS == THREE_ADDR_CODE_LSHIFT_STMT){
+		//Print out the assignee
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+
+		//Now the assop and keyword
+		printf(" <- LSHIFT ");
+
+		//Now op1
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+
+		printf(", ");
+
+		//Now if we have a constant, we'll print that
+		if(stmt->op1_const != NULL){
+			three_addr_const_t* constant = stmt->op1_const;
+			//We'll now interpret what we have here
+			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST){
+				printf("0x%x", constant->int_const);
+			} else if(constant->const_type == LONG_CONST){
+				printf("0x%lx", constant->long_const);
+			} else if(constant->const_type == CHAR_CONST){
+				printf("'%c'", constant->char_const);
+			}
+
+		} else {
+			print_variable(stmt->op2, PRINTING_VAR_INLINE);
+		}
+
+		//And a newline
+		printf("\n");
+	//We have a right shift statement
+	} else if(stmt->CLASS == THREE_ADDR_CODE_RSHIFT_STMT){
+		//Print out the assignee
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+
+		//Now the assop and keyword
+		printf(" <- RSHIFT ");
+
+		//Now op1
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+
+		printf(", ");
+
+		//Now if we have a constant, we'll print that
+		if(stmt->op1_const != NULL){
+			three_addr_const_t* constant = stmt->op1_const;
+			//We'll now interpret what we have here
+			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST){
+				printf("0x%x", constant->int_const);
+			} else if(constant->const_type == LONG_CONST){
+				printf("0x%lx", constant->long_const);
+			} else if(constant->const_type == CHAR_CONST){
+				printf("'%c'", constant->char_const);
+			}
+
+		} else {
+			print_variable(stmt->op2, PRINTING_VAR_INLINE);
+		}
+
+		//And a newline
 		printf("\n");
 	}
 }
