@@ -2903,11 +2903,37 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	//Store this binary operator
 	package.operator = binary_operator;
 
+	//Generic holder for us
+	three_addr_code_stmt_t* stmt;
+
+	//If the left hand temp's assignee is not null, we'll need to modify that to be so, since all arithmetic
+	//expressions in assembly will modify the first operand
+	//For example:
+	//	add %rax, %rbx is the same as saying %rbx = %rbx + %rax. So whatever RBX was it no longer is
+	
+	three_addr_var_t* op1;
+	
+	//If this is temporary, we're fine. Otherwise emit one
+	if(left_hand_temp.assignee->is_temporary == TRUE){
+		op1 = left_hand_temp.assignee;
+	} else {
+		//emit the temp assignment
+		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(left_hand_temp.assignee->type), left_hand_temp.assignee);
+		//Add it into here
+		add_statement(basic_block, temp_assnment);
+		
+		//We can mark that op1 was used
+		add_used_variable(basic_block, left_hand_temp.assignee);
+		
+		//Grab the assignee out
+		op1 = temp_assnment->assignee;
+	}
+
 	//Emit the binary operator expression using our helper
-	three_addr_code_stmt_t* bin_op_stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), left_hand_temp.assignee, binary_operator, right_hand_temp.assignee);
+	stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), op1, binary_operator, right_hand_temp.assignee);
 
 	//Mark this with what we have
-	bin_op_stmt->is_branch_ending = is_branch_ending;
+	stmt->is_branch_ending = is_branch_ending;
 
 	//If these are not temporary, they also count as live
 	if(left_hand_temp.assignee->is_temporary == FALSE){
@@ -2919,10 +2945,10 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	}
 
 	//Add this statement to the block
-	add_statement(basic_block, bin_op_stmt);
+	add_statement(basic_block, stmt);
 
 	//Store the temporary var as the assignee
-	package.assignee = bin_op_stmt->assignee;
+	package.assignee = stmt->assignee;
 	
 	//Return the temp variable that we assigned to
 	return package;

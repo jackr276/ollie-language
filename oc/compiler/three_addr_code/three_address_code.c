@@ -184,7 +184,7 @@ three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* label)
 /**
  * Emit a left shift statement
  */
-three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount){
+three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const){
 	//First we allocate it
 	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
@@ -194,7 +194,9 @@ three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* a
 	//And we'll assign the values. The var is the assignee, and the shift amount is always op2
 	stmt->assignee = assignee;
 	stmt->op1 = var;
-	stmt->op2 = shift_amount;
+	//Whichever was passed in as non-null doesn't matter. We'll just add them both
+	stmt->op2 = shift_amount_var;
+	stmt->op1_const = shift_amount_const;
 	//Note the function we're in
 	stmt->function = current_function;
 
@@ -207,7 +209,7 @@ three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* a
 /**
  * Emit a right shift statement
  */
-three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount){
+three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amound_const){
 	//First we allocate it
 	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
 
@@ -217,7 +219,9 @@ three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* 
 	//And we'll assign the values. The var is the assignee, and the shift amount is always op2
 	stmt->assignee = assignee;
 	stmt->op1 = var;
-	stmt->op2 = shift_amount;
+	//Whichever was non-null doesn't matter, we'll add both in
+	stmt->op1_const = shift_amound_const;
+	stmt->op2 = shift_amount_var;
 	//Note the function we're in
 	stmt->function = current_function;
 
@@ -736,7 +740,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 
 		//Now the assop and keyword
-		printf(" <- LSHIFT ");
+		printf(" <- lshift ");
 
 		//Now op1
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);
@@ -767,7 +771,7 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
 
 		//Now the assop and keyword
-		printf(" <- RSHIFT ");
+		printf(" <- rshift ");
 
 		//Now op1
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);

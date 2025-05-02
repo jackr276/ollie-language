@@ -323,12 +323,12 @@ three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* var);
 /**
  * Emit a left shift statement
  */
-three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount);
+three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const);
 
 /**
  * Emit a right shift statement
  */
-three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount);
+three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount, three_addr_const_t* shift_amount_const);
 
 /**
  * Emit a logical not instruction
