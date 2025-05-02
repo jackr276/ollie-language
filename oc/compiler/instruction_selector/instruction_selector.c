@@ -250,13 +250,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction1->assignee->is_temporary == TRUE &&
 			variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 			//Grab this out for convenience
-			three_addr_code_stmt_t* constant_assingment = window->instruction2;
+			three_addr_code_stmt_t* binary_operation = window->instruction2;
 
 			//Now we'll modify this to be an assignment const statement
-			constant_assingment->op1_const = window->instruction1->op1_const;
+			binary_operation->op1_const = window->instruction1->op1_const;
 
 			//Modify the type of the assignment
-			constant_assingment->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+			binary_operation->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 			//Once we've done this, the first statement is entirely useless
 			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
@@ -264,7 +264,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Once we've deleted the statement, we'll need to completely rewire the block
 			
 			//The second instruction is now the first one
-			window->instruction1 = constant_assingment;
+			window->instruction1 = binary_operation;
 			//Now instruction 2 becomes instruction 3
 			window->instruction2 = window->instruction3;
 
@@ -292,13 +292,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction2->assignee->is_temporary == TRUE &&
 			variables_equal(window->instruction2->assignee, window->instruction3->op1, FALSE) == TRUE){
 			//Grab this out for convenience
-			three_addr_code_stmt_t* constant_assingment = window->instruction3;
+			three_addr_code_stmt_t* binary_operation = window->instruction3;
 
 			//Now we'll modify this to be an assignment const statement
-			constant_assingment->op1_const = window->instruction2->op1_const;
+			binary_operation->op1_const = window->instruction2->op1_const;
 
 			//Modify the type of the assignment
-			constant_assingment->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+			binary_operation->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 			//Once we've done this, the first statement is entirely useless
 			delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
@@ -306,7 +306,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Once we've deleted the statement, we'll need to completely rewire the block
 			
 			//The second instruction is now the first one
-			window->instruction2 = constant_assingment;
+			window->instruction2 = binary_operation;
 			//Now instruction 2 becomes instruction 3
 			window->instruction3 = window->instruction3->next_statement;
 
@@ -326,6 +326,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
 	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
 	 */
+	//Check first with 1 and 2
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
@@ -333,7 +334,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
-			three_addr_code_stmt_t* const_assingment = window->instruction1;
+			three_addr_code_stmt_t* const_assignment = window->instruction1;
 
 			//Let's mark that this is now a binary op with const statement
 			window->instruction2->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -342,7 +343,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			window->instruction2->op2 = NULL;
 			
 			//We'll replace it with the op1 const that we've gotten from the prior instruction
-			window->instruction2->op1_const = const_assingment->op1_const;
+			window->instruction2->op1_const = const_assignment->op1_const;
 
 			//We can now delete the very first statement
 			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
@@ -368,6 +369,45 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			changed = TRUE;
 		}
 	}
+
+	//Now check with 1 and 3. The prior compression may have made this more worthwhile
+	if(window->instruction3 != NULL && window->instruction3->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
+		if(window->instruction1->assignee->is_temporary == TRUE &&
+			variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
+			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
+			//Grab this out for convenience
+			three_addr_code_stmt_t* const_assignment = window->instruction1;
+
+			//Let's mark that this is now a binary op with const statement
+			window->instruction3->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//We'll want to NULL out the secondary variable in the operation
+			window->instruction3->op2 = NULL;
+			
+			//We'll replace it with the op1 const that we've gotten from the prior instruction
+			window->instruction3->op1_const = const_assignment->op1_const;
+
+			//We can now delete the very first statement
+			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+
+			//Following this, we'll shift everything appropriately now that instruction1 is gone
+			window->instruction1 = window->instruction2;
+			window->instruction2 = window->instruction3;
+
+			//Otherwise we'll shift this forward
+			window->instruction3 = window->instruction2->next_statement;
+			//Make sure that we still mark if need be
+			if(window->instruction3 == NULL){
+				window->status = WINDOW_AT_END;
+			}
+
+			//This does count as a change
+			changed = TRUE;
+		}
+	}
+	
 
 	/**
 	 * --------------------- Folding constant assingments in LEA statements ----------------------
