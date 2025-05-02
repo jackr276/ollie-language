@@ -2228,12 +2228,15 @@ static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* 
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
-void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending){
+void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
 	//Use the helper function to emit the statement
 	three_addr_code_stmt_t* stmt = emit_jmp_stmt_three_addr_code(dest_block, type);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
+
+	//Is this an inverse jump? Important for optimization down the line
+	stmt->inverse_jump = inverse_jump;
 
 	//Add this into the first block
 	add_statement(basic_block, stmt);
@@ -3628,7 +3631,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	add_successor(for_stmt_entry_block, condition_block);
 
 	//We will now emit a jump from the entry block, to the condition block
-	emit_jmp_stmt(for_stmt_entry_block, condition_block, JUMP_TYPE_JMP ,TRUE);
+	emit_jmp_stmt(for_stmt_entry_block, condition_block, JUMP_TYPE_JMP ,TRUE, FALSE);
 
 	//Move along to the next node
 	ast_cursor = ast_cursor->next_sibling;
@@ -3665,7 +3668,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	}
 	
 	//Unconditional jump to condition block
-	emit_jmp_stmt(for_stmt_update_block, condition_block, JUMP_TYPE_JMP, TRUE);
+	emit_jmp_stmt(for_stmt_update_block, condition_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//This node will always jump right back to the start
 	add_successor(for_stmt_update_block, condition_block);
@@ -3702,8 +3705,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		//exit
 		add_successor(condition_block, for_stmt_exit_block);
 
-		//Make the condition block jump to the exit
-		emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type, TRUE);
+		//Make the condition block jump to the exit. This is an inverse jump
+		emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
 
 		//And we're done
 		return for_stmt_entry_block;
@@ -3716,11 +3719,11 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//if the condition fails, we will be jumping here
 	add_successor(condition_block, for_stmt_exit_block);
 
-	//Make the condition block jump to the compound stmt start
-	emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type, TRUE);
+	//Make the condition block jump to the exit. This is an inverse jump
+	emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
 
 	//Emit a direct jump from the condition block to the compound stmt start
-	emit_jmp_stmt(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE);
+	emit_jmp_stmt(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
@@ -3733,7 +3736,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If it ends in a return statement, there is no point in continuing this
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
 		//We also need an uncoditional jump right to the update block
-		emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP, TRUE);
+		emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
 	//We'll add the successor either way for control flow reasons
@@ -3789,7 +3792,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//No matter what, this will get merged into the top statement
 	add_successor(do_while_stmt_entry_block, do_while_compound_stmt_entry);
 	//Now we'll jump to it
-	emit_jmp_stmt(do_while_stmt_entry_block, do_while_compound_stmt_entry, JUMP_TYPE_JMP, TRUE);
+	emit_jmp_stmt(do_while_stmt_entry_block, do_while_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//We will drill to the bottom of the compound statement
 	basic_block_t* compound_stmt_end = do_while_stmt_entry_block;
@@ -3823,9 +3826,9 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 		
 	//We'll need a jump statement here to the entrance block
-	emit_jmp_stmt(compound_stmt_end, do_while_stmt_entry_block, jump_type, TRUE);
+	emit_jmp_stmt(compound_stmt_end, do_while_stmt_entry_block, jump_type, TRUE, FALSE);
 	//Also emit a jump statement to the ending block
-	emit_jmp_stmt(compound_stmt_end, do_while_stmt_exit_block, JUMP_TYPE_JMP, TRUE);
+	emit_jmp_stmt(compound_stmt_end, do_while_stmt_exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//Always return the entry block
 	return do_while_stmt_entry_block;
@@ -3892,13 +3895,13 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	//we're bad, so we'll do an inverse jump
 	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 	//"Jump over" the body if it's bad
-	emit_jmp_stmt(while_statement_entry_block, while_statement_end_block, jump_type, TRUE);
+	emit_jmp_stmt(while_statement_entry_block, while_statement_end_block, jump_type, TRUE, TRUE);
 
 	//Otherwise it isn't null, so we can add it as a successor
 	add_successor(while_statement_entry_block, compound_stmt_start);
 
 	//We want to have a direct jump to the body too
-	emit_jmp_stmt(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE);
+	emit_jmp_stmt(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//The exit block is also a successor to the entry block
 	add_successor(while_statement_entry_block, while_statement_end_block);
@@ -3918,7 +3921,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		//His direct successor is the end block
 		compound_stmt_end->direct_successor = while_statement_end_block;
 		//The compound statement end will jump right back up to the entry block
-		emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP, TRUE);
+		emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
 	//Set this to make sure
@@ -3965,7 +3968,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//We'll just set this to jump out of here
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-		emit_jmp_stmt(entry_block, exit_block, jump_to_if, TRUE);
+		emit_jmp_stmt(entry_block, exit_block, jump_to_if, TRUE, FALSE);
 		add_successor(entry_block, exit_block);
 
 	//We expect this to be the most likely option
@@ -3974,7 +3977,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		add_successor(entry_block, if_compound_stmt_entry);
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-		emit_jmp_stmt(entry_block, if_compound_stmt_entry, jump_to_if, TRUE);
+		emit_jmp_stmt(entry_block, if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
 
 		//Now we'll find the end of this statement
 		if_compound_stmt_end = if_compound_stmt_entry;
@@ -3987,7 +3990,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//If this is not a return block, we will add these
 		if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
 			//The successor to the if-stmt end path is the if statement end block
-			emit_jmp_stmt(if_compound_stmt_end, exit_block, JUMP_TYPE_JMP, TRUE);
+			emit_jmp_stmt(if_compound_stmt_end, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			//If this is the case, the end block is a successor of the if_stmt end
 			add_successor(if_compound_stmt_end, exit_block);
 		}
@@ -4020,7 +4023,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//The new one is a successor of the old one
 		add_successor(temp, current_entry_block);
 		//And we'll emit a direct jump from the old one to the new one
-		emit_jmp_stmt(temp, current_entry_block, JUMP_TYPE_JMP, TRUE);
+		emit_jmp_stmt(temp, current_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 		//So we've seen the else-if clause. Let's grab the expression first
 		package = emit_expr_code(current_entry_block, else_if_cursor, TRUE, TRUE);
@@ -4046,7 +4049,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//We'll just set this to jump out of here
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-			emit_jmp_stmt(current_entry_block, exit_block, jump_to_else_if, TRUE);
+			emit_jmp_stmt(current_entry_block, exit_block, jump_to_else_if, TRUE, FALSE);
 			add_successor(current_entry_block, exit_block);
 
 		//We expect this to be the most likely option
@@ -4055,7 +4058,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			add_successor(current_entry_block, else_if_compound_stmt_entry);
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-			emit_jmp_stmt(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE);
+			emit_jmp_stmt(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
 			else_if_compound_stmt_exit = else_if_compound_stmt_entry;
@@ -4068,7 +4071,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//If this is not a return block, we will add these
 			if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
-				emit_jmp_stmt(else_if_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(else_if_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
 				add_successor(else_if_compound_stmt_exit, exit_block);
 			}
@@ -4099,12 +4102,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//We'll jump to the end here
 			add_successor(current_entry_block, exit_block);
 			//Emit a direct jump here
-			emit_jmp_stmt(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE);
+			emit_jmp_stmt(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 		} else {
 			//Add the if statement node in as a direct successor
 			add_successor(current_entry_block, else_compound_stmt_entry);
 			//We will perform a normal jump to this one
-			emit_jmp_stmt(current_entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP, TRUE);
+			emit_jmp_stmt(current_entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
 			else_compound_stmt_exit = else_compound_stmt_entry;
@@ -4117,7 +4120,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//If this is not a return block, we will add these
 			if(else_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
-				emit_jmp_stmt(else_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(else_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
 				add_successor(else_compound_stmt_exit, exit_block);
 			}
@@ -4128,7 +4131,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//We'll jump to the end here
 		add_successor(current_entry_block, exit_block);
 		//Emit a direct jump here
-		emit_jmp_stmt(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE);
+		emit_jmp_stmt(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
 	//For our convenience - this makes drilling way faster
@@ -4270,7 +4273,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//Add this in as a successor to current
 				add_successor(current_block, if_stmt_start);
 				//Emit a jump from current to the start
-				emit_jmp_stmt(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 				//Now reassign current
 				current_block = if_stmt_start;
 			}
@@ -4301,7 +4304,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			} else {
 				//Add as a successor
 				add_successor(current_block, while_stmt_entry_block);
-				emit_jmp_stmt(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//Set the current block here
@@ -4331,7 +4334,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//We never merge do-while's, they are strictly successors
 			} else {
 				add_successor(current_block, do_while_stmt_entry_block);
-				emit_jmp_stmt(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//Now we'll need to reach the end-point of this statement
@@ -4363,7 +4366,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Don't merge, just add successors
 			} else {
 				add_successor(current_block, for_stmt_entry_block);
-				emit_jmp_stmt(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				current_block = for_stmt_entry_block;
 			}
 			
@@ -4400,14 +4403,14 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//the loop entry block
 					add_successor(current_block, values->loop_stmt_start);
 					//We always jump to the start of the loop statement unconditionally
-					emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
 					add_successor(current_block, values->for_loop_update_block);
 					//Emit a direct unconditional jump statement to it
-					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//We're done here, so return the starting block. There is no 
@@ -4436,9 +4439,9 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//Restore the direct successor
 					current_block->direct_successor = new_block;
 					//We always jump to the start of the loop statement unconditionally
-					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type, TRUE);
+					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
 					//Emit a direct jump to the new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//We are in a for loop
 				} else {
@@ -4449,9 +4452,9 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//The direct successor of the current block is the new block
 					current_block->direct_successor = new_block;
 					//Emit a direct unconditional jump statement to it
-					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE);
+					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
 					//Emit a direct jump to the new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//This is now the current block
@@ -4482,7 +4485,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//Otherwise we need to break out of the loop
 				add_successor(current_block, values->loop_stmt_end);
 				//We will jump to it -- this is always an uncoditional jump
-				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//For a regular break statement, this is it, so we just get out
 				//Give back the starting block
@@ -4507,9 +4510,9 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
 				//Emit our conditional jump now
-				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE);
+				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
 				//Emit a jump statement to the new block. This will count as our "else"
-				emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//And finally - we set the current block to be the new block
 				current_block = new_block;
 			}
@@ -4537,7 +4540,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//Otherwise it's a successor
 					add_successor(current_block, compound_stmt_block);
 					//Jump to it - important for optimizer
-					emit_jmp_stmt(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//Regardless, the current block now is the compound statement
@@ -4809,7 +4812,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		add_successor(current_block, ending_block);
 
 		//We will always emit a direct jump from this block to the ending block
-		emit_jmp_stmt(current_block, ending_block, JUMP_TYPE_JMP, TRUE);
+		emit_jmp_stmt(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
@@ -4842,14 +4845,14 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL);
 	//Now we'll emit our jump
-	emit_jmp_stmt(starting_block, default_block, jump_lower_than, TRUE);
+	emit_jmp_stmt(starting_block, default_block, jump_lower_than, TRUE, FALSE);
 
 	//Next step -> if we're above the maximum, jump to default
 	emit_binary_op_with_constant_code(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package.assignee, G_THAN, upper_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL);
 	//Now we'll emit our jump
-	emit_jmp_stmt(starting_block, default_block, jump_greater_than, TRUE);
+	emit_jmp_stmt(starting_block, default_block, jump_greater_than, TRUE, FALSE);
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
@@ -4976,7 +4979,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Add a successor to the current block
 				add_successor(current_block, if_stmt_start);
 				//Emit a jump from current to the start
-				emit_jmp_stmt(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 				current_block = if_stmt_start;
 			}
 
@@ -5007,7 +5010,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Add as a successor
 				add_successor(current_block, while_stmt_entry_block);
 				//Emit a direct jump to it
-				emit_jmp_stmt(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//Let's now drill to the bottom
@@ -5037,7 +5040,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We never merge do-while's, they are strictly successors
 			} else {
 				add_successor(current_block, do_while_stmt_entry_block);
-				emit_jmp_stmt(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//Now we'll need to reach the end-point of this statement
@@ -5069,7 +5072,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We don't merge, we'll add successors
 			} else {
 				add_successor(current_block, for_stmt_entry_block);
-				emit_jmp_stmt(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				current_block = for_stmt_entry_block;
 			}
 			
@@ -5106,14 +5109,14 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//the loop entry block
 					add_successor(current_block, values->loop_stmt_start);
 					//We always jump to the start of the loop statement unconditionally
-					emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
 					add_successor(current_block, values->for_loop_update_block);
 					//Emit a direct unconditional jump statement to it
-					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//We're done here, so return the starting block. There is no 
@@ -5142,9 +5145,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//Restore the direct successor
 					current_block->direct_successor = new_block;
 					//We always jump to the start of the loop statement unconditionally
-					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type, TRUE);
+					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
 					//The other end of the conditional continue will be jumping to this new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
@@ -5155,9 +5158,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//Restore the direct successor
 					current_block->direct_successor = new_block;
 					//Emit a direct unconditional jump statement to it
-					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE);
+					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
 					//The other end of the conditional continue will be jumping to this new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//And as we go forward, this new block will be the current block
@@ -5188,7 +5191,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//We'll need to break out of the loop
 				add_successor(current_block, values->loop_stmt_end);
 				//We will jump to it -- this is always an uncoditional jump
-				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//For a regular break statement, this is it, so we just get out
 				//Give back the starting block
@@ -5214,9 +5217,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block->direct_successor = new_block;
 
 				//We will jump to it -- this jump is decided above
-				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE);
+				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
 				//Emit a jump to the new block
-				emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//Once we're out here, the current block is now the new one
 				current_block = new_block;
@@ -5245,7 +5248,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//Otherwise it's a successor
 					add_successor(current_block, compound_stmt_block);
 					//Jump to it - important for optimizer
-					emit_jmp_stmt(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//Regardless, the current block now is the compound statement
@@ -5301,7 +5304,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Otherwise this is a direct successor
 				add_successor(current_block, switch_stmt_entry);
 				//We will also emit a jump from the current block to the entry
-				emit_jmp_stmt(current_block, switch_stmt_entry, JUMP_TYPE_JMP, TRUE);
+				emit_jmp_stmt(current_block, switch_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//We need to drill to the end

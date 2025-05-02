@@ -219,6 +219,9 @@ struct three_addr_code_stmt_t{
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
+	//Are we jumping to if?(Affirmative jump) Our if statements and do while blocks
+	//use this in the conditional. Otherwise, we're jumping to else, which is an inverse jump
+	u_int8_t inverse_jump;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
 	//Memory access type

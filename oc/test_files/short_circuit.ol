@@ -14,6 +14,7 @@ fn main(arg:i32, argv:char**) -> i32{
 		@tester(x);
 	};
 
+	
 	if(x >= 3 && x <= 32) then{
 		x := x - 3;
 	} else if(x < 2 && (x != 1 || x != 2)) then {
@@ -22,6 +23,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	 	x := x + 3;
 		ret x;
 	}
+	
 
 	//Assign B a start
 	let mut b:i32 := 33;
@@ -29,7 +31,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	while(b >= 9 && b <= 32) do{
 		b--;
 		x := x - 1;
-	}
+	} 
 
 	//So it isn't optimized away
 	ret x;

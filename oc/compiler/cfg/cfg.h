@@ -58,8 +58,10 @@ typedef enum{
 	BLOCK_TYPE_FUNC_EXIT, //Block is a function exit
 	BLOCK_TYPE_DO_WHILE_END, //End of a do-while
 	BLOCK_TYPE_IF_STMT_END, //End of an if-statement
+	BLOCK_TYPE_WHILE_ENTRY, //While statement entry
 	BLOCK_TYPE_WHILE_END, //End of a while statement
 	BLOCK_TYPE_FOR_STMT_END, //End of a for statement
+	BLOCK_TYPE_FOR_STMT_CONDITIONAL, //For statement conditional block
 	BLOCK_TYPE_FOR_STMT_UPDATE, //Update block of a for statement
 } block_type_t;
 
@@ -200,7 +202,7 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh);
 /**
  * Emit a jump statement directly into a block
  */
-void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending);
+void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump);
 
 /**
  * For DEBUGGING purposes - we will print all of the blocks in the control

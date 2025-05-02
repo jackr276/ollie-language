@@ -271,7 +271,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 					delete_all_branching_statements(cfg, current);
 					//Once we're done deleting, we'll emit a jump right to that jumping to
 					//block. This constitutes our "fold"
-					emit_jmp_stmt(current, end_branch_target, JUMP_TYPE_JMP, TRUE);
+					emit_jmp_stmt(current, end_branch_target, JUMP_TYPE_JMP, TRUE, FALSE);
 					//This does mean that we've changed
 					changed = TRUE;
 				}
