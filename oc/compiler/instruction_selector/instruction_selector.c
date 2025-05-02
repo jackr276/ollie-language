@@ -322,6 +322,51 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	/**
+	 * --------------------- Redundnant copying elimination ------------------------------------
+	 *  Let's now fold redundant copies. Here is an example of a redundant copy
+	 * 	t10 <- x_2
+	 * 	t11 <- t10
+	 *
+	 * This can be folded into simply:
+	 * 	t11 <- x_2
+	 */
+	//If we have two consecutive assignment statements
+	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT &&
+		window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+		//Grab these out for convenience
+		three_addr_code_stmt_t* first = window->instruction1;
+		three_addr_code_stmt_t* second = window->instruction2;
+		
+		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
+		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, FALSE) == TRUE){
+			//Reorder the op1's
+			second->op1 = first->op1;
+
+			//We can now delete the first statement
+			delete_statement(cfg, first->block_contained_in, first);
+
+			//Once the first one has been deleted, we'll need to fold down
+			window->instruction1 = second;
+			window->instruction2 = second->next_statement;
+
+			//We need to account for this case
+			if(window->instruction2 == NULL){
+				window->instruction3 = NULL;
+				window->status = WINDOW_AT_END;
+			} else {
+				window->instruction3 = window->instruction2->next_statement;
+				//Mark where appropriate
+				if(window->instruction3 == NULL){
+					window->status = WINDOW_AT_END;
+				}
+			}
+
+			//Regardless of what happened, we did see a change here
+			changed = TRUE;
+		}
+	}
+
+	/**
 	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
 	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
 	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
