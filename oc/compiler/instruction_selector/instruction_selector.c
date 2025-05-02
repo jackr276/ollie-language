@@ -407,6 +407,75 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			changed = TRUE;
 		}
 	}
+
+	/**
+	 * -------------------- Arithmetic expressions with assignee the same as op1 ---------------------
+	 *  There will be times where we generate arithmetic expressions like this:
+	 *
+	 * 	t19 <- a_3
+	 * 	t20 <- t19 + y_0
+	 * 	a_4 <- t20
+	 *
+	 *  Since a_4 and a_3 are the same variable(register), this is an ideal candidate to be compressed
+	 *  like
+	 *
+	 *  a_4 <- a_3 + y_0
+	 *
+	 * This 3-instruction large optimizaion will look for this
+	 */
+	//If the first statement is an assignmehnt statement, and the second statement is a binary operation,
+	//and the third statement is an assignment statement, we have our chance to optimize
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2 != NULL && (window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_STMT ||
+		window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT) && window->instruction3 != NULL
+		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+
+		//Grab these out for convenience
+		three_addr_code_stmt_t* first = window->instruction1;
+		three_addr_code_stmt_t* second = window->instruction2;
+		three_addr_code_stmt_t* third = window->instruction3;
+
+		//We still need further checks to see if this is indeed the pattern above. If
+		//we survive all of these checks, we know that we're set to optimize
+		if(first->assignee->is_temporary == TRUE && third->assignee->is_temporary == FALSE &&
+			variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE &&
+	 		variables_equal(first->assignee, second->op1, FALSE) == TRUE &&
+	 		variables_equal(second->assignee, third->op1, FALSE) == TRUE){
+
+			//The second op1 will now become the first op1
+			second->op1 = first->op1;
+
+			//And the second's assignee will now be the third's assignee
+			second->assignee = third->assignee;
+
+			//Following this, all we need to do is delete and rearrange
+			delete_statement(cfg, first->block_contained_in, first);
+			delete_statement(cfg, third->block_contained_in, third);
+
+			//Now that the second is the only one left, we'll shift the window down
+			//Second becomes first
+			window->instruction1 = second;
+			window->instruction2 = second->next_statement;
+
+			//We need to account for cases where this happens
+			if(window->instruction2 == NULL){
+				window->instruction3 = NULL;
+				window->status = WINDOW_AT_END;
+
+			} else {
+				//Advance it
+				window->instruction3 = window->instruction2->next_statement;
+				//Set this when appropriate
+				if(window->instruction3 == NULL){
+					window->status = WINDOW_AT_END;
+				}
+			}
+
+			//Regardless of what happened, we did change the window, so we'll
+			//update this
+			changed = TRUE;
+		}
+	}
 	
 
 	/**
