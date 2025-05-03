@@ -17,7 +17,7 @@
 #include <sys/types.h>
 
 //A struct that holds all knowledge of three address codes
-typedef struct three_addr_code_stmt_t three_addr_code_stmt_t;
+typedef struct instruction_t instruction_t;
 //A struct that holds our three address variables
 typedef struct three_addr_var_t three_addr_var_t;
 //A struct that holds our three address constants
@@ -205,13 +205,13 @@ struct three_addr_const_t{
  * A generic struct that encapsulates most of our three address code
  * statements
  */
-struct three_addr_code_stmt_t{
+struct instruction_t{
 	//What block holds this?
 	void* block_contained_in;
 	//For linked list properties -- the next statement
-	three_addr_code_stmt_t* next_statement;
+	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
-	three_addr_code_stmt_t* previous_statement;
+	instruction_t* previous_statement;
 	//A three address code always has 2 operands and an assignee
 	three_addr_var_t* op1;
 	//For convenience: op1 can also be a const sometimes
@@ -294,115 +294,115 @@ three_addr_const_t* emit_int_constant_direct(int int_const);
 /**
  * Emit a statement that is in LEA form
  */
-three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
-three_addr_code_stmt_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* jump_table, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* jump_table, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit a statement using three vars and a binary operator
  * ALL statements are of the form: assignee <- op1 operator op2
 */
-three_addr_code_stmt_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2); 
+instruction_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2); 
 
 /**
  * Emit a statement using two vars and a constant
  */
-three_addr_code_stmt_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2); 
+instruction_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2); 
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2
  */
-three_addr_code_stmt_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
-three_addr_code_stmt_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_const_t* constant);
+instruction_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_const_t* constant);
 
 /**
  * Emit a return statement. The return statement can optionally have a node that we're returning.
  * Returnee may or may not be null
  */
-three_addr_code_stmt_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee);
+instruction_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee);
 
 /**
  * Emit an increment instruction
  */
-three_addr_code_stmt_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incrementee);
+instruction_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incrementee);
 
 /**
  * Emit a decrement instruction
  */
-three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decrementee);
+instruction_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decrementee);
 
 /**
  * Emit a negation(negX) statement
  */
-three_addr_code_stmt_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* negatee);
+instruction_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* negatee);
 
 /**
  * Emit a bitwise not instruction
  */
-three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var);
+instruction_t* emit_not_stmt_three_addr_code(three_addr_var_t* var);
 
 /**
  * Emit a label statement here
  */
-three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* var);
+instruction_t* emit_label_stmt_three_addr_code(three_addr_var_t* var);
 
 /**
  * Emit a left shift statement
  */
-three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const);
+instruction_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const);
 
 /**
  * Emit a right shift statement
  */
-three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount, three_addr_const_t* shift_amount_const);
+instruction_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount, three_addr_const_t* shift_amount_const);
 
 /**
  * Emit a logical not instruction
  */
-three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var);
+instruction_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var);
 
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
-three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, jump_type_t jump_type);
+instruction_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, jump_type_t jump_type);
 
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-three_addr_code_stmt_t* emit_indirect_jmp_stmt_three_addr_code(three_addr_var_t* address, jump_type_t jump_type);
+instruction_t* emit_indirect_jmp_stmt_three_addr_code(three_addr_var_t* address, jump_type_t jump_type);
 
 /**
  * Emit a direct jump statement. This is used only with jump statements the user has made
  */
-three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jumping_to);
+instruction_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jumping_to);
 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in
  */
-three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
+instruction_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
 
 /**
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
  * by any future optimizations
  */
-three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node);
+instruction_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node);
 
 /**
  * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
  */
-three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable);
+instruction_t* emit_phi_function(symtab_variable_record_t* variable);
 
 /**
  * Emit an idle statement
  */
-three_addr_code_stmt_t* emit_idle_statement_three_addr_code();
+instruction_t* emit_idle_statement_three_addr_code();
 
 /**
  * Are two variables equal? A helper method for searching
@@ -418,12 +418,12 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
 /**
  * Emit a complete, one-for-one copy of a three address code statement
  */
-three_addr_code_stmt_t* copy_three_addr_code_stmt(three_addr_code_stmt_t* copied);
+instruction_t* copy_three_addr_code_stmt(instruction_t* copied);
 
 /**
  * Pretty print a three address code statement
 */
-void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt);
+void print_three_addr_code_stmt(instruction_t* stmt);
 
 /**
  * Print a variable and everything about it. If the variable is in
@@ -439,7 +439,7 @@ void three_addr_var_dealloc(three_addr_var_t* var);
 /**
  * Destroy an entire three address code statement
 */
-void three_addr_stmt_dealloc(three_addr_code_stmt_t* stmt);
+void instruction_dealloc(instruction_t* stmt);
 
 /**
  * Destroy all variables

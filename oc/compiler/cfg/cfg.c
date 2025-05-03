@@ -615,7 +615,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Now grab a cursor and print out every statement that we 
 	//have
-	three_addr_code_stmt_t* cursor = block->leader_statement;
+	instruction_t* cursor = block->leader_statement;
 
 	//So long as it isn't null
 	while(cursor != NULL){
@@ -637,7 +637,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
  * This statement also takes care of the linking that we need to do. When we have a phi-function, we'll
  * need to link it back to whichever variables it refers to
  */
-static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi_statement){
+static void add_phi_statement(basic_block_t* target, instruction_t* phi_statement){
 	//Generic fail case - this should never happen
 	if(target == NULL){
 		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
@@ -669,7 +669,7 @@ static void add_phi_statement(basic_block_t* target, three_addr_code_stmt_t* phi
 /**
  * Add a parameter to a phi statement
  */
-static void add_phi_parameter(three_addr_code_stmt_t* phi_statement, three_addr_var_t* var){
+static void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* var){
 	//If we've not yet given the dynamic array
 	if(phi_statement->phi_function_parameters == NULL){
 		//Take care of allocation then
@@ -684,7 +684,7 @@ static void add_phi_parameter(three_addr_code_stmt_t* phi_statement, three_addr_
 /**
  * Add a statement to the target block, following all standard linked-list protocol
  */
-void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node){
+void add_statement(basic_block_t* target, instruction_t* statement_node){
 	//Generic fail case
 	if(target == NULL){
 		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
@@ -723,7 +723,7 @@ void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node
 /**
  * Delete a statement from the CFG - handling any/all edge cases that may arise
  */
-void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt){
+void delete_statement(cfg_t* cfg, basic_block_t* block, instruction_t* stmt){
 	//If it's the leader statement, we'll just update the references
 	if(block->leader_statement == stmt){
 		//Special case - it's the only statement. We'll just delete it here
@@ -741,7 +741,7 @@ void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* 
 
 	//What if it's the exit statement?
 	} else if(block->exit_statement == stmt){
-		three_addr_code_stmt_t* previous = stmt->previous_statement;
+		instruction_t* previous = stmt->previous_statement;
 		//Nothing at the end
 		previous->next_statement = NULL;
 
@@ -751,8 +751,8 @@ void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* 
 	//Otherwise, we have one in the middle
 	} else {
 		//Regular middle deletion here
-		three_addr_code_stmt_t* previous = stmt->previous_statement;
-		three_addr_code_stmt_t* next = stmt->next_statement;
+		instruction_t* previous = stmt->previous_statement;
+		instruction_t* next = stmt->next_statement;
 		previous->next_statement = next;
 		next->previous_statement = previous;
 	}
@@ -1811,7 +1811,7 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 
 						//If we make it here that means that we don't already have one, so we'll add it
 						//This function only emits the skeleton of a phi function
-						three_addr_code_stmt_t* phi_stmt = emit_phi_function(record);
+						instruction_t* phi_stmt = emit_phi_function(record);
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
@@ -1918,7 +1918,7 @@ static void rename_block(basic_block_t* entry){
 
 	//Grab out our leader statement here. We will iterate over all statements
 	//looking for phi functions
-	three_addr_code_stmt_t* cursor = entry->leader_statement;
+	instruction_t* cursor = entry->leader_statement;
 
 	//So long as this isn't null
 	while(cursor != NULL){
@@ -1979,7 +1979,7 @@ static void rename_block(basic_block_t* entry){
 		//here, we'll want to add that newly renamed defined variable into the phi function parameters
 		
 		//Yet another cursor
-		three_addr_code_stmt_t* succ_cursor = successor->leader_statement;
+		instruction_t* succ_cursor = successor->leader_statement;
 
 		//So long as it isn't null AND it's a phi function
 		while(succ_cursor != NULL && succ_cursor->CLASS == THREE_ADDR_CODE_PHI_FUNC){
@@ -2064,7 +2064,7 @@ static three_addr_var_t* emit_lea_stmt(basic_block_t* basic_block, three_addr_va
 	}
 
 	//Now we leverage the helper to emit this
-	three_addr_code_stmt_t* stmt = emit_lea_stmt_three_addr_code(assignee, base_addr, offset, base_type->type_size);
+	instruction_t* stmt = emit_lea_stmt_three_addr_code(assignee, base_addr, offset, base_type->type_size);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2090,7 +2090,7 @@ static three_addr_var_t* emit_indirect_jump_addr_calc_stmt(basic_block_t* basic_
 	}
 
 	//Use the helper to emit it - type size is 8 because it's an address
-	three_addr_code_stmt_t* stmt = emit_indir_jump_address_calc_three_addr_code(assignee, initial_address, mutliplicand, 8);
+	instruction_t* stmt = emit_indir_jump_address_calc_three_addr_code(assignee, initial_address, mutliplicand, 8);
 
 	//Mark it as branch ending
 	stmt->is_branch_ending = is_branch_ending;
@@ -2108,7 +2108,7 @@ static three_addr_var_t* emit_indirect_jump_addr_calc_stmt(basic_block_t* basic_
  */
 static void emit_idle_stmt(basic_block_t* basic_block, u_int8_t is_branch_ending){
 	//Use the helper
-	three_addr_code_stmt_t* idle_stmt = emit_idle_statement_three_addr_code();
+	instruction_t* idle_stmt = emit_idle_statement_three_addr_code();
 
 	//Mark this with whatever was passed through
 	idle_stmt->is_branch_ending = is_branch_ending;
@@ -2126,7 +2126,7 @@ static void emit_idle_stmt(basic_block_t* basic_block, u_int8_t is_branch_ending
  */
 static void emit_asm_inline_stmt(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node, u_int8_t is_branch_ending){
 	//First we allocate the whole thing
-	three_addr_code_stmt_t* asm_inline_stmt = emit_asm_statement_three_addr_code(asm_inline_node->node); 
+	instruction_t* asm_inline_stmt = emit_asm_statement_three_addr_code(asm_inline_node->node); 
 	
 	//Mark this with whatever was passed through
 	asm_inline_stmt->is_branch_ending =is_branch_ending;
@@ -2160,7 +2160,7 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 		//it that way we aren't trying to dereference in the return statement
 		if(package.assignee->indirection_level > 0){
 			//Emit the temp assignment
-			three_addr_code_stmt_t* assn_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(package.assignee->type), package.assignee);
+			instruction_t* assn_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(package.assignee->type), package.assignee);
 			//Add it into the block
 			add_statement(basic_block, assn_stmt);
 			//The return variable is now what was assigned
@@ -2171,7 +2171,7 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 	}
 
 	//We'll use the ret stmt feature here
-	three_addr_code_stmt_t* ret_stmt = emit_ret_stmt_three_addr_code(return_variable);
+	instruction_t* ret_stmt = emit_ret_stmt_three_addr_code(return_variable);
 
 	//Mark this with whatever was passed through
 	ret_stmt->is_branch_ending = is_branch_ending;
@@ -2192,7 +2192,7 @@ static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t*
 	//in the way that most do. As such, we will not add it in as live
 
 	//We'll just use the helper to emit this
-	three_addr_code_stmt_t* stmt = emit_label_stmt_three_addr_code(label_var);
+	instruction_t* stmt = emit_label_stmt_three_addr_code(label_var);
 
 	//Mark with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2213,7 +2213,7 @@ static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* 
 	//in the way that most do. As such, we will not add it in as live
 	
 	//We'll just use the helper to do this
-	three_addr_code_stmt_t* stmt = emit_dir_jmp_stmt_three_addr_code(label_var);
+	instruction_t* stmt = emit_dir_jmp_stmt_three_addr_code(label_var);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -2229,7 +2229,7 @@ static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* 
  */
 void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
 	//Use the helper function to emit the statement
-	three_addr_code_stmt_t* stmt = emit_jmp_stmt_three_addr_code(dest_block, type);
+	instruction_t* stmt = emit_jmp_stmt_three_addr_code(dest_block, type);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -2250,7 +2250,7 @@ void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_t
  */
 void emit_indirect_jump_stmt(basic_block_t* basic_block, three_addr_var_t* dest_addr, jump_type_t type, u_int8_t is_branch_ending){
 	//Use the helper function to create it
-	three_addr_code_stmt_t* indirect_jump = emit_indirect_jmp_stmt_three_addr_code(dest_addr, type);
+	instruction_t* indirect_jump = emit_indirect_jmp_stmt_three_addr_code(dest_addr, type);
 
 	//Is it branch ending?
 	indirect_jump->is_branch_ending = is_branch_ending;
@@ -2265,7 +2265,7 @@ void emit_indirect_jump_stmt(basic_block_t* basic_block, three_addr_var_t* dest_
  */
 static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node, u_int8_t is_branch_ending){
 	//We'll use the constant var feature here
-	three_addr_code_stmt_t* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
+	instruction_t* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
 
 	//Mark this with whatever was passed through
 	const_var->is_branch_ending = is_branch_ending;
@@ -2283,7 +2283,7 @@ static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_
  */
 static three_addr_var_t* emit_constant_code_direct(basic_block_t* basic_block, three_addr_const_t* constant, generic_type_t* inferred_type, u_int8_t is_branch_ending){
 	//We'll use the constant var feature here
-	three_addr_code_stmt_t* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(inferred_type), constant);
+	instruction_t* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(inferred_type), constant);
 
 	//Mark this with whatever was passed through
 	const_var->is_branch_ending = is_branch_ending;
@@ -2345,7 +2345,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		add_used_variable(basic_block, non_temp_var);
 
 		//Let's first create the assignment statement
-		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), non_temp_var);
+		instruction_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), non_temp_var);
 
 		//Carry this through
 		temp_assnment->is_branch_ending = is_branch_ending;
@@ -2364,7 +2364,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
  */
 static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
 	//Create the code
-	three_addr_code_stmt_t* inc_code = emit_inc_stmt_three_addr_code(incrementee);
+	instruction_t* inc_code = emit_inc_stmt_three_addr_code(incrementee);
 
 	//This will count as live if we read from it
 	if(incrementee->is_temporary == FALSE){
@@ -2389,7 +2389,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
  */
 static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
 	//Create the code
-	three_addr_code_stmt_t* dec_code = emit_dec_stmt_three_addr_code(decrementee);
+	instruction_t* dec_code = emit_dec_stmt_three_addr_code(decrementee);
 
 	//This will count as live if we read from it
 	if(decrementee->is_temporary == FALSE){
@@ -2437,7 +2437,7 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
  */
 static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, temp_selection_t use_temp, u_int8_t is_branch_ending){
 	//First we'll create it here
-	three_addr_code_stmt_t* not_stmt = emit_not_stmt_three_addr_code(var);
+	instruction_t* not_stmt = emit_not_stmt_three_addr_code(var);
 
 	//This is also a case where the variable is read from, so it counts as live
 	if(var->is_temporary == FALSE){
@@ -2480,7 +2480,7 @@ static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_
 	}
 
 	//First let's create it
-	three_addr_code_stmt_t* stmt = emit_bin_op_with_const_three_addr_code(assignee, op1, op, constant);
+	instruction_t* stmt = emit_bin_op_with_const_three_addr_code(assignee, op1, op, constant);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -2512,7 +2512,7 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
 	}
 
 	//Now let's create it
-	three_addr_code_stmt_t* stmt = emit_neg_stmt_three_addr_code(var, negated);
+	instruction_t* stmt = emit_neg_stmt_three_addr_code(var, negated);
 
 	//Mark with it's branch ending status
 	stmt->is_branch_ending = is_branch_ending;
@@ -2530,7 +2530,7 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
  */
 static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, u_int8_t is_branch_ending){
 	//We ALWAYS use a temp var here
-	three_addr_code_stmt_t* stmt = emit_logical_not_stmt_three_addr_code(emit_temp_var(negated->type), negated);
+	instruction_t* stmt = emit_logical_not_stmt_three_addr_code(emit_temp_var(negated->type), negated);
 	
 	//If negated isn't temp, it also counts as a read
 	if(negated->is_temporary == FALSE){
@@ -2608,7 +2608,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			
 			//Save the current variable into this new temporary one. This is what allows
 			//us to achieve the "Increment/decrement after use" effect
-			three_addr_code_stmt_t* assignment =  emit_assn_stmt_three_addr_code(temp_var, current_var);
+			instruction_t* assignment =  emit_assn_stmt_three_addr_code(temp_var, current_var);
 
 			//Mark this
 			assignment->is_branch_ending = is_branch_ending;
@@ -2687,7 +2687,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 					current_var->access_type = MEMORY_ACCESS_READ;
 
 					//We will perform the deref here, as we can't do it in the lea 
-					three_addr_code_stmt_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
+					instruction_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
@@ -2716,7 +2716,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			three_addr_const_t* offset = emit_int_constant_direct(field->offset);
 
 			//Now that we have the construct field, we can calculate what we need by grabbing the offset
-			three_addr_code_stmt_t* address_calc = emit_bin_op_with_const_three_addr_code(emit_temp_var(member->type), current_var, PLUS, offset);
+			instruction_t* address_calc = emit_bin_op_with_const_three_addr_code(emit_temp_var(member->type), current_var, PLUS, offset);
 
 			//Add this into the block
 			add_statement(basic_block, address_calc);
@@ -2740,7 +2740,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 					current_var->access_type = MEMORY_ACCESS_READ;
 
 					//We will perform the deref here, as we can't do it in the lea 
-					three_addr_code_stmt_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
+					instruction_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
@@ -2906,7 +2906,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	package.operator = binary_operator;
 
 	//Generic holder for us
-	three_addr_code_stmt_t* stmt;
+	instruction_t* stmt;
 
 	//If the left hand temp's assignee is not null, we'll need to modify that to be so, since all arithmetic
 	//expressions in assembly will modify the first operand
@@ -2920,7 +2920,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 		op1 = left_hand_temp.assignee;
 	} else {
 		//emit the temp assignment
-		three_addr_code_stmt_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(left_hand_temp.assignee->type), left_hand_temp.assignee);
+		instruction_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(left_hand_temp.assignee->type), left_hand_temp.assignee);
 		//Add it into here
 		add_statement(basic_block, temp_assnment);
 		
@@ -2998,7 +2998,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		expr_ret_package_t package = emit_binary_op_expr_code(basic_block, expr_node->first_child, is_branch_ending);
 
 		//The actual statement is the assignment of right to left
-		three_addr_code_stmt_t* assn_stmt = emit_assn_stmt_three_addr_code(left_hand_var, package.assignee);
+		instruction_t* assn_stmt = emit_assn_stmt_three_addr_code(left_hand_var, package.assignee);
 
 		//Finally we'll add this into the overall block
 		add_statement(basic_block, assn_stmt);
@@ -3027,7 +3027,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		expr_ret_package_t package = emit_binary_op_expr_code(basic_block, cursor, is_branch_ending);
 
 		//Finally we'll construct the whole thing
-		three_addr_code_stmt_t* stmt = emit_assn_stmt_three_addr_code(left_hand_var, package.assignee);
+		instruction_t* stmt = emit_assn_stmt_three_addr_code(left_hand_var, package.assignee);
 		
 		//Mark this with what was passed through
 		stmt->is_branch_ending = is_branch_ending;
@@ -3094,7 +3094,7 @@ static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, gen
 	}
 
 	//Once we get here we can create the function statement
-	three_addr_code_stmt_t* func_call_stmt = emit_func_call_three_addr_code(func_record, assignee);
+	instruction_t* func_call_stmt = emit_func_call_three_addr_code(func_record, assignee);
 
 	//Mark this with whatever we have
 	func_call_stmt->is_branch_ending = is_branch_ending;
@@ -3360,16 +3360,16 @@ void basic_block_dealloc(basic_block_t* block){
 	}
 
 	//Grab a statement cursor here
-	three_addr_code_stmt_t* cursor = block->leader_statement;
+	instruction_t* cursor = block->leader_statement;
 	//We'll need a temp block too
-	three_addr_code_stmt_t* temp = cursor;
+	instruction_t* temp = cursor;
 
 	//So long as the cursor is not NULL
 	while(cursor != NULL){
 		temp = cursor;
 		cursor = cursor->next_statement;
 		//Destroy temp
-		three_addr_stmt_dealloc(temp);
+		instruction_dealloc(temp);
 	}
 	
 
@@ -3557,7 +3557,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->block_terminal_type = b->block_terminal_type;
 
 	//For each statement in b, all of it's old statements are now "defined" in a
-	three_addr_code_stmt_t* b_stmt = b->leader_statement;
+	instruction_t* b_stmt = b->leader_statement;
 
 	while(b_stmt != NULL){
 		b_stmt->block_contained_in = a;

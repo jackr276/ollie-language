@@ -121,9 +121,9 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 /**
  * Emit a statement that is in LEA form
  */
-three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
+instruction_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
 	//First we allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll make our populations
 	stmt->CLASS = THREE_ADDR_CODE_LEA_STMT;
@@ -144,9 +144,9 @@ three_addr_code_stmt_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
-three_addr_code_stmt_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size){
+instruction_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size){
 	//First we allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll make our populations
 	stmt->CLASS = THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT;
@@ -164,9 +164,9 @@ three_addr_code_stmt_t* emit_indir_jump_address_calc_three_addr_code(three_addr_
 /**
  * Emit a copy of this statement
  */
-three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* label){
+instruction_t* emit_label_stmt_three_addr_code(three_addr_var_t* label){
 	//Let's first allocate the statement
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//All we do now is give this the label 
 	stmt->assignee = label;
@@ -182,9 +182,9 @@ three_addr_code_stmt_t* emit_label_stmt_three_addr_code(three_addr_var_t* label)
 /**
  * Emit a left shift statement
  */
-three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const){
+instruction_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const){
 	//First we allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's assign the label
 	stmt->CLASS = THREE_ADDR_CODE_LSHIFT_STMT;
@@ -207,9 +207,9 @@ three_addr_code_stmt_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* a
 /**
  * Emit a right shift statement
  */
-three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amound_const){
+instruction_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amound_const){
 	//First we allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's assign the label
 	stmt->CLASS = THREE_ADDR_CODE_RSHIFT_STMT;
@@ -232,9 +232,9 @@ three_addr_code_stmt_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* 
 /**
  * Emit a direct jump statement. This is used only with jump statements the user has made
  */
-three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jumping_to){
+instruction_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jumping_to){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now all we need to do is give it the label
 	stmt->assignee = jumping_to;
@@ -250,9 +250,9 @@ three_addr_code_stmt_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jump
 /**
  * Directly emit an idle statement
  */
-three_addr_code_stmt_t* emit_idle_statement_three_addr_code(){
+instruction_t* emit_idle_statement_three_addr_code(){
 	//First we allocate
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Store the class
 	stmt->CLASS = THREE_ADDR_CODE_IDLE_STMT;
@@ -316,7 +316,7 @@ static void print_three_addr_constant(three_addr_const_t* constant){
  * Pretty print a three address code statement
  *
 */
-void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
+void print_three_addr_code_stmt(instruction_t* stmt){
 	//If it's a binary operator statement(most common), we'll
 	//print the whole thing
 	if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
@@ -779,9 +779,9 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 /**
  * Emit a decrement instruction
  */
-three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decrementee){
+instruction_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decrementee){
 	//First allocate it
-	three_addr_code_stmt_t* dec_stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* dec_stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we populate
 	dec_stmt->CLASS = THREE_ADDR_CODE_DEC_STMT;
@@ -797,9 +797,9 @@ three_addr_code_stmt_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decremen
 /**
  * Emit a decrement instruction
  */
-three_addr_code_stmt_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incrementee){
+instruction_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incrementee){
 	//First allocate it
-	three_addr_code_stmt_t* inc_stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* inc_stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we populate
 	inc_stmt->CLASS = THREE_ADDR_CODE_INC_STMT;
@@ -864,9 +864,9 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 /**
  * Emit a return statement. The returnee variable may or may not be null
  */
-three_addr_code_stmt_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee){
+instruction_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it appropriately
 	stmt->CLASS = THREE_ADDR_CODE_RET_STMT;
@@ -883,9 +883,9 @@ three_addr_code_stmt_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee
  * Emit a binary operator three address code statement. Once we're here, we expect that the caller has created and 
  * supplied the appropriate variables
  */
-three_addr_code_stmt_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2){
+instruction_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with the appropriate values
 	stmt->CLASS = THREE_ADDR_CODE_BIN_OP_STMT;
@@ -909,9 +909,9 @@ three_addr_code_stmt_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, 
 /**
  * Emit a binary operation with a constant three address code statement
  */
-three_addr_code_stmt_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2){
+instruction_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with the appropriate values
 	stmt->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -930,9 +930,9 @@ three_addr_code_stmt_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t*
  * Emit an assignment three address code statement. Once we're here, we expect that the caller has created and supplied the
  * appropriate variables
  */
-three_addr_code_stmt_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+instruction_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_ASSN_STMT;
@@ -948,9 +948,9 @@ three_addr_code_stmt_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assigne
 /**
  * Emit a memory access statement
  */
-three_addr_code_stmt_t* emit_mem_access_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type){
+instruction_t* emit_mem_access_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type){
 	//First we allocate
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_MEM_ACCESS_STMT;
@@ -965,9 +965,9 @@ three_addr_code_stmt_t* emit_mem_access_stmt_three_addr_code(three_addr_var_t* a
 /**
  * Emit an assignment "three" address code statement
  */
-three_addr_code_stmt_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_const_t* constant){
+instruction_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_const_t* constant){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -983,9 +983,9 @@ three_addr_code_stmt_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* a
 /**
  * Emit a jump statement where we jump to the block with the ID provided
  */
-three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, jump_type_t jump_type){
+instruction_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, jump_type_t jump_type){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
@@ -1001,9 +1001,9 @@ three_addr_code_stmt_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, ju
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-three_addr_code_stmt_t* emit_indirect_jmp_stmt_three_addr_code(three_addr_var_t* address, jump_type_t jump_type){
+instruction_t* emit_indirect_jmp_stmt_three_addr_code(three_addr_var_t* address, jump_type_t jump_type){
 	//First we allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
@@ -1020,9 +1020,9 @@ three_addr_code_stmt_t* emit_indirect_jmp_stmt_three_addr_code(three_addr_var_t*
 /**
  * Emit a function call statement where we're calling the function record provided
  */
-three_addr_code_stmt_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to){
+instruction_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_FUNC_CALL;
@@ -1060,9 +1060,9 @@ three_addr_const_t* emit_int_constant_direct(int int_const){
 /**
  * Emit a negation statement
  */
-three_addr_code_stmt_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* negatee){
+instruction_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* negatee){
 	//First we'll create the negation
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll assign whatever we need
 	stmt->CLASS = THREE_ADDR_CODE_NEG_STATEMENT;
@@ -1079,9 +1079,9 @@ three_addr_code_stmt_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee
 /**
  * Emit a not instruction 
  */
-three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var){
+instruction_t* emit_not_stmt_three_addr_code(three_addr_var_t* var){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's make it a not stmt
 	stmt->CLASS = THREE_ADDR_CODE_BITWISE_NOT_STMT;
@@ -1100,9 +1100,9 @@ three_addr_code_stmt_t* emit_not_stmt_three_addr_code(three_addr_var_t* var){
 /**
  * Emit a logical not statement
  */
-three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var){
+instruction_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var){
 	//First allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's make it a logical not stmt
 	stmt->CLASS = THREE_ADDR_CODE_LOGICAL_NOT_STMT;
@@ -1121,9 +1121,9 @@ three_addr_code_stmt_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* 
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
  * by any future optimizations
  */
-three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node){
+instruction_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node){
 	//First we allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Store the class
 	stmt->CLASS = THREE_ADDR_CODE_ASM_INLINE_STMT;
@@ -1145,9 +1145,9 @@ three_addr_code_stmt_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_n
  * Emit a phi function for a given variable. Once emitted, these statements are compiler exclusive,
  * but they are needed for our optimization
  */
-three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable){
+instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 	//First we allocate it
-	three_addr_code_stmt_t* stmt = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//We'll just store the assignee here, no need for anything else
 	stmt->assignee = emit_var(variable, FALSE);
@@ -1165,12 +1165,12 @@ three_addr_code_stmt_t* emit_phi_function(symtab_variable_record_t* variable){
 /**
  * Emit a complete copy of whatever was in here previously
  */
-three_addr_code_stmt_t* copy_three_addr_code_stmt(three_addr_code_stmt_t* copied){
+instruction_t* copy_three_addr_code_stmt(instruction_t* copied){
 	//First we allocate
-	three_addr_code_stmt_t* copy = calloc(1, sizeof(three_addr_code_stmt_t));
+	instruction_t* copy = calloc(1, sizeof(instruction_t));
 
 	//Perform a complete memory copy
-	memcpy(copy, copied, sizeof(three_addr_code_stmt_t));
+	memcpy(copy, copied, sizeof(instruction_t));
 
 	//Now we'll check for special values. NOTE: if we're using this, we should NOT have
 	//any phi functions OR assembly in here. The only thing that we might have are
@@ -1296,7 +1296,7 @@ void three_addr_const_dealloc(three_addr_const_t* constant){
 /**
  * Deallocate the entire three address code statement
 */
-void three_addr_stmt_dealloc(three_addr_code_stmt_t* stmt){
+void instruction_dealloc(instruction_t* stmt){
 	//If the statement is null we bail out
 	if(stmt == NULL){
 		return;

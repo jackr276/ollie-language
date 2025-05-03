@@ -78,7 +78,7 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	a->block_terminal_type = b->block_terminal_type;
 
 	//For each statement in b, all of it's old statements are now "defined" in a
-	three_addr_code_stmt_t* b_stmt = b->leader_statement;
+	instruction_t* b_stmt = b->leader_statement;
 
 	//Modify these "block contained in" references to be A
 	while(b_stmt != NULL){
@@ -124,7 +124,7 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 
 		//Now we'll go through every single statement in this block. If it's a jump statement whose target
 		//is the empty block, we'll replace that reference with the replacement
-		three_addr_code_stmt_t* current_stmt = predecessor->leader_statement;
+		instruction_t* current_stmt = predecessor->leader_statement;
 
 		//So long as this isn't null
 		while(current_stmt != NULL){
@@ -161,9 +161,9 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
  */
 static void delete_all_branching_statements(cfg_t* cfg, basic_block_t* block){
 	//We'll always start from the end and work our way up
-	three_addr_code_stmt_t* current = block->exit_statement;
+	instruction_t* current = block->exit_statement;
 	//To hold while we delete
-	three_addr_code_stmt_t* temp;
+	instruction_t* temp;
 
 	//So long as this is NULL and it's branch ending
 	while(current != NULL && current->is_branch_ending == TRUE){
@@ -233,7 +233,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				basic_block_t* end_branch_target = NULL;
 				
 				//Grab a statement cursor. This time, since we care about what we end with, we'll crawl from the bottom up
-				three_addr_code_stmt_t* stmt = current->exit_statement;
+				instruction_t* stmt = current->exit_statement;
 
 				//So long as we are still branch ending and seeing statements
 				while(stmt != NULL && stmt->is_branch_ending == TRUE){
@@ -306,7 +306,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//block? If there is only one, then we are all set to merge
 
 				//Grab a statement cursor
-				three_addr_code_stmt_t* cursor = current->exit_statement->previous_statement;
+				instruction_t* cursor = current->exit_statement->previous_statement;
 
 				//Are we good to merge?
 				u_int8_t good_to_merge = TRUE;
@@ -392,17 +392,17 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//a complete copy of it. This new copy will then be added into the current block in lieu of the jump statement that we just deleted
 	
 				//The leader of this new string of statement 
-				three_addr_code_stmt_t* head = NULL;
+				instruction_t* head = NULL;
 				//The one that we're currently operating on
-				three_addr_code_stmt_t* tail = NULL;
+				instruction_t* tail = NULL;
 
 				//We'll use this cursor to run through the entirety of the jumping to block's code
-				three_addr_code_stmt_t* cursor = jumping_to_block->leader_statement;
+				instruction_t* cursor = jumping_to_block->leader_statement;
 				
 				//So long as we have stuff to add
 				while(cursor != NULL){
 					//Get a complete copy of the statement
-					three_addr_code_stmt_t* new = copy_three_addr_code_stmt(cursor);
+					instruction_t* new = copy_three_addr_code_stmt(cursor);
 
 					//If we're adding the very first one
 					if(head == NULL){
@@ -461,13 +461,13 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
  * jg .L16 <-------- else target
  * jmp .L17
  */
-static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
 	//Grab a statement cursor
-	three_addr_code_stmt_t* cursor = stmt;
+	instruction_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
@@ -484,12 +484,12 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE);
 	
 	//Jump to else here
-	three_addr_code_stmt_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, jump);
+	instruction_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_else_stmt->is_branch_ending = TRUE;
 
 	//We'll now need to insert this statement right after where op1 is assigned at cursor
-	three_addr_code_stmt_t* after = cursor->next_statement;
+	instruction_t* after = cursor->next_statement;
 
 	//The jump statement is now in between the two
 	cursor->next_statement = jump_to_else_stmt;
@@ -500,9 +500,9 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	after->previous_statement = jump_to_else_stmt;
 
 	//Hang onto these
-	three_addr_code_stmt_t* previous = stmt->previous_statement;
-	three_addr_code_stmt_t* next = stmt->next_statement;
-	three_addr_code_stmt_t* final_jump = next->next_statement;
+	instruction_t* previous = stmt->previous_statement;
+	instruction_t* next = stmt->next_statement;
+	instruction_t* final_jump = next->next_statement;
 
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
 	delete_statement(cfg, block, stmt);
@@ -515,7 +515,7 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE);
 
 	//Now we'll jump to else
-	three_addr_code_stmt_t* final_cond_jump = emit_jmp_stmt_three_addr_code(else_target, jump);
+	instruction_t* final_cond_jump = emit_jmp_stmt_three_addr_code(else_target, jump);
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -550,13 +550,13 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
  * jmp .L17  <------- it worked, go to if
  *
  */
-static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
 	//Grab a statement cursor
-	three_addr_code_stmt_t* cursor = stmt;
+	instruction_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
@@ -572,12 +572,12 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
 	//rest of the or to be true
 	//Jump to else here
-	three_addr_code_stmt_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, jump);
+	instruction_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_if_stmt->is_branch_ending = TRUE;
 
 	//We'll now need to insert this statement right after where op1 is assigned at cursor
-	three_addr_code_stmt_t* after = cursor->next_statement;
+	instruction_t* after = cursor->next_statement;
 
 	//The jump statement is now in between the two
 	cursor->next_statement = jump_to_if_stmt;
@@ -588,9 +588,9 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	after->previous_statement = jump_to_if_stmt;
 
 	//Hang onto these
-	three_addr_code_stmt_t* previous = stmt->previous_statement;
-	three_addr_code_stmt_t* next = stmt->next_statement;
-	three_addr_code_stmt_t* final_jump = next->next_statement;
+	instruction_t* previous = stmt->previous_statement;
+	instruction_t* next = stmt->next_statement;
+	instruction_t* final_jump = next->next_statement;
 
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
 	delete_statement(cfg, block, stmt);
@@ -603,7 +603,7 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE);
 
 	//Now we'll emit the jump to else
-	three_addr_code_stmt_t* final_cond_jump = emit_jmp_stmt_three_addr_code(else_target, jump);
+	instruction_t* final_cond_jump = emit_jmp_stmt_three_addr_code(else_target, jump);
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -616,13 +616,13 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 /**
  * Handle a compound and statement optimization
  */
-static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
 	//Grab a statement cursor
-	three_addr_code_stmt_t* cursor = stmt;
+	instruction_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
@@ -639,12 +639,12 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_a
 	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE);
 	
 	//Jump to else here
-	three_addr_code_stmt_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, jump);
+	instruction_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_else_stmt->is_branch_ending = TRUE;
 
 	//We'll now need to insert this statement right after where op1 is assigned at cursor
-	three_addr_code_stmt_t* after = cursor->next_statement;
+	instruction_t* after = cursor->next_statement;
 
 	//The jump statement is now in between the two
 	cursor->next_statement = jump_to_else_stmt;
@@ -655,9 +655,9 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_a
 	after->previous_statement = jump_to_else_stmt;
 
 	//Hang onto these
-	three_addr_code_stmt_t* previous = stmt->previous_statement;
-	three_addr_code_stmt_t* next = stmt->next_statement;
-	three_addr_code_stmt_t* final_jump = next->next_statement;
+	instruction_t* previous = stmt->previous_statement;
+	instruction_t* next = stmt->next_statement;
+	instruction_t* final_jump = next->next_statement;
 
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
 	delete_statement(cfg, block, stmt);
@@ -670,7 +670,7 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_a
 	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL);
 
 	//Now we'll emit the jump to if
-	three_addr_code_stmt_t* final_cond_jump = emit_jmp_stmt_three_addr_code(if_target, jump);
+	instruction_t* final_cond_jump = emit_jmp_stmt_three_addr_code(if_target, jump);
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -683,13 +683,13 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_a
 /**
  * Hande a compound or statement optimization
  */
-static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
 	//Grab a statement cursor
-	three_addr_code_stmt_t* cursor = stmt;
+	instruction_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
@@ -705,12 +705,12 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_ad
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
 	//rest of the or to be true
 	//Jump to else here
-	three_addr_code_stmt_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, jump);
+	instruction_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_if_stmt->is_branch_ending = TRUE;
 
 	//We'll now need to insert this statement right after where op1 is assigned at cursor
-	three_addr_code_stmt_t* after = cursor->next_statement;
+	instruction_t* after = cursor->next_statement;
 
 	//The jump statement is now in between the two
 	cursor->next_statement = jump_to_if_stmt;
@@ -721,9 +721,9 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_ad
 	after->previous_statement = jump_to_if_stmt;
 
 	//Hang onto these
-	three_addr_code_stmt_t* previous = stmt->previous_statement;
-	three_addr_code_stmt_t* next = stmt->next_statement;
-	three_addr_code_stmt_t* final_jump = next->next_statement;
+	instruction_t* previous = stmt->previous_statement;
+	instruction_t* next = stmt->next_statement;
+	instruction_t* final_jump = next->next_statement;
 
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
 	delete_statement(cfg, block, stmt);
@@ -736,7 +736,7 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, three_ad
 	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL);
 
 	//Now we'll emit the jump to if
-	three_addr_code_stmt_t* final_cond_jump = emit_jmp_stmt_three_addr_code(if_target, jump);
+	instruction_t* final_cond_jump = emit_jmp_stmt_three_addr_code(if_target, jump);
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -857,7 +857,7 @@ static void optimize_compound_logic(cfg_t* cfg){
 		}
 
 		//Grab a statement cursor
-		three_addr_code_stmt_t* cursor = block->exit_statement;
+		instruction_t* cursor = block->exit_statement;
 
 		//Store all of our eligible statements in this block. This will be done in a FIFO
 		//fashion
@@ -885,7 +885,7 @@ static void optimize_compound_logic(cfg_t* cfg){
 		//Now we'll iterate over the array and process what we have
 		for(u_int16_t i = 0; eligible_statements != NULL && i < eligible_statements->current_index; i++){
 			//Grab the block out
-			three_addr_code_stmt_t* stmt = dynamic_array_get_at(eligible_statements, i);
+			instruction_t* stmt = dynamic_array_get_at(eligible_statements, i);
 
 			//Make the helper call. These are treated differently based on what their
 			//operators are, so we'll need to use the appropriate call
@@ -1060,7 +1060,7 @@ static void sweep(cfg_t* cfg){
 		}
 
 		//Grab the statement out
-		three_addr_code_stmt_t* stmt = block->leader_statement;
+		instruction_t* stmt = block->leader_statement;
 
 		//For each statement in the block
 		while(stmt != NULL){
@@ -1094,7 +1094,7 @@ static void sweep(cfg_t* cfg){
 					 * As such, we'll delete the .L9 jump and update successors
 					 */
 					if(stmt != NULL && stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && stmt->jump_type == JUMP_TYPE_JMP){
-						three_addr_code_stmt_t* temp = stmt;
+						instruction_t* temp = stmt;
 						//Advance stmt
 						stmt = stmt->next_statement;
 						//Remove the statement
@@ -1107,7 +1107,7 @@ static void sweep(cfg_t* cfg){
 
 				//If we make it down here then we know that this statement is some kind of custom jump. We're assuming	
 				//that whatever conditional it was jumping on has been deleted, simply because we made it this far
-				three_addr_code_stmt_t* jump_to_if = stmt;
+				instruction_t* jump_to_if = stmt;
 
 				//Let's see if we also have a jump to else here
 				stmt = stmt->next_statement;
@@ -1120,11 +1120,11 @@ static void sweep(cfg_t* cfg){
 				//If it's not a jump, we'll also just delete
 				} else if(stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT){
 					//Perform the deletion and advancement
-					three_addr_code_stmt_t* temp = stmt;
+					instruction_t* temp = stmt;
 					stmt = stmt->next_statement;
 					//Delete the statement, now that we know it is not a jump
 					delete_statement(cfg, stmt->block_contained_in, temp);
-					three_addr_stmt_dealloc(temp);
+					instruction_dealloc(temp);
 					continue;
 				//One final snag we could catch - if it's a jump, but a conditional one, we'll also
 				//leave it alone
@@ -1139,7 +1139,7 @@ static void sweep(cfg_t* cfg){
 
 				//So if we get down here, we know that this statement is unamrked and its a direct jump.
 				//At this point, we have our conditional branch
-				three_addr_code_stmt_t* jump_to_else = stmt;
+				instruction_t* jump_to_else = stmt;
 
 				//Now we can delete these both
 				delete_statement(cfg, block, jump_to_else);
@@ -1148,7 +1148,7 @@ static void sweep(cfg_t* cfg){
 				//We'll first find the nearest marked postdominator
 				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
 				//We'll then emit a jump to that node
-				three_addr_code_stmt_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
+				instruction_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
 				//Add this statement in
 				add_statement(block, jump_stmt);
 				//It is also now a successor
@@ -1159,11 +1159,11 @@ static void sweep(cfg_t* cfg){
 			//Otherwise we delete the statement. Jump statements are ALWAYS considered useful
 			} else {
 				//Perform the deletion and advancement
-				three_addr_code_stmt_t* temp = stmt;
+				instruction_t* temp = stmt;
 				stmt = stmt->next_statement;
 				//Delete the statement, now that we know it is not a jump
 				delete_statement(cfg, temp->block_contained_in, temp);
-				three_addr_stmt_dealloc(temp);
+				instruction_dealloc(temp);
 			}
 		}
 	}
@@ -1206,7 +1206,7 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
  * ever using a certain field, we need only worry about writes to that given field
  *
  */
-static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_code_stmt_t* stmt){
+static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, instruction_t* stmt){
 	//Grab these out for quick access
 	three_addr_var_t* construct_base_address = stmt->op1;
 	//And the offset
@@ -1236,7 +1236,7 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
 		//that write to the exact location in memory that we want. 
 
 		//Grab a cursor
-		three_addr_code_stmt_t* cursor = current->leader_statement;
+		instruction_t* cursor = current->leader_statement;
 
 		//So long as this isn't NULL
 		while(cursor != NULL){
@@ -1264,10 +1264,10 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
 			}
 
 			//At this point, we know this is the statement that we're after
-			three_addr_code_stmt_t* address_calc = cursor;
+			instruction_t* address_calc = cursor;
 
 			//Following this, we'll need to see where this is used. Let's keep crawling through to find out
-			three_addr_code_stmt_t* assignee_used = cursor->next_statement;
+			instruction_t* assignee_used = cursor->next_statement;
 
 			//So long as this isn't NULL, we'll hunt for where this assignee is used
 			while(assignee_used != NULL){
@@ -1335,7 +1335,7 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 		//out the statements that are doing it
 		
 		//Grab a cursor out	of this block. We'll need to traverse to see which statements in here are important
-		three_addr_code_stmt_t* cursor = current->leader_statement;
+		instruction_t* cursor = current->leader_statement;
 		
 		//Run through every statement in here
 		while(cursor != NULL){
@@ -1355,7 +1355,7 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 			}
 
 			//Save this lea statement for later
-			three_addr_code_stmt_t* lea_stmt = cursor;
+			instruction_t* lea_stmt = cursor;
 
 			//If we make it here, we know that we have a lea statement whose assignee is an address within or array of interest
 			//Let's save that assignee for searching
@@ -1365,7 +1365,7 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 			//in a read or a write. Either way, we need to keep searching until it does happen
 
 			//Grab another cursor
-			three_addr_code_stmt_t* assignee_used = cursor->next_statement;
+			instruction_t* assignee_used = cursor->next_statement;
 
 			//So long as this isn't NULL
 			while(assignee_used != NULL){
@@ -1411,9 +1411,9 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
  * 	2.) We are reading from a construct member: Since the location of the fields in a construct *are* known at compile time, we can optimize this one further by only
  * 	marking writes to that specific field as important
  */
-static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, three_addr_code_stmt_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, instruction_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//Let's see what kind of statement preceeds this one. If it's a LEA statement, we could have either a pointer or an array
-	three_addr_code_stmt_t* previous = stmt->previous_statement;
+	instruction_t* previous = stmt->previous_statement;
 
 	//We first need to crawl back to where this variable was assigned
 	while(previous != NULL){
@@ -1450,7 +1450,7 @@ static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable
  * Mark definitions(assignment) of a three address variable within
  * the current function. If a definition is not marked, it must be added to the worklist
  */
-static void mark_and_add_definition(cfg_t* cfg, three_addr_code_stmt_t* stmt, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
 	if(variable == NULL || current_function == NULL){
 		return;
@@ -1478,7 +1478,7 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_code_stmt_t* stmt, th
 		//If this does assign the variable, we'll look through it
 		if(variable->is_temporary == FALSE){
 			//Let's find where we assign it
-			three_addr_code_stmt_t* stmt = block->leader_statement;
+			instruction_t* stmt = block->leader_statement;
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
@@ -1505,7 +1505,7 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_code_stmt_t* stmt, th
 		//each statement and see if the assignee has the same temp number
 		} else {
 			//Let's find where we assign it
-			three_addr_code_stmt_t* stmt = block->leader_statement;
+			instruction_t* stmt = block->leader_statement;
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
@@ -1543,7 +1543,7 @@ static void mark(cfg_t* cfg){
 		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, _);
 
 		//Grab a cursor to the current statement
-		three_addr_code_stmt_t* current_stmt = current->leader_statement;
+		instruction_t* current_stmt = current->leader_statement;
 
 		//Now we'll run through every statement(operation) in this block
 		//TODO this is NOT complete
@@ -1625,7 +1625,7 @@ static void mark(cfg_t* cfg){
 	//these values back through the code
 	while(dynamic_array_is_empty(worklist) == FALSE){
 		//Grab out the operation from the worklist(delete from back-most efficient)
-		three_addr_code_stmt_t* stmt = dynamic_array_delete_from_back(worklist);
+		instruction_t* stmt = dynamic_array_delete_from_back(worklist);
 
 		//If it's a phi function, now we need to go back and mark everything that it came from
 		if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
@@ -1666,7 +1666,7 @@ static void mark(cfg_t* cfg){
 			//If this is a switch statement block, then we'll simply mark everything
 			if(rdf_block->block_type == BLOCK_TYPE_SWITCH){
 				//Run through and mark everything in it
-				three_addr_code_stmt_t* cursor = rdf_block->leader_statement;
+				instruction_t* cursor = rdf_block->leader_statement;
 
 				//Keep going through and marking
 				while(cursor != NULL){
@@ -1699,7 +1699,7 @@ static void mark(cfg_t* cfg){
 			 */
 
 			//Grab the exit statement. We will crawl our way from the bottom up here
-			three_addr_code_stmt_t* rdf_block_stmt = rdf_block->exit_statement;
+			instruction_t* rdf_block_stmt = rdf_block->exit_statement;
 			
 			/**
 			 * If the exit statement is:
@@ -1715,7 +1715,7 @@ static void mark(cfg_t* cfg){
 			}
 
 			//Otherwise, this is a jump statement and it's our "jump to else" statement. 
-			three_addr_code_stmt_t* jump_to_else = rdf_block_stmt;
+			instruction_t* jump_to_else = rdf_block_stmt;
 
 			//Advance the statement back by one
 			rdf_block_stmt = rdf_block_stmt->previous_statement;
@@ -1739,7 +1739,7 @@ static void mark(cfg_t* cfg){
 
 			//If we make it here, then we've found the conditional part of our jump. This
 			//will be our jump to if
-			three_addr_code_stmt_t* jump_to_if = rdf_block_stmt;
+			instruction_t* jump_to_if = rdf_block_stmt;
 
 			/**
 			 * One final thing to check here - our conditional statement. This should really be a foregone
@@ -1754,7 +1754,7 @@ static void mark(cfg_t* cfg){
 			}
 
 			//We survived - so this is our conditional statement
-			three_addr_code_stmt_t* conditional_stmt = rdf_block_stmt;
+			instruction_t* conditional_stmt = rdf_block_stmt;
 
 			//Now we'll go through and mark these statements
 			//Mark the conditional and add it to the worklist

@@ -39,9 +39,9 @@ typedef enum {
  */
 struct instruction_window_t{
 	//We store three instructions and a status
-	three_addr_code_stmt_t* instruction1;
-	three_addr_code_stmt_t* instruction2;
-	three_addr_code_stmt_t* instruction3;
+	instruction_t* instruction1;
+	instruction_t* instruction2;
+	instruction_t* instruction3;
 	//This will tell us, at a quick glance, whether we're at the beginning,
 	//middle or end of a sequence
 	window_status_t status;
@@ -300,7 +300,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction1->assignee->is_temporary == TRUE &&
 			variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 			//Grab this out for convenience
-			three_addr_code_stmt_t* binary_operation = window->instruction2;
+			instruction_t* binary_operation = window->instruction2;
 
 			//Now we'll modify this to be an assignment const statement
 			binary_operation->op1_const = window->instruction1->op1_const;
@@ -342,7 +342,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction2->assignee->is_temporary == TRUE &&
 			variables_equal(window->instruction2->assignee, window->instruction3->op1, FALSE) == TRUE){
 			//Grab this out for convenience
-			three_addr_code_stmt_t* binary_operation = window->instruction3;
+			instruction_t* binary_operation = window->instruction3;
 
 			//Now we'll modify this to be an assignment const statement
 			binary_operation->op1_const = window->instruction2->op1_const;
@@ -384,8 +384,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT &&
 		window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 		//Grab these out for convenience
-		three_addr_code_stmt_t* first = window->instruction1;
-		three_addr_code_stmt_t* second = window->instruction2;
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
 		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, FALSE) == TRUE){
@@ -429,7 +429,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
-			three_addr_code_stmt_t* const_assignment = window->instruction1;
+			instruction_t* const_assignment = window->instruction1;
 
 			//Let's mark that this is now a binary op with const statement
 			window->instruction2->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -473,7 +473,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
-			three_addr_code_stmt_t* const_assignment = window->instruction1;
+			instruction_t* const_assignment = window->instruction1;
 
 			//Let's mark that this is now a binary op with const statement
 			window->instruction3->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -526,9 +526,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 
 		//Grab these out for convenience
-		three_addr_code_stmt_t* first = window->instruction1;
-		three_addr_code_stmt_t* second = window->instruction2;
-		three_addr_code_stmt_t* third = window->instruction3;
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+		instruction_t* third = window->instruction3;
 
 		//We still need further checks to see if this is indeed the pattern above. If
 		//we survive all of these checks, we know that we're set to optimize
@@ -668,9 +668,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction2 != NULL
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 		//For convenience/memory ease
-		three_addr_code_stmt_t* first = window->instruction1;
-		three_addr_code_stmt_t* second = window->instruction2;
-		three_addr_code_stmt_t* third = window->instruction3;
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+		instruction_t* third = window->instruction3;
 
 		//If we have a temporary start variable, a non temp end variable, and the variables
 		//match in the corresponding spots, we have our opportunity
@@ -728,7 +728,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	//If we have a bin op with const statement, we have an opportunity
 	for(u_int16_t i = 0; i < 3; i++){
-		three_addr_code_stmt_t* current_instruction;
+		instruction_t* current_instruction;
 
 		//Simple logic to select the current instruction
 		if(i == 0){
@@ -1058,7 +1058,7 @@ static void print_ordered_block(basic_block_t* block){
 
 	//Now grab a cursor and print out every statement that we 
 	//have
-	three_addr_code_stmt_t* cursor = block->leader_statement;
+	instruction_t* cursor = block->leader_statement;
 
 	//So long as it isn't null
 	while(cursor != NULL){

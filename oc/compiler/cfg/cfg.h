@@ -156,8 +156,8 @@ struct basic_block_t{
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
-	three_addr_code_stmt_t* leader_statement;
-	three_addr_code_stmt_t* exit_statement;
+	instruction_t* leader_statement;
+	instruction_t* exit_statement;
 };
 
 //Build the entire CFG from the AST. This function returns the CFG struct, which
@@ -165,12 +165,12 @@ struct basic_block_t{
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 //Add a statement to the basic block
-void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node);
+void add_statement(basic_block_t* target, instruction_t* statement_node);
 
 /**
  * Delete a statement from the CFG - handling any/all edge cases that may arise
  */
-void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt);
+void delete_statement(cfg_t* cfg, basic_block_t* block, instruction_t* stmt);
 
 //Add a successor to the block
 void add_successor(basic_block_t* target, basic_block_t* successor);
