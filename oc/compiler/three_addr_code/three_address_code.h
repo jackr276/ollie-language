@@ -157,8 +157,6 @@ typedef enum{
  * for eventual SSA and type information
 */
 struct three_addr_var_t{
-	//For memory management. An extra 10 is given for SSA
-	char var_name[MAX_IDENT_LENGTH + 10];
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
 	//Link to symtab(NULL if not there)

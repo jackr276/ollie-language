@@ -64,9 +64,6 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	//Store the temp var number
 	var->temp_var_number = increment_and_get_temp_id();
 
-	//We'll now create our temporary variable name
-	sprintf(var->var_name, "t%d", var->temp_var_number);
-
 	//Finally we'll bail out
 	return var;
 }
@@ -93,8 +90,6 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
 	//And store the symtab record
 	emitted_var->linked_var = var;
 
-	sprintf(emitted_var->var_name, "%s", var->var_name);
-
 	//And we're all done
 	return emitted_var;
 }
@@ -116,6 +111,9 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 
 	//Transfer this status over
 	emitted_var->is_temporary = var->is_temporary;
+
+	//Copy the generation level
+	emitted_var->ssa_generation = var->ssa_generation;
 
 	return emitted_var;
 }
@@ -277,8 +275,14 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 		printf("(");
 	}
 	
-	//Print the variables declared name out -- along with it's SSA generation
-	printf("%s", variable->var_name);
+	//If this is a temp var
+	if(variable->is_temporary == TRUE){
+		//Print out it's temp var number
+		printf("t%d", variable->temp_var_number);
+	} else {
+		//Otherwise, print out the SSA generation along with the variable
+		printf("%s_%d", variable->linked_var->var_name, variable->ssa_generation);
+	}
 
 	//Lastly we print out the remaining indirection characters
 	for(u_int16_t i = 0; mode != PRINTING_VAR_BLOCK_HEADER && i < variable->indirection_level; i++){
@@ -614,10 +618,10 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 	//For a label statement, we need to trim off the $ that it has
 	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
 		//Let's print it out. This is an instance where we will not use the print var
-		printf("%s:\n", stmt->assignee->var_name + 1);
+		printf("%s:\n", stmt->assignee->linked_var->var_name + 1);
 	} else if(stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
 		//This is an instance where we will not use the print var
-		printf("jmp %s\n", stmt->assignee->var_name + 1);
+		printf("jmp %s\n", stmt->assignee->linked_var->var_name + 1);
 	//Display an assembly inline statement
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
 		//Should already have a trailing newline
@@ -1221,8 +1225,8 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 			return FALSE;
 		}
 
-		//Final check here via string comparison
-		if(strcmp(a->var_name, b->var_name) == 0){
+		//Finally check their SSA levels
+		if(a->ssa_generation == b->ssa_generation){
 			return TRUE;
 		}
 	}

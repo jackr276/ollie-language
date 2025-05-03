@@ -1859,8 +1859,8 @@ static void lhs_new_name(three_addr_var_t* var){
 	//We'll also push this generation level onto the stack
 	lightstack_push(&(linked_var->counter_stack), generation_level);
 
-	//Actually perform the renaming. Now this variable is in SSA form
-	sprintf(var->var_name, "%s_%d", linked_var->var_name, generation_level);
+	//Store the generation level in here
+	var->ssa_generation = generation_level;
 }
 
 
@@ -1875,9 +1875,8 @@ static void rhs_new_name(three_addr_var_t* var){
 	//Grab the value off of the stack
 	u_int16_t generation_level = lightstack_peek(&(linked_var->counter_stack));
 
-	//And now we'll rename with this name
-	//Actually perform the renaming. Now this variable is in SSA form
-	sprintf(var->var_name, "%s_%d", linked_var->var_name, generation_level);
+	//Store the generation level in here
+	var->ssa_generation = generation_level;
 }
 
 

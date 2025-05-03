@@ -7,7 +7,6 @@
 #include "optimizer.h"
 #include "../queue/heap_queue.h"
 #include <stdio.h>
-#include <string.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -1485,7 +1484,7 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_code_stmt_t* stmt, th
 			while(stmt != NULL){
 				//Is the assignee our variable AND it's unmarked?
 				if(stmt->mark == FALSE && stmt->assignee != NULL && stmt->assignee->linked_var == variable->linked_var){
-					if(strcmp(stmt->assignee->var_name, variable->var_name) == 0){
+					if(stmt->assignee->ssa_generation == variable->ssa_generation){
 						//Add this in
 						dynamic_array_add(worklist, stmt);
 						//Mark it
