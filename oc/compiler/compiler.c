@@ -33,6 +33,8 @@ u_int32_t num_warnings;
  *  level-order traversal and compile in that order
  */
 static void compile(char* fname, front_end_results_package_t* results){
+	//For errors
+	char info[2000];
 	//These are all NULL initially
 	results->constant_symtab = NULL;
 	results->function_symtab = NULL;
@@ -43,6 +45,15 @@ static void compile(char* fname, front_end_results_package_t* results){
 
 	//First we try to open the file
 	FILE* fl = fopen(fname, "r");
+
+	//If this is the case, we fail immediately
+	if(fl == NULL){
+		sprintf(info, "The file %s either could not be found or could not be opened", fname);
+		//Error out
+		print_parse_message(PARSE_ERROR, info, 0);
+		num_errors++;
+		return;
+	}
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
@@ -99,7 +110,6 @@ int main(int argc, char** argv){
 
 	//If the AST root is bad, there's no use in going on here
 	if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
-		printf("CFG CONSTRUCTOR WILL NOT BE INVOKED\n");
 		goto final_printout;
 	}
 
