@@ -445,6 +445,89 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 /**
  * Handle a compound and statement optimization
+ *
+ * t36 <- t35 >= t34
+ * t37 <- 0x20
+ * t38 <- b_1
+ * t39 <- t38 <= t37
+ * t40 <- t36 && t39
+ * jz .L16 <----------- else target
+ * jmp .L17 <---------- affirmative target
+ *
+ * This should become
+ * t36 <- t35 >= t34
+ * jl .L16 <-------- else target
+ * t38 <- b_1
+ * t39 <- t38 <= t37
+ * jg .L16 <-------- else target
+ * jmp .L17
+ */
+static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+	//Starting off-we're given the and stmt as a parameter, and our two jumps
+	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
+	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
+	three_addr_var_t* op1 = stmt->op1;
+	//Grab a statement cursor
+	three_addr_code_stmt_t* cursor = stmt;
+
+	//Run backwards until we find where op1 is the assignee
+	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
+		//Keep advancing backward
+		cursor = cursor->previous_statement;
+	}
+	
+	//Once we get out here, we have the statement that assigns op1. Since this is an "and" target,
+	//we'll jump to ELSE if we have a bad result here(result being zero) because that would cause
+	//the rest of the and to be false
+	
+	//We need to select the appropriate jump type for our statement. We want an inverse jump, 
+	//because we're jumping if this condition fails
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE);
+	
+	//Jump to else here
+	three_addr_code_stmt_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, jump);
+	//Make sure to mark that this is branch ending
+	jump_to_else_stmt->is_branch_ending = TRUE;
+
+	//We'll now need to insert this statement right after where op1 is assigned at cursor
+	three_addr_code_stmt_t* after = cursor->next_statement;
+
+	//The jump statement is now in between the two
+	cursor->next_statement = jump_to_else_stmt;
+	jump_to_else_stmt->previous_statement = cursor;
+
+	//And we'll also update the references for after
+	jump_to_else_stmt->next_statement = after;
+	after->previous_statement = jump_to_else_stmt;
+
+	//Hang onto these
+	three_addr_code_stmt_t* previous = stmt->previous_statement;
+	three_addr_code_stmt_t* next = stmt->next_statement;
+	three_addr_code_stmt_t* final_jump = next->next_statement;
+
+	//And even better, we now don't need the compound and at all. We can delete the whole stmt
+	delete_statement(cfg, block, stmt);
+
+	//We also no longer need the following jump statement
+	delete_statement(cfg, block, next);
+
+	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
+	//We'll do a direct jump here - if it's affirmative
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE);
+
+	//Now we'll jump to else
+	three_addr_code_stmt_t* final_cond_jump = emit_jmp_stmt_three_addr_code(else_target, jump);
+
+	//We'll now add this one in right as the previous one
+	previous->next_statement = final_cond_jump;
+	final_cond_jump->previous_statement = previous;
+	final_cond_jump->next_statement = final_jump;
+	final_jump->previous_statement = final_cond_jump;
+}
+
+
+/**
+ * Handle a compound and statement optimization
  */
 static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
@@ -653,17 +736,38 @@ static void optimize_compound_logic(cfg_t* cfg){
 			continue;
 		}
 
-		//We made it here, so we know that this is the else target
-		else_target = block->exit_statement->jumping_to_block;
-
 		//Now we need to check for the if target. If it's null, not a jump statement, or a direct jump, we're out of here
 		if(block->exit_statement->previous_statement == NULL || block->exit_statement->previous_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT
 			|| block->exit_statement->previous_statement->jump_type == JUMP_TYPE_JMP){
 			continue;
 		}
 
-		//This will be our if target
-		if_target = block->exit_statement->previous_statement->jumping_to_block;
+		//Do we need to use the inverse jumping methodology?
+		u_int8_t use_inverse_jump = FALSE;
+
+		//If this IS an inverse jump, then our else clause is actually the conditional
+		if(block->exit_statement->previous_statement->inverse_jump == TRUE){
+			//These will be inverse of what we normally have
+			//We made it here, so we know that this is the else target
+			else_target = block->exit_statement->previous_statement->jumping_to_block;
+
+			//This will be our if target
+			if_target = block->exit_statement->jumping_to_block;
+
+			//Set the flag
+			use_inverse_jump = TRUE;
+
+		//Otherwise it's a normal conditional scenario
+		} else {
+			//We made it here, so we know that this is the else target
+			else_target = block->exit_statement->jumping_to_block;
+
+			//This will be our if target
+			if_target = block->exit_statement->previous_statement->jumping_to_block;
+
+			//Set the flag
+			use_inverse_jump = FALSE;
+		}
 
 		//Grab a statement cursor
 		three_addr_code_stmt_t* cursor = block->exit_statement;
@@ -699,8 +803,14 @@ static void optimize_compound_logic(cfg_t* cfg){
 			//Make the helper call. These are treated differently based on what their
 			//operators are, so we'll need to use the appropriate call
 			if(stmt->op == DOUBLE_AND){
-				//Invoke the and helper
-				optimize_compound_and_jump(cfg, block, stmt, if_target, else_target);
+				if(use_inverse_jump == FALSE){
+					//Invoke the and helper
+					optimize_compound_and_jump(cfg, block, stmt, if_target, else_target);
+				} else {
+					//Invoke the inverse function
+					optimize_compound_and_jump_inverse(cfg, block, stmt, if_target, else_target);
+				}
+
 			} else {
 				//Invoke the or helper
 				optimize_compound_or_jump(cfg, block, stmt, if_target, else_target);
