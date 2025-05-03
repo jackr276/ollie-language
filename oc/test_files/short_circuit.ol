@@ -28,10 +28,10 @@ fn main(arg:i32, argv:char**) -> i32{
 	//Assign B a start
 	let mut b:i32 := 33;
 
-	while(b >= 9 && b <= 32) do{
+	do{
 		b--;
 		x := x - 1;
-	} 
+	} while(x == 88 || b <= 32) ;
 
 	//So it isn't optimized away
 	ret x;
