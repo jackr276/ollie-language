@@ -8,7 +8,7 @@
 #include "../ast/ast.h"
 #include "../parser/parser.h"
 #include "../stack/heapstack.h"
-#include "../three_addr_code/three_address_code.h"
+#include "../instruction/instruction.h"
 #include "../dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 

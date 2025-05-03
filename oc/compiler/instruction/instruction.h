@@ -3,11 +3,12 @@
  *
  * This header file defines methods that are used in the production and interpretation of
  * three address code. Three address code is what the middle-level IR of the compiler
- * is, and occupies the basic blocks of the CFG.
+ * is, and occupies the basic blocks of the CFG. The end IR of Ollie will be an instruction. 
+ * Everything begins its life as a three address code statement, and ends its life as an instruction
 */
 
-#ifndef THREE_ADDRESS_CODE_H
-#define THREE_ADDRESS_CODE_H
+#ifndef INSTRUCTION_H 
+#define INSTRUCTION_H 
 
 //For symtab linking
 #include "../symtab/symtab.h"
@@ -450,4 +451,4 @@ void deallocate_all_vars();
 */
 void deallocate_all_consts();
 
-#endif
+#endif /* INSTRUCTION_H */

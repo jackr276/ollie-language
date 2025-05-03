@@ -4,7 +4,7 @@
  * This is the implementation file for the three_address_code header file
 */
 
-#include "three_address_code.h"
+#include "instruction.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
