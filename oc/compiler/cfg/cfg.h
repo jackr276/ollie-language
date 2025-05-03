@@ -8,7 +8,7 @@
 #include "../ast/ast.h"
 #include "../parser/parser.h"
 #include "../stack/heapstack.h"
-#include "../three_addr_code/three_address_code.h"
+#include "../instruction/instruction.h"
 #include "../dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 
@@ -156,8 +156,8 @@ struct basic_block_t{
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
-	three_addr_code_stmt_t* leader_statement;
-	three_addr_code_stmt_t* exit_statement;
+	instruction_t* leader_statement;
+	instruction_t* exit_statement;
 };
 
 //Build the entire CFG from the AST. This function returns the CFG struct, which
@@ -165,12 +165,12 @@ struct basic_block_t{
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 //Add a statement to the basic block
-void add_statement(basic_block_t* target, three_addr_code_stmt_t* statement_node);
+void add_statement(basic_block_t* target, instruction_t* statement_node);
 
 /**
  * Delete a statement from the CFG - handling any/all edge cases that may arise
  */
-void delete_statement(cfg_t* cfg, basic_block_t* block, three_addr_code_stmt_t* stmt);
+void delete_statement(cfg_t* cfg, basic_block_t* block, instruction_t* stmt);
 
 //Add a successor to the block
 void add_successor(basic_block_t* target, basic_block_t* successor);
@@ -202,7 +202,7 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh);
 /**
  * Emit a jump statement directly into a block
  */
-void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump);
+void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump);
 
 /**
  * For DEBUGGING purposes - we will print all of the blocks in the control
