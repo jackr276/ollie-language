@@ -270,7 +270,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 					delete_all_branching_statements(cfg, current);
 					//Once we're done deleting, we'll emit a jump right to that jumping to
 					//block. This constitutes our "fold"
-					emit_jmp_stmt(current, end_branch_target, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current, end_branch_target, JUMP_TYPE_JMP, TRUE, FALSE);
 					//This does mean that we've changed
 					changed = TRUE;
 				}
@@ -402,7 +402,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//So long as we have stuff to add
 				while(cursor != NULL){
 					//Get a complete copy of the statement
-					instruction_t* new = copy_three_addr_code_stmt(cursor);
+					instruction_t* new = copy_instruction(cursor);
 
 					//If we're adding the very first one
 					if(head == NULL){
@@ -484,7 +484,7 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE);
 	
 	//Jump to else here
-	instruction_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, jump);
+	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_else_stmt->is_branch_ending = TRUE;
 
@@ -515,7 +515,7 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE);
 
 	//Now we'll jump to else
-	instruction_t* final_cond_jump = emit_jmp_stmt_three_addr_code(else_target, jump);
+	instruction_t* final_cond_jump = emit_jmp_instruction(else_target, jump);
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -572,7 +572,7 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
 	//rest of the or to be true
 	//Jump to else here
-	instruction_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, jump);
+	instruction_t* jump_to_if_stmt = emit_jmp_instruction(if_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_if_stmt->is_branch_ending = TRUE;
 
@@ -603,7 +603,7 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE);
 
 	//Now we'll emit the jump to else
-	instruction_t* final_cond_jump = emit_jmp_stmt_three_addr_code(else_target, jump);
+	instruction_t* final_cond_jump = emit_jmp_instruction(else_target, jump);
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -639,7 +639,7 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE);
 	
 	//Jump to else here
-	instruction_t* jump_to_else_stmt = emit_jmp_stmt_three_addr_code(else_target, jump);
+	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_else_stmt->is_branch_ending = TRUE;
 
@@ -670,7 +670,7 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL);
 
 	//Now we'll emit the jump to if
-	instruction_t* final_cond_jump = emit_jmp_stmt_three_addr_code(if_target, jump);
+	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -705,7 +705,7 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
 	//rest of the or to be true
 	//Jump to else here
-	instruction_t* jump_to_if_stmt = emit_jmp_stmt_three_addr_code(if_target, jump);
+	instruction_t* jump_to_if_stmt = emit_jmp_instruction(if_target, jump);
 	//Make sure to mark that this is branch ending
 	jump_to_if_stmt->is_branch_ending = TRUE;
 
@@ -736,7 +736,7 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL);
 
 	//Now we'll emit the jump to if
-	instruction_t* final_cond_jump = emit_jmp_stmt_three_addr_code(if_target, jump);
+	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -1148,7 +1148,7 @@ static void sweep(cfg_t* cfg){
 				//We'll first find the nearest marked postdominator
 				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
 				//We'll then emit a jump to that node
-				instruction_t* jump_stmt = emit_jmp_stmt_three_addr_code(immediate_postdominator, JUMP_TYPE_JMP);
+				instruction_t* jump_stmt = emit_jmp_instruction(immediate_postdominator, JUMP_TYPE_JMP);
 				//Add this statement in
 				add_statement(block, jump_stmt);
 				//It is also now a successor

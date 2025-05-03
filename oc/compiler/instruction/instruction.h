@@ -150,7 +150,7 @@ typedef enum{
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A memory access statement
 	THREE_ADDR_CODE_MEM_ACCESS_STMT
-} three_addr_code_stmt_class_t;
+} instruction_stmt_class_t;
 
 /**
  * A three address var may be a temp variable or it may be
@@ -235,7 +235,7 @@ struct instruction_t{
 	//The list of temp variable parameters at most 6
 	void* function_parameters;
 	//What is the three address code class
-	three_addr_code_stmt_class_t CLASS;
+	instruction_stmt_class_t CLASS;
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
 	//The actual operator, stored as a token for size requirements
@@ -294,105 +294,110 @@ three_addr_const_t* emit_int_constant_direct(int int_const);
 /**
  * Emit a statement that is in LEA form
  */
-instruction_t* emit_lea_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
-instruction_t* emit_indir_jump_address_calc_three_addr_code(three_addr_var_t* assignee, void* jump_table, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* jump_table, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit a statement using three vars and a binary operator
  * ALL statements are of the form: assignee <- op1 operator op2
 */
-instruction_t* emit_bin_op_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2); 
+instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2); 
 
 /**
  * Emit a statement using two vars and a constant
  */
-instruction_t* emit_bin_op_with_const_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2); 
+instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2); 
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2
  */
-instruction_t* emit_assn_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
-instruction_t* emit_assn_const_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_const_t* constant);
+instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant);
+
+/**
+ * Emit a memory access statement
+ */
+instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type);
 
 /**
  * Emit a return statement. The return statement can optionally have a node that we're returning.
  * Returnee may or may not be null
  */
-instruction_t* emit_ret_stmt_three_addr_code(three_addr_var_t* returnee);
+instruction_t* emit_ret_instruction(three_addr_var_t* returnee);
 
 /**
  * Emit an increment instruction
  */
-instruction_t* emit_inc_stmt_three_addr_code(three_addr_var_t* incrementee);
+instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
 
 /**
  * Emit a decrement instruction
  */
-instruction_t* emit_dec_stmt_three_addr_code(three_addr_var_t* decrementee);
+instruction_t* emit_dec_instruction(three_addr_var_t* decrementee);
 
 /**
  * Emit a negation(negX) statement
  */
-instruction_t* emit_neg_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* negatee);
+instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t* negatee);
 
 /**
  * Emit a bitwise not instruction
  */
-instruction_t* emit_not_stmt_three_addr_code(three_addr_var_t* var);
+instruction_t* emit_not_instruction(three_addr_var_t* var);
 
 /**
  * Emit a label statement here
  */
-instruction_t* emit_label_stmt_three_addr_code(three_addr_var_t* var);
+instruction_t* emit_label_instruction(three_addr_var_t* var);
 
 /**
  * Emit a left shift statement
  */
-instruction_t* emit_left_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const);
+instruction_t* emit_left_shift_stmt_instruction(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const);
 
 /**
  * Emit a right shift statement
  */
-instruction_t* emit_right_shift_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount, three_addr_const_t* shift_amount_const);
+instruction_t* emit_right_shift_instruction(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount, three_addr_const_t* shift_amount_const);
 
 /**
  * Emit a logical not instruction
  */
-instruction_t* emit_logical_not_stmt_three_addr_code(three_addr_var_t* assignee, three_addr_var_t* var);
+instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_addr_var_t* var);
 
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_jmp_stmt_three_addr_code(void* jumping_to_block, jump_type_t jump_type);
+instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_type);
 
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_indirect_jmp_stmt_three_addr_code(three_addr_var_t* address, jump_type_t jump_type);
+instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_type_t jump_type);
 
 /**
  * Emit a direct jump statement. This is used only with jump statements the user has made
  */
-instruction_t* emit_dir_jmp_stmt_three_addr_code(three_addr_var_t* jumping_to);
+instruction_t* emit_direct_jmp_instruction(three_addr_var_t* jumping_to);
 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in
  */
-instruction_t* emit_func_call_three_addr_code(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
+instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
 
 /**
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
  * by any future optimizations
  */
-instruction_t* emit_asm_statement_three_addr_code(asm_inline_stmt_ast_node_t* asm_inline_node);
+instruction_t* emit_asm_inline_instruction(asm_inline_stmt_ast_node_t* asm_inline_node);
 
 /**
  * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
@@ -402,7 +407,7 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable);
 /**
  * Emit an idle statement
  */
-instruction_t* emit_idle_statement_three_addr_code();
+instruction_t* emit_idle_instruction();
 
 /**
  * Are two variables equal? A helper method for searching
@@ -416,9 +421,9 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level);
 
 /**
- * Emit a complete, one-for-one copy of a three address code statement
+ * Emit a complete, one-for-one copy of an instruction
  */
-instruction_t* copy_three_addr_code_stmt(instruction_t* copied);
+instruction_t* copy_instruction(instruction_t* copied);
 
 /**
  * Pretty print a three address code statement

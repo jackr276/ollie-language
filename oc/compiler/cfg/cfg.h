@@ -202,7 +202,7 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh);
 /**
  * Emit a jump statement directly into a block
  */
-void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump);
+void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump);
 
 /**
  * For DEBUGGING purposes - we will print all of the blocks in the control

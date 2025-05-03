@@ -101,9 +101,9 @@ static basic_block_t* visit_switch_statement(values_package_t* values);
 
 
 //Return a three address code variable
-static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
-static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
-
+static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
+static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
+static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 
 /**
  * This is a very simple helper function that will pack values for us. This is done to avoid repeated code
@@ -2054,7 +2054,7 @@ static void rename_all_variables(cfg_t* cfg){
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
-static three_addr_var_t* emit_lea_stmt(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee
 	three_addr_var_t* assignee = emit_temp_var(base_type);
 
@@ -2064,7 +2064,7 @@ static three_addr_var_t* emit_lea_stmt(basic_block_t* basic_block, three_addr_va
 	}
 
 	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_lea_stmt_three_addr_code(assignee, base_addr, offset, base_type->type_size);
+	instruction_t* stmt = emit_lea_instruction(assignee, base_addr, offset, base_type->type_size);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2080,7 +2080,7 @@ static three_addr_var_t* emit_lea_stmt(basic_block_t* basic_block, three_addr_va
 /**
  * Emit an indirect jump statement
  */
-static three_addr_var_t* emit_indirect_jump_addr_calc_stmt(basic_block_t* basic_block, jump_table_t* initial_address, three_addr_var_t* mutliplicand, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* basic_block, jump_table_t* initial_address, three_addr_var_t* mutliplicand, u_int8_t is_branch_ending){
 	//We'll need a new temp var for the assignee
 	three_addr_var_t* assignee = emit_temp_var(lookup_type(type_symtab, "label")->type);
 
@@ -2090,7 +2090,7 @@ static three_addr_var_t* emit_indirect_jump_addr_calc_stmt(basic_block_t* basic_
 	}
 
 	//Use the helper to emit it - type size is 8 because it's an address
-	instruction_t* stmt = emit_indir_jump_address_calc_three_addr_code(assignee, initial_address, mutliplicand, 8);
+	instruction_t* stmt = emit_indir_jump_address_calc_instruction(assignee, initial_address, mutliplicand, 8);
 
 	//Mark it as branch ending
 	stmt->is_branch_ending = is_branch_ending;
@@ -2106,9 +2106,9 @@ static three_addr_var_t* emit_indirect_jump_addr_calc_stmt(basic_block_t* basic_
 /**
  * Directly emit the assembly nop instruction
  */
-static void emit_idle_stmt(basic_block_t* basic_block, u_int8_t is_branch_ending){
+static void emit_idle(basic_block_t* basic_block, u_int8_t is_branch_ending){
 	//Use the helper
-	instruction_t* idle_stmt = emit_idle_statement_three_addr_code();
+	instruction_t* idle_stmt = emit_idle_instruction();
 
 	//Mark this with whatever was passed through
 	idle_stmt->is_branch_ending = is_branch_ending;
@@ -2124,9 +2124,9 @@ static void emit_idle_stmt(basic_block_t* basic_block, u_int8_t is_branch_ending
  * Directly emit the assembly code for an inlined statement. Users who write assembly inline
  * want it directly inserted in order, nothing more, nothing less
  */
-static void emit_asm_inline_stmt(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node, u_int8_t is_branch_ending){
+static void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node, u_int8_t is_branch_ending){
 	//First we allocate the whole thing
-	instruction_t* asm_inline_stmt = emit_asm_statement_three_addr_code(asm_inline_node->node); 
+	instruction_t* asm_inline_stmt = emit_asm_inline_instruction(asm_inline_node->node); 
 	
 	//Mark this with whatever was passed through
 	asm_inline_stmt->is_branch_ending =is_branch_ending;
@@ -2141,7 +2141,7 @@ static void emit_asm_inline_stmt(basic_block_t* basic_block, generic_ast_node_t*
 /**
  * Emit the abstract machine code for a return statement
  */
-static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
+static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
 	//For holding our temporary return variable
 	expr_ret_package_t package;
 
@@ -2154,13 +2154,13 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 	//If the ret node's first child is not null, we'll let the expression rule
 	//handle it
 	if(ret_node->first_child != NULL){
-		package = emit_binary_op_expr_code(basic_block, ret_node->first_child, is_branch_ending);
+		package = emit_binary_operation(basic_block, ret_node->first_child, is_branch_ending);
 
 		//If the assignee here is an indirect(memory access) variable, we'll do a quick temp assignment for
 		//it that way we aren't trying to dereference in the return statement
 		if(package.assignee->indirection_level > 0){
 			//Emit the temp assignment
-			instruction_t* assn_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(package.assignee->type), package.assignee);
+			instruction_t* assn_stmt = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 			//Add it into the block
 			add_statement(basic_block, assn_stmt);
 			//The return variable is now what was assigned
@@ -2171,7 +2171,7 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 	}
 
 	//We'll use the ret stmt feature here
-	instruction_t* ret_stmt = emit_ret_stmt_three_addr_code(return_variable);
+	instruction_t* ret_stmt = emit_ret_instruction(return_variable);
 
 	//Mark this with whatever was passed through
 	ret_stmt->is_branch_ending = is_branch_ending;
@@ -2184,7 +2184,7 @@ static void emit_ret_stmt(basic_block_t* basic_block, generic_ast_node_t* ret_no
 /**
  * Emit the abstract machine code for a label statement
  */
-static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t* label_node, u_int8_t is_branch_ending){
+static void emit_label(basic_block_t* basic_block, generic_ast_node_t* label_node, u_int8_t is_branch_ending){
 	//Emit the appropriate variable
 	three_addr_var_t* label_var = emit_var(label_node->variable, TRUE);
 
@@ -2192,7 +2192,7 @@ static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t*
 	//in the way that most do. As such, we will not add it in as live
 
 	//We'll just use the helper to emit this
-	instruction_t* stmt = emit_label_stmt_three_addr_code(label_var);
+	instruction_t* stmt = emit_label_instruction(label_var);
 
 	//Mark with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2205,7 +2205,7 @@ static void emit_label_stmt_code(basic_block_t* basic_block, generic_ast_node_t*
 /**
  * Emit the abstract machine code for a jump statement
  */
-static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* jump_statement, u_int8_t is_branch_ending){
+static void emit_direct_jump(basic_block_t* basic_block, generic_ast_node_t* jump_statement, u_int8_t is_branch_ending){
 	//Emit the appropriate variable
 	three_addr_var_t* label_var = emit_var(jump_statement->variable, TRUE);
 
@@ -2213,7 +2213,7 @@ static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* 
 	//in the way that most do. As such, we will not add it in as live
 	
 	//We'll just use the helper to do this
-	instruction_t* stmt = emit_dir_jmp_stmt_three_addr_code(label_var);
+	instruction_t* stmt = emit_direct_jmp_instruction(label_var);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -2227,9 +2227,9 @@ static void emit_jump_stmt_code(basic_block_t* basic_block, generic_ast_node_t* 
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
-void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
+void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
 	//Use the helper function to emit the statement
-	instruction_t* stmt = emit_jmp_stmt_three_addr_code(dest_block, type);
+	instruction_t* stmt = emit_jmp_instruction(dest_block, type);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -2248,9 +2248,9 @@ void emit_jmp_stmt(basic_block_t* basic_block, basic_block_t* dest_block, jump_t
  * Indirect jumps are written in the form:
  * 	jump *__var__, where var holds the address that we need
  */
-void emit_indirect_jump_stmt(basic_block_t* basic_block, three_addr_var_t* dest_addr, jump_type_t type, u_int8_t is_branch_ending){
+void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr, jump_type_t type, u_int8_t is_branch_ending){
 	//Use the helper function to create it
-	instruction_t* indirect_jump = emit_indirect_jmp_stmt_three_addr_code(dest_addr, type);
+	instruction_t* indirect_jump = emit_indirect_jmp_instruction(dest_addr, type);
 
 	//Is it branch ending?
 	indirect_jump->is_branch_ending = is_branch_ending;
@@ -2263,9 +2263,9 @@ void emit_indirect_jump_stmt(basic_block_t* basic_block, three_addr_var_t* dest_
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
-static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_ast_node_t* constant_node, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node, u_int8_t is_branch_ending){
 	//We'll use the constant var feature here
-	instruction_t* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
+	instruction_t* const_var = emit_assignment_with_const_instruction(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
 
 	//Mark this with whatever was passed through
 	const_var->is_branch_ending = is_branch_ending;
@@ -2281,9 +2281,9 @@ static three_addr_var_t* emit_constant_code(basic_block_t* basic_block, generic_
 /**
  * Emit the abstract machine code for a constant to variable assignment. 
  */
-static three_addr_var_t* emit_constant_code_direct(basic_block_t* basic_block, three_addr_const_t* constant, generic_type_t* inferred_type, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_block, three_addr_const_t* constant, generic_type_t* inferred_type, u_int8_t is_branch_ending){
 	//We'll use the constant var feature here
-	instruction_t* const_var = emit_assn_const_stmt_three_addr_code(emit_temp_var(inferred_type), constant);
+	instruction_t* const_var = emit_assignment_with_const_instruction(emit_temp_var(inferred_type), constant);
 
 	//Mark this with whatever was passed through
 	const_var->is_branch_ending = is_branch_ending;
@@ -2300,12 +2300,12 @@ static three_addr_var_t* emit_constant_code_direct(basic_block_t* basic_block, t
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
-static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generic_ast_node_t* ident_node, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
 	//Just give back the name
 	if(use_temp == PRESERVE_ORIG_VAR || side == SIDE_TYPE_RIGHT){
 		//If it's an enum constant
 		if(ident_node->variable->is_enumeration_member == TRUE){
-			return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), lookup_type(type_symtab, "u32")->type, is_branch_ending);
+			return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), lookup_type(type_symtab, "u32")->type, is_branch_ending);
 		}
 
 		//Emit the variable
@@ -2332,7 +2332,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		symtab_type_record_t* type_record = lookup_type(type_symtab, "u32");
 		generic_type_t* type = type_record->type;
 		//Just create a constant here with the enum
-		return emit_constant_code_direct(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), type, is_branch_ending);
+		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), type, is_branch_ending);
 
 	} else {
 		//First we'll create the non-temp var here
@@ -2345,7 +2345,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
 		add_used_variable(basic_block, non_temp_var);
 
 		//Let's first create the assignment statement
-		instruction_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(ident_node->inferred_type), non_temp_var);
+		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
 
 		//Carry this through
 		temp_assnment->is_branch_ending = is_branch_ending;
@@ -2364,7 +2364,7 @@ static three_addr_var_t* emit_ident_expr_code(basic_block_t* basic_block, generi
  */
 static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
 	//Create the code
-	instruction_t* inc_code = emit_inc_stmt_three_addr_code(incrementee);
+	instruction_t* inc_code = emit_inc_instruction(incrementee);
 
 	//This will count as live if we read from it
 	if(incrementee->is_temporary == FALSE){
@@ -2389,7 +2389,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
  */
 static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
 	//Create the code
-	instruction_t* dec_code = emit_dec_stmt_three_addr_code(decrementee);
+	instruction_t* dec_code = emit_dec_instruction(decrementee);
 
 	//This will count as live if we read from it
 	if(decrementee->is_temporary == FALSE){
@@ -2437,7 +2437,7 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
  */
 static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, temp_selection_t use_temp, u_int8_t is_branch_ending){
 	//First we'll create it here
-	instruction_t* not_stmt = emit_not_stmt_three_addr_code(var);
+	instruction_t* not_stmt = emit_not_instruction(var);
 
 	//This is also a case where the variable is read from, so it counts as live
 	if(var->is_temporary == FALSE){
@@ -2468,7 +2468,7 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 /**
  * Emit a binary operation statement with a constant built in
  */
-static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending){
 	//If these variables are not temporary, then we have read from them
 	if(assignee->is_temporary == FALSE){
 		add_used_variable(basic_block, assignee);
@@ -2480,7 +2480,7 @@ static three_addr_var_t* emit_binary_op_with_constant_code(basic_block_t* basic_
 	}
 
 	//First let's create it
-	instruction_t* stmt = emit_bin_op_with_const_three_addr_code(assignee, op1, op, constant);
+	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, op1, op, constant);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -2512,7 +2512,7 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
 	}
 
 	//Now let's create it
-	instruction_t* stmt = emit_neg_stmt_three_addr_code(var, negated);
+	instruction_t* stmt = emit_neg_instruction(var, negated);
 
 	//Mark with it's branch ending status
 	stmt->is_branch_ending = is_branch_ending;
@@ -2530,7 +2530,7 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
  */
 static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, u_int8_t is_branch_ending){
 	//We ALWAYS use a temp var here
-	instruction_t* stmt = emit_logical_not_stmt_three_addr_code(emit_temp_var(negated->type), negated);
+	instruction_t* stmt = emit_logical_not_instruction(emit_temp_var(negated->type), negated);
 	
 	//If negated isn't temp, it also counts as a read
 	if(negated->is_temporary == FALSE){
@@ -2556,15 +2556,15 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
 static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
 	if(primary_parent->CLASS == AST_NODE_CLASS_IDENTIFIER){
 		//If it's an identifier, emit this and leave
-		 return emit_ident_expr_code(basic_block, primary_parent, use_temp, side, is_branch_ending);
+		 return emit_identifier(basic_block, primary_parent, use_temp, side, is_branch_ending);
 	//If it's a constant, emit this and leave
 	} else if(primary_parent->CLASS == AST_NODE_CLASS_CONSTANT){
-		return emit_constant_code(basic_block, primary_parent, is_branch_ending);
+		return emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
 	} else if(primary_parent->CLASS == AST_NODE_CLASS_BINARY_EXPR){
-		return emit_binary_op_expr_code(basic_block, primary_parent, is_branch_ending).assignee;
+		return emit_binary_operation(basic_block, primary_parent, is_branch_ending).assignee;
 	//Handle a function call
 	} else if(primary_parent->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
-		return emit_function_call_code(basic_block, primary_parent, is_branch_ending);
+		return emit_function_call(basic_block, primary_parent, is_branch_ending);
 	} else {
 		//Throw some error here, really this should never occur
 		print_parse_message(PARSE_ERROR, "Did not find identifier, constant, expression or function call in primary expression", primary_parent->line_number);
@@ -2608,7 +2608,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			
 			//Save the current variable into this new temporary one. This is what allows
 			//us to achieve the "Increment/decrement after use" effect
-			instruction_t* assignment =  emit_assn_stmt_three_addr_code(temp_var, current_var);
+			instruction_t* assignment =  emit_assignment_instruction(temp_var, current_var);
 
 			//Mark this
 			assignment->is_branch_ending = is_branch_ending;
@@ -2638,7 +2638,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 		} else if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//Let's find the logical or expression that we have here. It should
 			//be the first child of this node
-			three_addr_var_t* offset = emit_binary_op_expr_code(basic_block, cursor->first_child, is_branch_ending).assignee;
+			three_addr_var_t* offset = emit_binary_operation(basic_block, cursor->first_child, is_branch_ending).assignee;
 
 			//Now we'll need the current variable type to know the base address and the size
 			//This should be guaranteed to be a pointer or array. Current var is either
@@ -2666,7 +2666,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			 *
 			 * This can be done using a lea instruction, so we will emit that directly
 			 */
-			three_addr_var_t* address = emit_lea_stmt(basic_block, current_var, offset, base_type, is_branch_ending);
+			three_addr_var_t* address = emit_lea(basic_block, current_var, offset, base_type, is_branch_ending);
 
 			//The current var is always updated to be the address
 			current_var = address;
@@ -2687,7 +2687,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 					current_var->access_type = MEMORY_ACCESS_READ;
 
 					//We will perform the deref here, as we can't do it in the lea 
-					instruction_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
+					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_var->type), current_var);
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
@@ -2716,7 +2716,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			three_addr_const_t* offset = emit_int_constant_direct(field->offset);
 
 			//Now that we have the construct field, we can calculate what we need by grabbing the offset
-			instruction_t* address_calc = emit_bin_op_with_const_three_addr_code(emit_temp_var(member->type), current_var, PLUS, offset);
+			instruction_t* address_calc = emit_binary_operation_with_const_instruction(emit_temp_var(member->type), current_var, PLUS, offset);
 
 			//Add this into the block
 			add_statement(basic_block, address_calc);
@@ -2740,7 +2740,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 					current_var->access_type = MEMORY_ACCESS_READ;
 
 					//We will perform the deref here, as we can't do it in the lea 
-					instruction_t* deref_stmt = emit_assn_stmt_three_addr_code(emit_temp_var(current_var->type), current_var);
+					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_var->type), current_var);
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
@@ -2778,7 +2778,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 	//node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
 		//Let the helper deal with it
-		return emit_constant_code(basic_block, unary_expr_parent, is_branch_ending);
+		return emit_constant_assignment(basic_block, unary_expr_parent, is_branch_ending);
 	}
 
 	//If it isn't a constant, then this node should have children
@@ -2806,7 +2806,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 				//Emit the constant size
 				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size);
 				//Now we'll make the statement
-				return emit_binary_op_with_constant_code(basic_block, assignee, assignee, PLUS, constant, is_branch_ending);
+				return emit_binary_operation_with_constant(basic_block, assignee, assignee, PLUS, constant, is_branch_ending);
 			} else {
 				//We really just have an "inc" instruction here
 				return emit_inc_code(basic_block, assignee, is_branch_ending);
@@ -2817,7 +2817,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 				//Emit the constant size
 				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size);
 				//Now we'll make the statement
-				return emit_binary_op_with_constant_code(basic_block, assignee, assignee, MINUS, constant, is_branch_ending);
+				return emit_binary_operation_with_constant(basic_block, assignee, assignee, MINUS, constant, is_branch_ending);
 			} else {
 				//We really just have an "inc" instruction here
 				return emit_dec_code(basic_block, assignee, is_branch_ending);
@@ -2870,7 +2870,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  * For each binary expression, we compute
  *
  */
-static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
+static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
 	//The return package here
 	expr_ret_package_t package;
 	//Operator is blank by default
@@ -2883,7 +2883,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 		package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, USE_TEMP_VAR, SIDE_TYPE_RIGHT, is_branch_ending);
 		return package;
 	} else if(logical_or_expr->CLASS == AST_NODE_CLASS_CONSTANT){
-		package.assignee = emit_constant_code(basic_block, logical_or_expr, is_branch_ending);
+		package.assignee = emit_constant_assignment(basic_block, logical_or_expr, is_branch_ending);
 		return package;
 	}
 
@@ -2892,13 +2892,13 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	generic_ast_node_t* cursor = logical_or_expr->first_child;
 	
 	//Emit the binary expression on the left first
-	expr_ret_package_t left_hand_temp = emit_binary_op_expr_code(basic_block, cursor, is_branch_ending);
+	expr_ret_package_t left_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
 
 	//Advance up here
 	cursor = cursor->next_sibling;
 
 	//Then grab the right hand temp
-	expr_ret_package_t right_hand_temp = emit_binary_op_expr_code(basic_block, cursor, is_branch_ending);
+	expr_ret_package_t right_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
 
 	//Let's see what binary operator that we have
 	Token binary_operator = logical_or_expr->binary_operator;
@@ -2920,7 +2920,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 		op1 = left_hand_temp.assignee;
 	} else {
 		//emit the temp assignment
-		instruction_t* temp_assnment = emit_assn_stmt_three_addr_code(emit_temp_var(left_hand_temp.assignee->type), left_hand_temp.assignee);
+		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(left_hand_temp.assignee->type), left_hand_temp.assignee);
 		//Add it into here
 		add_statement(basic_block, temp_assnment);
 		
@@ -2932,7 +2932,7 @@ static expr_ret_package_t emit_binary_op_expr_code(basic_block_t* basic_block, g
 	}
 
 	//Emit the binary operator expression using our helper
-	stmt = emit_bin_op_three_addr_code(emit_temp_var(logical_or_expr->inferred_type), op1, binary_operator, right_hand_temp.assignee);
+	stmt = emit_binary_operation_instruction(emit_temp_var(logical_or_expr->inferred_type), op1, binary_operator, right_hand_temp.assignee);
 
 	//Mark this with what we have
 	stmt->is_branch_ending = is_branch_ending;
@@ -2995,10 +2995,10 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		add_assigned_variable(basic_block, left_hand_var);
 
 		//Now emit whatever binary expression code that we have
-		expr_ret_package_t package = emit_binary_op_expr_code(basic_block, expr_node->first_child, is_branch_ending);
+		expr_ret_package_t package = emit_binary_operation(basic_block, expr_node->first_child, is_branch_ending);
 
 		//The actual statement is the assignment of right to left
-		instruction_t* assn_stmt = emit_assn_stmt_three_addr_code(left_hand_var, package.assignee);
+		instruction_t* assn_stmt = emit_assignment_instruction(left_hand_var, package.assignee);
 
 		//Finally we'll add this into the overall block
 		add_statement(basic_block, assn_stmt);
@@ -3024,10 +3024,10 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		cursor = cursor->next_sibling;
 
 		//Now emit the right hand expression
-		expr_ret_package_t package = emit_binary_op_expr_code(basic_block, cursor, is_branch_ending);
+		expr_ret_package_t package = emit_binary_operation(basic_block, cursor, is_branch_ending);
 
 		//Finally we'll construct the whole thing
-		instruction_t* stmt = emit_assn_stmt_three_addr_code(left_hand_var, package.assignee);
+		instruction_t* stmt = emit_assignment_instruction(left_hand_var, package.assignee);
 		
 		//Mark this with what was passed through
 		stmt->is_branch_ending = is_branch_ending;
@@ -3044,10 +3044,10 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
-		return emit_binary_op_expr_code(basic_block, expr_node, is_branch_ending);
+		return emit_binary_operation(basic_block, expr_node, is_branch_ending);
 	} else if(expr_node->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
 		//Emit the function call statement
-		ret_package.assignee = emit_function_call_code(basic_block, expr_node, is_branch_ending);
+		ret_package.assignee = emit_function_call(basic_block, expr_node, is_branch_ending);
 		return ret_package;
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		/**
@@ -3059,7 +3059,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 			printf("========HERE============\n");
 			print_variable_name(expr_node->first_child->variable);
 			//If this is the case, then we need to just emit the temporary value and be done with it
-			ret_package.assignee =  emit_ident_expr_code(basic_block, expr_node->first_child, USE_TEMP_VAR, SIDE_TYPE_LEFT, TRUE);
+			ret_package.assignee =  emit_identifier(basic_block, expr_node->first_child, USE_TEMP_VAR, SIDE_TYPE_LEFT, TRUE);
 			return ret_package;
 		} else {
 			//Let this rule handle it
@@ -3080,7 +3080,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
  * Emit a function call node. In this iteration of a function call, we will still be parameterized, so the actual 
  * node will record what needs to be passed into the function
  */
-static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
 	//Grab this out first
 	symtab_function_record_t* func_record = function_call_node->func_record;
 
@@ -3094,7 +3094,7 @@ static three_addr_var_t* emit_function_call_code(basic_block_t* basic_block, gen
 	}
 
 	//Once we get here we can create the function statement
-	instruction_t* func_call_stmt = emit_func_call_three_addr_code(func_record, assignee);
+	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, assignee);
 
 	//Mark this with whatever we have
 	func_call_stmt->is_branch_ending = is_branch_ending;
@@ -3630,7 +3630,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	add_successor(for_stmt_entry_block, condition_block);
 
 	//We will now emit a jump from the entry block, to the condition block
-	emit_jmp_stmt(for_stmt_entry_block, condition_block, JUMP_TYPE_JMP ,TRUE, FALSE);
+	emit_jump(for_stmt_entry_block, condition_block, JUMP_TYPE_JMP ,TRUE, FALSE);
 
 	//Move along to the next node
 	ast_cursor = ast_cursor->next_sibling;
@@ -3667,7 +3667,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	}
 	
 	//Unconditional jump to condition block
-	emit_jmp_stmt(for_stmt_update_block, condition_block, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(for_stmt_update_block, condition_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//This node will always jump right back to the start
 	add_successor(for_stmt_update_block, condition_block);
@@ -3705,7 +3705,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		add_successor(condition_block, for_stmt_exit_block);
 
 		//Make the condition block jump to the exit. This is an inverse jump
-		emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
+		emit_jump(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
 
 		//And we're done
 		return for_stmt_entry_block;
@@ -3719,10 +3719,10 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	add_successor(condition_block, for_stmt_exit_block);
 
 	//Make the condition block jump to the exit. This is an inverse jump
-	emit_jmp_stmt(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
+	emit_jump(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
 
 	//Emit a direct jump from the condition block to the compound stmt start
-	emit_jmp_stmt(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
@@ -3735,7 +3735,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//If it ends in a return statement, there is no point in continuing this
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
 		//We also need an uncoditional jump right to the update block
-		emit_jmp_stmt(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		emit_jump(compound_stmt_end, for_stmt_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
 	//We'll add the successor either way for control flow reasons
@@ -3791,7 +3791,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//No matter what, this will get merged into the top statement
 	add_successor(do_while_stmt_entry_block, do_while_compound_stmt_entry);
 	//Now we'll jump to it
-	emit_jmp_stmt(do_while_stmt_entry_block, do_while_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(do_while_stmt_entry_block, do_while_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//We will drill to the bottom of the compound statement
 	basic_block_t* compound_stmt_end = do_while_stmt_entry_block;
@@ -3825,9 +3825,9 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 		
 	//We'll need a jump statement here to the entrance block
-	emit_jmp_stmt(compound_stmt_end, do_while_stmt_entry_block, jump_type, TRUE, FALSE);
+	emit_jump(compound_stmt_end, do_while_stmt_entry_block, jump_type, TRUE, FALSE);
 	//Also emit a jump statement to the ending block
-	emit_jmp_stmt(compound_stmt_end, do_while_stmt_exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(compound_stmt_end, do_while_stmt_exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//Always return the entry block
 	return do_while_stmt_entry_block;
@@ -3894,13 +3894,13 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	//we're bad, so we'll do an inverse jump
 	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
 	//"Jump over" the body if it's bad
-	emit_jmp_stmt(while_statement_entry_block, while_statement_end_block, jump_type, TRUE, TRUE);
+	emit_jump(while_statement_entry_block, while_statement_end_block, jump_type, TRUE, TRUE);
 
 	//Otherwise it isn't null, so we can add it as a successor
 	add_successor(while_statement_entry_block, compound_stmt_start);
 
 	//We want to have a direct jump to the body too
-	emit_jmp_stmt(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//The exit block is also a successor to the entry block
 	add_successor(while_statement_entry_block, while_statement_end_block);
@@ -3920,7 +3920,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		//His direct successor is the end block
 		compound_stmt_end->direct_successor = while_statement_end_block;
 		//The compound statement end will jump right back up to the entry block
-		emit_jmp_stmt(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		emit_jump(compound_stmt_end, while_statement_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
 	//Set this to make sure
@@ -3967,7 +3967,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//We'll just set this to jump out of here
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-		emit_jmp_stmt(entry_block, exit_block, jump_to_if, TRUE, FALSE);
+		emit_jump(entry_block, exit_block, jump_to_if, TRUE, FALSE);
 		add_successor(entry_block, exit_block);
 
 	//We expect this to be the most likely option
@@ -3976,7 +3976,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		add_successor(entry_block, if_compound_stmt_entry);
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-		emit_jmp_stmt(entry_block, if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
+		emit_jump(entry_block, if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
 
 		//Now we'll find the end of this statement
 		if_compound_stmt_end = if_compound_stmt_entry;
@@ -3989,7 +3989,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//If this is not a return block, we will add these
 		if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
 			//The successor to the if-stmt end path is the if statement end block
-			emit_jmp_stmt(if_compound_stmt_end, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+			emit_jump(if_compound_stmt_end, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			//If this is the case, the end block is a successor of the if_stmt end
 			add_successor(if_compound_stmt_end, exit_block);
 		}
@@ -4022,7 +4022,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//The new one is a successor of the old one
 		add_successor(temp, current_entry_block);
 		//And we'll emit a direct jump from the old one to the new one
-		emit_jmp_stmt(temp, current_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		emit_jump(temp, current_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 		//So we've seen the else-if clause. Let's grab the expression first
 		package = emit_expr_code(current_entry_block, else_if_cursor, TRUE, TRUE);
@@ -4048,7 +4048,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//We'll just set this to jump out of here
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-			emit_jmp_stmt(current_entry_block, exit_block, jump_to_else_if, TRUE, FALSE);
+			emit_jump(current_entry_block, exit_block, jump_to_else_if, TRUE, FALSE);
 			add_successor(current_entry_block, exit_block);
 
 		//We expect this to be the most likely option
@@ -4057,7 +4057,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			add_successor(current_entry_block, else_if_compound_stmt_entry);
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
-			emit_jmp_stmt(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
+			emit_jump(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
 			else_if_compound_stmt_exit = else_if_compound_stmt_entry;
@@ -4070,7 +4070,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//If this is not a return block, we will add these
 			if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
-				emit_jmp_stmt(else_if_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(else_if_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
 				add_successor(else_if_compound_stmt_exit, exit_block);
 			}
@@ -4101,12 +4101,12 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//We'll jump to the end here
 			add_successor(current_entry_block, exit_block);
 			//Emit a direct jump here
-			emit_jmp_stmt(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+			emit_jump(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 		} else {
 			//Add the if statement node in as a direct successor
 			add_successor(current_entry_block, else_compound_stmt_entry);
 			//We will perform a normal jump to this one
-			emit_jmp_stmt(current_entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
+			emit_jump(current_entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
 			else_compound_stmt_exit = else_compound_stmt_entry;
@@ -4119,7 +4119,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//If this is not a return block, we will add these
 			if(else_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
-				emit_jmp_stmt(else_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(else_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
 				add_successor(else_compound_stmt_exit, exit_block);
 			}
@@ -4130,7 +4130,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//We'll jump to the end here
 		add_successor(current_entry_block, exit_block);
 		//Emit a direct jump here
-		emit_jmp_stmt(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		emit_jump(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
 	//For our convenience - this makes drilling way faster
@@ -4201,7 +4201,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 
 			//Emit the return statement, let the sub rule handle
-			emit_ret_stmt(current_block, current_node, FALSE);
+			emit_ret(current_block, current_node, FALSE);
 
 			//Destroy any/all successors of the current block. Once you have a return statement in a block, there
 			//can be no other successors
@@ -4272,7 +4272,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//Add this in as a successor to current
 				add_successor(current_block, if_stmt_start);
 				//Emit a jump from current to the start
-				emit_jmp_stmt(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 				//Now reassign current
 				current_block = if_stmt_start;
 			}
@@ -4303,7 +4303,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			} else {
 				//Add as a successor
 				add_successor(current_block, while_stmt_entry_block);
-				emit_jmp_stmt(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//Set the current block here
@@ -4333,7 +4333,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//We never merge do-while's, they are strictly successors
 			} else {
 				add_successor(current_block, do_while_stmt_entry_block);
-				emit_jmp_stmt(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//Now we'll need to reach the end-point of this statement
@@ -4365,7 +4365,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//Don't merge, just add successors
 			} else {
 				add_successor(current_block, for_stmt_entry_block);
-				emit_jmp_stmt(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				current_block = for_stmt_entry_block;
 			}
 			
@@ -4402,14 +4402,14 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//the loop entry block
 					add_successor(current_block, values->loop_stmt_start);
 					//We always jump to the start of the loop statement unconditionally
-					emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
 					add_successor(current_block, values->for_loop_update_block);
 					//Emit a direct unconditional jump statement to it
-					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//We're done here, so return the starting block. There is no 
@@ -4438,9 +4438,9 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//Restore the direct successor
 					current_block->direct_successor = new_block;
 					//We always jump to the start of the loop statement unconditionally
-					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
+					emit_jump(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
 					//Emit a direct jump to the new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//We are in a for loop
 				} else {
@@ -4451,9 +4451,9 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//The direct successor of the current block is the new block
 					current_block->direct_successor = new_block;
 					//Emit a direct unconditional jump statement to it
-					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
+					emit_jump(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
 					//Emit a direct jump to the new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//This is now the current block
@@ -4484,7 +4484,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//Otherwise we need to break out of the loop
 				add_successor(current_block, values->loop_stmt_end);
 				//We will jump to it -- this is always an uncoditional jump
-				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//For a regular break statement, this is it, so we just get out
 				//Give back the starting block
@@ -4509,9 +4509,9 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
 				//Emit our conditional jump now
-				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
+				emit_jump(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
 				//Emit a jump statement to the new block. This will count as our "else"
-				emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//And finally - we set the current block to be the new block
 				current_block = new_block;
 			}
@@ -4539,7 +4539,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 					//Otherwise it's a successor
 					add_successor(current_block, compound_stmt_block);
 					//Jump to it - important for optimizer
-					emit_jmp_stmt(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//Regardless, the current block now is the compound statement
@@ -4563,7 +4563,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 			
 			//We rely on the helper to do it for us
-			emit_label_stmt_code(current_block, current_node, FALSE);
+			emit_label(current_block, current_node, FALSE);
 
 		//Handle a jump statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_JUMP_STMT){
@@ -4574,7 +4574,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 
 			//We rely on the helper to do it for us
-			emit_jump_stmt_code(current_block, current_node, TRUE);
+			emit_direct_jump(current_block, current_node, TRUE);
 
 		//These are 100% user generated,
 		} else if(current_node->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
@@ -4589,7 +4589,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 
 			//Let the helper handle
-			emit_asm_inline_stmt(current_block, current_node, FALSE);
+			emit_assembly_inline(current_block, current_node, FALSE);
 
 		//Handle a nop statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_IDLE_STMT){
@@ -4600,7 +4600,7 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			}
 
 			//Let the helper handle -- doesn't even need the cursor
-			emit_idle_stmt(current_block, FALSE);
+			emit_idle(current_block, FALSE);
 	
 		//This means that we have some kind of expression statement
 		} else {
@@ -4811,7 +4811,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 		add_successor(current_block, ending_block);
 
 		//We will always emit a direct jump from this block to the ending block
-		emit_jmp_stmt(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
@@ -4840,22 +4840,22 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//range or above the upper range. If it is, we jump to the very end
 	
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_op_with_constant_code(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package.assignee, L_THAN, lower_bound, TRUE);
+	emit_binary_operation_with_constant(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package.assignee, L_THAN, lower_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL);
 	//Now we'll emit our jump
-	emit_jmp_stmt(starting_block, default_block, jump_lower_than, TRUE, FALSE);
+	emit_jump(starting_block, default_block, jump_lower_than, TRUE, FALSE);
 
 	//Next step -> if we're above the maximum, jump to default
-	emit_binary_op_with_constant_code(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package.assignee, G_THAN, upper_bound, TRUE);
+	emit_binary_operation_with_constant(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package.assignee, G_THAN, upper_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL);
 	//Now we'll emit our jump
-	emit_jmp_stmt(starting_block, default_block, jump_greater_than, TRUE, FALSE);
+	emit_jump(starting_block, default_block, jump_greater_than, TRUE, FALSE);
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_op_with_constant_code(starting_block, emit_temp_var(expression_node->inferred_type), package.assignee, MINUS, emit_int_constant_direct(offset), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(starting_block, emit_temp_var(expression_node->inferred_type), package.assignee, MINUS, emit_int_constant_direct(offset), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -4867,10 +4867,10 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	 * 	TODO an idea: we could replace this is a right shift by 3(just a thought)
 	 */
 	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_addr_calc_stmt(starting_block, &(starting_block->jump_table), input, TRUE);
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(starting_block, &(starting_block->jump_table), input, TRUE);
 
 	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump_stmt(starting_block, address, JUMP_TYPE_JMP, TRUE);
+	emit_indirect_jump(starting_block, address, JUMP_TYPE_JMP, TRUE);
 
 	//Ensure that the starting block's direct successor is the end block, for convenience
 	starting_block->direct_successor = ending_block;
@@ -4934,7 +4934,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 
 			//Emit the return statement, let the sub rule handle
-			emit_ret_stmt(current_block, ast_cursor, FALSE);
+			emit_ret(current_block, ast_cursor, FALSE);
 
 			//Destroy any/all successors of the current block. Once you have a return statement in a block, there
 			//can be no other successors
@@ -4978,7 +4978,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Add a successor to the current block
 				add_successor(current_block, if_stmt_start);
 				//Emit a jump from current to the start
-				emit_jmp_stmt(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 				current_block = if_stmt_start;
 			}
 
@@ -5009,7 +5009,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Add as a successor
 				add_successor(current_block, while_stmt_entry_block);
 				//Emit a direct jump to it
-				emit_jmp_stmt(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//Let's now drill to the bottom
@@ -5039,7 +5039,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We never merge do-while's, they are strictly successors
 			} else {
 				add_successor(current_block, do_while_stmt_entry_block);
-				emit_jmp_stmt(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//Now we'll need to reach the end-point of this statement
@@ -5071,7 +5071,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//We don't merge, we'll add successors
 			} else {
 				add_successor(current_block, for_stmt_entry_block);
-				emit_jmp_stmt(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				current_block = for_stmt_entry_block;
 			}
 			
@@ -5108,14 +5108,14 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//the loop entry block
 					add_successor(current_block, values->loop_stmt_start);
 					//We always jump to the start of the loop statement unconditionally
-					emit_jmp_stmt(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
 					add_successor(current_block, values->for_loop_update_block);
 					//Emit a direct unconditional jump statement to it
-					emit_jmp_stmt(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//We're done here, so return the starting block. There is no 
@@ -5144,9 +5144,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//Restore the direct successor
 					current_block->direct_successor = new_block;
 					//We always jump to the start of the loop statement unconditionally
-					emit_jmp_stmt(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
+					emit_jump(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
 					//The other end of the conditional continue will be jumping to this new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//We are in a for loop
 				} else {
 					//Otherwise we are in a for loop, so we just need to point to the for loop update block
@@ -5157,9 +5157,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//Restore the direct successor
 					current_block->direct_successor = new_block;
 					//Emit a direct unconditional jump statement to it
-					emit_jmp_stmt(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
+					emit_jump(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
 					//The other end of the conditional continue will be jumping to this new block
-					emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//And as we go forward, this new block will be the current block
@@ -5190,7 +5190,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//We'll need to break out of the loop
 				add_successor(current_block, values->loop_stmt_end);
 				//We will jump to it -- this is always an uncoditional jump
-				emit_jmp_stmt(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//For a regular break statement, this is it, so we just get out
 				//Give back the starting block
@@ -5216,9 +5216,9 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				current_block->direct_successor = new_block;
 
 				//We will jump to it -- this jump is decided above
-				emit_jmp_stmt(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
+				emit_jump(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
 				//Emit a jump to the new block
-				emit_jmp_stmt(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//Once we're out here, the current block is now the new one
 				current_block = new_block;
@@ -5247,7 +5247,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 					//Otherwise it's a successor
 					add_successor(current_block, compound_stmt_block);
 					//Jump to it - important for optimizer
-					emit_jmp_stmt(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//Regardless, the current block now is the compound statement
@@ -5272,7 +5272,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 			
 			//We rely on the helper to do it for us
-			emit_label_stmt_code(current_block, ast_cursor, FALSE);
+			emit_label(current_block, ast_cursor, FALSE);
 
 		//Handle a jump statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_JUMP_STMT){
@@ -5283,7 +5283,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 
 			//We rely on the helper to do it for us
-			emit_jump_stmt_code(current_block, ast_cursor, TRUE);
+			emit_direct_jump(current_block, ast_cursor, TRUE);
 
 		//A very unique case exists in the switch statement. For a switch 
 		//statement, we leverage some very unique properties of the enumerable
@@ -5303,7 +5303,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Otherwise this is a direct successor
 				add_successor(current_block, switch_stmt_entry);
 				//We will also emit a jump from the current block to the entry
-				emit_jmp_stmt(current_block, switch_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, switch_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
 			//We need to drill to the end
@@ -5353,7 +5353,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 
 			//Let the helper handle
-			emit_asm_inline_stmt(current_block, ast_cursor, FALSE);
+			emit_assembly_inline(current_block, ast_cursor, FALSE);
 		//Handle a nop statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IDLE_STMT){
 			//Do we need a new block?
@@ -5363,7 +5363,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			}
 
 			//Let the helper handle -- doesn't even need the cursor
-			emit_idle_stmt(current_block, FALSE);
+			emit_idle(current_block, FALSE);
 	
 		//This means that we have some kind of expression statement
 		} else {
