@@ -106,6 +106,56 @@ static u_int8_t is_power_of_2(int64_t value){
 
 
 /**
+ * Take the binary logarithm of something that we already know
+ * is a power of 2. 
+ *
+ * IMPORTANT: This function will *only* work with values that are already
+ * known to be powers of 2. If you pass in something that isn't a power of 2,
+ * the answer *will* be wrong
+ *
+ * Here's how this works:
+ * Take 8: 1000, which is 2^3
+ *
+ * 1000 >> 1 = 0100 != 1, current power: 1
+ * 0100 >> 1 = 0010 != 1, current power: 2 
+ * 0010 >> 1 = 0001 != 1, current power: 3 
+ *
+ */
+static u_int32_t log2_of_known_power_of_2(u_int64_t value){
+	//Store a counter, initialize to 0
+	u_int32_t counter = 0;
+
+	//So long as we can shift to the left
+	while(value != 1){
+		//One more power here
+		counter++;
+		//Go back by 1
+		value = value >> 1;
+	}
+
+	return counter;
+}
+
+
+/**
+ * Take in a constant and update it with its binary log value
+ */
+static void update_constant_with_log2_value(three_addr_const_t* constant){
+	//These types use the 32 bit field
+	if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U || constant->const_type == HEX_CONST){
+		constant->int_const = log2_of_known_power_of_2(constant->int_const);
+	//Use the 64 bit field
+	} else if(constant->const_type == LONG_CONST || constant->const_type == LONG_CONST_FORCE_U){
+		constant->long_const = log2_of_known_power_of_2(constant->long_const);
+	//Use the 8 bit field
+	} else if(constant->const_type == CHAR_CONST){
+		constant->char_const = log2_of_known_power_of_2(constant->char_const);
+	}
+	//Anything else we ignore
+}
+
+
+/**
  * Simple utility for us to print out an instruction window
  */
 static void print_instruction_window(instruction_window_t* window){
@@ -755,7 +805,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				//We'll need to throw a warning here about 0 division
 				// TODO ADD MORE
 				} else {
-
+					//Throw a warning, not much else to do here
+					print_parse_message(WARNING, "Division by 0 will always error", 0);
 				}
 
 				//Notice how we do NOT mark any change as true here. This is because, even though yes we
@@ -795,7 +846,26 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					current_instruction->op1_const = NULL;
 					current_instruction->op = BLANK;
 				}
-				//TODO Add more
+			//What if we have a power of 2 here? For any kind of multiplication or division, this can
+			//be optimized into a  left or right shift if we have a compatible type(not a float)
+			} else if(const_is_power_of_2 && current_instruction->assignee->type->type_class == TYPE_CLASS_BASIC 
+				&& current_instruction->assignee->type->basic_type->basic_type != FLOAT32 
+				&& current_instruction->assignee->type->basic_type->basic_type != FLOAT64){
+
+				//If we have a star that's a left shift
+				if(current_instruction->op == STAR){
+					//Multiplication is a left shift
+					current_instruction->op = L_SHIFT;
+					//Update the constant with its log2 value
+					update_constant_with_log2_value(current_instruction->op1_const);
+
+				} else if(current_instruction->op == F_SLASH){
+					//Division is a right shift
+					current_instruction->op = R_SHIFT;
+					//Update the constant with its log2 value
+					update_constant_with_log2_value(current_instruction->op1_const);
+				}
+				//Otherwise, we don't need this
 			}
 		}
 	}
