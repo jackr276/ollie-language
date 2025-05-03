@@ -19,7 +19,7 @@ fn main(arg:i32, argv:char**) -> i32 {
 	a := x << 3;
 
 	a := a + y;
-	x := x - 1;
+	x := x / 8;
 
 	ret x + y + a;
 }

@@ -447,10 +447,12 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		three_addr_const_t* constant = stmt->op1_const;
 
 		//We'll now interpret what we have here
-		if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST){
+		if(constant->const_type == INT_CONST){
+			printf("%d\n", constant->int_const);
+		} else if(constant->const_type == HEX_CONST){
 			printf("0x%x\n", constant->int_const);
 		} else if(constant->const_type == LONG_CONST){
-			printf("0x%lx\n", constant->long_const);
+			printf("%ld\n", constant->long_const);
 		} else if(constant->const_type == FLOAT_CONST){
 			printf("%f\n", constant->float_const);
 		} else if(constant->const_type == CHAR_CONST){
@@ -475,10 +477,12 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		three_addr_const_t* constant = stmt->op1_const;
 
 		//We'll now interpret what we have here
-		if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST){
+		if(constant->const_type == INT_CONST){
+			printf("%d\n", constant->int_const);
+		} else if(constant->const_type == HEX_CONST){
 			printf("0x%x\n", constant->int_const);
 		} else if(constant->const_type == LONG_CONST){
-			printf("0x%lx\n", constant->long_const);
+			printf("%ld\n", constant->long_const);
 		} else if(constant->const_type == FLOAT_CONST){
 			printf("%f\n", constant->float_const);
 		} else if(constant->const_type == CHAR_CONST){
@@ -642,10 +646,12 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 			three_addr_const_t* constant = stmt->op1_const;
 
 			//We'll now interpret what we have here
-			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST){
-				printf("0x%x", constant->int_const);
+			if(constant->const_type == INT_CONST){
+				printf("%d", constant->int_const);
 			} else if(constant->const_type == LONG_CONST){
-				printf("0x%lx", constant->long_const);
+				printf("%ld", constant->long_const);
+			} else if(constant->const_type == HEX_CONST){
+				printf("0x%x", constant->int_const);
 			} else if(constant->const_type == FLOAT_CONST){
 				printf("%f", constant->float_const);
 			} else if(constant->const_type == CHAR_CONST){
@@ -751,10 +757,12 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		if(stmt->op1_const != NULL){
 			three_addr_const_t* constant = stmt->op1_const;
 			//We'll now interpret what we have here
-			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST){
+			if(constant->const_type == INT_CONST){
+				printf("%d", constant->int_const);
+			} else if(constant->const_type == HEX_CONST){
 				printf("0x%x", constant->int_const);
 			} else if(constant->const_type == LONG_CONST){
-				printf("0x%lx", constant->long_const);
+				printf("%ld", constant->long_const);
 			} else if(constant->const_type == CHAR_CONST){
 				printf("'%c'", constant->char_const);
 			}
@@ -782,10 +790,12 @@ void print_three_addr_code_stmt(three_addr_code_stmt_t* stmt){
 		if(stmt->op1_const != NULL){
 			three_addr_const_t* constant = stmt->op1_const;
 			//We'll now interpret what we have here
-			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST){
+			if(constant->const_type == INT_CONST){
+				printf("%d", constant->int_const);
+			} else if(constant->const_type == HEX_CONST){
 				printf("0x%x", constant->int_const);
 			} else if(constant->const_type == LONG_CONST){
-				printf("0x%lx", constant->long_const);
+				printf("%ld", constant->long_const);
 			} else if(constant->const_type == CHAR_CONST){
 				printf("'%c'", constant->char_const);
 			}
