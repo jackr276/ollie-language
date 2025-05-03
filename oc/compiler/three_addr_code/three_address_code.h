@@ -22,6 +22,33 @@ typedef struct three_addr_var_t three_addr_var_t;
 //A struct that holds our three address constants
 typedef struct three_addr_const_t three_addr_const_t;
 
+
+/**
+ * What type of instruction do we have? This saves us a lot of space
+ * as opposed to storing strings. These are x86-64 assembly instructions
+ */
+typedef enum{
+	MOVW,
+	MOVL,
+	MOVQ,
+	JMP,
+	JNE,
+	JE,
+	JNZ,
+	JZ,
+	JGE,
+	JG,
+	JLE,
+	JL,
+	ADDW,
+	ADDL,
+	ADDQ,
+	SUBW,
+	SUBL,
+	SUBQ,
+} instruction_type_t;
+
+
 /**
  * What kind of jump statement do we have?
  */
@@ -35,7 +62,6 @@ typedef enum{
 	JUMP_TYPE_JMP,
 	JUMP_TYPE_JGE,
 	JUMP_TYPE_JLE,
-	//TODO may add more
 } jump_type_t;
 
 
@@ -133,6 +159,8 @@ typedef enum{
 struct three_addr_var_t{
 	//For memory management. An extra 10 is given for SSA
 	char var_name[MAX_IDENT_LENGTH + 10];
+	//What is the ssa generation level?
+	u_int32_t ssa_generation;
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
 	//Types will be used for eventual register assignment
@@ -207,7 +235,10 @@ struct three_addr_code_stmt_t{
 	void* phi_function_parameters;
 	//The list of temp variable parameters at most 6
 	void* function_parameters;
+	//What is the three address code class
 	three_addr_code_stmt_class_t CLASS;
+	//What is the x86-64 instruction
+	instruction_type_t instruction_type;
 	//The actual operator, stored as a token for size requirements
 	Token op;
 	//Is this a jump table? -- for use in switch statements

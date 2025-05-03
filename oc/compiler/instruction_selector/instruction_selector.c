@@ -1093,19 +1093,11 @@ static void print_ordered_blocks(basic_block_t* head_block){
 
 
 /**
- * Run through and print every instruction in the selector
-*/
-void print_instructions(dynamic_array_t* instructions){
-
-}
-
-
-/**
  * A function that selects all instructions, via the peephole method. This kind of 
  * operation completely translates the CFG out of a CFG. When done, we have a straight line
  * of code that we print out
  */
-dynamic_array_t* select_all_instructions(cfg_t* cfg){
+basic_block_t* select_all_instructions(cfg_t* cfg){
 	//Our very first step in the instruction selector is to order all of the blocks in one 
 	//straight line. This step is also able to recognize and exploit some early optimizations,
 	//such as when a block ends in a jump to the block right below it
