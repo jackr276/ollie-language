@@ -49,6 +49,154 @@ struct instruction_window_t{
 
 
 /**
+ * Simple utility for us to print out an instruction window
+ */
+static void print_instruction_window(instruction_window_t* window){
+	printf("----------- Instruction Window ------------\n");
+	//We'll just print out all three instructions
+	if(window->instruction1 != NULL){
+		print_three_addr_code_stmt(window->instruction1);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	if(window->instruction2 != NULL){
+		print_three_addr_code_stmt(window->instruction2);
+	} else {
+		printf("EMPTY\n");
+	}
+	
+	if(window->instruction3 != NULL){
+		print_three_addr_code_stmt(window->instruction3);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	printf("-------------------------------------------\n");
+}
+
+
+/**
+ * Initialize the instruction window by taking in the first 3 values in the head block
+ */
+static instruction_window_t initialize_instruction_window(basic_block_t* head){
+	//Grab the window
+	instruction_window_t window;
+	window.instruction1 = NULL;
+	window.instruction2 = NULL;
+	window.instruction3 = NULL;
+
+	//The first instruction is the leader statement
+	window.instruction1 = head->leader_statement;
+
+	//If the next one is NULL, we have 2 NULL instructions
+	//following this. This is very rare, but it could happen
+	if(window.instruction1->next_statement == NULL){
+		window.instruction2 = NULL;
+		window.instruction3 = NULL;
+	} else {
+		//Otherwise we know we have a second instruction
+		window.instruction2 = window.instruction1->next_statement;
+		//No such checks are needed for instruction 3, we have no possibility of a null pointer
+		//error here
+		window.instruction3 = window.instruction2->next_statement;
+	}
+
+	//We're at the beginning here by default
+	if(window.instruction2 == NULL || window.instruction3 == NULL){
+		window.status = WINDOW_AT_END;
+	} else {
+		window.status = WINDOW_AT_START;
+	}
+	
+	//And now we give back the window
+	return window;
+}
+
+
+/**
+ * Advance the window up by 1 instruction. This means that the lowest instruction slides
+ * out of our window, and the one next to the highest instruction slides into it
+ */
+static instruction_window_t* slide_window(instruction_window_t* window){
+	//It should be fairly easy to slide -- except in the case
+	//where we're at the end of a block. In that case, we need to slide to that
+	//new block or we'll need an entirely new window if we end in a discrete jump
+	//to said block
+
+	
+	//If the third operation is not the end, then we're good to just bump everything up
+	//This is the simplest case, and allows us to just bump everything up and get out
+	if(window->instruction3->next_statement != NULL){
+		window->instruction1 = window->instruction1->next_statement;
+		window->instruction2 = window->instruction2->next_statement;
+		window->instruction3 = window->instruction3->next_statement;
+		//We're in the thick of it here
+		window->status = WINDOW_AT_MIDDLE;
+		
+		//Nowhere else to go here
+		return window;
+	
+	//This means that we don't have a full block, and are likely reaching the end
+	} else {
+		window->instruction1 = window->instruction1->next_statement;
+		window->instruction2 = window->instruction2->next_statement;
+		window->instruction3 = window->instruction3->next_statement;
+		//We're in the thick of it here
+		window->status = WINDOW_AT_END;
+
+		return window;
+	}
+}
+
+
+/**
+ * Select instructions in a given window
+ */
+static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* window){
+
+	//TODO 
+	return FALSE;
+}
+
+
+/**
+ * Run through every block and convert each instruction or sequence of instructions
+ * from three address code to assembly statements
+ */
+static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
+	//First we'll grab the head
+	basic_block_t* current = head_block;
+
+	//So long as this isn't NULL
+	while(current != NULL){
+		//Initialize the sliding window(very basic, more to come)
+		instruction_window_t window = initialize_instruction_window(current);
+
+		//Simplify it
+		select_instructions_in_window(cfg, &window);
+
+		//Did we change the block? If not, we need to slide
+		u_int8_t changed;
+
+		//So long as the window status is not end
+		while(window.status != WINDOW_AT_END) {
+			//Simplify the window
+			changed = select_instructions_in_window(cfg, &window);
+
+			//And slide it
+			if(changed == FALSE){
+				slide_window(&window);
+			}
+		} 
+
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
+}
+
+
+/**
  * Does the block that we're passing in end in a direct(jmp) jump to
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
@@ -152,108 +300,6 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 		constant->char_const = log2_of_known_power_of_2(constant->char_const);
 	}
 	//Anything else we ignore
-}
-
-
-/**
- * Simple utility for us to print out an instruction window
- */
-static void print_instruction_window(instruction_window_t* window){
-	printf("----------- Instruction Window ------------\n");
-	//We'll just print out all three instructions
-	if(window->instruction1 != NULL){
-		print_three_addr_code_stmt(window->instruction1);
-	} else {
-		printf("EMPTY\n");
-	}
-
-	if(window->instruction2 != NULL){
-		print_three_addr_code_stmt(window->instruction2);
-	} else {
-		printf("EMPTY\n");
-	}
-	
-	if(window->instruction3 != NULL){
-		print_three_addr_code_stmt(window->instruction3);
-	} else {
-		printf("EMPTY\n");
-	}
-
-	printf("-------------------------------------------\n");
-}
-
-
-/**
- * Advance the window up by 1 instruction. This means that the lowest instruction slides
- * out of our window, and the one next to the highest instruction slides into it
- */
-static instruction_window_t* slide_window(instruction_window_t* window){
-	//It should be fairly easy to slide -- except in the case
-	//where we're at the end of a block. In that case, we need to slide to that
-	//new block or we'll need an entirely new window if we end in a discrete jump
-	//to said block
-
-	
-	//If the third operation is not the end, then we're good to just bump everything up
-	//This is the simplest case, and allows us to just bump everything up and get out
-	if(window->instruction3->next_statement != NULL){
-		window->instruction1 = window->instruction1->next_statement;
-		window->instruction2 = window->instruction2->next_statement;
-		window->instruction3 = window->instruction3->next_statement;
-		//We're in the thick of it here
-		window->status = WINDOW_AT_MIDDLE;
-		
-		//Nowhere else to go here
-		return window;
-	
-	//This means that we don't have a full block, and are likely reaching the end
-	} else {
-		window->instruction1 = window->instruction1->next_statement;
-		window->instruction2 = window->instruction2->next_statement;
-		window->instruction3 = window->instruction3->next_statement;
-		//We're in the thick of it here
-		window->status = WINDOW_AT_END;
-
-		return window;
-	}
-}
-
-
-/**
- * Initialize the instruction window by taking in the first 3 values in the head block
- */
-static instruction_window_t initialize_instruction_window(basic_block_t* head){
-	//Grab the window
-	instruction_window_t window;
-	window.instruction1 = NULL;
-	window.instruction2 = NULL;
-	window.instruction3 = NULL;
-
-	//The first instruction is the leader statement
-	window.instruction1 = head->leader_statement;
-
-	//If the next one is NULL, we have 2 NULL instructions
-	//following this. This is very rare, but it could happen
-	if(window.instruction1->next_statement == NULL){
-		window.instruction2 = NULL;
-		window.instruction3 = NULL;
-	} else {
-		//Otherwise we know we have a second instruction
-		window.instruction2 = window.instruction1->next_statement;
-		//No such checks are needed for instruction 3, we have no possibility of a null pointer
-		//error here
-		window.instruction3 = window.instruction2->next_statement;
-	}
-
-	//We're at the beginning here by default
-	if(window.instruction2 == NULL || window.instruction3 == NULL){
-		window.status = WINDOW_AT_END;
-	} else {
-		window.status = WINDOW_AT_START;
-	}
-	
-	//And now we give back the window
-	return window;
 }
 
 
@@ -1116,8 +1162,8 @@ basic_block_t* select_all_instructions(cfg_t* cfg){
 	print_ordered_blocks(head_block);
 
 	printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
-	//Once we're done simplifying, we'll use the same sliding window technique to select instructions
-	
+	//Once we're done simplifying, we'll use the same sliding window technique to select instructions.
+	select_instructions(cfg, head_block);
 
 	//FOR NOW
 	return NULL;

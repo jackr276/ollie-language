@@ -16,7 +16,8 @@
 #include "../ast/ast.h"
 #include <sys/types.h>
 
-//A struct that holds all knowledge of three address codes
+//An overall structure for an instruction. Instructions start their life
+//as three address code statements, and eventually become assembly instructions
 typedef struct instruction_t instruction_t;
 //A struct that holds our three address variables
 typedef struct three_addr_var_t three_addr_var_t;
@@ -29,6 +30,7 @@ typedef struct three_addr_const_t three_addr_const_t;
  * as opposed to storing strings. These are x86-64 assembly instructions
  */
 typedef enum{
+	NONE = 0, //The NONE instruction, this is our default and we'll get this when we calloc
 	MOVW,
 	MOVL,
 	MOVQ,
@@ -48,6 +50,14 @@ typedef enum{
 	SUBL,
 	SUBQ,
 } instruction_type_t;
+
+
+/**
+ * Define the standard x86-64 register table
+ */
+typedef enum{
+	NO_REG = 0, //Default is that there's no register used
+} register_64_t;
 
 
 /**
@@ -202,8 +212,7 @@ struct three_addr_const_t{
 
 
 /**
- * A generic struct that encapsulates most of our three address code
- * statements
+ * A generic struct that encapsulates most of our instructions
  */
 struct instruction_t{
 	//What block holds this?
