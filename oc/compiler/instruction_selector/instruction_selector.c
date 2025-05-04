@@ -34,6 +34,16 @@ typedef enum {
 
 
 /**
+ * Will we be printing these out as instructions or as three address code
+ * statements?
+ */
+typedef enum {
+	PRINT_THREE_ADDRESS_CODE,
+	PRINT_INSTRUCTION
+} instruction_printing_mode_t;
+
+
+/**
  * The widow that we have here will store three instructions at once. This allows
  * us to look at three instruction patterns at any given time.
  */
@@ -49,9 +59,10 @@ struct instruction_window_t{
 
 
 /**
- * Simple utility for us to print out an instruction window
+ * Simple utility for us to print out an instruction window in its three address code
+ * (before instruction selection) format
  */
-static void print_instruction_window(instruction_window_t* window){
+static void print_instruction_window_three_address_code(instruction_window_t* window){
 	printf("----------- Instruction Window ------------\n");
 	//We'll just print out all three instructions
 	if(window->instruction1 != NULL){
@@ -68,6 +79,35 @@ static void print_instruction_window(instruction_window_t* window){
 	
 	if(window->instruction3 != NULL){
 		print_three_addr_code_stmt(window->instruction3);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	printf("-------------------------------------------\n");
+}
+
+
+/**
+ * Simple utility for us to print out an instruction window in the post
+ * instruction selection format
+ */
+static void print_instruction_window(instruction_window_t* window){
+	printf("----------- Instruction Window ------------\n");
+	//We'll just print out all three instructions
+	if(window->instruction1 != NULL){
+		print_instruction(window->instruction1);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	if(window->instruction2 != NULL){
+		print_instruction(window->instruction2);
+	} else {
+		printf("EMPTY\n");
+	}
+	
+	if(window->instruction3 != NULL){
+		print_instruction(window->instruction3);
 	} else {
 		printf("EMPTY\n");
 	}
@@ -1089,7 +1129,7 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 /**
  * Print a block our for reading
 */
-static void print_ordered_block(basic_block_t* block){
+static void print_ordered_block(basic_block_t* block, instruction_printing_mode_t mode){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
 		print_jump_table(&(block->jump_table));
@@ -1108,8 +1148,16 @@ static void print_ordered_block(basic_block_t* block){
 
 	//So long as it isn't null
 	while(cursor != NULL){
-		//Hand off to printing method
-		print_three_addr_code_stmt(cursor);
+		//Based on what mode we're given here, we call the appropriate
+		//print statement
+		if(mode == PRINT_THREE_ADDRESS_CODE){
+			//Hand off to printing method
+			print_three_addr_code_stmt(cursor);
+		} else {
+			print_instruction(cursor);
+		}
+
+
 		//Move along to the next one
 		cursor = cursor->next_statement;
 	}
@@ -1124,14 +1172,14 @@ static void print_ordered_block(basic_block_t* block){
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_ordered_blocks(basic_block_t* head_block){
+static void print_ordered_blocks(basic_block_t* head_block, instruction_printing_mode_t mode){
 	//Run through the direct successors so long as the block is not null
 	basic_block_t* current = head_block;
 
 	//So long as this one isn't NULL
 	while(current != NULL){
 		//Print it
-		print_ordered_block(current);
+		print_ordered_block(current, mode);
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
@@ -1152,18 +1200,19 @@ basic_block_t* select_all_instructions(cfg_t* cfg){
 	//DEBUG
 	//We'll first print before we simplify
 	printf("============================== BEFORE SIMPLIFY ========================================\n");
-	print_ordered_blocks(head_block);
+	print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
 
 	printf("============================== AFTER SIMPLIFY ========================================\n");
 	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
 	//format that is used in the optimization phase. Now, we need to take that expanded IR and
 	//recognize any redundant operations, dead values, unnecessary loads, etc.
 	simplify(cfg, head_block);
-	print_ordered_blocks(head_block);
+	print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
 
 	printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
 	//Once we're done simplifying, we'll use the same sliding window technique to select instructions.
 	select_instructions(cfg, head_block);
+	//print_ordered_blocks(head_block,PRINT_INSTRUCTION);
 
 	//FOR NOW
 	return NULL;

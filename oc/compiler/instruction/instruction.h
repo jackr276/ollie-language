@@ -440,6 +440,11 @@ instruction_t* copy_instruction(instruction_t* copied);
 void print_three_addr_code_stmt(instruction_t* stmt);
 
 /**
+ * Print an instruction that has not yet been given registers
+ */
+void print_instruction(instruction_t* instruction);
+
+/**
  * Print a variable and everything about it. If the variable is in
  * "Block header" mode, we won't print out any dereferencing info
  */

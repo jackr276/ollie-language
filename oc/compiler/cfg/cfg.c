@@ -2152,22 +2152,19 @@ static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u
 	three_addr_var_t* return_variable = NULL;
 
 	//If the ret node's first child is not null, we'll let the expression rule
-	//handle it
+	//handle it. We'll always do an assignment here because return statements present
+	//a special case. We always need our return variable to be in %rax, and that may
+	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
+		//Perform the binary operation here
 		package = emit_binary_operation(basic_block, ret_node->first_child, is_branch_ending);
 
-		//If the assignee here is an indirect(memory access) variable, we'll do a quick temp assignment for
-		//it that way we aren't trying to dereference in the return statement
-		if(package.assignee->indirection_level > 0){
-			//Emit the temp assignment
-			instruction_t* assn_stmt = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
-			//Add it into the block
-			add_statement(basic_block, assn_stmt);
-			//The return variable is now what was assigned
-			return_variable	= assn_stmt->assignee;
-		} else {
-			return_variable = package.assignee;
-		}
+		//Emit the temp assignment
+		instruction_t* assn_stmt = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+		//Add it into the block
+		add_statement(basic_block, assn_stmt);
+		//The return variable is now what was assigned
+		return_variable	= assn_stmt->assignee;
 	}
 
 	//We'll use the ret stmt feature here

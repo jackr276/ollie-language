@@ -777,6 +777,19 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 
 
 /**
+ * Print an instruction that has not yet been given registers
+ */
+void print_instruction(instruction_t* instruction){
+	//Switch based on what type we have
+	switch (instruction->instruction_type) {
+		default:
+			printf("Not yet selected\n");
+			break;
+	}
+}
+
+
+/**
  * Emit a decrement instruction
  */
 instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
