@@ -31,6 +31,8 @@ typedef struct three_addr_const_t three_addr_const_t;
  */
 typedef enum{
 	NONE = 0, //The NONE instruction, this is our default and we'll get this when we calloc
+	RET,
+	CALL,
 	MOVW,
 	MOVL,
 	MOVQ,

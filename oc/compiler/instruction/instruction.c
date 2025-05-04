@@ -782,6 +782,10 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 void print_instruction(instruction_t* instruction){
 	//Switch based on what type we have
 	switch (instruction->instruction_type) {
+		case RET:
+			printf("ret\n");
+			break;
+		//Show a default error message
 		default:
 			printf("Not yet selected\n");
 			break;

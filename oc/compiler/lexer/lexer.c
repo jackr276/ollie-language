@@ -73,7 +73,7 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 	lex_item.line_num = line_number;
 
 	//Token array, we will index using their enum values
-	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, FN, RET, JUMP, REQUIRE, REPLACE, 
+	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
 						STATIC, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
 						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM, ON,
 						REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 

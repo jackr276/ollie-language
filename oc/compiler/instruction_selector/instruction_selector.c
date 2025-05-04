@@ -194,9 +194,22 @@ static instruction_window_t* slide_window(instruction_window_t* window){
  * Select instructions in a given window
  */
 static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* window){
+	//Have we changed the window at all? Very similar to the simplify function
+	u_int8_t changed = FALSE;
 
-	//TODO 
-	return FALSE;
+	/**
+	 * =========================== Selecting move instructions ============================
+	 * After the simplifier runs, we should be able to plainly select move instructions based
+	 * on what remains. We'll need to know the word size for how large of a move we need to
+	 * do, but this will be stored in the variable
+	 */
+	//If we have an assign const statement, we'll do an immediate movement
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+
+	}
+
+
+	return changed;
 }
 
 
@@ -955,6 +968,18 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			}
 		}
 	}
+
+	/**
+	 * ================== Simplifying Adjacent Binary Operation with Constant statements ==============
+	 * Here is an example:
+	 * t2 <- arr_0 + 24
+	 * t4 <- t2 + 4
+	 * 
+	 * We could turn this into
+	 * t4 <- arr_0 + 28
+	 * TODO
+	 */
+
 
 	
 	/**

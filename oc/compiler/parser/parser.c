@@ -5946,7 +5946,7 @@ static generic_ast_node_t* branch_statement(FILE* fl){
 	switch (lookahead.tok) {
 		case JUMP:
 			return jump_statement(fl);
-		case RET:
+		case RETURN:
 			return return_statement(fl);
 		case BREAK:
 			return break_statement(fl);
@@ -7037,7 +7037,7 @@ static generic_ast_node_t* statement(FILE* fl){
 
 	//Some kind of branch statement
 	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
-			|| lookahead.tok == RET){
+			|| lookahead.tok == RETURN){
 		//The branch rule needs these, so we'll put them back
 		push_back_token(lookahead);
 		//return whatever this gives us
@@ -7135,7 +7135,7 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
 	//Some kind of branch statement
-	} else if(lookahead.tok == JUMP || lookahead.tok == RET){
+	} else if(lookahead.tok == JUMP || lookahead.tok == RETURN){
 		//The branch rule needs these, so we'll put them back
 		push_back_token(lookahead);
 		//return whatever this gives us
