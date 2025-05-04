@@ -12,6 +12,7 @@
 #include "../queue/heap_queue.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
 //For standardization across all modules
@@ -56,6 +57,18 @@ struct instruction_window_t{
 	//middle or end of a sequence
 	window_status_t status;
 };
+
+
+/**
+ * Set the window status to see if we're actually at the end. We do not
+ * count as being "at the end" unless the window's last 2 statements are NULL
+ */
+static void set_window_status(instruction_window_t* window){
+	//This is our case to check for
+	if(window->instruction2 == NULL && window->instruction3 == NULL){
+		window->status = WINDOW_AT_END;
+	}
+}
 
 
 /**
@@ -167,7 +180,7 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 	
 	//If the third operation is not the end, then we're good to just bump everything up
 	//This is the simplest case, and allows us to just bump everything up and get out
-	if(window->instruction3->next_statement != NULL){
+	if(window->instruction3 != NULL){
 		window->instruction1 = window->instruction1->next_statement;
 		window->instruction2 = window->instruction2->next_statement;
 		window->instruction3 = window->instruction3->next_statement;
@@ -176,12 +189,11 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 		
 		//Nowhere else to go here
 		return window;
-	
 	//This means that we don't have a full block, and are likely reaching the end
 	} else {
 		window->instruction1 = window->instruction1->next_statement;
 		window->instruction2 = window->instruction2->next_statement;
-		window->instruction3 = window->instruction3->next_statement;
+		window->instruction3 = NULL;
 		//We're in the thick of it here
 		window->status = WINDOW_AT_END;
 
@@ -255,8 +267,13 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 		assign_jump_instructions(window->instruction2);
 	}
 
+	if(window->instruction3 != NULL && (window->instruction3->CLASS == THREE_ADDR_CODE_JUMP_STMT
+		|| window->instruction3->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT)){
+		assign_jump_instructions(window->instruction2);
+	}
 
 
+	//Give back whether or not this got changed
 	return changed;
 }
 
@@ -466,13 +483,16 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			window->instruction2 = window->instruction3;
 
 			//We could have a case where instruction 3 is NULL here, let's account for that
-			if(window->instruction2 == NULL || window->instruction2->next_statement == NULL){
+			if(window->instruction2 == NULL){
+				//Set instruction 3 to be NULL
 				window->instruction3 = NULL;
-				//We're at the end if this happens
-				window->status = WINDOW_AT_END;
 			} else {
+				//Otherwise we're safe to crawl
 				window->instruction3 = window->instruction2->next_statement;
 			}
+
+			//Allow the helper to set this status
+			set_window_status(window);
 
 			//Whatever happened here, we did change something
 			changed = TRUE;
@@ -507,11 +527,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Now instruction 2 becomes instruction 3
 			window->instruction3 = window->instruction3->next_statement;
 
-			//We could have a case where instruction 3 is NULL here, let's account for that
-			if(window->instruction3 == NULL){
-				//We're at the end if this happens
-				window->status = WINDOW_AT_END;
-			}
+			//Set the status accordingly
+			set_window_status(window);
 
 			//Whatever happened here, we did change something
 			changed = TRUE;
@@ -549,14 +566,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//We need to account for this case
 			if(window->instruction2 == NULL){
 				window->instruction3 = NULL;
-				window->status = WINDOW_AT_END;
 			} else {
 				window->instruction3 = window->instruction2->next_statement;
-				//Mark where appropriate
-				if(window->instruction3 == NULL){
-					window->status = WINDOW_AT_END;
-				}
 			}
+
+			//Let the helper set the status
+			set_window_status(window);
 
 			//Regardless of what happened, we did see a change here
 			changed = TRUE;
@@ -597,15 +612,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//If this is NULL, mark that we're at the end
 			if(window->instruction2 == NULL){
 				window->instruction3 = NULL;
-				window->status = WINDOW_AT_END;
 			} else {
 				//Otherwise we'll shift this forward
 				window->instruction3 = window->instruction2->next_statement;
-				//Make sure that we still mark if need be
-				if(window->instruction3 == NULL){
-					window->status = WINDOW_AT_END;
-				}
 			}
+
+			//Let the helper set the status
+			set_window_status(window);
 
 			//This does count as a change
 			changed = TRUE;
@@ -640,10 +653,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//Otherwise we'll shift this forward
 			window->instruction3 = window->instruction2->next_statement;
-			//Make sure that we still mark if need be
-			if(window->instruction3 == NULL){
-				window->status = WINDOW_AT_END;
-			}
+
+			//Let the helper set the window status
+			set_window_status(window);
 
 			//This does count as a change
 			changed = TRUE;
@@ -702,16 +714,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//We need to account for cases where this happens
 			if(window->instruction2 == NULL){
 				window->instruction3 = NULL;
-				window->status = WINDOW_AT_END;
-
 			} else {
 				//Advance it
 				window->instruction3 = window->instruction2->next_statement;
-				//Set this when appropriate
-				if(window->instruction3 == NULL){
-					window->status = WINDOW_AT_END;
-				}
 			}
+
+			//Allow the helper to set this status
+			set_window_status(window);
 
 			//Regardless of what happened, we did change the window, so we'll
 			//update this
@@ -779,16 +788,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//If this is NULL, avoid a null pointer reference
 			if(window->instruction2 == NULL){
 				window->instruction3 = NULL;
-				window->status = WINDOW_AT_END;
 			} else {
 				//Otherwise we'll set it to be the next one
 				window->instruction3 = window->instruction2->next_statement;
-
-				//If appropriate, flag that we're at the end
-				if(window->instruction3 == NULL){
-					window->status = WINDOW_AT_END;
-				}
 			}
+
+			//Allow the helper to set the status
+			set_window_status(window);
 
 			//This counts as a change 
 			changed = TRUE;
@@ -839,14 +845,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//If this one is already NULL, we know we're at the end
 			if(third == NULL){
 				window->instruction3 = NULL;
-				window->status = WINDOW_AT_END;
 			} else {
 				window->instruction3 = third->next_statement;
-				//If this is the case, set the flag
-				if(window->instruction3 == NULL){
-					window->status = WINDOW_AT_END;
-				}
 			}
+
+			//Allow the helper to set the status
+			set_window_status(window);
 
 			//Regardless of what happened here, we did change the window so we'll set the flag
 			changed = TRUE;
@@ -1285,7 +1289,7 @@ basic_block_t* select_all_instructions(cfg_t* cfg){
 	printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
 	//Once we're done simplifying, we'll use the same sliding window technique to select instructions.
 	select_instructions(cfg, head_block);
-	print_ordered_blocks(head_block,PRINT_INSTRUCTION);
+	//print_ordered_blocks(head_block,PRINT_INSTRUCTION);
 
 	//FOR NOW
 	return NULL;

@@ -780,10 +780,40 @@ void print_three_addr_code_stmt(instruction_t* stmt){
  * Print an instruction that has not yet been given registers
  */
 void print_instruction(instruction_t* instruction){
+	//This will be null often, but if we need it it'll be here
+	basic_block_t* jumping_to_block = instruction->jumping_to_block;
+
 	//Switch based on what type we have
 	switch (instruction->instruction_type) {
 		case RET:
 			printf("ret\n");
+			break;
+		case JMP:
+			printf("jmp .L%d\n", jumping_to_block->block_id);
+			break;
+		case JE:
+			printf("je .L%d\n", jumping_to_block->block_id);
+			break;
+		case JNE:
+			printf("jne .L%d\n", jumping_to_block->block_id);
+			break;
+		case JZ:
+			printf("jZ .L%d\n", jumping_to_block->block_id);
+			break;
+		case JNZ:
+			printf("jnz .L%d\n", jumping_to_block->block_id);
+			break;
+		case JG:
+			printf("jg .L%d\n", jumping_to_block->block_id);
+			break;
+		case JL:
+			printf("jl .L%d\n", jumping_to_block->block_id);
+			break;
+		case JGE:
+			printf("jge .L%d\n", jumping_to_block->block_id);
+			break;
+		case JLE:
+			printf("jle .L%d\n", jumping_to_block->block_id);
 			break;
 		//Show a default error message
 		default:
