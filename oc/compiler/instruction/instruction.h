@@ -66,6 +66,7 @@ typedef enum{
  * What kind of jump statement do we have?
  */
 typedef enum{
+	NO_JUMP, //This is the default, and what we get when we have 0
 	JUMP_TYPE_JNE,
 	JUMP_TYPE_JE,
 	JUMP_TYPE_JNZ,
@@ -170,14 +171,14 @@ typedef enum{
  * for eventual SSA and type information
 */
 struct three_addr_var_t{
-	//What is the ssa generation level?
-	u_int32_t ssa_generation;
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//For memory management
 	three_addr_var_t* next_created;
+	//What is the ssa generation level?
+	u_int32_t ssa_generation;
 	//What's the temp var number
 	u_int32_t temp_var_number;
 	//What is the indirection level

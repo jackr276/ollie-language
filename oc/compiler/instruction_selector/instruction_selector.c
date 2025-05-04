@@ -191,6 +191,47 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 
 
 /**
+ * Jump instructions are basically already done for us. It's a very simple one-to-one
+ * mapping that we need to do here
+ */
+static void assign_jump_instructions(instruction_t* instruction){
+	//We already know that we have a jump here, we'll just need to switch on
+	//what the type is
+	switch (instruction->jump_type) {
+		case JUMP_TYPE_JMP:
+			instruction->instruction_type = JMP;
+			break;
+		case JUMP_TYPE_JE:
+			instruction->instruction_type = JE;
+			break;
+		case JUMP_TYPE_JNE:
+			instruction->instruction_type = JNE;
+			break;
+		case JUMP_TYPE_JG:
+			instruction->instruction_type = JG;
+			break;
+		case JUMP_TYPE_JGE:
+			instruction->instruction_type = JGE;
+			break;
+		case JUMP_TYPE_JL:
+			instruction->instruction_type = JL;
+			break;
+		case JUMP_TYPE_JLE:
+			instruction->instruction_type = JLE;
+			break;
+		case JUMP_TYPE_JZ:
+			instruction->instruction_type = JZ;
+			break;
+		case JUMP_TYPE_JNZ:
+			instruction->instruction_type = JNZ;
+			break;
+		default:
+			break;
+	}
+}
+
+
+/**
  * Select instructions in a given window
  */
 static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* window){
@@ -204,9 +245,16 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 	 * do, but this will be stored in the variable
 	 */
 	//If we have an assign const statement, we'll do an immediate movement
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
-
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_JUMP_STMT
+		|| window->instruction1->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
+		assign_jump_instructions(window->instruction1);
 	}
+
+	if(window->instruction2 != NULL && (window->instruction2->CLASS == THREE_ADDR_CODE_JUMP_STMT
+		|| window->instruction2->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT)){
+		assign_jump_instructions(window->instruction2);
+	}
+
 
 
 	return changed;
@@ -1237,7 +1285,7 @@ basic_block_t* select_all_instructions(cfg_t* cfg){
 	printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
 	//Once we're done simplifying, we'll use the same sliding window technique to select instructions.
 	select_instructions(cfg, head_block);
-	//print_ordered_blocks(head_block,PRINT_INSTRUCTION);
+	print_ordered_blocks(head_block,PRINT_INSTRUCTION);
 
 	//FOR NOW
 	return NULL;
