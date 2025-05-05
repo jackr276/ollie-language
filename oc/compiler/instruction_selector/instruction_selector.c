@@ -12,7 +12,6 @@
 #include "../queue/heap_queue.h"
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <sys/types.h>
 
 //For standardization across all modules
@@ -418,6 +417,16 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 		constant->char_const = log2_of_known_power_of_2(constant->char_const);
 	}
 	//Anything else we ignore
+}
+
+
+/**
+ * Take in two constant and a binary operand and combine them in whichever way we can
+ */
+three_addr_const_t* combine_constants(three_addr_const_t* const1, three_addr_const_t* const2, Token operator){
+
+	//We always give back the result in const1
+	return const1;
 }
 
 
@@ -859,6 +868,43 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 
 	/**
+	 * ================== Simplifying Adjacent Binary Operation with Constant statements ==============
+	 * Here is an example:
+	 * t2 <- arr_0 + 24
+	 * t4 <- t2 - 4
+	 * 
+	 * We could turn this into
+	 * t4 <- arr_0 + 20
+	 */
+	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT &&
+		window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		//Let's do this for convenience
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+
+		//Grab these two operators out, we'll need them to compare
+		Token first_operator = first->op;
+		Token second_operator = second->op;
+
+		//Let's check some more. If the assignee of the first instruction is the op1 of the second instruction,
+		//then we'll want to go ahead. We also need to ensure that the first and second operations are both plus
+		//and minus. There may be more in the future here
+		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, FALSE) == TRUE
+			&& (first_operator == PLUS || first_operator == MINUS) && (second_operator == PLUS || second_operator == MINUS)){
+			//Now we're good to optimize here, we'll be able to fold the constant operations into one big operation
+			
+			//First we'll set the op1 of the second operation to be the op1 of the first one
+			//second->op1 = first->op1;
+
+
+			//This is an operation that will change our window
+			//changed = TRUE;
+		}
+	}
+
+
+	/**
 	 * ================== Arithmetic Operation Simplifying ==========================
 	 * After we do all of this folding, we can stand to ask the question of if we 
 	 * have any simple arithmetic operations that can be folded together. Our first
@@ -1021,16 +1067,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
-	/**
-	 * ================== Simplifying Adjacent Binary Operation with Constant statements ==============
-	 * Here is an example:
-	 * t2 <- arr_0 + 24
-	 * t4 <- t2 + 4
-	 * 
-	 * We could turn this into
-	 * t4 <- arr_0 + 28
-	 * TODO
-	 */
 
 
 	

@@ -6,6 +6,12 @@ fn tester(arg:i32) -> void{
 	arg++;
 }
 
+//Dummy
+fn really_long_function(arg:i32) -> i32 {
+	arg++;
+	ret arg;
+}
+
 fn main(arg:i32, argv:char**) -> i32{
 	let mut x:u32 := 232;
 
@@ -15,7 +21,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	};
 
 	
-	if(x >= 3 && x <= 32) then{
+	if(x >= 3 && @really_long_function(x)) then{
 		x := x - 3;
 	} else if(x < 2 && (x != 1 || x != 2)) then {
 		x := x * 2;
