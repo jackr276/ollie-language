@@ -15,11 +15,11 @@ fn main(arg:i32, argv:char**) -> i32{
 	let mut i:i32 := 3;
 	
 	if(arg == 2) then {
-		arr[x] := 3;
+		arr[x] := i;
 	} else {
 		i := arr[0];
 	}
 
 	//So it isn't optimized away
-	ret arr[7];
+	ret arr[i];
 }

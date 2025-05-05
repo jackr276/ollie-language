@@ -277,6 +277,44 @@ static void single_instruction_pattern_match(instruction_t* instruction){
 }
 
 
+/**
+ * Handle a register/immediate to memory move type instruction selection
+ *
+ * DOES NOT DO DELETION/WINDOW REORDERING
+ */
+static void handle_to_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+	//If we have a bin op with const statement
+	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+
+	//Or if we have a statement like this(rare but may happen, covering our bases)
+	} else if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+ 
+	//Another very common case - a lea statement
+	} else if(address_calculation->CLASS == THREE_ADDR_CODE_LEA_STMT){
+
+	}
+
+}
+
+
+/**
+ * Handle a memory to register move type instruction selection
+ *
+ * DOES NOT DO DELETION/WINDOW REORDERING
+ */
+static void handle_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+	//If we have a bin op with const statement
+	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+
+	//Or if we have a statement like this(rare but may happen, covering our bases)
+	} else if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+ 
+	//Another very common case - a lea statement
+	} else if(address_calculation->CLASS == THREE_ADDR_CODE_LEA_STMT){
+
+	}
+}
+
 
 /**
  * Select instructions in a given window
@@ -296,7 +334,41 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 	 * a register-to-memory "store" or a memory-to-register "load". Remember, in x86 assembly
 	 * we can't go from memory-to-memory, so every memory access operation will fall within
 	 * this category
+	 *
+	 * First handle to memory movement
+	 * Example:
+	 * t26 <- t24 + 4
+	 * (t26) <- 3
+	 *
+	 * should become:
+	 * mov(w/l/q) $3, 4(t24)
 	 */
+	//If we have some kind of offset calculation followed by a dereferencing assingment, we have either a 
+	//register to memory or immediate to memory move. Either way, we can rewrite this using address computation mode
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT && window->instruction1->op == PLUS 
+		&& window->instruction2 != NULL &&
+		(window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
+		&& window->instruction2->assignee->indirection_level > 0){
+
+		//Use the helper to keep things somewhat clean in here
+		handle_to_memory_move(window->instruction1, window->instruction2);
+
+		//This counts as a change
+		//changed = TRUE;
+	}
+
+	//We also need to perform the exact same kind of optimization for instructions 2 and 3
+	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT && window->instruction2->op == PLUS 
+		&& window->instruction3 != NULL &&
+		(window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
+		&& window->instruction3->assignee->indirection_level > 0){
+
+		//Use the helper to keep things somewhat clean in here
+		handle_to_memory_move(window->instruction2, window->instruction3);
+
+		//This counts as a change
+		//changed = TRUE;
+	}
 
 	//Give back whether or not this got changed
 	return changed;
