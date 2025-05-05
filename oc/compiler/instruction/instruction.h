@@ -93,7 +93,6 @@ typedef enum{
 typedef enum{
 	WORD,
 	DOUBLE_WORD,
-	LONG_WORD,
 	QUAD_WORD,
 	SINGLE_PRECISION,
 	DOUBLE_PRECISION //For floats

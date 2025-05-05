@@ -10,6 +10,7 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/select.h>
@@ -350,13 +351,70 @@ static variable_size_t select_variable_size(three_addr_var_t* variable){
 
 
 /**
- * Handle a register/immediate to memory move type instruction selection
+ * Select the size of a constant based on its type
+ */
+variable_size_t select_constant_size(three_addr_const_t* constant){
+	variable_size_t size;
+
+	//This are all 32 bit
+	if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U
+		|| constant->const_type == HEX_CONST){
+		size = DOUBLE_WORD;
+
+	//Default for a float is double precision
+	} else if(constant->const_type == FLOAT_CONST){
+		size = DOUBLE_PRECISION;
+
+	//These are all 64 bit
+	} else if(constant->const_type == LONG_CONST || constant->const_type == LONG_CONST_FORCE_U){
+		size = QUAD_WORD;
+
+	//Sane default
+	} else {
+		size = QUAD_WORD;
+	}
+
+	return size;
+}
+
+
+/**
+ * Handle a register/immediate to memory move type instruction selection with an address calculation
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
-static void handle_to_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+static void handle_address_calc_to_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+	//Select the variable size
+	variable_size_t size;
+
+	//Select the appropriate size for later
+	if(memory_access->op1 != NULL){
+		size = select_variable_size(memory_access->op1);
+	//Otherwise it must be a constant
+	} else {
+		size = select_constant_size(memory_access->op1_const);
+	}
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
 	//If we have a bin op with const statement
 	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		
 
 	//Or if we have a statement like this(rare but may happen, covering our bases)
 	} else if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
@@ -370,11 +428,39 @@ static void handle_to_memory_move(instruction_t* address_calculation, instructio
 
 
 /**
- * Handle a memory to register move type instruction selection
+ * Handle a memory to register move type instruction selection with an address calculation
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
-static void handle_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+static void handle_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+	//Select the variable size
+	variable_size_t size;
+
+	//Select the appropriate size for later
+	if(memory_access->op1 != NULL){
+		size = select_variable_size(memory_access->op1);
+	//Otherwise it must be a constant
+	} else {
+		size = select_constant_size(memory_access->op1_const);
+	}
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
 	//If we have a bin op with const statement
 	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 
@@ -424,7 +510,7 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 		&& window->instruction2->assignee->indirection_level == 1){
 
 		//Use the helper to keep things somewhat clean in here
-		handle_to_memory_move(window->instruction1, window->instruction2);
+		handle_address_calc_to_memory_move(window->instruction1, window->instruction2);
 
 		//This counts as a change
 		//changed = TRUE;
@@ -438,7 +524,7 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 		&& window->instruction3->assignee->indirection_level == 1){
 
 		//Use the helper to keep things somewhat clean in here
-		handle_to_memory_move(window->instruction2, window->instruction3);
+		handle_address_calc_to_memory_move(window->instruction2, window->instruction3);
 
 		//This counts as a change
 		//changed = TRUE;
