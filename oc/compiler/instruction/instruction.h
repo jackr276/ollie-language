@@ -42,6 +42,8 @@ typedef enum{
 	MEM_TO_REG_MOVW,
 	MEM_TO_REG_MOVL,
 	MEM_TO_REG_MOVQ,
+	INDIRECT_JMP, //For our switch statements
+	NOP,
 	JMP,
 	JNE,
 	JE,

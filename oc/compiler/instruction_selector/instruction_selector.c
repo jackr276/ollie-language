@@ -194,7 +194,7 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 		window->instruction1 = window->instruction1->next_statement;
 		window->instruction2 = window->instruction2->next_statement;
 		window->instruction3 = NULL;
-		//We're in the thick of it here
+		//We know we're at the end
 		window->status = WINDOW_AT_END;
 
 		return window;
@@ -265,6 +265,11 @@ static void single_instruction_pattern_match(instruction_t* instruction){
 			//Let the helper do this and then leave
 			assign_jump_instructions(instruction);
 			break;
+		//This one is just assigned to NOP
+		case IDLE:
+			instruction->instruction_type = NOP;
+			break;
+
 	
 		default:
 			break;
@@ -280,11 +285,17 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 	//Have we changed the window at all? Very similar to the simplify function
 	u_int8_t changed = FALSE;
 
+	//============================= The "Grand Patterns" ==============================
+	//These are patterns that span multiple instructions. Often we're able to
+	//condense these multiple instructions into one singular x86 instruction
+
 	/**
-	 * =========================== Selecting move instructions ============================
-	 * After the simplifier runs, we should be able to plainly select move instructions based
-	 * on what remains. We'll need to know the word size for how large of a move we need to
-	 * do, but this will be stored in the variable
+	 * =========================== Memory Movement Instructions =======================
+	 * Moving from memory to a register or vice versa often presents opportunities, because
+	 * we're able to make use of memory addressing mode. This will arise whenever we do
+	 * a register-to-memory "store" or a memory-to-register "load". Remember, in x86 assembly
+	 * we can't go from memory-to-memory, so every memory access operation will fall within
+	 * this category
 	 */
 
 	//Give back whether or not this got changed
