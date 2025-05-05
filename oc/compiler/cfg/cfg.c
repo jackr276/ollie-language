@@ -3112,9 +3112,16 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
 		expr_ret_package_t package = emit_expr_code(basic_block, param_cursor, is_branch_ending, FALSE);
+
+		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
+		//registers before a function call
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+		//Add this to the block
+		add_statement(basic_block, assignment);
 		
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->function_parameters, package.assignee);
+		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;

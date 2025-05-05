@@ -12,6 +12,7 @@
 #include "../queue/heap_queue.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/select.h>
 #include <sys/types.h>
 
 //For standardization across all modules
@@ -243,6 +244,36 @@ static void assign_jump_instructions(instruction_t* instruction){
 
 
 /**
+ * This is a final step to match single instructions that have not yet
+ * been selected with a pattern. Examples of these include jump statements,
+ * ret statements, or any other kind of statements that don't apply the
+ * grand pattern matching selection on
+ */
+static void single_instruction_pattern_match(instruction_t* instruction){
+	//Catch the instances where this has been called on instructions that have
+	//already been selected. If they have, we're done here, just bail out
+	if(instruction->instruction_type != NONE){
+		return;
+	}
+
+	//Otherwise swtich on what kind of three address code statement
+	//that we have
+	switch (instruction->CLASS) {
+		//These follow the same pattern
+		case THREE_ADDR_CODE_JUMP_STMT:
+		case THREE_ADDR_CODE_DIR_JUMP_STMT:
+			//Let the helper do this and then leave
+			assign_jump_instructions(instruction);
+			break;
+	
+		default:
+			break;
+	}
+}
+
+
+
+/**
  * Select instructions in a given window
  */
 static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* window){
@@ -255,22 +286,6 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 	 * on what remains. We'll need to know the word size for how large of a move we need to
 	 * do, but this will be stored in the variable
 	 */
-	//If we have an assign const statement, we'll do an immediate movement
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_JUMP_STMT
-		|| window->instruction1->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
-		assign_jump_instructions(window->instruction1);
-	}
-
-	if(window->instruction2 != NULL && (window->instruction2->CLASS == THREE_ADDR_CODE_JUMP_STMT
-		|| window->instruction2->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT)){
-		assign_jump_instructions(window->instruction2);
-	}
-
-	if(window->instruction3 != NULL && (window->instruction3->CLASS == THREE_ADDR_CODE_JUMP_STMT
-		|| window->instruction3->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT)){
-		assign_jump_instructions(window->instruction2);
-	}
-
 
 	//Give back whether or not this got changed
 	return changed;
