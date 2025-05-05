@@ -33,9 +33,9 @@ typedef enum{
 	NONE = 0, //The NONE instruction, this is our default and we'll get this when we calloc
 	RET,
 	CALL,
-	REG_TO_REG_MOVW,
-	REG_TO_REG_MOVL,
-	REG_TO_REG_MOVQ,
+	MOVW, //Regular register-to-register or immediate to register
+	MOVL,
+	MOVQ,
 	REG_TO_MEM_MOVW,
 	REG_TO_MEM_MOVL,
 	REG_TO_MEM_MOVQ,
@@ -95,6 +95,8 @@ typedef enum{
 	DOUBLE_WORD,
 	LONG_WORD,
 	QUAD_WORD,
+	SINGLE_PRECISION,
+	DOUBLE_PRECISION //For floats
 } variable_size_t;
 
 
@@ -224,6 +226,14 @@ struct three_addr_const_t{
 
 /**
  * A generic struct that encapsulates most of our instructions
+ *
+ * ADDRESSING MODES:
+ * op2 NULL
+ * op2_const occupied
+ * op3 NULL
+ *
+ * This will be translated to: op1_const(op1) -> op1 + op1_const
+ *
  */
 struct instruction_t{
 	//What block holds this?
@@ -236,7 +246,11 @@ struct instruction_t{
 	three_addr_var_t* op1;
 	//For convenience: op1 can also be a const sometimes
 	three_addr_const_t* op1_const;
+	//SPECIAL CASES ONLY - for addressing modes
+	three_addr_const_t* op2_const;
 	three_addr_var_t* op2;
+	//SPECIAL CASES ONLY - for addressing modes
+	three_addr_var_t* op3;
 	three_addr_var_t* assignee;
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;

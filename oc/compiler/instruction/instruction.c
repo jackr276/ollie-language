@@ -815,6 +815,29 @@ void print_instruction(instruction_t* instruction){
 		case JLE:
 			printf("jle .L%d\n", jumping_to_block->block_id);
 			break;
+		//Handle the special addressing modes that we could have here
+		case REG_TO_MEM_MOVL:
+		case REG_TO_MEM_MOVW:
+		case REG_TO_MEM_MOVQ:
+			//Print out the appropriate flavor of move
+			if(instruction->instruction_type == REG_TO_MEM_MOVL){
+				printf("movl ");
+			} else if(instruction->instruction_type == REG_TO_MEM_MOVW){
+				printf("movw ");
+			} else {
+				printf("movq ");
+			}
+
+			//Now we need to figure out what the addressing mode is
+
+			//We have the special addressing type
+			if(instruction->op1 != NULL && instruction->op1_const != NULL){
+
+			}
+
+			break;
+
+
 		//Show a default error message
 		default:
 			printf("Not yet selected\n");

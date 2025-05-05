@@ -278,6 +278,78 @@ static void single_instruction_pattern_match(instruction_t* instruction){
 
 
 /**
+ * Select the size of a given variable based on its type
+ */
+static variable_size_t select_variable_size(three_addr_var_t* variable){
+	//What the size will be
+	variable_size_t size;
+	
+	//Grab this type out of here
+	generic_type_t* type = variable->type;
+	
+	//Probably the most common option
+	if(type->type_class == TYPE_CLASS_BASIC){
+		//Extract for convenience
+		Token basic_type = type->basic_type->basic_type;
+
+		//Switch based on this
+		switch (basic_type) {
+			//We round up to 16 bit here
+			case U_INT8:
+			case S_INT8:
+			case U_INT16:
+			case S_INT16:
+			case CHAR:
+				size = WORD;
+				break;
+
+			//These are 32 bit(double word)
+			case S_INT32:
+			case U_INT32:
+				size = DOUBLE_WORD;
+				break;
+
+			//This is SP
+			case FLOAT32:
+				size = SINGLE_PRECISION;
+				break;
+
+			//This is double precision
+			case FLOAT64:
+				size = DOUBLE_PRECISION;
+				break;
+
+			//These are all quad word(64 bit)
+			case U_INT64:
+			case S_INT64:
+				size = QUAD_WORD;
+				break;
+		
+			//We shouldn't get here
+			default:
+				size = QUAD_WORD;
+				break;
+		}
+
+	//These will always be 64 bits
+	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
+				|| type->type_class == TYPE_CLASS_CONSTRUCT){
+		size = QUAD_WORD;
+
+	//This should never happen, but a sane default doesn't hurt
+	} else if(type->type_class == TYPE_CLASS_ALIAS){
+		size = QUAD_WORD;
+	//Catch all down here
+	} else {
+		size = DOUBLE_WORD;
+	}
+
+	//Give it back
+	return size;
+}
+
+
+/**
  * Handle a register/immediate to memory move type instruction selection
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
@@ -348,7 +420,8 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT && window->instruction1->op == PLUS 
 		&& window->instruction2 != NULL &&
 		(window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
-		&& window->instruction2->assignee->indirection_level > 0){
+		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
+		&& window->instruction2->assignee->indirection_level == 1){
 
 		//Use the helper to keep things somewhat clean in here
 		handle_to_memory_move(window->instruction1, window->instruction2);
@@ -361,7 +434,8 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT && window->instruction2->op == PLUS 
 		&& window->instruction3 != NULL &&
 		(window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
-		&& window->instruction3->assignee->indirection_level > 0){
+		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE
+		&& window->instruction3->assignee->indirection_level == 1){
 
 		//Use the helper to keep things somewhat clean in here
 		handle_to_memory_move(window->instruction2, window->instruction3);
