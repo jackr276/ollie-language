@@ -653,6 +653,7 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 
 		//And the finishing sequence
 		printf(" * %ld\n", stmt->lea_multiplicator);
+
 	//Print out a phi function 
 	} else if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
 		//Print it in block header mode
@@ -1259,6 +1260,43 @@ instruction_t* copy_instruction(instruction_t* copied){
 
 	//Give back the copied one
 	return copied;
+}
+
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the second constant given
+ *
+ * The result will be: constant2 = constant1 + constant2
+ */
+three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	// Switch based on the type
+	switch(constant2->const_type){
+		//If this is a type as such, we'll add the int constant and char constant
+		//from constant 1. We can do this because whatever is unused is set to 0
+		//by the calloc
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+		case HEX_CONST:
+			constant2->int_const += constant1->int_const + constant1->char_const;
+			break;
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+			//Again, we can add all of these together because of the way that this works
+			constant2->long_const += constant1->long_const + constant1->int_const + constant1->char_const;
+			break;
+		//Can't really see this ever happening, but it won't hurt
+		case CHAR_CONST:
+			//Add the other one's char const
+			constant2->char_const += constant1->char_const;
+			break;
+		//Mainly for us as the programmer
+		default:
+			print_parse_message(PARSE_ERROR, "Attempt to add incompatible constants", 0);
+			break;
+	}
+
+	//We always give back constant 2
+	return constant2;
 }
 
 

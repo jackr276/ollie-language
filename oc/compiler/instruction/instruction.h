@@ -459,6 +459,13 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
 instruction_t* copy_instruction(instruction_t* copied);
 
 /**
+ * Emit the sum of two given constants. The result will overwrite the second constant given
+ *
+ * The result will be: constant2 = constant1 + constant2
+ */
+three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
  * Pretty print a three address code statement
 */
 void print_three_addr_code_stmt(instruction_t* stmt);

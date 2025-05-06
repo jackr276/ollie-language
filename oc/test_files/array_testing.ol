@@ -7,8 +7,8 @@ fn main(arg:i32, argv:char**) -> i32{
 	declare mut arr:i32[14][2];
 	declare mut oneD:i64[2];
 	
-	arr[3][1] := 3;
-	arr[5][1] := 3;
+	arr[3][3] := 3;
+	arr[5][2] := 3;
 	arr[7][0] := 2;
 
 	oneD[1] := 3;

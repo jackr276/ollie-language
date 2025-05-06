@@ -706,7 +706,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
 	//see, we perform one small optimization
-	
+
+	printf("Instruction 1 is: ");
+	print_three_addr_code_stmt(window->instruction1);
+	printf("Instruction 2 is: ");
+	print_three_addr_code_stmt(window->instruction2);
+
+
 	
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
@@ -1125,41 +1131,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 
-	/**
-	 * ================== Simplifying Adjacent Binary Operation with Constant statements ==============
-	 * Here is an example:
-	 * t2 <- arr_0 + 24
-	 * t4 <- t2 - 4
-	 * 
-	 * We could turn this into
-	 * t4 <- arr_0 + 20
-	 */
-	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT &&
-		window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		//Let's do this for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-
-		//Grab these two operators out, we'll need them to compare
-		Token first_operator = first->op;
-		Token second_operator = second->op;
-
-		//Let's check some more. If the assignee of the first instruction is the op1 of the second instruction,
-		//then we'll want to go ahead. We also need to ensure that the first and second operations are both plus
-		//and minus. There may be more in the future here
-		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, FALSE) == TRUE
-			&& (first_operator == PLUS || first_operator == MINUS) && (second_operator == PLUS || second_operator == MINUS)){
-			//Now we're good to optimize here, we'll be able to fold the constant operations into one big operation
-			
-			//First we'll set the op1 of the second operation to be the op1 of the first one
-			//second->op1 = first->op1;
-
-
-			//This is an operation that will change our window
-			//changed = TRUE;
-		}
-	}
 
 
 	/**
@@ -1325,9 +1296,71 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
+	/**
+	 * ================== Simplifying Consecutive Binary Operation with Constant statements ==============
+	 * Here is an example:
+	 * t2 <- arr_0 + 24
+	 * t4 <- t2 + 4
+	 * 
+	 * We could turn this into
+	 * t4 <- arr_0 + 24
+	 *
+	 * This is incredibly common with array address calculations, which is why we do it. We focus on the special case
+	 * of two consecutive additions here for this reason. Any other two consecutive operations are usually quite uncommon
+	 */
+	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
+	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == PLUS){
+		print_three_addr_code_stmt(window->instruction1);
+		if(window->instruction1->CLASS != THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+			printf("NOT BIN OP WITH CONST\n");
+		}
 
+		//Let's do this for convenience
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
 
-	
+		printf("HERE\n");
+
+		//Calculate this for now in case we need it
+		generic_type_t* final_type = types_compatible(second->op1_const->type, first->op1_const->type);
+
+		if(final_type == NULL){
+			printf("ITS NULL\n");
+		}
+
+		//If these are the same variable and the types are compatible, then we're good to go
+		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL
+			&& first->op == PLUS && second->op == PLUS){
+			//What we'll do first is add the two constants. The resultant constant will be stored
+			//in the second instruction's constant
+			second->op1_const = add_constants(second->op1_const, first->op1_const);
+
+			//Now that we've done that, we'll modify the second equation's op1 to be the first equation's op1
+			second->op1 = first->op1;
+
+			//Now that this is done, we can remove the first equation
+			delete_statement(cfg, first->block_contained_in, first);
+
+			//And now we shift everything back by 1
+			window->instruction1 = second;
+			window->instruction2 = second->next_statement;
+
+			//Handle the potentiality for null values here
+			if(window->instruction2 == NULL){
+				window->instruction3 = NULL;
+			} else {
+				window->instruction3 = window->instruction2->next_statement;
+			}
+
+			//And now we can update the status
+			set_window_status(window);
+
+			//This counts as a change because we deleted
+			changed = TRUE;
+		}
+	}
+
 	/**
 	 * ------------------------ Optimizing adjacent statements into LEA statements ----------------
 	 *  In cases where we have a multiplication statement next to an addition statement, or vice versa,
