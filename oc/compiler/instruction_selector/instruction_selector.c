@@ -10,8 +10,6 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
-#include <stdatomic.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>
@@ -187,19 +185,26 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 		window->instruction3 = window->instruction3->next_statement;
 		//We're in the thick of it here
 		window->status = WINDOW_AT_MIDDLE;
-		
-		//Nowhere else to go here
-		return window;
-	//This means that we don't have a full block, and are likely reaching the end
+	//Handle this case
+	} else if(window->instruction2 == NULL){
+		window->instruction1 = NULL;
+		window->instruction2 = NULL;
+		window->instruction3 = NULL;
+		//Definitely at the end
+		window->status = WINDOW_AT_END;
+
+	//This means that we don't have a full block, but we also don't have a null
+	//instruction 2
 	} else {
 		window->instruction1 = window->instruction1->next_statement;
 		window->instruction2 = window->instruction2->next_statement;
 		window->instruction3 = NULL;
 		//We know we're at the end
 		window->status = WINDOW_AT_END;
-
-		return window;
 	}
+
+	//Give it back
+	return window;
 }
 
 
@@ -707,13 +712,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
 	//see, we perform one small optimization
 
-	printf("Instruction 1 is: ");
-	print_three_addr_code_stmt(window->instruction1);
-	printf("Instruction 2 is: ");
-	print_three_addr_code_stmt(window->instruction2);
-
-
-	
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
 	 *
@@ -1221,6 +1219,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//Wipe the values out
 					current_instruction->op1_const = NULL;
 					current_instruction->op2 = NULL;
+					//We changed something
+					changed = TRUE;
 				//If this is a multiplication, we'll turn this into a 0 assignment
 				} else if(current_instruction->op == STAR){
 					//Now we're assigning a const
@@ -1228,6 +1228,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//The constant is still the same thing(0), let's just wipe out the ops
 					current_instruction->op1 = NULL;
 					current_instruction->op2 = NULL;
+					//We changed something
+					changed = TRUE;
 				//We'll need to throw a warning here about 0 division
 				// TODO ADD MORE
 				} else {
@@ -1256,6 +1258,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//Wipe the values out
 					current_instruction->op1_const = NULL;
 					current_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
 				//Otherwise if we have a minus, we can turn this into a dec statement
 				} else if(current_instruction->op == MINUS && current_instruction->assignee->is_temporary == FALSE){
 					//Change what the class is
@@ -1263,6 +1267,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//Wipe the values out
 					current_instruction->op1_const = NULL;
 					current_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
 				//What if we have multiplication or division? If so, multiplying/dividing by 1
 				//is idempotent, so we can transform these into assignment statements
 				} else if(current_instruction->op == STAR || current_instruction->op == F_SLASH){
@@ -1271,6 +1277,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//Wipe the operator out
 					current_instruction->op1_const = NULL;
 					current_instruction->op = BLANK;
+					//We changed something
+					changed = TRUE;
 				}
 			//What if we have a power of 2 here? For any kind of multiplication or division, this can
 			//be optimized into a  left or right shift if we have a compatible type(not a float)
@@ -1284,12 +1292,16 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					current_instruction->op = L_SHIFT;
 					//Update the constant with its log2 value
 					update_constant_with_log2_value(current_instruction->op1_const);
+					//We changed something
+					changed = TRUE;
 
 				} else if(current_instruction->op == F_SLASH){
 					//Division is a right shift
 					current_instruction->op = R_SHIFT;
 					//Update the constant with its log2 value
 					update_constant_with_log2_value(current_instruction->op1_const);
+					//We changed something
+					changed = TRUE;
 				}
 				//Otherwise, we don't need this
 			}
@@ -1311,20 +1323,14 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == PLUS && window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
-		&& window->instruction1->op == PLUS){
+		&& window->instruction1->op == PLUS /*&& 1 == 0*/){
 
 		//Let's do this for convenience
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
 
-		printf("HERE\n");
-
 		//Calculate this for now in case we need it
 		generic_type_t* final_type = types_compatible(second->op1_const->type, first->op1_const->type);
-
-		if(final_type == NULL){
-			printf("ITS NULL\n");
-		}
 
 		//If these are the same variable and the types are compatible, then we're good to go
 		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL
@@ -1364,8 +1370,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  odds are we can write it as a lea statement
 	 *
 	 */
-
-	//Return whether or not we changed the block
+	//Return whether or not we changed the block return changed;
 	return changed;
 }
 
@@ -1375,35 +1380,52 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
  * etc. Simplification happens first over the entirety of the OIR using the sliding window
  * technique. Following this, the instruction selector runs over the same area
  */
-static void simplify(cfg_t* cfg, basic_block_t* head){
+static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* head){
 	//First we'll grab the head
 	basic_block_t* current = head;
 
+	u_int8_t window_changed = FALSE;
+	u_int8_t changed;
+
 	//So long as this isn't NULL
 	while(current != NULL){
+		changed = FALSE;
+		
 		//Initialize the sliding window(very basic, more to come)
 		instruction_window_t window = initialize_instruction_window(current);
 
-		//Simplify it
-		simplify_window(cfg, &window);
-
-		//Did we change the block? If not, we need to slide
-		u_int8_t changed;
-
-		//So long as the window status is not end
-		while(window.status != WINDOW_AT_END) {
+		//Run through and simplify everything we can
+		do{
 			//Simplify the window
 			changed = simplify_window(cfg, &window);
 
-			//And slide it
-			if(changed == FALSE){
-				slide_window(&window);
+			//Set this flag if it was changed
+			if(changed == TRUE){
+				window_changed = TRUE;
 			}
-		} 
+
+			//And slide it
+			slide_window(&window);
+
+		//So long as we aren't at the end
+		} while(window.status != WINDOW_AT_END);
+
 
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
+
+	//Give back whether or not it's been changed
+	return window_changed;
+}
+
+
+/**
+ * We'll make use of a while change algorithm here. We make passes
+ * until we see the first pass where we experience no chnage at all.
+ */
+static void simplify(cfg_t* cfg, basic_block_t* head){
+	while(simplifier_pass(cfg, head) == TRUE);
 }
 
 
