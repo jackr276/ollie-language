@@ -1310,11 +1310,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == PLUS){
-		print_three_addr_code_stmt(window->instruction1);
-		if(window->instruction1->CLASS != THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-			printf("NOT BIN OP WITH CONST\n");
-		}
+		&& window->instruction2->op == PLUS && window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+		&& window->instruction1->op == PLUS){
 
 		//Let's do this for convenience
 		instruction_t* first = window->instruction1;
