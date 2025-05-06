@@ -322,7 +322,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 /**
  * Emit an int constant in a very direct way
  */
-three_addr_const_t* emit_int_constant_direct(int int_const);
+three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* type);
 
 /**
  * Emit a statement that is in LEA form

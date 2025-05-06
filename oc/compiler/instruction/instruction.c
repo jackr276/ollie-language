@@ -1110,7 +1110,7 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 /**
  * Emit an int constant direct 
  */
-three_addr_const_t* emit_int_constant_direct(int int_const){
+three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symtab){
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Attach it for memory management
@@ -1122,6 +1122,8 @@ three_addr_const_t* emit_int_constant_direct(int int_const){
 	//Store the int value
 	constant->int_const = int_const;
 
+	//Lookup what we have in here(i32)
+	constant->type = lookup_type(symtab, "i32")->type;
 
 	//Return out
 	return constant;
@@ -1277,12 +1279,32 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
 		case HEX_CONST:
-			constant2->int_const += constant1->int_const + constant1->char_const;
+			//If it's any of these we'll add the int value
+			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U
+				|| constant1->const_type == HEX_CONST){
+				constant2->int_const += constant1->int_const;
+			//Otherwise add the long value
+			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
+				constant2->int_const += constant1->long_const;
+			//Only other option is char
+			} else {
+				constant2->int_const += constant1->char_const;
+			}
 			break;
 		case LONG_CONST:
 		case LONG_CONST_FORCE_U:
-			//Again, we can add all of these together because of the way that this works
-			constant2->long_const += constant1->long_const + constant1->int_const + constant1->char_const;
+			//If it's any of these we'll add the int value
+			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U
+				|| constant1->const_type == HEX_CONST){
+				constant2->long_const += constant1->int_const;
+			//Otherwise add the long value
+			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
+				constant2->long_const += constant1->long_const;
+			//Only other option is char
+			} else {
+				constant2->long_const += constant1->char_const;
+			}
+
 			break;
 		//Can't really see this ever happening, but it won't hurt
 		case CHAR_CONST:

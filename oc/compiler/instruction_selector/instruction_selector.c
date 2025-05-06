@@ -1128,9 +1128,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
-
-
-
 	/**
 	 * ================== Arithmetic Operation Simplifying ==========================
 	 * After we do all of this folding, we can stand to ask the question of if we 
@@ -1315,7 +1312,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * t4 <- t2 + 4
 	 * 
 	 * We could turn this into
-	 * t4 <- arr_0 + 24
+	 * t4 <- arr_0 + 28
 	 *
 	 * This is incredibly common with array address calculations, which is why we do it. We focus on the special case
 	 * of two consecutive additions here for this reason. Any other two consecutive operations are usually quite uncommon
@@ -1323,7 +1320,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == PLUS && window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
-		&& window->instruction1->op == PLUS /*&& 1 == 0*/){
+		&& window->instruction1->op == PLUS){
 
 		//Let's do this for convenience
 		instruction_t* first = window->instruction1;
@@ -1333,8 +1330,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		generic_type_t* final_type = types_compatible(second->op1_const->type, first->op1_const->type);
 
 		//If these are the same variable and the types are compatible, then we're good to go
-		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL
-			&& first->op == PLUS && second->op == PLUS){
+		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL){
 			//What we'll do first is add the two constants. The resultant constant will be stored
 			//in the second instruction's constant
 			second->op1_const = add_constants(second->op1_const, first->op1_const);

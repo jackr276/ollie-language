@@ -2302,7 +2302,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	if(use_temp == PRESERVE_ORIG_VAR || side == SIDE_TYPE_RIGHT){
 		//If it's an enum constant
 		if(ident_node->variable->is_enumeration_member == TRUE){
-			return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), lookup_type(type_symtab, "u32")->type, is_branch_ending);
+			return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), lookup_type(type_symtab, "u32")->type, is_branch_ending);
 		}
 
 		//Emit the variable
@@ -2329,7 +2329,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		symtab_type_record_t* type_record = lookup_type(type_symtab, "u32");
 		generic_type_t* type = type_record->type;
 		//Just create a constant here with the enum
-		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value), type, is_branch_ending);
+		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), type, is_branch_ending);
 
 	} else {
 		//First we'll create the non-temp var here
@@ -2710,7 +2710,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			symtab_variable_record_t* member = field->variable;
 
 			//The constant that represents the offset
-			three_addr_const_t* offset = emit_int_constant_direct(field->offset);
+			three_addr_const_t* offset = emit_int_constant_direct(field->offset, type_symtab);
 
 			//Now that we have the construct field, we can calculate what we need by grabbing the offset
 			instruction_t* address_calc = emit_binary_operation_with_const_instruction(emit_temp_var(member->type), current_var, PLUS, offset);
@@ -2801,7 +2801,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 			//What if the assignee is a complex type(pointer, array, etc)
 			if(assignee->type->type_class != TYPE_CLASS_BASIC){
 				//Emit the constant size
-				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size);
+				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size, type_symtab);
 				//Now we'll make the statement
 				return emit_binary_operation_with_constant(basic_block, assignee, assignee, PLUS, constant, is_branch_ending);
 			} else {
@@ -2812,7 +2812,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 			//What if the assignee is a complex type(pointer, array, etc)
 			if(assignee->type->type_class != TYPE_CLASS_BASIC){
 				//Emit the constant size
-				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size);
+				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size, type_symtab);
 				//Now we'll make the statement
 				return emit_binary_operation_with_constant(basic_block, assignee, assignee, MINUS, constant, is_branch_ending);
 			} else {
@@ -4837,8 +4837,8 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	expr_ret_package_t package = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_int_constant_direct(values->initial_node->lower_bound);
-	three_addr_const_t* upper_bound = emit_int_constant_direct(values->initial_node->upper_bound);
+	three_addr_const_t* lower_bound = emit_int_constant_direct(values->initial_node->lower_bound, type_symtab);
+	three_addr_const_t* upper_bound = emit_int_constant_direct(values->initial_node->upper_bound, type_symtab);
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
@@ -4859,7 +4859,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(starting_block, emit_temp_var(expression_node->inferred_type), package.assignee, MINUS, emit_int_constant_direct(offset), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(starting_block, emit_temp_var(expression_node->inferred_type), package.assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
