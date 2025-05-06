@@ -243,13 +243,9 @@ struct instruction_t{
 	instruction_t* previous_statement;
 	//A three address code always has 2 operands and an assignee
 	three_addr_var_t* op1;
+	three_addr_var_t* op2;
 	//For convenience: op1 can also be a const sometimes
 	three_addr_const_t* op1_const;
-	//SPECIAL CASES ONLY - for addressing modes
-	three_addr_const_t* op2_const;
-	three_addr_var_t* op2;
-	//SPECIAL CASES ONLY - for addressing modes
-	three_addr_var_t* op3;
 	three_addr_var_t* assignee;
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;

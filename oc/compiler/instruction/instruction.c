@@ -778,6 +778,44 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 
 
 /**
+ * Print a constant as an immediate($ prefixed) value
+ */
+static void print_immediate_value(three_addr_const_t* constant){
+	//We'll now interpret what we have here
+	if(constant->const_type == INT_CONST){
+		printf("$%d", constant->int_const);
+	} else if(constant->const_type == HEX_CONST){
+		printf("$0x%x", constant->int_const);
+	} else if(constant->const_type == LONG_CONST){
+		printf("$%ld", constant->long_const);
+	} else if(constant->const_type == FLOAT_CONST){
+		printf("$%f", constant->float_const);
+	} else if(constant->const_type == CHAR_CONST){
+		printf("$%d", constant->char_const);
+	} 
+}
+
+
+/**
+ * Use the variety of address calculation modes that we have to print one out
+ *
+ * NOTE: this function only prints out the address calculation portion. Everything
+ * else is handled by the caller
+ *
+ * PRINTING RULES:
+ * Assignee is off limits
+ * op1 and op1_const are what will be moved into, so those are also off limits
+ *
+ * That leaves us with op2, op2_const, lea_multiplicator
+ */
+static void print_address_calculation(instruction_t* instruction){
+	//Going through here. If we see that op2_const and assignee are both not NULL,
+	//that leaves us with this pattern: op2_const(assignee) = assignee + op2_const
+
+}
+
+
+/**
  * Print an instruction that has not yet been given registers
  */
 void print_instruction(instruction_t* instruction){
@@ -786,6 +824,7 @@ void print_instruction(instruction_t* instruction){
 
 	//Switch based on what type we have
 	switch (instruction->instruction_type) {
+		//These first ones are very simple - no real variations here
 		case RET:
 			printf("ret\n");
 			break;
@@ -829,15 +868,24 @@ void print_instruction(instruction_t* instruction){
 				printf("movq ");
 			}
 
-			//Now we need to figure out what the addressing mode is
-
-			//We have the special addressing type
-			if(instruction->op1 != NULL && instruction->op1_const != NULL){
-
+			//We'll print out the value being moved into memory here. It can be an
+			//immediate value(in op1_const) or it can be a register(op1)
+			if(instruction->op1 != NULL){
+				print_variable(instruction->op1, PRINTING_VAR_INLINE);
+			} else if(instruction->op1_const != NULL){
+				print_immediate_value(instruction->op1_const);
 			}
 
-			break;
+			//Needed comma
+			printf(", ");
 
+			//Since we're moving TO memory, we'll print out the address instruction
+			//first
+			print_address_calculation(instruction);
+
+			//Newline out here
+			printf("\n");
+			break;
 
 		//Show a default error message
 		default:

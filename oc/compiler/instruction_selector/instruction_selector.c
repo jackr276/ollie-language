@@ -466,8 +466,26 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 			break;
 	}
 
-	//If we have a bin op with const statement
+	/**
+	 * ======== BIN OP WITH CONST =================
+	 *
+	 * Here is what this would look like
+	 *
+	 * t26 <- t24 + 4
+	 * (t26) <- 3
+	 * 
+	 * mov(w/l/q) $3, 4(t24)
+	 *     op1_const  op2_const assignee
+	 */
 	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		//Assign memory access's op1_const to be this value
+		//memory_access->op2_const = address_calculation->op1_const;
+
+		//Now we'll need to set the assignee to be the base address. This makes the most sense
+		//memory_access->assignee = address_calculation->assignee;
+
+		//That should really be all. After we do all of this, the actual address calculation instruction is useless.
+		//The helper will delete it
 
 	//Or if we have a statement like this(rare but may happen, covering our bases)
 	} else if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
@@ -517,6 +535,21 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 		//Use the helper to keep things somewhat clean in here
 		handle_address_calc_to_memory_move(window->instruction1, window->instruction2);
 
+		//We can now delete instruction 1
+		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+
+		//Once that's done, everything needs to be shifted back by 1
+		window->instruction1 = window->instruction2;
+		window->instruction2 = window->instruction1->next_statement;
+
+		if(window->instruction2 == NULL){
+			window->instruction3 = NULL;
+		} else {
+			window->instruction3 = window->instruction2->next_statement;
+		}
+
+		set_window_status(window);
+
 		//This counts as a change
 		//changed = TRUE;
 	}
@@ -553,22 +586,16 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 		//Initialize the sliding window(very basic, more to come)
 		instruction_window_t window = initialize_instruction_window(current);
 
-		//Simplify it
-		select_instructions_in_window(cfg, &window);
+		//Keep going so long as the window isn't at the end
+		do{
+			//Select the instructions
+			select_instructions_in_window(cfg, &window);
 
-		//Did we change the block? If not, we need to slide
-		u_int8_t changed;
+			//Slide the window
+			slide_window(&window);
 
-		//So long as the window status is not end
-		while(window.status != WINDOW_AT_END) {
-			//Simplify the window
-			changed = select_instructions_in_window(cfg, &window);
-
-			//And slide it
-			if(changed == FALSE){
-				slide_window(&window);
-			}
-		} 
+		//Keep going if we aren't at the end
+		} while(window.status != WINDOW_AT_END);
 
 		//Advance to the direct successor
 		current = current->direct_successor;
@@ -742,6 +769,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//Modify the type of the assignment
 			binary_operation->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Make sure that we now null out op1
+			binary_operation->op1 = NULL;
 
 			//Once we've done this, the first statement is entirely useless
 			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
@@ -1631,7 +1661,8 @@ basic_block_t* select_all_instructions(cfg_t* cfg){
 	printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
 	//Once we're done simplifying, we'll use the same sliding window technique to select instructions.
 	select_instructions(cfg, head_block);
-	//print_ordered_blocks(head_block,PRINT_INSTRUCTION);
+	//Print them out
+	print_ordered_blocks(head_block,PRINT_INSTRUCTION);
 
 	//FOR NOW
 	return NULL;
