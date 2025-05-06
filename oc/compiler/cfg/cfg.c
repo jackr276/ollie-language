@@ -37,6 +37,8 @@ cfg_t* cfg_ref;
 symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
 basic_block_t* function_exit_block = NULL;
+//Keep ahold of our stack pointer
+symtab_variable_record_t* stack_pointer = NULL;
 
 //A package of values that each visit function uses
 typedef struct {
@@ -2651,7 +2653,6 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				//if(base_type->type_class == TYPE_CLASS_ARRAY){
 				//	base_type = base_type->array_type->member_type;
 				//}
-				printf("Member type size is: %d\n", base_type->type_size);
 				class = TYPE_CLASS_ARRAY;
 			} else {
 				base_type = current_var->type->pointer_type->points_to;
@@ -2968,14 +2969,41 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	//By default, last seen op is blank
 	ret_package.operator = BLANK;
 
-	
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
-		//What kind of declarative statement do we have here?
+		//Extract the type info out of here
+		generic_type_t* type = expr_node->variable->type;
 
-		//We could be trying to declare an array
-		//TODO
+		//If we have an array, we'll need to decrement the stack
+		if(type->type_class == TYPE_CLASS_ARRAY){
+			//Grab the size out, we'll need to subtract this from the stack
+			u_int32_t array_size = type->type_size;
 
+			//We need to align this as well. We'll add 15 and then 0 out
+			//the last 4 bits so that this is 16 byte aligned
+			array_size = (array_size + 15) & -16;
+
+			//Emit this stack pointer variables
+			three_addr_var_t* assignee = emit_var(stack_pointer, FALSE);
+			three_addr_var_t* operand = emit_var(stack_pointer, FALSE);
+
+			//Spit out the subtraction here
+			three_addr_var_t* stack = emit_binary_operation_with_constant(basic_block, assignee, operand, MINUS, emit_int_constant_direct(array_size, type_symtab), is_branch_ending);
+
+			//Now we emit the variable for the array base address
+			three_addr_var_t* array = emit_var(expr_node->variable, FALSE);
+
+			//Now we assign the bottom of the stack to be this
+			instruction_t* assignment = emit_assignment_instruction(array, stack);
+
+			//This variable was assigned
+			add_assigned_variable(basic_block, assignment->assignee); 
+			
+			//Add the assignment in
+			add_statement(basic_block, assignment);
+		}
+
+		//TODO do structs
 
 	//Convert our let statement into abstract machine code 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_LET_STMT){
@@ -3503,7 +3531,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	}
 
 	//If b is null, we just return a
-	if(b == NULL){
+	if(b == NULL || b->leader_statement == NULL){
 		return a;
 	}
 
@@ -4173,7 +4201,14 @@ static basic_block_t* visit_statement_sequence(values_package_t* values){
 			//We'll visit the block here
 			basic_block_t* decl_block = visit_declaration_statement(&decl_values, VARIABLE_SCOPE_LOCAL);
 
-			//There is nothing to merge here
+			//If the start block is null, then this is the start block. Otherwise, we merge it in
+			if(starting_block == NULL){
+				starting_block = decl_block;
+				current_block = decl_block;
+			//Just merge with current
+			} else {
+				current_block = merge_blocks(current_block, decl_block); 
+			}
 
 		//We've found a let statement
 		} else if(current_node->CLASS == AST_NODE_CLASS_LET_STMT){
@@ -4911,6 +4946,15 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//We'll visit the block here
 			basic_block_t* decl_block = visit_declaration_statement(&values, VARIABLE_SCOPE_LOCAL);
+
+			//If the start block is null, then this is the start block. Otherwise, we merge it in
+			if(starting_block == NULL){
+				starting_block = decl_block;
+				current_block = decl_block;
+			//Just merge with current
+			} else {
+				current_block = merge_blocks(current_block, decl_block); 
+			}
 
 		//We've found a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
@@ -5686,6 +5730,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Set this to NULL initially
 	current_function = NULL;
+
+	//Create the stack pointer
+	stack_pointer = initialize_stack_pointer(results.variable_symtab, results.type_symtab);
 
 	//For dev use here
 	if(results.root->CLASS != AST_NODE_CLASS_PROG){

@@ -417,10 +417,10 @@ static void handle_address_calc_to_memory_move(instruction_t* address_calculatio
 			break;
 	}
 
-	//If we have a bin op with const statement
+	//If we have a bin op with const statement, we'll have a constant in our answer
 	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		
 
+		
 	//Or if we have a statement like this(rare but may happen, covering our bases)
 	} else if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
  

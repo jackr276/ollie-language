@@ -487,7 +487,19 @@ void add_all_basic_types(type_symtab_t* symtab){
 	//label type
 	type = create_basic_type("label", LABEL_IDENT);
 	insert_type(symtab,  create_type_record(type));
+}
 
+
+/** 
+ * Create the stack pointer(rsp) variable for us to use throughout
+ */
+symtab_variable_record_t* initialize_stack_pointer(variable_symtab_t* symtab, type_symtab_t* types){
+	symtab_variable_record_t* stack_pointer = create_variable_record("stack_pointer", STORAGE_CLASS_NORMAL);
+	//Set this type as a label(address)
+	stack_pointer->type = lookup_type(types, "label")->type;
+
+	//Give it back
+	return stack_pointer;
 }
 
 

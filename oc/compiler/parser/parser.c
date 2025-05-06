@@ -7658,8 +7658,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Store the line number
 	decl_node->line_number = current_line;
 
-	//We no longer need the ident or type specifier nodes
-
 	//All went well so we can return this
 	return decl_node;
 }
