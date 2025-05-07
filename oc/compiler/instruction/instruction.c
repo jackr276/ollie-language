@@ -894,6 +894,22 @@ void print_instruction(instruction_t* instruction){
 		case JLE:
 			printf("jle .L%d\n", jumping_to_block->block_id);
 			break;
+		case ASM_INLINE:
+			printf("%s", instruction->inlined_assembly);
+			break;
+		case CALL:
+			printf("call %s\n", instruction->func_record->func_name);
+			break;
+		case INC:
+			printf("inc ");
+			print_variable(instruction->dest, PRINTING_VAR_INLINE);
+			printf("\n");
+			break;
+		case DEC:
+			printf("dec ");
+			print_variable(instruction->dest, PRINTING_VAR_INLINE);
+			printf("\n");
+			break;
 		//Handle the special addressing modes that we could have here
 		case REG_TO_MEM_MOVL:
 		case REG_TO_MEM_MOVW:
@@ -909,7 +925,7 @@ void print_instruction(instruction_t* instruction){
 
 		//Show a default error message
 		default:
-			printf("Not yet selected\n");
+			//printf("Not yet selected\n");
 			break;
 	}
 }

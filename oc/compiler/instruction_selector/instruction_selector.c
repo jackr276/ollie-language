@@ -630,7 +630,22 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 				//Let the helper do this and then leave
 				select_jump_instruction(current);
 				break;
-
+			//Special case here - we don't change anything
+			case THREE_ADDR_CODE_ASM_INLINE_STMT:
+				current->instruction_type = ASM_INLINE;
+				break;
+			//The translation here takes the form of a call instruction
+			case THREE_ADDR_CODE_FUNC_CALL:
+				current->instruction_type = CALL;
+				break;
+			case THREE_ADDR_CODE_INC_STMT:
+				current->instruction_type = INC;
+				current->dest = current->assignee;
+				break;
+			case THREE_ADDR_CODE_DEC_STMT:
+				current->instruction_type = DEC;
+				current->dest = current->assignee;
+				break;
 			default:
 				break;
 		}
@@ -881,6 +896,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Now we'll modify this to be an assignment const statement
 			binary_operation->op1_const = window->instruction2->op1_const;
 
+			//Make sure that we now NULL out the first non-const operand for the future
+			binary_operation->op1 = NULL;
+			
 			//Modify the type of the assignment
 			binary_operation->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
 

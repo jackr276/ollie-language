@@ -59,6 +59,9 @@ typedef enum{
 	SUBW,
 	SUBL,
 	SUBQ,
+	ASM_INLINE, //ASM inline statements aren't really instructions
+	INC,
+	DEC,
 } instruction_type_t;
 
 
