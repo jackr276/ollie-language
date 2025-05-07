@@ -2892,20 +2892,6 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//Emit the binary expression on the left first
 	expr_ret_package_t left_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
 
-	//Advance up here
-	cursor = cursor->next_sibling;
-
-	//Then grab the right hand temp
-	expr_ret_package_t right_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
-
-	//Let's see what binary operator that we have
-	Token binary_operator = logical_or_expr->binary_operator;
-	//Store this binary operator
-	package.operator = binary_operator;
-
-	//Generic holder for us
-	instruction_t* stmt;
-
 	//If the left hand temp's assignee is not null, we'll need to modify that to be so, since all arithmetic
 	//expressions in assembly will modify the first operand
 	//For example:
@@ -2928,6 +2914,20 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 		//Grab the assignee out
 		op1 = temp_assnment->assignee;
 	}
+
+	//Advance up here
+	cursor = cursor->next_sibling;
+
+	//Then grab the right hand temp
+	expr_ret_package_t right_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
+
+	//Let's see what binary operator that we have
+	Token binary_operator = logical_or_expr->binary_operator;
+	//Store this binary operator
+	package.operator = binary_operator;
+
+	//Generic holder for us
+	instruction_t* stmt;
 
 	//Emit the binary operator expression using our helper
 	stmt = emit_binary_operation_instruction(emit_temp_var(logical_or_expr->inferred_type), op1, binary_operator, right_hand_temp.assignee);
