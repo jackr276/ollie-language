@@ -465,17 +465,44 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 
 /**
  * Handle a bin-op-with-const statement
+ *
+ * We can translate a bin op with const operation a few different ways based on the 
+ * operand
  */
 static void handle_binary_operation_with_const_instruction(instruction_t* instruction){
+	switch(instruction->op){
+		case PLUS:
+
+		case MINUS:
+
+		case STAR:
+
+		case F_SLASH:
+
+		default:
+			break;
+	}
 
 }
 
 
 /**
  * Handle a bin-op-with-const statement
+ *
+ * We can translate a bin op statement a few differnet ways based on the operand
  */
 static void handle_binary_operation_intruction(instruction_t* instruction){
+	switch(instruction->op){
+		case PLUS:
 
+		case MINUS:
+
+		case STAR:
+
+		case F_SLASH:
+		default:
+			break;
+	}
 }
 
 
@@ -495,7 +522,7 @@ static void handle_inc_instruction(instruction_t* instruction){
 	}
 
 	//Set the destination as the assignee
-	instruction->dest = instruction->assignee;
+	instruction->destination_register = instruction->assignee;
 }
 
 /**
@@ -514,7 +541,7 @@ static void handle_dec_instruction(instruction_t* instruction){
 	}
 
 	//Set the destination as the assignee
-	instruction->dest = instruction->assignee;
+	instruction->destination_register = instruction->assignee;
 }
 
 
@@ -529,7 +556,7 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
 	if(instruction->op1 != NULL){
 		size = select_variable_size(instruction->op1);
 		//May as well set this here
-		instruction->source_reg = instruction->op1;
+		instruction->source_register = instruction->op1;
 	//Otherwise it must be a constant
 	} else {
 		size = select_constant_size(instruction->op1_const);
@@ -555,7 +582,7 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
 	}
 
 	//We've already set the sources, now we set the destination as the assignee
-	instruction->dest = instruction->assignee;
+	instruction->destination_register = instruction->assignee;
 }
 
 

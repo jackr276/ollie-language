@@ -734,8 +734,8 @@ static void print_register_to_register_move(instruction_t* instruction){
 	}
 
 	//Print the appropriate variable here
-	if(instruction->source_reg != NULL){
-		print_variable(instruction->source_reg, PRINTING_VAR_INLINE);
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
@@ -744,7 +744,7 @@ static void print_register_to_register_move(instruction_t* instruction){
 	printf(", ");
 
 	//Now print our destination
-	print_variable(instruction->dest, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 
 	printf("\n");
 }
@@ -807,22 +807,22 @@ void print_instruction(instruction_t* instruction){
 			break;
 		case INC:
 			printf("inc ");
-			print_variable(instruction->dest, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
 		case INCQ:
 			printf("incq ");
-			print_variable(instruction->dest, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
 		case DEC:
 			printf("dec ");
-			print_variable(instruction->dest, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
 		case DECQ:
 			printf("decq ");
-			print_variable(instruction->dest, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
 		//Handle the special addressing modes that we could have here

@@ -42,6 +42,8 @@ typedef enum{
 	MEM_TO_REG_MOVW,
 	MEM_TO_REG_MOVL,
 	MEM_TO_REG_MOVQ,
+	LEA,
+	LEAQ,
 	INDIRECT_JMP, //For our switch statements
 	NOP,
 	JMP,
@@ -64,6 +66,10 @@ typedef enum{
 	INCQ,
 	DEC,
 	DECQ,
+	CMP,
+	CMPQ,
+	TEST,
+	TESTQ
 } instruction_type_t;
 
 
@@ -195,8 +201,6 @@ struct three_addr_var_t{
 	u_int16_t indirection_level;
 	//Is this a temp variable?
 	u_int8_t is_temporary;
-	//Is this a constant?
-	u_int8_t is_constant;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//Store the type info for faster access
@@ -249,11 +253,11 @@ struct instruction_t{
 	three_addr_const_t* op1_const;
 	three_addr_var_t* assignee;
 	//Now for the assembly operations, we have a source and destination
-	three_addr_var_t* source_reg;
+	three_addr_var_t* source_register;
 	//If we're trying to move a constant in
 	three_addr_const_t* source_immediate;
 	//Our destination register/variable
-	three_addr_var_t* dest;
+	three_addr_var_t* destination_register;
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;
 	//The LEA addition
