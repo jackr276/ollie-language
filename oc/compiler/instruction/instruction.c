@@ -180,56 +180,6 @@ instruction_t* emit_label_instruction(three_addr_var_t* label){
 
 
 /**
- * Emit a left shift statement
- */
-instruction_t* emit_left_shift_instruction(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amount_const){
-	//First we allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's assign the label
-	stmt->CLASS = THREE_ADDR_CODE_LSHIFT_STMT;
-
-	//And we'll assign the values. The var is the assignee, and the shift amount is always op2
-	stmt->assignee = assignee;
-	stmt->op1 = var;
-	//Whichever was passed in as non-null doesn't matter. We'll just add them both
-	stmt->op2 = shift_amount_var;
-	stmt->op1_const = shift_amount_const;
-	//Note the function we're in
-	stmt->function = current_function;
-
-
-	//And give it back
-	return stmt;
-}
-
-
-/**
- * Emit a right shift statement
- */
-instruction_t* emit_right_shift_instruction(three_addr_var_t* assignee, three_addr_var_t* var, three_addr_var_t* shift_amount_var, three_addr_const_t* shift_amound_const){
-	//First we allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's assign the label
-	stmt->CLASS = THREE_ADDR_CODE_RSHIFT_STMT;
-
-	//And we'll assign the values. The var is the assignee, and the shift amount is always op2
-	stmt->assignee = assignee;
-	stmt->op1 = var;
-	//Whichever was non-null doesn't matter, we'll add both in
-	stmt->op1_const = shift_amound_const;
-	stmt->op2 = shift_amount_var;
-	//Note the function we're in
-	stmt->function = current_function;
-
-
-	//And give it back
-	return stmt;
-}
-
-
-/**
  * Emit a direct jump statement. This is used only with jump statements the user has made
  */
 instruction_t* emit_direct_jmp_instruction(three_addr_var_t* jumping_to){
@@ -728,52 +678,7 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 		//Now the variable
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
-	} else if(stmt->CLASS == THREE_ADDR_CODE_LSHIFT_STMT){
-		//Print out the assignee
-		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-
-		//Now the assop and keyword
-		printf(" <- lshift ");
-
-		//Now op1
-		print_variable(stmt->op1, PRINTING_VAR_INLINE);
-
-		printf(", ");
-
-		//Now if we have a constant, we'll print that
-		if(stmt->op1_const != NULL){
-			//Print the constant out 
-			print_three_addr_constant(stmt->op1_const);
-		} else {
-			print_variable(stmt->op2, PRINTING_VAR_INLINE);
-		}
-
-		//And a newline
-		printf("\n");
-	//We have a right shift statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_RSHIFT_STMT){
-		//Print out the assignee
-		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-
-		//Now the assop and keyword
-		printf(" <- rshift ");
-
-		//Now op1
-		print_variable(stmt->op1, PRINTING_VAR_INLINE);
-
-		printf(", ");
-
-		//Now if we have a constant, we'll print that
-		if(stmt->op1_const != NULL){
-			//Print the constant out
-			print_three_addr_constant(stmt->op1_const);
-		} else {
-			print_variable(stmt->op2, PRINTING_VAR_INLINE);
-		}
-
-		//And a newline
-		printf("\n");
-	}
+	} 
 }
 
 
@@ -905,8 +810,18 @@ void print_instruction(instruction_t* instruction){
 			print_variable(instruction->dest, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
+		case INCQ:
+			printf("incq ");
+			print_variable(instruction->dest, PRINTING_VAR_INLINE);
+			printf("\n");
+			break;
 		case DEC:
 			printf("dec ");
+			print_variable(instruction->dest, PRINTING_VAR_INLINE);
+			printf("\n");
+			break;
+		case DECQ:
+			printf("decq ");
 			print_variable(instruction->dest, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;

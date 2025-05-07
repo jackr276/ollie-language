@@ -464,6 +464,61 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 
 
 /**
+ * Handle a bin-op-with-const statement
+ */
+static void handle_binary_operation_with_const_instruction(instruction_t* instruction){
+
+}
+
+
+/**
+ * Handle a bin-op-with-const statement
+ */
+static void handle_binary_operation_intruction(instruction_t* instruction){
+
+}
+
+
+/**
+ * Handle an increment statement
+ */
+static void handle_inc_instruction(instruction_t* instruction){
+	//Determine the size of the variable we need
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//If it's a quad word, there's a different instruction to use. Otherwise
+	//it's just a regular inc
+	if(size == QUAD_WORD){
+		instruction->instruction_type = INCQ;
+	} else {
+		instruction->instruction_type = INC;
+	}
+
+	//Set the destination as the assignee
+	instruction->dest = instruction->assignee;
+}
+
+/**
+ * Handle a decrement statement
+ */
+static void handle_dec_instruction(instruction_t* instruction){
+	//Determine the size of the variable we need
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//If it's a quad word, there's a different instruction to use. Otherwise
+	//it's just a regular inc
+	if(size == QUAD_WORD){
+		instruction->instruction_type = DECQ;
+	} else {
+		instruction->instruction_type = DEC;
+	}
+
+	//Set the destination as the assignee
+	instruction->dest = instruction->assignee;
+}
+
+
+/**
  * Handle a regular move condition
  */
 static void handle_to_register_move_instruction(instruction_t* instruction){
@@ -638,13 +693,21 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 			case THREE_ADDR_CODE_FUNC_CALL:
 				current->instruction_type = CALL;
 				break;
+			//Let the helper deal with this
 			case THREE_ADDR_CODE_INC_STMT:
-				current->instruction_type = INC;
-				current->dest = current->assignee;
+				handle_inc_instruction(current);
 				break;
+			//Again use the helper
 			case THREE_ADDR_CODE_DEC_STMT:
-				current->instruction_type = DEC;
-				current->dest = current->assignee;
+				handle_dec_instruction(current);
+				break;
+			//Let the helper handle this one
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+				handle_binary_operation_intruction(current);
+				break;
+			//Same here
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				handle_binary_operation_with_const_instruction(current);
 				break;
 			default:
 				break;

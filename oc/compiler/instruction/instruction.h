@@ -61,7 +61,9 @@ typedef enum{
 	SUBQ,
 	ASM_INLINE, //ASM inline statements aren't really instructions
 	INC,
+	INCQ,
 	DEC,
+	DECQ,
 } instruction_type_t;
 
 
@@ -143,10 +145,6 @@ typedef enum{
 	THREE_ADDR_CODE_ASSN_STMT,
 	//Assigning a constant to a variable
 	THREE_ADDR_CODE_ASSN_CONST_STMT,
-	//A right shift statement
-	THREE_ADDR_CODE_RSHIFT_STMT,
-	//A left shift statement
-	THREE_ADDR_CODE_LSHIFT_STMT,
 	//A return statement
 	THREE_ADDR_CODE_RET_STMT,
 	//A jump statement -- used for control flow
