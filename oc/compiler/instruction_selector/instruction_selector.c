@@ -212,7 +212,7 @@ static instruction_window_t* slide_window(instruction_window_t* window){
  * Jump instructions are basically already done for us. It's a very simple one-to-one
  * mapping that we need to do here
  */
-static void assign_jump_instructions(instruction_t* instruction){
+static void select_jump_instruction(instruction_t* instruction){
 	//We already know that we have a jump here, we'll just need to switch on
 	//what the type is
 	switch (instruction->jump_type) {
@@ -243,40 +243,6 @@ static void assign_jump_instructions(instruction_t* instruction){
 		case JUMP_TYPE_JNZ:
 			instruction->instruction_type = JNZ;
 			break;
-		default:
-			break;
-	}
-}
-
-
-/**
- * This is a final step to match single instructions that have not yet
- * been selected with a pattern. Examples of these include jump statements,
- * ret statements, or any other kind of statements that don't apply the
- * grand pattern matching selection on
- */
-static void single_instruction_pattern_match(instruction_t* instruction){
-	//Catch the instances where this has been called on instructions that have
-	//already been selected. If they have, we're done here, just bail out
-	if(instruction->instruction_type != NONE){
-		return;
-	}
-
-	//Otherwise swtich on what kind of three address code statement
-	//that we have
-	switch (instruction->CLASS) {
-		//These follow the same pattern
-		case THREE_ADDR_CODE_JUMP_STMT:
-		case THREE_ADDR_CODE_DIR_JUMP_STMT:
-			//Let the helper do this and then leave
-			assign_jump_instructions(instruction);
-			break;
-		//This one is just assigned to NOP
-		case IDLE:
-			instruction->instruction_type = NOP;
-			break;
-
-	
 		default:
 			break;
 	}
@@ -539,9 +505,12 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
 
 
 /**
- * Select instructions in a given window
+ * The first part of the instruction selector to run is the pattern selector. This 
+ * first set of passes will determine if there are any large patterns that we can optimize
+ * with our instructions. This will likely leave a lot of instructions not selected, 
+ * which is part of the plan
  */
-static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* window){
+static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
 	//Have we changed the window at all? Very similar to the simplify function
 	u_int8_t changed = FALSE;
 
@@ -616,49 +585,56 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 		*/
 	}
 
-	//If it's not none
-	if(window->instruction1->instruction_type == NONE){
-		switch (window->instruction1->CLASS) {
-			//These two are handled the same
-			case THREE_ADDR_CODE_ASSN_STMT:
-			case THREE_ADDR_CODE_ASSN_CONST_STMT:
-				handle_to_register_move_instruction(window->instruction1);
-				break;
-			default:
-				break;
-		}
-
-	}
-
-	if(window->instruction2 != NULL && window->instruction2->instruction_type == NONE){
-		switch (window->instruction1->CLASS) {
-			//These two are handled the same
-			case THREE_ADDR_CODE_ASSN_STMT:
-			case THREE_ADDR_CODE_ASSN_CONST_STMT:
-				handle_to_register_move_instruction(window->instruction1);
-				break;
-			default:
-				break;
-		}
-
-	}
-
-
-	if(window->instruction3 != NULL && window->instruction3->instruction_type == NONE){
-		switch (window->instruction1->CLASS) {
-			//These two are handled the same
-			case THREE_ADDR_CODE_ASSN_STMT:
-			case THREE_ADDR_CODE_ASSN_CONST_STMT:
-				handle_to_register_move_instruction(window->instruction1);
-				break;
-			default:
-				break;
-		}
-
-	}
-
-	//Give back whether or not this got changed
 	return changed;
+}
+
+
+/**
+ * Select instructions that follow a singular pattern. This one single pass will run after
+ * the pattern selector ran and perform one-to-one mappings on whatever is left.
+ */
+static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
+	//Make an array for us
+	instruction_t* instructions[3] = {window->instruction1, window->instruction2, window->instruction3};
+
+	//The current instruction
+	instruction_t* current;
+
+	//Run through each of the tree instructions
+	for(u_int8_t _ = 0; _ < 3; _++){
+		//Grab whichever current is
+		current = instructions[_];
+	
+		//If this is the case, it's already been selected so bail
+		if(current == NULL || current->instruction_type != NONE){
+			continue;
+		}
+
+		//Switch on whatever we have currently
+		switch (current->CLASS) {
+			//These have a helper
+			case THREE_ADDR_CODE_ASSN_STMT:
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				handle_to_register_move_instruction(current);
+				break;
+			//One-to-one mapping to nop
+			case THREE_ADDR_CODE_IDLE_STMT:
+				current->instruction_type = NOP;
+				break;
+			//One to one mapping here as well
+			case THREE_ADDR_CODE_RET_STMT:
+				current->instruction_type = RET;
+				break;
+			case THREE_ADDR_CODE_JUMP_STMT:
+			case THREE_ADDR_CODE_DIR_JUMP_STMT:
+				//Let the helper do this and then leave
+				select_jump_instruction(current);
+				break;
+
+			default:
+				break;
+		}
+	}
 }
 
 
@@ -678,7 +654,8 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 		//Keep going so long as the window isn't at the end
 		do{
 			//Select the instructions
-			select_instructions_in_window(cfg, &window);
+			//TODO only single pattern for now
+			select_single_instruction_patterns(cfg, &window);
 
 			//Slide the window
 			slide_window(&window);
@@ -1266,18 +1243,17 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
 	 */
+
+	//Shove these all into an array for selecting
+	instruction_t* instructions[3] = {window->instruction1, window->instruction2, window->instruction3};
+
+	//The current instruction pointer
+	instruction_t* current_instruction;
+
 	//If we have a bin op with const statement, we have an opportunity
 	for(u_int16_t i = 0; i < 3; i++){
-		instruction_t* current_instruction;
-
-		//Simple logic to select the current instruction
-		if(i == 0){
-			current_instruction = window->instruction1;
-		} else if(i == 1){
-			current_instruction = window->instruction2;
-		} else {
-			current_instruction = window->instruction3;
-		}
+		//Grab the current instruction out
+		current_instruction = instructions[i];
 
 		if(current_instruction != NULL && current_instruction->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 			//Grab this out for convenience

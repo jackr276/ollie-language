@@ -846,6 +846,15 @@ static void print_register_to_register_move(instruction_t* instruction){
 
 
 /**
+ * Handle a complex register(or immediate) to memory move with a complex
+ * address offset calculation
+ */
+static void print_to_memory_move(instruction_t* instruction){
+
+}
+
+
+/**
  * Print an instruction that has not yet been given registers
  */
 void print_instruction(instruction_t* instruction){
@@ -889,34 +898,9 @@ void print_instruction(instruction_t* instruction){
 		case REG_TO_MEM_MOVL:
 		case REG_TO_MEM_MOVW:
 		case REG_TO_MEM_MOVQ:
-			//Print out the appropriate flavor of move
-			if(instruction->instruction_type == REG_TO_MEM_MOVL){
-				printf("movl ");
-			} else if(instruction->instruction_type == REG_TO_MEM_MOVW){
-				printf("movw ");
-			} else {
-				printf("movq ");
-			}
-
-			//We'll print out the value being moved into memory here. It can be an
-			//immediate value(in op1_const) or it can be a register(op1)
-			if(instruction->op1 != NULL){
-				print_variable(instruction->op1, PRINTING_VAR_INLINE);
-			} else if(instruction->op1_const != NULL){
-				print_immediate_value(instruction->op1_const);
-			}
-
-			//Needed comma
-			printf(", ");
-
-			//Since we're moving TO memory, we'll print out the address instruction
-			//first
-			print_address_calculation(instruction);
-
-			//Newline out here
-			printf("\n");
-			break;
-
+			print_to_memory_move(instruction);
+		
+		//Handle basic move instructions(no complex addressing)
 		case MOVW:
 		case MOVL:
 		case MOVQ:
