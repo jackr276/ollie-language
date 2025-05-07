@@ -21,7 +21,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	};
 
 	
-	if(x >= 3 && @really_long_function(x)) then{
+	if(x && @really_long_function(x)) then{
 		x := x - 3;
 	} else if(x < 2 && (x != 1 || x != 2)) then {
 		x := x * 2;

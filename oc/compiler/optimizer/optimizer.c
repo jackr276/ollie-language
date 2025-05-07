@@ -460,17 +460,35 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
  * t39 <- t38 <= t37
  * jg .L16 <-------- else target
  * jmp .L17
+ *
+ * EDGE CASE:
+ * t6 <- x_0
+ * t5 <- call really_long_function(t6)
+ * t7 <- x_0
+ * t8 <- t7 && t5
+ * jnz .L12 <----------- else target
+ * jmp .L13 <---------- affirmative target
+ *
  */
 static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
-	//Starting off-we're given the and stmt as a parameter, and our two jumps
-	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
-	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
-	three_addr_var_t* op1 = stmt->op1;
+	//Hold onto what was first assigned
+	three_addr_var_t* first_assigned;
+
+	//Due to the way that we create these statements, it is not a guarantee that op1 will be assigned before op2. It's
+	//easy for us to know though. We'll first check if op1 is assigned immediately or not
+	if(variables_equal(stmt->previous_statement->assignee, stmt->op1, FALSE) == TRUE){
+		//This means that op2 was assigned above
+		first_assigned = stmt->op2;
+	} else {
+		//Otherwise, op1 must be the first assigned here
+		first_assigned = stmt->op1;
+	}
+
 	//Grab a statement cursor
 	instruction_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
+	while(cursor != NULL && variables_equal(first_assigned, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
@@ -551,15 +569,24 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
  *
  */
 static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
-	//Starting off-we're given the and stmt as a parameter, and our two jumps
-	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
-	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
-	three_addr_var_t* op1 = stmt->op1;
+	//Hold onto what was first assigned
+	three_addr_var_t* first_assigned;
+
+	//Due to the way that we create these statements, it is not a guarantee that op1 will be assigned before op2. It's
+	//easy for us to know though. We'll first check if op1 is assigned immediately or not
+	if(variables_equal(stmt->previous_statement->assignee, stmt->op1, FALSE) == TRUE){
+		//This means that op2 was assigned above
+		first_assigned = stmt->op2;
+	} else {
+		//Otherwise, op1 must be the first assigned here
+		first_assigned = stmt->op1;
+	}
+	
 	//Grab a statement cursor
 	instruction_t* cursor = stmt;
 
 	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
+	while(cursor != NULL && variables_equal(first_assigned, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
@@ -615,17 +642,34 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 
 /**
  * Handle a compound and statement optimization
+ *
+ * EDGE CASE:
+ * t6 <- x_0
+ * t5 <- call really_long_function(t6)
+ * t7 <- x_0
+ * t8 <- t7 && t5
+ * jnz .L12 <----------- affirmative target
+ * jmp .L13 <---------- else target
  */
 static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
-	//Starting off-we're given the and stmt as a parameter, and our two jumps
-	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
-	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
-	three_addr_var_t* op1 = stmt->op1;
+	//Hold onto what was first assigned
+	three_addr_var_t* first_assigned;
+
+	//Due to the way that we create these statements, it is not a guarantee that op1 will be assigned before op2. It's
+	//easy for us to know though. We'll first check if op1 is assigned immediately or not
+	if(variables_equal(stmt->previous_statement->assignee, stmt->op1, FALSE) == TRUE){
+		//This means that op2 was assigned above
+		first_assigned = stmt->op2;
+	} else {
+		//Otherwise, op1 must be the first assigned here
+		first_assigned = stmt->op1;
+	}
+
 	//Grab a statement cursor
 	instruction_t* cursor = stmt;
 
-	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
+	//Run backwards until we find where first_assigned is the assignee
+	while(cursor != NULL && variables_equal(first_assigned, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
@@ -684,15 +728,24 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
  * Hande a compound or statement optimization
  */
 static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
-	//Starting off-we're given the and stmt as a parameter, and our two jumps
-	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
-	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
-	three_addr_var_t* op1 = stmt->op1;
+	//Hold onto what was first assigned
+	three_addr_var_t* first_assigned;
+
+	//Due to the way that we create these statements, it is not a guarantee that op1 will be assigned before op2. It's
+	//easy for us to know though. We'll first check if op1 is assigned immediately or not
+	if(variables_equal(stmt->previous_statement->assignee, stmt->op1, FALSE) == TRUE){
+		//This means that op2 was assigned above
+		first_assigned = stmt->op2;
+	} else {
+		//Otherwise, op1 must be the first assigned here
+		first_assigned = stmt->op1;
+	}
+
 	//Grab a statement cursor
 	instruction_t* cursor = stmt;
 
-	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
+	//Run backwards until we find where first_assigned is the assignee
+	while(cursor != NULL && variables_equal(first_assigned, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
