@@ -498,6 +498,47 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 
 
 /**
+ * Handle a regular move condition
+ */
+static void handle_to_register_move_instruction(instruction_t* instruction){
+	//Select the variable size
+	variable_size_t size;
+
+	//Select the appropriate size for later
+	if(instruction->op1 != NULL){
+		size = select_variable_size(instruction->op1);
+		//May as well set this here
+		instruction->source_reg = instruction->op1;
+	//Otherwise it must be a constant
+	} else {
+		size = select_constant_size(instruction->op1_const);
+		//Set this as well if we can
+		instruction->source_immediate = instruction->op1_const;
+	}
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			instruction->instruction_type = MOVQ;
+			break;
+	}
+
+	//We've already set the sources, now we set the destination as the assignee
+	instruction->dest = instruction->assignee;
+}
+
+
+/**
  * Select instructions in a given window
  */
 static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* window){
@@ -526,12 +567,16 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 	 */
 	//If we have some kind of offset calculation followed by a dereferencing assingment, we have either a 
 	//register to memory or immediate to memory move. Either way, we can rewrite this using address computation mode
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT && window->instruction1->op == PLUS 
-		&& window->instruction2 != NULL &&
-		(window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
+	if(window->instruction1->instruction_type == NONE 
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+		&& window->instruction1->op == PLUS 
+		&& window->instruction2 != NULL
+		&& window->instruction2->instruction_type == NONE 
+		&& (window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
 		&& window->instruction2->assignee->indirection_level == 1){
 
+		/*
 		//Use the helper to keep things somewhat clean in here
 		handle_address_calc_to_memory_move(window->instruction1, window->instruction2);
 
@@ -552,6 +597,7 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 
 		//This counts as a change
 		//changed = TRUE;
+		*/
 	}
 
 	//We also need to perform the exact same kind of optimization for instructions 2 and 3
@@ -561,11 +607,54 @@ static u_int8_t select_instructions_in_window(cfg_t* cfg, instruction_window_t* 
 		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE
 		&& window->instruction3->assignee->indirection_level == 1){
 
+		/*
 		//Use the helper to keep things somewhat clean in here
 		handle_address_calc_to_memory_move(window->instruction2, window->instruction3);
 
 		//This counts as a change
 		//changed = TRUE;
+		*/
+	}
+
+	//If it's not none
+	if(window->instruction1->instruction_type == NONE){
+		switch (window->instruction1->CLASS) {
+			//These two are handled the same
+			case THREE_ADDR_CODE_ASSN_STMT:
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				handle_to_register_move_instruction(window->instruction1);
+				break;
+			default:
+				break;
+		}
+
+	}
+
+	if(window->instruction2 != NULL && window->instruction2->instruction_type == NONE){
+		switch (window->instruction1->CLASS) {
+			//These two are handled the same
+			case THREE_ADDR_CODE_ASSN_STMT:
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				handle_to_register_move_instruction(window->instruction1);
+				break;
+			default:
+				break;
+		}
+
+	}
+
+
+	if(window->instruction3 != NULL && window->instruction3->instruction_type == NONE){
+		switch (window->instruction1->CLASS) {
+			//These two are handled the same
+			case THREE_ADDR_CODE_ASSN_STMT:
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				handle_to_register_move_instruction(window->instruction1);
+				break;
+			default:
+				break;
+		}
+
 	}
 
 	//Give back whether or not this got changed

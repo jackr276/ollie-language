@@ -816,6 +816,36 @@ static void print_address_calculation(instruction_t* instruction){
 
 
 /**
+ * Handle a simple register to register or immediate to register move
+ */
+static void print_register_to_register_move(instruction_t* instruction){
+	//Print out the appropriate flavor of move
+	if(instruction->instruction_type == MOVL){
+		printf("movl ");
+	} else if(instruction->instruction_type == MOVW){
+		printf("movw ");
+	} else {
+		printf("movq ");
+	}
+
+	//Print the appropriate variable here
+	if(instruction->source_reg != NULL){
+		print_variable(instruction->source_reg, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Needed comma
+	printf(", ");
+
+	//Now print our destination
+	print_variable(instruction->dest, PRINTING_VAR_INLINE);
+
+	printf("\n");
+}
+
+
+/**
  * Print an instruction that has not yet been given registers
  */
 void print_instruction(instruction_t* instruction){
@@ -886,6 +916,12 @@ void print_instruction(instruction_t* instruction){
 			//Newline out here
 			printf("\n");
 			break;
+
+		case MOVW:
+		case MOVL:
+		case MOVQ:
+			//Invoke the helper
+			print_register_to_register_move(instruction);
 
 		//Show a default error message
 		default:

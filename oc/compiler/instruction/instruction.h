@@ -247,6 +247,12 @@ struct instruction_t{
 	//For convenience: op1 can also be a const sometimes
 	three_addr_const_t* op1_const;
 	three_addr_var_t* assignee;
+	//Now for the assembly operations, we have a source and destination
+	three_addr_var_t* source_reg;
+	//If we're trying to move a constant in
+	three_addr_const_t* source_immediate;
+	//Our destination register/variable
+	three_addr_var_t* dest;
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;
 	//The LEA addition
