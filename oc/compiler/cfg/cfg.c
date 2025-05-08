@@ -713,12 +713,6 @@ void add_statement(basic_block_t* target, instruction_t* statement_node){
 
 	//Save what block we're in
 	statement_node->block_contained_in = target;
-
-	//If this statement is a jump statement, reflect that in the block
-	if(statement_node->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-		//One more jump
-		target->num_jumps += 1;
-	}
 }
 
 
@@ -757,12 +751,6 @@ void delete_statement(cfg_t* cfg, basic_block_t* block, instruction_t* stmt){
 		instruction_t* next = stmt->next_statement;
 		previous->next_statement = next;
 		next->previous_statement = previous;
-	}
-
-	//If this was a jump statement, update the number of jump statements
-	if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-		//Decrement
-		block->num_jumps -= 1;
 	}
 }
 

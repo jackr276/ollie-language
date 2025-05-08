@@ -119,15 +119,13 @@ struct generic_ast_node_t{
 	char* type_name;
 	//The type record that we have
 	symtab_type_record_t* type_record;
-	//What kind of node is it?
-	ast_node_class_t CLASS;
+	//What is the value of this case statement
+	int64_t case_statement_value;
 	//The upper and lower bound for switch statements
 	int32_t lower_bound;
 	int32_t upper_bound;
 	//What line number is this from
 	u_int16_t line_number;
-	//Number of members - used for enums and constructs
-	u_int16_t num_members;
 	//Store a binary operator(if one exists)
 	Token binary_operator;
 	//Store a unary operator(if one exists)
@@ -138,14 +136,14 @@ struct generic_ast_node_t{
 	char* identifier;
 	//Is this assignable?
 	variable_assignability_t is_assignable;
+	//What kind of node is it?
+	ast_node_class_t CLASS;
 	//Is this a deferred node?
 	u_int8_t is_deferred;
 	//The number of parameters
 	u_int8_t num_params;
 	//The type address specifier - for types
 	address_specifier_type_t address_type;
-	//What is the value of this case statement
-	int64_t case_statement_value;
 };
 
 

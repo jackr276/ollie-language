@@ -92,27 +92,17 @@ struct cfg_t{
  * by the "leader" and "exit" references for quick access
 */
 struct basic_block_t{
-	//An integer ID
-	int32_t block_id;
-	//Does this block contain a marked record?
-	u_int8_t contains_mark;
+	//The reference to a jump table. This is often not used at all
+	jump_table_t jump_table;
 	//The function record -- we need to store this for printing
 	symtab_function_record_t* func_record;
 	//The function that we're defined in
 	symtab_function_record_t* function_defined_in;
-	//Is this a global variable block?
-	u_int8_t is_global_var_block;
-	//How many jump statements does the block have? This helps us avoid
-	//redundant computation
-	u_int16_t num_jumps;
-	//What is the general classification of this block
-	block_type_t block_type;
-	//How does the block terminate? This is important for CFG drilling
-	block_terminal_type_t block_terminal_type;
-	//Was this block visited by traverser?
-	u_int8_t visited;
-	//Does this block have short-circuiting eligibility?
-	u_int8_t is_short_circuit_eligible;
+	//There are consecutive statements(declare, define, let, assign, alias)
+	//in a node. These statements are a linked list
+	//Keep a reference to the "leader"(head) and "exit"(tail) statements
+	instruction_t* leader_statement;
+	instruction_t* exit_statement;
 	//Predecessor nodes
 	dynamic_array_t* predecessors;
 	//Successor nodes
@@ -149,16 +139,22 @@ struct basic_block_t{
 	basic_block_t* immediate_dominator;
 	//The immediate postdominator reference
 	basic_block_t* immediate_postdominator;
-	//The reference to a jump table. This is often not used at all
-	jump_table_t jump_table;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
-	//There are consecutive statements(declare, define, let, assign, alias)
-	//in a node. These statements are a linked list
-	//Keep a reference to the "leader"(head) and "exit"(tail) statements
-	instruction_t* leader_statement;
-	instruction_t* exit_statement;
+	//An integer ID
+	int32_t block_id;
+	//What is the general classification of this block
+	block_type_t block_type;
+	//How does the block terminate? This is important for CFG drilling
+	block_terminal_type_t block_terminal_type;
+	//Does this block contain a marked record?
+	u_int8_t contains_mark;
+	//Is this a global variable block?
+	u_int8_t is_global_var_block;
+	//Was this block visited by traverser?
+	u_int8_t visited;
 };
+
 
 //Build the entire CFG from the AST. This function returns the CFG struct, which
 //always has the root block
@@ -172,7 +168,9 @@ void add_statement(basic_block_t* target, instruction_t* statement_node);
  */
 void delete_statement(cfg_t* cfg, basic_block_t* block, instruction_t* stmt);
 
-//Add a successor to the block
+/**
+ * Add a successor to the block
+ */
 void add_successor(basic_block_t* target, basic_block_t* successor);
 
 /**
@@ -180,13 +178,19 @@ void add_successor(basic_block_t* target, basic_block_t* successor);
  */
 jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type);
 
-//Exclusively add a predecessor to a block
+/**
+ * Add a predecessor to the block
+ */
 void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
 
-//Exclusively add a successor to a block
+/**
+ * Exclusively add a successor to the block
+ */
  void add_successor_only(basic_block_t* target, basic_block_t* successor);
 
-//Deallocate our entire cfg structure
+/**
+ * Deallocate the entire CFG
+ */
 void dealloc_cfg(cfg_t* cfg);
 
 /**
