@@ -771,6 +771,43 @@ static void print_to_memory_move(instruction_t* instruction){
  * Print an addition instruction, in all the forms it can take
  */
 static void print_addition_instruction(instruction_t* instruction){
+	//First we'll print out the appropriate variety of addition
+	switch(instruction->instruction_type){
+		case ADDW:
+			printf("addw ");
+			break;
+		case ADDL:
+			printf("addl ");
+			break;
+		case ADDQ:
+			printf("addq ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//Print the appropriate variable here
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Needed comma
+	printf(", ");
+
+	//Now print our destination
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
+ * Print a lea instruction. This will also handle all the complexities around
+ * complex addressing modes
+ */
+static void print_lea_instruction(instruction_t* instruction){
 
 }
 
@@ -859,6 +896,12 @@ void print_instruction(instruction_t* instruction){
 		case MOVQ:
 			//Invoke the helper
 			print_register_to_register_move(instruction);
+			break;
+		//Handle lea printing
+		case LEA:
+		case LEAQ:
+			//Invoke the helper
+			print_lea_instruction(instruction);
 			break;
 
 		//Show a default error message

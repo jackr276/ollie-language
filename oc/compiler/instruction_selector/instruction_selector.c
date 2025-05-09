@@ -359,6 +359,25 @@ static instruction_type_t select_lea_instruction(variable_size_t size){
 
 
 /**
+ * A very simple helper function that selects the right add instruction based
+ * solely on variable size. Done to avoid code duplication
+ */
+static instruction_type_t select_add_instruction(variable_size_t size){
+	//Go based on size
+	switch(size){
+		case WORD:
+			return ADDW;
+		case DOUBLE_WORD:
+			return ADDL;
+		case QUAD_WORD:
+			return ADDQ;
+		default:
+			return ADDQ;
+	}
+}
+
+
+/**
  * Select the size of a constant based on its type
  */
 variable_size_t select_constant_size(three_addr_const_t* constant){
@@ -529,11 +548,11 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 		 */
 		case PLUS:
 			//Let's see if we have case 1
-			if(variables_equal(instruction->assignee, instruction->op1, FALSE) == FALSE){
+			if(variables_equal_no_ssa(instruction->assignee, instruction->op1, FALSE) == FALSE){
 				//Grab the lea that we need and set it to be the instruction type
 				instruction->instruction_type = select_lea_instruction(size);
 
-				//We'll need to perform an address calculation move. This will fall under
+				//We'll need to perform an address calculation via LEA instruction. This will fall under
 				//the category of ADDRESS_CALCULATION_MODE_CONST_ONLY
 				//Set this flag for later
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_CONST_ONLY;
@@ -545,9 +564,16 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 				instruction->source_register = instruction->op1;
 				//And the constant additive is op1 const
 				instruction->constant_additive = instruction->op1_const;
+
 			//Else we've got case 2
 			} else {
+				//Grab the add instruction that we want
+				instruction->instruction_type = select_add_instruction(size);
 
+				//We'll just need to set the source immediate and destination register
+				instruction->destination_register = instruction->assignee;
+				//And grab the immediate source
+				instruction->source_immediate = instruction->op1_const;
 			}
 
 			break;
