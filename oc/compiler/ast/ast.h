@@ -154,14 +154,14 @@ struct generic_ast_node_t{
 
 //Holds information about a constant
 struct constant_ast_node_t{
-	//Holds the token for what kind of constant it is
-	Token constant_type;
+	char string_val[MAX_TOKEN_LENGTH];
+	int64_t long_val;
 	//It's cheap enough for us to just hold all of these here
 	int32_t int_val;
-	int64_t long_val;
 	float float_val;
 	char char_val;
-	char string_val[MAX_TOKEN_LENGTH];
+	//Holds the token for what kind of constant it is
+	Token constant_type;
 };
 
 

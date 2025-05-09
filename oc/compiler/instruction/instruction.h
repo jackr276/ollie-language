@@ -218,13 +218,13 @@ struct three_addr_const_t{
 	three_addr_const_t* next_created;
 	//We hold the type info
 	generic_type_t* type;
-	//What kind of constant is it
-	Token const_type;
 	//And we hold everything relevant about the constant
 	long long_const;
-	char char_const;
 	float float_const;
 	int int_const;
+	//What kind of constant is it
+	Token const_type;
+	char char_const;
 };
 
 

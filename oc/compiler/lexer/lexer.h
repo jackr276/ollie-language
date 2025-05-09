@@ -135,14 +135,14 @@ typedef enum {
 typedef struct Lexer_item Lexer_item;
 
 struct Lexer_item{
-	//The token associated with this item
-	Token tok;
 	//The string(lexeme) that got us this token
 	char lexeme[MAX_TOKEN_LENGTH];
 	//The line number of the source that we found it on
 	u_int16_t line_num;
 	//The number of characters in this token
 	int16_t char_count;
+	//The token associated with this item
+	Token tok;
 };
 
 /**

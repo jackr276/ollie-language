@@ -1162,5 +1162,3 @@ void constants_symtab_dealloc(constants_symtab_t* symtab){
 	//Once, we're done, free the overall thing
 	free(symtab);
 }
-
-

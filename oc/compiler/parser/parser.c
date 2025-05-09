@@ -116,6 +116,19 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 
 
 /**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t parser_line_num){
+	//Display the error
+	print_parse_message(PARSE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Allocate and return an error node
+	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+}
+
+
+/**
  * We will always return a pointer to the node holding the identifier. Due to the times when
  * this will be called, we can not do any symbol table validation here. 
  *
@@ -132,10 +145,7 @@ static generic_ast_node_t* identifier(FILE* fl){
 	//If we can't find it that's bad
 	if(lookahead.tok != IDENT){
 		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Create and return an error node that will be sent up the chain
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Create the identifier node
@@ -170,10 +180,8 @@ static generic_ast_node_t* label_identifier(FILE* fl){
 	//If we can't find it that's bad
 	if(lookahead.tok != LABEL_IDENT){
 		sprintf(info, "String %s is not a valid label identifier", lookahead.lexeme);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
 		//Create and return an error node that will be sent up the chain
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Create the identifier node
@@ -300,9 +308,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//Too long of a string
 			if(length > 499){
-				print_parse_message(PARSE_ERROR, "String literals may be at most 500 characters in length", parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return print_and_return_error("String literals may be at most 500 characters in length", parser_line_num);
 			}
 
 			//Increment 1 to account for the null terminator
@@ -344,10 +350,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			break;
 
 		default:
-			print_parse_message(PARSE_ERROR, "Invalid constant given", parser_line_num);
-			num_errors++;
 			//Create and return an error node that will be propagated up
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Invalid constant given", parser_line_num);
 	}
 
 	//All went well so give the constant node back
@@ -385,10 +389,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 	//We have a general error-probably will be quite uncommon
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Non identifier provided as function call", parser_line_num);
-		num_errors++;
 		//We'll let the node propogate up
-		return ident;
+		return print_and_return_error("Non-identifier provided as funciton call", parser_line_num);
 	}
 
 	//Grab the function name out for convenience
@@ -401,10 +403,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 	//call a nonexistent function
 	if(function_record == NULL){
 		sprintf(info, "Function \"%s\" is being called before definition", function_name);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		num_errors++;
 		//Return the error node and get out
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, current_line);
 	}
 
 	//Now we can grab out some info for convenience
@@ -431,10 +431,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 	//Fail out here
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected on function call", parser_line_num);
-		num_errors++;
 		//Send this error node up the chain
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left parenthesis expected on function call", parser_line_num);
 	}
 
 	//Push onto the grouping stack once we see this
@@ -448,12 +446,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 		//If we don't see this it's bad
 		if(lookahead.tok != R_PAREN){
 			sprintf(info, "Function \"%s\" expects no parameters First declared here:", function_record->func_name);
-			print_parse_message(PARSE_ERROR, info, current_line);
-			//Print out the actual function record as well
-			print_function_name(function_record);
-			num_errors++;
-			//Return the error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error(info, current_line);
 		}
 		
 		//Be sure to clear the stack out
@@ -472,7 +465,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 	symtab_variable_record_t* current_function_param;
 
 	//So long as we don't see the R_PAREN we aren't done
-	while(1){
+	while(TRUE){
 		//If we're exceeding the number of parameters, we'll fail out
 		if(num_params > function_num_params){
 			sprintf(info, "Function \"%s\" expects %d params, was given %d. First declared here:", function_name, function_num_params, num_params);
@@ -537,10 +530,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 		//Otherwise it must be a comma. If it isn't we have a failure
 		if(lookahead.tok != COMMA){
-			print_parse_message(PARSE_ERROR, "Commas must be used to separate parameters in function call", parser_line_num);
-			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
 		}
 	}
 
@@ -559,10 +550,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in function call", parser_line_num);
-		num_errors++;
 		//Return the error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 	}
 
 	//Add the line number in
@@ -639,9 +628,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//initialized, then we have an issue
 		if(found == NULL){
 			sprintf(info, "Variable \"%s\" has not been declared", var_name);
-			print_parse_message(PARSE_ERROR, info, current_line);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error(info, current_line);
 		}
 
 		//Store the inferred type
@@ -692,18 +679,13 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 		//Fail case here
 		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", parser_line_num);
-			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Right parenthesis expected after expression", parser_line_num);
 		}
 
 		//Another fail case, if they're unmatched
 		if(pop_token(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 		}
 
 		//Return the expression node
@@ -725,10 +707,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	//Generic fail case
 	} else {
 		sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, current_line);
 	}
 }
 
@@ -8162,7 +8141,7 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
  * We need to go through and check all of the jump statements that we have in the function. If any
  * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
  */
-static int8_t check_jump_labels(symtab_function_record_t* func_record){
+static int8_t check_jump_labels(){
 	//For error printing
 	char info[ERROR_SIZE];
 	//Grab a reference to our current jump statement
@@ -8676,7 +8655,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		add_child_node(function_node, compound_stmt_node);
 		
 		//We now need to check and see if our jump statements are actually valid
-		if(check_jump_labels(function_record) == FAILURE){
+		if(check_jump_labels() == FAILURE){
 			//If this fails, we fail out here too
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
@@ -9006,18 +8985,13 @@ front_end_results_package_t parse(FILE* fl, char* file_name){
 	num_errors = 0;
 	num_warnings = 0;
 
-	//Initialize all of our symtabs
-	if(function_symtab == NULL && type_symtab == NULL && variable_symtab == NULL && constant_symtab == NULL){
-		function_symtab = function_symtab_alloc();
-		variable_symtab = variable_symtab_alloc();
-		type_symtab = type_symtab_alloc();
-		constant_symtab = constants_symtab_alloc(); 
-	}
+	function_symtab = function_symtab_alloc();
+	variable_symtab = variable_symtab_alloc();
+	type_symtab = type_symtab_alloc();
+	constant_symtab = constants_symtab_alloc(); 
 
 	//Initialize the OS call graph. This is because the OS always calls the main function
-	if(os == NULL){
-		os = calloc(1, sizeof(call_graph_node_t));
-	}
+	os = calloc(1, sizeof(call_graph_node_t));
 
 	//Assign the file token
 	current_file_name = file_name;

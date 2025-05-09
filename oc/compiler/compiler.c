@@ -1,8 +1,9 @@
 /**
+ * Author: Jack Robbins
+ *
  * The compiler for Ollie-Lang. Depends on the lexer and the parser. See documentation for
  * full option details
 */
-
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -14,9 +15,6 @@
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
 #include "optimizer/optimizer.h"
-
-// A list of currently compiled files
-typedef struct compiled_file_token_t compiled_file_token_t;
 
 //The number of errors and warnings
 u_int32_t num_errors;

@@ -20,13 +20,13 @@ typedef struct dynamic_array_t dynamic_array_t;
  * can be used anywhere
 */
 struct dynamic_array_t{
+	//The overall array - void* so it's generic
+	void** internal_array;
 	//The current maximum size
 	u_int16_t current_max_size;
 	//The current index that we're on - it also happens to be
 	//how many nodes we have
 	u_int16_t current_index;
-	//The overall array - void* so it's generic
-	void** internal_array;
 };
 
 
