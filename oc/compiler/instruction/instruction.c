@@ -760,6 +760,14 @@ static void print_to_memory_move(instruction_t* instruction){
 
 
 /**
+ * Print an addition instruction, in all the forms it can take
+ */
+static void print_addition_instruction(instruction_t* instruction){
+
+}
+
+
+/**
  * Print an instruction that has not yet been given registers
  */
 void print_instruction(instruction_t* instruction){
@@ -830,13 +838,20 @@ void print_instruction(instruction_t* instruction){
 		case REG_TO_MEM_MOVW:
 		case REG_TO_MEM_MOVQ:
 			print_to_memory_move(instruction);
-		
+			break;
+		//Handle addition instructions
+		case ADDW:
+		case ADDL:
+		case ADDQ:
+			print_addition_instruction(instruction);
+			break;
 		//Handle basic move instructions(no complex addressing)
 		case MOVW:
 		case MOVL:
 		case MOVQ:
 			//Invoke the helper
 			print_register_to_register_move(instruction);
+			break;
 
 		//Show a default error message
 		default:

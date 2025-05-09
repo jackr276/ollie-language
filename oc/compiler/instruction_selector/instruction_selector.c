@@ -470,7 +470,18 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
  * operand
  */
 static void handle_binary_operation_with_const_instruction(instruction_t* instruction){
+	//Go based on what we have as the operation
 	switch(instruction->op){
+		/**
+		 * There are 2 routes we could take with a plus. 
+		 * 	1.) t4 <- t2 + 3: since the operand and assignee are different, we can
+		 * 		use an address calculation instruction to do this. 
+		 * 		We'll make this mov(w/l/q) 3(t2), t4
+		 *
+		 * 	2.) x3 <- x2 + 4: since the operand and assignee are the same, we're fine overwriting.
+		 * 		This can be a regular addition instruction.
+		 * 		We'll make this: add(w/l/q) $4, x3
+		 */
 		case PLUS:
 
 		case MINUS:

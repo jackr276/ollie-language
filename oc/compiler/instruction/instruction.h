@@ -111,6 +111,18 @@ typedef enum{
 
 
 /**
+ * What kind of memory addressing mode do we have?
+ */
+typedef enum{
+	ADDRESS_CALCULATION_MODE_NONE = 0, //default is always none
+	ADDRESS_CALCULATION_MODE_CONST_ONLY,
+	ADDRESS_CALCULATION_MODE_REGISTERS_ONLY,
+	ADDRESS_CALCULATION_MODE_OFFSET_ONLY,
+
+
+} address_calculation_mode_t;
+
+/**
  * For variable printing, where we're printing
  * matters. The user must specify if it's
  * block or inline mode
@@ -230,14 +242,6 @@ struct three_addr_const_t{
 
 /**
  * A generic struct that encapsulates most of our instructions
- *
- * ADDRESSING MODES:
- * op2 NULL
- * op2_const occupied
- * op3 NULL
- *
- * This will be translated to: op1_const(op1) -> op1 + op1_const
- *
  */
 struct instruction_t{
 	//What block holds this?
@@ -258,6 +262,21 @@ struct instruction_t{
 	three_addr_const_t* source_immediate;
 	//Our destination register/variable
 	three_addr_var_t* destination_register;
+	/**
+	 * ADDRESS CALCULATIONS
+	 *
+	 * ADDRESS_CALCULATION_MODE_CONST_ONLY
+	 * <constant_additive>(<source/dest>) = <constant_additive> + <source/dest>
+	 * Constant additive is stored in variable constant_additive
+	 * 
+	 * ADDRESS_CALCULATION_MODE_REGISTER_ONLY
+	 * (<source>/<dest>, <register_additive>) = <source>/<dest> + <register_additive>
+	 * Register additive stored in varibale register_additive
+	 */
+	three_addr_const_t* constant_additive;
+	//Register additive
+	three_addr_var_t* register_additive;
+	//The offset
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;
 	//The LEA addition
