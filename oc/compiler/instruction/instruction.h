@@ -315,6 +315,8 @@ struct instruction_t{
 	jump_type_t jump_type;
 	//Memory access type
 	TYPE_CLASS access_class;
+	//What kind of address calculation mode do we have?
+	address_calculation_mode_t calculation_mode;
 };
 
 

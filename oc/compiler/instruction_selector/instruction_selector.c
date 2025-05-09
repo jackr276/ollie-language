@@ -322,6 +322,43 @@ static variable_size_t select_variable_size(three_addr_var_t* variable){
 
 
 /**
+ * A very simple helper function that selects the right move instruction based
+ * solely on variable size. Done to avoid code duplication
+ */
+static instruction_type_t select_move_instruction(variable_size_t size){
+	//Go based on size
+	switch(size){
+		case WORD:
+			return MOVW;
+		case DOUBLE_WORD:
+			return MOVL;
+		case QUAD_WORD:
+			return MOVQ;
+		default:
+			return MOVQ;
+	}
+}
+
+
+/**
+ * A very simple helper function that selects the right lea instruction based
+ * solely on variable size. Done to avoid code duplication
+ */
+static instruction_type_t select_lea_instruction(variable_size_t size){
+	//Go based on size
+	switch(size){
+		case WORD:
+		case DOUBLE_WORD:
+			return LEA;
+		case QUAD_WORD:
+			return LEAQ;
+		default:
+			return LEAQ;
+	}
+}
+
+
+/**
  * Select the size of a constant based on its type
  */
 variable_size_t select_constant_size(three_addr_const_t* constant){
@@ -415,6 +452,9 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 		size = select_constant_size(memory_access->op1_const);
 	}
 
+	//Use the helper to get the right sized move instruction
+	memory_access->instruction_type = select_move_instruction(size);
+	
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
 		case WORD:
@@ -463,6 +503,8 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 }
 
 
+
+
 /**
  * Handle a bin-op-with-const statement
  *
@@ -470,26 +512,52 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
  * operand
  */
 static void handle_binary_operation_with_const_instruction(instruction_t* instruction){
+	//Determine what our size is off the bat
+	variable_size_t size = select_variable_size(instruction->assignee);
+
 	//Go based on what we have as the operation
 	switch(instruction->op){
 		/**
 		 * There are 2 routes we could take with a plus. 
 		 * 	1.) t4 <- t2 + 3: since the operand and assignee are different, we can
 		 * 		use an address calculation instruction to do this. 
-		 * 		We'll make this mov(w/l/q) 3(t2), t4
+		 * 		We'll make this lea(q) 3(t2), t4
 		 *
 		 * 	2.) x3 <- x2 + 4: since the operand and assignee are the same, we're fine overwriting.
 		 * 		This can be a regular addition instruction.
 		 * 		We'll make this: add(w/l/q) $4, x3
 		 */
 		case PLUS:
+			//Let's see if we have case 1
+			if(variables_equal(instruction->assignee, instruction->op1, FALSE) == FALSE){
+				//Grab the lea that we need and set it to be the instruction type
+				instruction->instruction_type = select_lea_instruction(size);
+
+				//We'll need to perform an address calculation move. This will fall under
+				//the category of ADDRESS_CALCULATION_MODE_CONST_ONLY
+				//Set this flag for later
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_CONST_ONLY;
+
+				//Now assign the constants appropriately
+				instruction->destination_register = instruction->assignee;
+
+				//The source register is op1
+				instruction->source_register = instruction->op1;
+				//And the constant additive is op1 const
+				instruction->constant_additive = instruction->op1_const;
+			//Else we've got case 2
+			} else {
+
+			}
+
+			break;
 
 		case MINUS:
-
+			break;
 		case STAR:
-
+			break;
 		case F_SLASH:
-
+			break;
 		default:
 			break;
 	}
@@ -575,23 +643,9 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
 		instruction->source_immediate = instruction->op1_const;
 	}
 
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		//WE DO NOT DO FLOATS YET
-		default:
-			instruction->instruction_type = MOVQ;
-			break;
-	}
-
+	//Use the helper to get the right sized move instruction
+	instruction->instruction_type = select_move_instruction(size);
+	
 	//We've already set the sources, now we set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
 }

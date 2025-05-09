@@ -733,19 +733,27 @@ static void print_register_to_register_move(instruction_t* instruction){
 		printf("movq ");
 	}
 
-	//Print the appropriate variable here
-	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
-	} else {
-		print_immediate_value(instruction->source_immediate);
+	switch(instruction->calculation_mode){
+
+		//This will handle our none case
+		default:
+			//Print the appropriate variable here
+			if(instruction->source_register != NULL){
+				print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+			} else {
+				print_immediate_value(instruction->source_immediate);
+			}
+
+			//Needed comma
+			printf(", ");
+
+			//Now print our destination
+			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+
+			break;
 	}
 
-	//Needed comma
-	printf(", ");
-
-	//Now print our destination
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
-
+	//A final newline is needed for all instructions
 	printf("\n");
 }
 
