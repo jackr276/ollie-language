@@ -945,7 +945,25 @@ void print_instruction(instruction_t* instruction){
 			//Invoke the helper
 			print_lea_instruction(instruction);
 			break;
+		//Handle the very rare case of an indirect jump. This will only appear
+		//in case statements
+		case INDIRECT_JMP:
+			//The star makes this indirect
+			printf("jmp *");
 
+			//Grab this out for convenience
+			jump_table_t* jumping_to_block = instruction->jumping_to_block;
+
+			//We first print out the jumping to block
+			printf(".JT%d(, ", jumping_to_block->jump_table_id);
+
+			//Now we print out the source register
+			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+
+			//And then a comma and the multplicator
+			printf(", %ld)\n", instruction->lea_multiplicator);
+
+			break;
 		//Show a default error message
 		default:
 			//printf("Not yet selected\n");
