@@ -861,6 +861,9 @@ void print_instruction(instruction_t* instruction){
 		case RET:
 			printf("ret\n");
 			break;
+		case NOP:
+			printf("nop\n");
+			break;
 		case JMP:
 			printf("jmp .L%d\n", jumping_to_block->block_id);
 			break;
@@ -871,7 +874,7 @@ void print_instruction(instruction_t* instruction){
 			printf("jne .L%d\n", jumping_to_block->block_id);
 			break;
 		case JZ:
-			printf("jZ .L%d\n", jumping_to_block->block_id);
+			printf("jz .L%d\n", jumping_to_block->block_id);
 			break;
 		case JNZ:
 			printf("jnz .L%d\n", jumping_to_block->block_id);
@@ -955,15 +958,39 @@ void print_instruction(instruction_t* instruction){
 			jump_table_t* jumping_to_block = instruction->jumping_to_block;
 
 			//We first print out the jumping to block
-			printf(".JT%d(, ", jumping_to_block->jump_table_id);
+			printf(".JT%d(,", jumping_to_block->jump_table_id);
 
 			//Now we print out the source register
 			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
 
 			//And then a comma and the multplicator
-			printf(", %ld)\n", instruction->lea_multiplicator);
+			printf(",%ld)\n", instruction->lea_multiplicator);
 
 			break;
+
+		//PHI functions are printed in the exact same manner they are for instructions. These
+		//will be dealt with after we perform register allocation
+		case PHI_FUNCTION:
+			//Print it in block header mode
+			print_variable(instruction->assignee, PRINTING_VAR_BLOCK_HEADER);
+			printf(" <- PHI(");
+
+			//For convenience
+			dynamic_array_t* phi_func_params = instruction->phi_function_parameters;
+
+			//Now run through all of the parameters
+			for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
+				//Print out the variable
+				print_variable(dynamic_array_get_at(phi_func_params, _), PRINTING_VAR_BLOCK_HEADER);
+
+				//If it isn't the very last one, add a comma space
+				if(_ != phi_func_params->current_index - 1){
+					printf(", ");
+				}
+			}
+
+			printf(")\n");
+
 		//Show a default error message
 		default:
 			//printf("Not yet selected\n");

@@ -892,6 +892,11 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				handle_binary_operation_with_const_instruction(current);
 				break;
+			//For a phi function, we perform an exact 1:1 mapping
+			case THREE_ADDR_CODE_PHI_FUNC:
+				//This is all we'll need
+				current->instruction_type = PHI_FUNCTION;
+				break;
 			default:
 				break;
 		}

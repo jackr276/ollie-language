@@ -31,6 +31,7 @@ typedef struct three_addr_const_t three_addr_const_t;
  */
 typedef enum{
 	NONE = 0, //The NONE instruction, this is our default and we'll get this when we calloc
+	PHI_FUNCTION, //Not really an instruction, but we still need to account for these
 	RET,
 	CALL,
 	MOVW, //Regular register-to-register or immediate to register
