@@ -788,6 +788,41 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		*/
 	}
 
+	//Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT && window->instruction2->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
+		//This will be flagged as an indirect jump
+		window->instruction2->instruction_type = INDIRECT_JMP;
+
+		//The source register is op1
+		window->instruction2->source_register = window->instruction1->op2;
+
+		//Store the jumping to block where the jump table is
+		window->instruction2->jumping_to_block = window->instruction1->jumping_to_block;
+
+		//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplicator
+		window->instruction2->lea_multiplicator = window->instruction1->lea_multiplicator;
+
+		//We're now able to delete instruction 1
+		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+
+		//Now we shift everything backwards
+		window->instruction1 = window->instruction2;
+		window->instruction2 = window->instruction2->next_statement;
+
+		//Avoid any kind of null pointer dereference
+		if(window->instruction2 == NULL){
+			window->instruction3 = NULL;
+		} else {
+			window->instruction3 = window->instruction2->next_statement;
+		}
+
+		//Reevaluate the status now
+		set_window_status(window);
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
 	return changed;
 }
 
@@ -865,12 +900,66 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 
 
 /**
+ * Perform one pass of the multi pattern instruction selector. We will keep performing passes
+ * until we no longer see the changed flag
+ */
+static u_int8_t multi_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* head_block){
+	u_int8_t changed;
+	u_int8_t window_changed = FALSE;
+
+	//Keep track of the current block
+	basic_block_t* current = head_block;
+
+	//So long as this isn't NULL
+	while(current != NULL){
+		//By default there's no change
+		changed = FALSE;
+		
+		//Initialize the sliding window(very basic, more to come)
+		instruction_window_t window = initialize_instruction_window(current);
+
+		//Run through and simplify everything we can
+		do {
+			//Select the patterns
+			changed = select_multiple_instruction_patterns(cfg, &window);
+
+			//Set this flag if it was changed
+			if(changed == TRUE){
+				window_changed = TRUE;
+			}
+
+			//And slide it
+			slide_window(&window);
+
+		//So long as we aren't at the end
+		} while(window.status != WINDOW_AT_END);
+
+
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
+
+	return window_changed;
+}
+
+
+/**
  * Run through every block and convert each instruction or sequence of instructions
  * from three address code to assembly statements
  */
 static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 	//First we'll grab the head
 	basic_block_t* current = head_block;
+
+	/**
+	 * We first go through and perform the multiple pattern instruction
+	 * selection. This allows us to catch any large patterns and select them
+	 * first, before they'd be obfuscated by the single pattern selector
+	 */
+	while(multi_instruction_pattern_selector_pass(cfg, head_block) == TRUE);
+
+	//Reset current here
+	current = head_block;
 
 	//So long as this isn't NULL
 	while(current != NULL){
