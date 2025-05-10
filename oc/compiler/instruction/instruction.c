@@ -549,22 +549,12 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 		printf("\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
 		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-		//First we use the test command
-		printf(" <- test ");
+		//We will use the built in "andn" command
+		printf(" <- andn ");
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf(", ");
-		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+		print_variable(stmt->op2, PRINTING_VAR_INLINE);
 		printf("\n");
-		//Then we "set if equal"(sete) the assigned
-		printf("sete ");
-		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-		printf("\n");
-		//Then we move it into itself for flag setting purposes
-		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-		printf(" <- ");
-		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-		printf("\n");
-
 	//For a label statement, we need to trim off the $ that it has
 	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
 		//Let's print it out. This is an instance where we will not use the print var
@@ -1325,7 +1315,7 @@ instruction_t* emit_not_instruction(three_addr_var_t* var){
 /**
  * Emit a logical not statement
  */
-instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_addr_var_t* var){
+instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1333,7 +1323,9 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 	stmt->CLASS = THREE_ADDR_CODE_LOGICAL_NOT_STMT;
 	stmt->assignee = assignee;
 	//Leave it in here
-	stmt->op1 = var;
+	stmt->op1 = op1;
+	//Assign this as well
+	stmt->op2 = op2;
 	//What function are we in
 	stmt->function = current_function;
 

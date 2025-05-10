@@ -2516,8 +2516,14 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
  * Emit a logical negation statement
  */
 static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, u_int8_t is_branch_ending){
+	//We need to emit a temp assignment for the negation
+	instruction_t* temp_assingment = emit_assignment_instruction(emit_temp_var(negated->type), negated);
+
+	//Add this into the block
+	add_statement(basic_block, temp_assingment);
+
 	//We ALWAYS use a temp var here
-	instruction_t* stmt = emit_logical_not_instruction(emit_temp_var(negated->type), negated);
+	instruction_t* stmt = emit_logical_not_instruction(emit_temp_var(negated->type), temp_assingment->assignee, negated);
 	
 	//If negated isn't temp, it also counts as a read
 	if(negated->is_temporary == FALSE){
