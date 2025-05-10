@@ -804,6 +804,42 @@ static void print_addition_instruction(instruction_t* instruction){
 
 
 /**
+ * Print a subtraction instruction, in all the forms it can take
+ */
+static void print_subtraction_instruction(instruction_t* instruction){
+	//First we'll print out the appropriate variety of subtraction 
+	switch(instruction->instruction_type){
+		case SUBW:
+			printf("subw ");
+			break;
+		case SUBL:
+			printf("subl ");
+			break;
+		case SUBQ:
+			printf("subq ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//Print the appropriate variable here
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Needed comma
+	printf(", ");
+
+	//Now print our destination
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
  * Print a lea instruction. This will also handle all the complexities around
  * complex addressing modes
  */
@@ -889,6 +925,12 @@ void print_instruction(instruction_t* instruction){
 		case ADDL:
 		case ADDQ:
 			print_addition_instruction(instruction);
+			break;
+		//Handle subtraction instruction
+		case SUBW:
+		case SUBL:
+		case SUBQ:
+			print_subtraction_instruction(instruction);
 			break;
 		//Handle basic move instructions(no complex addressing)
 		case MOVW:

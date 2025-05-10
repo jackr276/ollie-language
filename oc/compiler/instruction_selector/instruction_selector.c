@@ -378,6 +378,25 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 
 
 /**
+ * A very simple helper function that selects the right add instruction based
+ * solely on variable size. Done to avoid code duplication
+ */
+static instruction_type_t select_sub_instruction(variable_size_t size){
+	//Go based on size
+	switch(size){
+		case WORD:
+			return SUBW;
+		case DOUBLE_WORD:
+			return SUBL;
+		case QUAD_WORD:
+			return SUBQ;
+		default:
+			return SUBQ;
+	}
+}
+
+
+/**
  * Select the size of a constant based on its type
  */
 variable_size_t select_constant_size(three_addr_const_t* constant){
@@ -578,8 +597,19 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 
 			break;
 
+		/**
+		 * For subtraction there isn't much of a choice. We'll just use the subq operation
+		 */
 		case MINUS:
+			//Select the appropriate level of minus instruction
+			instruction->instruction_type = select_sub_instruction(size);
+
+			//Again we just need the source and dest registers
+			instruction->destination_register = instruction->assignee;
+			//And grab the immediate source
+			instruction->source_immediate = instruction->op1_const;
 			break;
+
 		case STAR:
 			break;
 		case F_SLASH:
