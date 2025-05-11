@@ -1478,7 +1478,7 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 		//If this does assign the variable, we'll look through it
 		if(variable->is_temporary == FALSE){
 			//Let's find where we assign it
-			instruction_t* stmt = block->leader_statement;
+			instruction_t* stmt = block->exit_statement;
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
@@ -1498,14 +1498,14 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 				}
 
 				//Advance the statement
-				stmt = stmt->next_statement;
+				stmt = stmt->previous_statement;
 			}
 
 		//If it's a temp var, the search is not so easy. We'll need to crawl through
 		//each statement and see if the assignee has the same temp number
 		} else {
 			//Let's find where we assign it
-			instruction_t* stmt = block->leader_statement;
+			instruction_t* stmt = block->exit_statement;
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
@@ -1521,7 +1521,7 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 				}
 
 				//Advance the statement
-				stmt = stmt->next_statement;
+				stmt = stmt->previous_statement;
 			}
 		}
 	}

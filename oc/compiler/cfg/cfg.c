@@ -2931,7 +2931,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	instruction_t* stmt;
 
 	//Emit the binary operator expression using our helper
-	stmt = emit_binary_operation_instruction(emit_temp_var(logical_or_expr->inferred_type), op1, binary_operator, right_hand_temp.assignee);
+	stmt = emit_binary_operation_instruction(op1, op1, binary_operator, right_hand_temp.assignee);
 
 	//Mark this with what we have
 	stmt->is_branch_ending = is_branch_ending;
@@ -4880,7 +4880,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	expr_ret_package_t package1 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
 
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package1.assignee, L_THAN, lower_bound, TRUE);
+	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL);
 	//Now we'll emit our jump
@@ -4890,7 +4890,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	expr_ret_package_t package2 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
 
 	//Next step -> if we're above the maximum, jump to default
-	emit_binary_operation_with_constant(starting_block, emit_temp_var(lookup_type(type_symtab, "i32")->type), package2.assignee, G_THAN, upper_bound, TRUE);
+	emit_binary_operation_with_constant(starting_block, package2.assignee, package2.assignee, G_THAN, upper_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL);
 	//Now we'll emit our jump
@@ -4901,7 +4901,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(starting_block, emit_temp_var(expression_node->inferred_type), package3.assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(starting_block, package3.assignee, package3.assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
