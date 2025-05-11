@@ -267,6 +267,8 @@ struct instruction_t{
 	three_addr_var_t* assignee;
 	//Now for the assembly operations, we have a source and destination
 	three_addr_var_t* source_register;
+	//We can have more than one source
+	three_addr_var_t* source_register2;
 	//If we're trying to move a constant in
 	three_addr_const_t* source_immediate;
 	//Our destination register/variable
@@ -283,8 +285,6 @@ struct instruction_t{
 	 * Register additive stored in varibale register_additive
 	 */
 	three_addr_const_t* constant_additive;
-	//Register additive
-	three_addr_var_t* register_additive;
 	//The offset
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;

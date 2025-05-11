@@ -735,7 +735,7 @@ static void print_register_to_register_move(instruction_t* instruction){
 			}
 
 			//Needed comma
-			printf(", ");
+			printf(",");
 
 			//Now print our destination
 			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
@@ -856,6 +856,7 @@ static void print_neg_instruction(instruction_t* instruction){
 	printf("\n");
 }
 
+
 /**
  * Print a not instruction
  */
@@ -869,6 +870,35 @@ static void print_not_instruction(instruction_t* instruction){
 
 	//Now we'll print out the destination register
 	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+
+	//And give it a newlinw and we're done
+	printf("\n");
+}
+
+
+/**
+ * Print a cmp instruction. These instructions can have two registers or
+ * one register and one immediate value
+ */
+static void print_cmp_instruction(instruction_t* instruction){
+	//First we'll need to decide which version to print
+	if(instruction->instruction_type == CMPQ){
+		printf("cmpq ");
+	} else {
+		printf("cmp ");
+	}
+
+	//If we have an immediate value, print it
+	if(instruction->source_immediate != NULL){
+		print_immediate_value(instruction->source_immediate);
+	} else {
+		print_variable(instruction->source_register2, PRINTING_VAR_INLINE);
+	}
+
+	printf(",");
+
+	//Now we'll need the source register. This may never be null
+	print_variable(instruction->source_register, PRINTING_VAR_INLINE);
 
 	//And give it a newlinw and we're done
 	printf("\n");
@@ -984,6 +1014,11 @@ void print_instruction(instruction_t* instruction){
 		case NOT:
 		case NOTQ:
 			print_not_instruction(instruction);
+			break;
+		//Handle our CMP instructions
+		case CMP:
+		case CMPQ:
+			print_cmp_instruction(instruction);
 			break;
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements

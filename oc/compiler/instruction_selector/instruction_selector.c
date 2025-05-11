@@ -397,6 +397,24 @@ static instruction_type_t select_sub_instruction(variable_size_t size){
 
 
 /**
+ * A very simple helper function that selects the right add instruction based
+ * solely on variable size. Done to avoid code duplication
+ */
+static instruction_type_t select_cmp_instruction(variable_size_t size){
+	//Go based on size
+	switch(size){
+		case WORD:
+		case DOUBLE_WORD:
+			return CMP;
+		case QUAD_WORD:
+			return CMPQ;
+		default:
+			return CMPQ;
+	}
+}
+
+
+/**
  * Select the size of a constant based on its type
  */
 variable_size_t select_constant_size(three_addr_const_t* constant){
@@ -617,10 +635,22 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 		case F_SLASH:
 			break;
 
-		//Handle the case where we need to use the test operation
+		//All of these instructions require us to use the CMP or CMPQ command
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+			//Select this instruction
+			instruction->instruction_type = select_cmp_instruction(size);
+			
+			//Since we have a comparison instruction, we don't actually have a destination
+			//register as the registers remain unmodified in this event
+			instruction->source_register = instruction->op1;
+			instruction->source_immediate = instruction->op1_const;
 
+			break;
 		default:
 			break;
 	}
