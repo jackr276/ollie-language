@@ -156,7 +156,7 @@ jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type){
 			} else {
 				return JUMP_TYPE_JGE;
 			}
-		case D_EQUALS:
+		case DOUBLE_EQUALS:
 			if(jump_type == JUMP_CATEGORY_INVERSE){
 				return JUMP_TYPE_JNE;
 			} else {

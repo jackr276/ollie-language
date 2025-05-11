@@ -383,7 +383,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 						if(ch2 == '='){
 							current_state = IN_START;
 							//Prepare and return
-							lex_item.tok = D_EQUALS;
+							lex_item.tok = DOUBLE_EQUALS;
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -418,7 +418,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 						} else {
 							put_back_char(fl);
 							current_state = IN_START;
-							lex_item.tok = AND;
+							lex_item.tok = SINGLE_AND;
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;
@@ -438,7 +438,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 							current_state = IN_START;
 							//"Put back" the char
 							put_back_char(fl);
-							lex_item.tok = OR;
+							lex_item.tok = SINGLE_OR;
 							lex_item.line_num = line_num;
 							lex_item.char_count = token_char_count;
 							return lex_item;

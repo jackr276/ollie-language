@@ -302,10 +302,10 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 			case R_SHIFT:
 				op = ">>";
 				break;
-			case AND:
+			case SINGLE_AND:
 				op = "&";
 				break;
-			case OR:
+			case SINGLE_OR:
 				op = "|";
 				break;
 			case DOUBLE_OR:
@@ -314,7 +314,7 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 			case DOUBLE_AND:
 				op = "&&";
 				break;
-			case D_EQUALS:
+			case DOUBLE_EQUALS:
 				op = "==";
 				break;
 			case NOT_EQUALS:
@@ -379,10 +379,10 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 			case R_SHIFT:
 				op = ">>";
 				break;
-			case AND:
+			case SINGLE_AND:
 				op = "&";
 				break;
-			case OR:
+			case SINGLE_OR:
 				op = "|";
 				break;
 			case DOUBLE_OR:
@@ -391,7 +391,7 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 			case DOUBLE_AND:
 				op = "&&";
 				break;
-			case D_EQUALS:
+			case DOUBLE_EQUALS:
 				op = "==";
 				break;
 			case NOT_EQUALS:

@@ -610,10 +610,17 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 			instruction->source_immediate = instruction->op1_const;
 			break;
 
+		
+
 		case STAR:
 			break;
 		case F_SLASH:
 			break;
+
+		//Handle the case where we need to use the test operation
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+
 		default:
 			break;
 	}

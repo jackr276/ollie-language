@@ -71,6 +71,12 @@ typedef enum{
 	NEGQ,
 	NOT,
 	NOTQ,
+	XOR,
+	XORQ,
+	OR,
+	ORQ,
+	AND,
+	ANDQ,
 	CMP,
 	CMPQ,
 	TEST,
@@ -186,8 +192,6 @@ typedef enum{
 	THREE_ADDR_CODE_NEG_STATEMENT,
 	//SPECIAL CASE - assembly inline statement
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
-	//Another special case - a switch statement
-	THREE_ADDR_CODE_SWITCH_STMT,
 	//A "Load effective address(lea)" instruction
 	THREE_ADDR_CODE_LEA_STMT,
 	//An indirect jump address calculation instruction, very similar to lea

@@ -64,8 +64,8 @@ typedef enum {
 	EXTERNAL,
 	DOUBLE_AND,
 	DOUBLE_OR,
-	AND, /* & */
-	OR,
+	SINGLE_AND, /* & */
+	SINGLE_OR,
 	COLONEQ, /* := */
 	DOT,
 	PLUS,
@@ -105,7 +105,7 @@ typedef enum {
 	R_SHIFT,
 	EQUALS,
 	CARROT,
-	D_EQUALS, /* == */
+	DOUBLE_EQUALS, /* == */
 	NOT_EQUALS,
 	G_THAN,
 	L_THAN,

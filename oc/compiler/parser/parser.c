@@ -1631,7 +1631,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
 	//the exact same way
 	} else if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUS || lookahead.tok == MINUSMINUS
-		     || lookahead.tok == STAR || lookahead.tok == AND || lookahead.tok == B_NOT || lookahead.tok == L_NOT){
+		     || lookahead.tok == STAR || lookahead.tok == SINGLE_AND || lookahead.tok == B_NOT || lookahead.tok == L_NOT){
 
 		//We'll first create the unary operateor node for ourselves here
 		generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
@@ -1683,7 +1683,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			is_assignable = ASSIGNABLE;
 
 		//Let's now check the & case
-		} else if (lookahead.tok == AND){
+		} else if (lookahead.tok == SINGLE_AND){
 			//Is there an attempt to take the address of a constant
 			if(cast_expr->CLASS == AST_NODE_CLASS_CONSTANT){
 				print_parse_message(PARSE_ERROR, "The address of a constant cannot be taken", parser_line_num);
@@ -3056,7 +3056,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
 	//As long as we have a relational operators(== or !=) 
-	while(lookahead.tok == NOT_EQUALS || lookahead.tok == D_EQUALS){
+	while(lookahead.tok == NOT_EQUALS || lookahead.tok == DOUBLE_EQUALS){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
@@ -3174,7 +3174,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
 	//As long as we have a single and(&) 
-	while(lookahead.tok == AND){
+	while(lookahead.tok == SINGLE_AND){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
@@ -3416,7 +3416,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
 	//As long as we have a single or(|)
-	while(lookahead.tok == OR){
+	while(lookahead.tok == SINGLE_OR){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
