@@ -754,6 +754,21 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	//Have we changed the window at all? Very similar to the simplify function
 	u_int8_t changed = FALSE;
 
+	//=========================== Logical Notting =============================
+	/**
+	 * Although it may not seem like it, logical not is actually a multiple instruction
+	 * pattern
+	 *
+	 * This:
+	 * t9 <- logical not t9
+	 *
+	 * will become
+	 * test t9, t9
+	 * sete %al
+	 * movzbl %al, t9
+	 */
+
+
 	//============================= The "Grand Patterns" ==============================
 	//These are patterns that span multiple instructions. Often we're able to
 	//condense these multiple instructions into one singular x86 instruction
@@ -905,6 +920,17 @@ static void handle_not_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a logical not statement
+ *
+ * This is a rare case where we'll generate new instructions. As such, we'll need
+ * to modify the window here
+ */
+static void handle_logical_not_instruction(instruction_window_t* window, instruction_t* instruction){
+
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -984,7 +1010,6 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 				//Let the helper do it
 				handle_not_instruction(current);
 				break;
-
 			default:
 				break;
 		}

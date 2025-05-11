@@ -2426,20 +2426,12 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 	//First we'll create it here
 	instruction_t* not_stmt = emit_not_instruction(var);
 
-	//This is also a case where the variable is read from, so it counts as live
+	//This is also a case where the variable is read from, so it counts as live. It's also
+	//assigned to, so it counts as assigned
 	if(var->is_temporary == FALSE){
+		add_assigned_variable(basic_block, var);
 		add_used_variable(basic_block, var);
 	}
-
-	//Now if we need to use a temp, we'll make one here
-	if(use_temp == USE_TEMP_VAR){
-		//Emit a temp var
-		three_addr_var_t* temp = emit_temp_var(var->type);
-
-		//The assignee is the temp
-		not_stmt->assignee = temp;
-	}
-	//Otherwise nothing else needed here
 
 	//Mark this with its branch end status
 	not_stmt->is_branch_ending = is_branch_ending;
@@ -2522,8 +2514,8 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
 	//Add this into the block
 	add_statement(basic_block, temp_assingment);
 
-	//We ALWAYS use a temp var here
-	instruction_t* stmt = emit_logical_not_instruction(emit_temp_var(negated->type), temp_assingment->assignee, negated);
+	//This will always overwrite the other value
+	instruction_t* stmt = emit_logical_not_instruction(temp_assingment->assignee, temp_assingment->assignee);
 	
 	//If negated isn't temp, it also counts as a read
 	if(negated->is_temporary == FALSE){
@@ -2826,8 +2818,10 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		 * Uses strategy of:
 		 * 	test rdx, rdx
 		 * 	sete rdx
-		 * 	mov rdx, rdx //this specifically exists to set flags
+		 * 	movzbl %al, %rdx
 		 * for implementation
+		 *
+		 * TODO NOT DONE
 		 */
 		} else if(unary_operator->unary_operator == L_NOT){
 			return emit_logical_neg_stmt_code(basic_block, assignee, is_branch_ending);

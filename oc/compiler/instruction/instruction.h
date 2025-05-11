@@ -80,7 +80,9 @@ typedef enum{
 	CMP,
 	CMPQ,
 	TEST,
-	TESTQ
+	TESTQ,
+	SETE, //Set if equal
+	MOVZBL, //move if zero or below long word
 } instruction_type_t;
 
 
@@ -441,7 +443,7 @@ instruction_t* emit_right_shift_instruction(three_addr_var_t* assignee, three_ad
 /**
  * Emit a logical not instruction
  */
-instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
+instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump
