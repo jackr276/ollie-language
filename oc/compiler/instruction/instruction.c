@@ -839,6 +839,25 @@ static void print_lea_instruction(instruction_t* instruction){
 
 
 /**
+ * Print a neg instruction
+ */
+static void print_neg_instruction(instruction_t* instruction){
+	//First we'll need to decide which version to print
+	if(instruction->instruction_type == NEGQ){
+		printf("negq ");
+	} else {
+		printf("neg ");
+	}
+
+	//Now we'll print out the destination register
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+
+	//And give it a newlinw and we're done
+	printf("\n");
+}
+
+
+/**
  * Print an instruction that has not yet been given registers
  */
 void print_instruction(instruction_t* instruction){
@@ -937,6 +956,11 @@ void print_instruction(instruction_t* instruction){
 		case LEAQ:
 			//Invoke the helper
 			print_lea_instruction(instruction);
+			break;
+		//Handle neg printing
+		case NEG:
+		case NEGQ:
+			print_neg_instruction(instruction);
 			break;
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements

@@ -2481,7 +2481,7 @@ static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basi
 
 
 /**
- * Emit a bitwise negation statement
+ * Emit a negation statement
  */
 static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, temp_selection_t use_temp, u_int8_t is_branch_ending){
 	three_addr_var_t* var;
@@ -2841,8 +2841,15 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		 * Uses strategy of: negl rdx
 		 */
 		} else if(unary_operator->unary_operator == MINUS){
+			//We'll need to assign to a temp here, these are
+			//only ever on the RHS
+			instruction_t* assnment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+			//Add this into the block
+			add_statement(basic_block, assnment);
+
 			//We will emit the negation code here
-			return emit_neg_stmt_code(basic_block, assignee, use_temp, is_branch_ending);
+			return emit_neg_stmt_code(basic_block, assnment->assignee, use_temp, is_branch_ending);
 		}
 
 		//FOR NOW ONLY

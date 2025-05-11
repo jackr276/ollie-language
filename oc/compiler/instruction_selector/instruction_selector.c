@@ -828,6 +828,26 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 
 /**
+ * Handle a negation instruction. Very simple - all we need to do is select the suffix and
+ * add it over
+ */
+static void handle_neg_instruction(instruction_t* instruction){
+	//Find out what size we have
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//Only two options to select on based on this
+	if(size == QUAD_WORD){
+		instruction->instruction_type = NEGQ;
+	} else {
+		instruction->instruction_type = NEG;
+	}
+
+	//Now we'll just translate the assignee to be the destination(and source in this case) register
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -897,6 +917,12 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 				//This is all we'll need
 				current->instruction_type = PHI_FUNCTION;
 				break;
+			//Handle a neg statement
+			case THREE_ADDR_CODE_NEG_STATEMENT:
+				//Let the helper do it
+				handle_neg_instruction(current);
+				break;
+
 			default:
 				break;
 		}

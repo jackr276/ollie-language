@@ -67,6 +67,8 @@ typedef enum{
 	INCQ,
 	DEC,
 	DECQ,
+	NEG,
+	NEGQ,
 	CMP,
 	CMPQ,
 	TEST,
