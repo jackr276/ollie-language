@@ -91,6 +91,7 @@ typedef enum{
  */
 typedef enum{
 	NO_REG = 0, //Default is that there's no register used
+	AL, //%al register
 } register_64_t;
 
 

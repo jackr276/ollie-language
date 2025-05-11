@@ -21,7 +21,6 @@
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
-
 /**
  * What is the status of our sliding window? Are we at the beginning,
  * middle or end of the sequence?
@@ -67,6 +66,78 @@ static void set_window_status(instruction_window_t* window){
 	if(window->instruction2 == NULL && window->instruction3 == NULL){
 		window->status = WINDOW_AT_END;
 	}
+}
+
+
+/**
+ * Select the size of a given variable based on its type
+ */
+static variable_size_t select_variable_size(three_addr_var_t* variable){
+	//What the size will be
+	variable_size_t size;
+	
+	//Grab this type out of here
+	generic_type_t* type = variable->type;
+	
+	//Probably the most common option
+	if(type->type_class == TYPE_CLASS_BASIC){
+		//Extract for convenience
+		Token basic_type = type->basic_type->basic_type;
+
+		//Switch based on this
+		switch (basic_type) {
+			//We round up to 16 bit here
+			case U_INT8:
+			case S_INT8:
+			case U_INT16:
+			case S_INT16:
+			case CHAR:
+				size = WORD;
+				break;
+
+			//These are 32 bit(double word)
+			case S_INT32:
+			case U_INT32:
+				size = DOUBLE_WORD;
+				break;
+
+			//This is SP
+			case FLOAT32:
+				size = SINGLE_PRECISION;
+				break;
+
+			//This is double precision
+			case FLOAT64:
+				size = DOUBLE_PRECISION;
+				break;
+
+			//These are all quad word(64 bit)
+			case U_INT64:
+			case S_INT64:
+				size = QUAD_WORD;
+				break;
+		
+			//We shouldn't get here
+			default:
+				size = QUAD_WORD;
+				break;
+		}
+
+	//These will always be 64 bits
+	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
+				|| type->type_class == TYPE_CLASS_CONSTRUCT){
+		size = QUAD_WORD;
+
+	//This should never happen, but a sane default doesn't hurt
+	} else if(type->type_class == TYPE_CLASS_ALIAS){
+		size = QUAD_WORD;
+	//Catch all down here
+	} else {
+		size = DOUBLE_WORD;
+	}
+
+	//Give it back
+	return size;
 }
 
 
@@ -125,6 +196,36 @@ static void print_instruction_window(instruction_window_t* window){
 	}
 
 	printf("-------------------------------------------\n");
+}
+
+
+/**
+ * Emit a test instructions
+ *
+ * Test instructions inherently have no assignee as they don't modify registers
+ *
+ * NOTE: This may only be used DURING the process of register selection
+ */
+static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size to select the appropriate instruction
+	variable_size_t size = select_variable_size(op1);
+
+	//Now based on the size we'll give the instruction
+	if(size == QUAD_WORD){
+		instruction->instruction_type = TESTQ;
+	} else {
+		instruction->instruction_type = TEST;
+	}
+
+	//Then we'll set op1 and op2 to be the source registers
+	instruction->source_register = op1;
+	instruction->source_register2 = op2;
+
+	//And now we'll give it back
+	return instruction;
 }
 
 
@@ -249,76 +350,6 @@ static void select_jump_instruction(instruction_t* instruction){
 }
 
 
-/**
- * Select the size of a given variable based on its type
- */
-static variable_size_t select_variable_size(three_addr_var_t* variable){
-	//What the size will be
-	variable_size_t size;
-	
-	//Grab this type out of here
-	generic_type_t* type = variable->type;
-	
-	//Probably the most common option
-	if(type->type_class == TYPE_CLASS_BASIC){
-		//Extract for convenience
-		Token basic_type = type->basic_type->basic_type;
-
-		//Switch based on this
-		switch (basic_type) {
-			//We round up to 16 bit here
-			case U_INT8:
-			case S_INT8:
-			case U_INT16:
-			case S_INT16:
-			case CHAR:
-				size = WORD;
-				break;
-
-			//These are 32 bit(double word)
-			case S_INT32:
-			case U_INT32:
-				size = DOUBLE_WORD;
-				break;
-
-			//This is SP
-			case FLOAT32:
-				size = SINGLE_PRECISION;
-				break;
-
-			//This is double precision
-			case FLOAT64:
-				size = DOUBLE_PRECISION;
-				break;
-
-			//These are all quad word(64 bit)
-			case U_INT64:
-			case S_INT64:
-				size = QUAD_WORD;
-				break;
-		
-			//We shouldn't get here
-			default:
-				size = QUAD_WORD;
-				break;
-		}
-
-	//These will always be 64 bits
-	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
-				|| type->type_class == TYPE_CLASS_CONSTRUCT){
-		size = QUAD_WORD;
-
-	//This should never happen, but a sane default doesn't hurt
-	} else if(type->type_class == TYPE_CLASS_ALIAS){
-		size = QUAD_WORD;
-	//Catch all down here
-	} else {
-		size = DOUBLE_WORD;
-	}
-
-	//Give it back
-	return size;
-}
 
 
 /**
@@ -745,6 +776,27 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
 
 
 /**
+ *	//=========================== Logical Notting =============================
+ * Although it may not seem like it, logical not is actually a multiple instruction
+ * pattern
+ *
+ * This:
+ * t9 <- logical not t9
+ *
+ * will become
+ * test t9, t9
+ * sete %al
+ * movzbl %al, t9
+ *
+ * NOTE: We know that instruction1 is the one that is a logical not instruction if we
+ * get here
+ */
+static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* window){
+
+}
+
+
+/**
  * The first part of the instruction selector to run is the pattern selector. This 
  * first set of passes will determine if there are any large patterns that we can optimize
  * with our instructions. This will likely leave a lot of instructions not selected, 
@@ -754,19 +806,11 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	//Have we changed the window at all? Very similar to the simplify function
 	u_int8_t changed = FALSE;
 
-	//=========================== Logical Notting =============================
-	/**
-	 * Although it may not seem like it, logical not is actually a multiple instruction
-	 * pattern
-	 *
-	 * This:
-	 * t9 <- logical not t9
-	 *
-	 * will become
-	 * test t9, t9
-	 * sete %al
-	 * movzbl %al, t9
-	 */
+	//Handle a logical not instruction selection
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
+		handle_logical_not_instruction(cfg, window);
+
+	}
 
 
 	//============================= The "Grand Patterns" ==============================
@@ -916,17 +960,6 @@ static void handle_not_instruction(instruction_t* instruction){
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
 	instruction->destination_register = instruction->assignee;
-}
-
-
-/**
- * Handle a logical not statement
- *
- * This is a rare case where we'll generate new instructions. As such, we'll need
- * to modify the window here
- */
-static void handle_logical_not_instruction(instruction_window_t* window, instruction_t* instruction){
-
 }
 
 

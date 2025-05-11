@@ -549,7 +549,7 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 		printf("\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
 		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-		//We will use the built in "andn" command
+		//We will use a sequence of commands to do this
 		printf(" <- logical_not ");
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
