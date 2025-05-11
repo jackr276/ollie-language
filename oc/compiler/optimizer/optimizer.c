@@ -466,8 +466,9 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
-	//Grab a statement cursor
-	instruction_t* cursor = stmt;
+	//Grab a statement cursor. We start at the previous one because we've no need
+	//for the one we're currently on
+	instruction_t* cursor = stmt->previous_statement;
 
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
@@ -555,8 +556,9 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
-	//Grab a statement cursor
-	instruction_t* cursor = stmt;
+	//Grab a statement cursor. We start at the previous one because we've no need
+	//for the one we're currently on
+	instruction_t* cursor = stmt->previous_statement;
 
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
@@ -615,14 +617,25 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 
 /**
  * Handle a compound and statement optimization
+ *
+ * t5 <- x_0
+ * t6 <- 3
+ * t5 <- t5 < t6
+ * t7 <- x_0
+ * t8 <- 1
+ * t7 <- t7 != t8
+ * t5 <- t5 && t7
+ * jnz .L12
+ * jmp .L13
  */
 static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
-	//Grab a statement cursor
-	instruction_t* cursor = stmt;
+	//Grab a statement cursor. We start at the previous one because we've no need
+	//for the one we're currently on
+	instruction_t* cursor = stmt->previous_statement;
 
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
@@ -688,8 +701,9 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
 	three_addr_var_t* op1 = stmt->op1;
-	//Grab a statement cursor
-	instruction_t* cursor = stmt;
+	//Grab a statement cursor. We start at the previous one because we've no need
+	//for the one we're currently on
+	instruction_t* cursor = stmt->previous_statement;
 
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
