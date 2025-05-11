@@ -848,6 +848,26 @@ static void handle_neg_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a bitwise not(one's complement) instruction. Very simple - all we need to do is select the suffix and
+ * add it over
+ */
+static void handle_not_instruction(instruction_t* instruction){
+	//Find out what size we have
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//Only two options to select on based on this
+	if(size == QUAD_WORD){
+		instruction->instruction_type = NOTQ;
+	} else {
+		instruction->instruction_type = NOT;
+	}
+
+	//Now we'll just translate the assignee to be the destination(and source in this case) register
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -921,6 +941,11 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 			case THREE_ADDR_CODE_NEG_STATEMENT:
 				//Let the helper do it
 				handle_neg_instruction(current);
+				break;
+			//Handle a neg statement
+			case THREE_ADDR_CODE_BITWISE_NOT_STMT:
+				//Let the helper do it
+				handle_not_instruction(current);
 				break;
 
 			default:
