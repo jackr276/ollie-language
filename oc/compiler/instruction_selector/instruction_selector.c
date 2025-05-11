@@ -200,13 +200,13 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
- * Emit a test instructions
+ * Emit a test instruction
  *
  * Test instructions inherently have no assignee as they don't modify registers
  *
  * NOTE: This may only be used DURING the process of register selection
  */
-static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
+static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -223,6 +223,48 @@ static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_va
 	//Then we'll set op1 and op2 to be the source registers
 	instruction->source_register = op1;
 	instruction->source_register2 = op2;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a sete instruction
+ *
+ * The sete instruction is typically used with the %al register, but not always
+ */
+static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//And we'll set the class
+	instruction->instruction_type = SETE;
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a movzbl instruction
+ *
+ * This specialized conditional move is normally used in conjuction with test and sete
+ * for logical inversion
+ */
+static instruction_t* emit_movzbl_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//And we'll set the class
+	instruction->instruction_type = MOVZBL;
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_register = source;
 
 	//And now we'll give it back
 	return instruction;
@@ -348,8 +390,6 @@ static void select_jump_instruction(instruction_t* instruction){
 			break;
 	}
 }
-
-
 
 
 /**
@@ -792,7 +832,16 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
  * get here
  */
 static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* window){
+	//Let's grab the value out for convenience
+	instruction_t* logical_not = window->instruction1;
 
+	//Now we'll need to generate three new instructions
+	//First comes the test command. We're testing this against itself
+	instruction_t* test_inst = emit_test_instruction(logical_not->assignee, logical_not->assignee); 
+	instruction_t* sete_inst;
+	instruction_t* movzbl_inst;
+
+	//We first need to test this value against itself
 }
 
 
@@ -806,9 +855,14 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	//Have we changed the window at all? Very similar to the simplify function
 	u_int8_t changed = FALSE;
 
-	//Handle a logical not instruction selection
+	//Handle a logical not instruction selection. This does generate multiple new instructions,
+	//so it has to go here
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
+		//Let this handle it
 		handle_logical_not_instruction(cfg, window);
+
+		//This does count as a change
+		//changed = TRUE;
 
 	}
 
