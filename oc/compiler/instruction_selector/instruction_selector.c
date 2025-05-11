@@ -1135,6 +1135,19 @@ static u_int8_t is_power_of_2(int64_t value){
 
 
 /**
+ * A simple helper function to determine if an operator is a comparison operator
+ */
+static u_int8_t is_comparison_operator(Token op){
+	if(op == G_THAN || op == L_THAN || op == G_THAN_OR_EQ || op == L_THAN_OR_EQ
+	   || op == DOUBLE_EQUALS || op == NOT_EQUALS){
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+
+/**
  * Take the binary logarithm of something that we already know
  * is a power of 2. 
  *
@@ -1439,6 +1452,55 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			changed = TRUE;
 		}
 	}
+
+
+	/**
+	 * ==================== Comparison expressions with unnecessary preceeding temp assignment ======================
+	 *	If we have something like this:
+	 *	t33 <- x_2;
+	 *	t34 <- t33 < 2
+	 *
+	 * 	Because cmp instructions do not alter any register values, we're fine to ditch the preceeding assignment
+	 * 	and rewrite like this:
+	 * 	t34 <- x_2 < 2
+	 *
+	 */
+	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
+	if(window->instruction2 != NULL 
+		&& (window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT)
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT && is_comparison_operator(window->instruction2->op) == TRUE){
+
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
+		if(window->instruction1->assignee->is_temporary == TRUE 
+			&& window->instruction1->op1->is_temporary == FALSE
+			&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+
+			//Set these two to be equal
+			window->instruction2->op1 = window->instruction1->op1;
+
+			//We can now delete the very first statement
+			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+
+			//Following this, we'll shift everything appropriately now that instruction1 is gone
+			window->instruction1 = window->instruction2;
+			window->instruction2 = window->instruction3;
+
+			//If this is NULL, mark that we're at the end
+			if(window->instruction2 == NULL){
+				window->instruction3 = NULL;
+			} else {
+				//Otherwise we'll shift this forward
+				window->instruction3 = window->instruction2->next_statement;
+			}
+
+			//Let the helper set the status
+			set_window_status(window);
+
+			//This does count as a change
+			changed = TRUE;
+		}
+	}
+
 
 	/**
 	 * -------------------- Arithmetic expressions with assignee the same as op1 ---------------------
