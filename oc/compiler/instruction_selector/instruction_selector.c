@@ -772,6 +772,22 @@ static void handle_addition_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a multiplication operation
+ */
+static void handle_multiplication_instruction(instruction_t* instruction){
+
+}
+
+
+/**
+ * Handle a division operation
+ */
+static void handle_division_instruction(instruction_t* instruction){
+
+}
+
+
+/**
  * Handle a bin-op-with-const statement
  *
  * We can translate a bin op with const operation a few different ways based on the 
@@ -790,8 +806,12 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 			handle_subtraction_instruction(instruction);
 			break;
 		case STAR:
+			//Let the helper do it
+			handle_multiplication_instruction(instruction);
 			break;
 		case F_SLASH:
+			//Let the helper do it
+			handle_division_instruction(instruction);
 			break;
 		//Hanlde a left shift instruction
 		case L_SHIFT:
@@ -851,7 +871,7 @@ static void handle_inc_instruction(instruction_t* instruction){
 	if(size == QUAD_WORD){
 		instruction->instruction_type = INCQ;
 	} else {
-		instruction->instruction_type = INC;
+		instruction->instruction_type = INCL;
 	}
 
 	//Set the destination as the assignee
@@ -870,7 +890,7 @@ static void handle_dec_instruction(instruction_t* instruction){
 	if(size == QUAD_WORD){
 		instruction->instruction_type = DECQ;
 	} else {
-		instruction->instruction_type = DEC;
+		instruction->instruction_type = DECL;
 	}
 
 	//Set the destination as the assignee
@@ -1134,7 +1154,7 @@ static void handle_neg_instruction(instruction_t* instruction){
 	if(size == QUAD_WORD){
 		instruction->instruction_type = NEGQ;
 	} else {
-		instruction->instruction_type = NEG;
+		instruction->instruction_type = NEGL;
 	}
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
@@ -1154,7 +1174,7 @@ static void handle_not_instruction(instruction_t* instruction){
 	if(size == QUAD_WORD){
 		instruction->instruction_type = NOTQ;
 	} else {
-		instruction->instruction_type = NOT;
+		instruction->instruction_type = NOTL;
 	}
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register

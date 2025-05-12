@@ -844,7 +844,7 @@ static void print_neg_instruction(instruction_t* instruction){
 	if(instruction->instruction_type == NEGQ){
 		printf("negq ");
 	} else {
-		printf("neg ");
+		printf("negl ");
 	}
 
 	//Now we'll print out the destination register
@@ -863,7 +863,7 @@ static void print_not_instruction(instruction_t* instruction){
 	if(instruction->instruction_type == NOTQ){
 		printf("notq ");
 	} else {
-		printf("not ");
+		printf("notl ");
 	}
 
 	//Now we'll print out the destination register
@@ -1095,8 +1095,8 @@ void print_instruction(instruction_t* instruction){
 		case CALL:
 			printf("call %s\n", instruction->func_record->func_name);
 			break;
-		case INC:
-			printf("inc ");
+		case INCL:
+			printf("incl ");
 			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
@@ -1105,8 +1105,8 @@ void print_instruction(instruction_t* instruction){
 			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
-		case DEC:
-			printf("dec ");
+		case DECL:
+			printf("decl ");
 			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
@@ -1147,12 +1147,12 @@ void print_instruction(instruction_t* instruction){
 			print_lea_instruction(instruction);
 			break;
 		//Handle neg printing
-		case NEG:
+		case NEGL:
 		case NEGQ:
 			print_neg_instruction(instruction);
 			break;
 		//Handle not(one's complement) printing
-		case NOT:
+		case NOTL:
 		case NOTQ:
 			print_not_instruction(instruction);
 			break;
