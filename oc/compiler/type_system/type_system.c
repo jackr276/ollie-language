@@ -576,6 +576,31 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 	return type;
 }
 
+
+/**
+ * Is a type signed?
+ */
+u_int8_t is_type_signed(generic_type_t* type){
+	//We must have a basic type for it to be signed
+	if(type->type_class != TYPE_CLASS_BASIC){
+		//By default everything else(addresses, etc) is not signed
+		return FALSE;
+	}
+
+	//If we get here there's a chance it could be signed
+	Token basic_type_token = type->basic_type->basic_type;
+
+	//This is a comprehensive list of all of our signed types
+	if(basic_type_token == S_INT8 || basic_type_token == S_INT16 || basic_type_token == S_INT32
+		|| basic_type_token == S_INT64 || basic_type_token == FLOAT32 || basic_type_token == FLOAT64){
+		return TRUE;
+	}
+
+	//Otherwise, we're not signed
+	return FALSE;
+}
+
+
 /**
  * This function will completely strip away any aliasing and return the raw type 
  * that we have underneath

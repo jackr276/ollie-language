@@ -2927,9 +2927,6 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//Emit the binary operator expression using our helper
 	stmt = emit_binary_operation_instruction(op1, op1, binary_operator, right_hand_temp.assignee);
 
-	//Make sure that we store the inferred type in here
-	stmt->assignee->type = logical_or_expr->inferred_type;
-
 	//Mark this with what we have
 	stmt->is_branch_ending = is_branch_ending;
 

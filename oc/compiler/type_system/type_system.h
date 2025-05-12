@@ -240,6 +240,11 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_type, u_int32_t line_number);
 
 /**
+ * Is a type signed?
+ */
+u_int8_t is_type_signed(generic_type_t* type);
+
+/**
  * Destroy a type that is no longer in use
 */
 void type_dealloc(generic_type_t* type);

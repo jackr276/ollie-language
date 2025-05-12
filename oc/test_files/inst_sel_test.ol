@@ -4,6 +4,13 @@
 
 let mut a:i32 := 3;
 
+fn unsigned_shift() -> u32 {
+	let mut z:u32 := 23;
+	let mut x:u32 := z << 3;
+
+	ret x;
+}
+
 
 fn main(arg:i32, argv:char**) -> i32 {
 

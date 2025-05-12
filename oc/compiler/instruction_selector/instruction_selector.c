@@ -636,10 +636,44 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 
 
 /**
- * Handle a left shift operation
+ * Handle a left shift operation. These are simpler than right shifting
+ * because we don't need to account for the possibility of sign extension
  */
 static void handle_left_shift_instruction(instruction_t* instruction){
+	//Is this a signed or unsigned instruction?
+	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
 
+	//We'll also need the size of the variable
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	switch (size) {
+		case WORD:
+		case DOUBLE_WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = SALL;
+			} else {
+				instruction->instruction_type = SHLL;
+			}
+			break;
+		//Everything else falls here
+		default:
+			if(is_signed == TRUE){
+				instruction->instruction_type = SALQ;
+			} else {
+				instruction->instruction_type = SHLQ;
+			}
+			break;		
+	}
+
+	//Now we'll move over the operands
+	instruction->destination_register = instruction->assignee;
+	
+	//We can have an immediate value or we can have a register
+	if(instruction->op1_const != NULL){
+		instruction->source_immediate = instruction->op1_const;
+	} else {
+		instruction->source_register = instruction->op1;
+	}
 }
 
 
@@ -722,12 +756,18 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 			//Let the helper do it
 			handle_subtraction_instruction(instruction);
 			break;
-
 		case STAR:
 			break;
 		case F_SLASH:
 			break;
+		//Hanlde a left shift instruction
+		case L_SHIFT:
+			handle_left_shift_instruction(instruction);
+			break;
 		//Handle a right shift operation
+		case R_SHIFT:
+			handle_right_shift_instruction(instruction);
+			break;
 
 		//All of these instructions require us to use the CMP or CMPQ command
 		case DOUBLE_EQUALS:
@@ -751,7 +791,7 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
  *
  * We can translate a bin op statement a few differnet ways based on the operand
  */
-static void handle_binary_operation_intruction(instruction_t* instruction){
+static void handle_binary_operation_instruction(instruction_t* instruction){
 	switch(instruction->op){
 		case PLUS:
 
@@ -1148,7 +1188,7 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 				break;
 			//Let the helper handle this one
 			case THREE_ADDR_CODE_BIN_OP_STMT:
-				handle_binary_operation_intruction(current);
+				handle_binary_operation_instruction(current);
 				break;
 			//Same here
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
