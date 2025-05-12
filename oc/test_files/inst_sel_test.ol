@@ -7,8 +7,9 @@ let mut a:i32 := 3;
 fn unsigned_shift() -> u32 {
 	let mut z:u32 := 23;
 	let mut x:u32 := z << 3;
+	let mut y:u32 := z >> 5;
 
-	ret x;
+	ret x + y;
 }
 
 

@@ -997,6 +997,56 @@ static void print_shl_instruction(instruction_t* instruction){
 
 
 /**
+ * Print out an arithmetic right shift instruction
+ */
+static void print_sar_instruction(instruction_t* instruction){
+	//Print out the appropriate opcode based on size
+	if(instruction->instruction_type == SARL){
+		printf("sarl ");
+	} else {
+		printf("sarq ");
+	}
+
+	//Now we'll need the source immediate/source
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Now our comma and the destination
+	printf(",");
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
+ * Print out a logical right shift instruction
+ */
+static void print_shr_instruction(instruction_t* instruction){
+	//Print out the appropriate opcode based on size
+	if(instruction->instruction_type == SHRL){
+		printf("shrl ");
+	} else {
+		printf("shrq ");
+	}
+
+	//Now we'll need the source immediate/source
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Now our comma and the destination
+	printf(",");
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
  * Print an instruction that has not yet been given registers
  */
 void print_instruction(instruction_t* instruction){
@@ -1135,6 +1185,16 @@ void print_instruction(instruction_t* instruction){
 		case SHLL:
 		case SHLQ:
 			print_shl_instruction(instruction);
+			break;
+		//Handle a logical right shift instruction
+		case SHRL:
+		case SHRQ:
+			print_shr_instruction(instruction);
+			break;
+		//Handle an arithmentic right shift instruction
+		case SARL:
+		case SARQ:
+			print_sar_instruction(instruction);
 			break;
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements

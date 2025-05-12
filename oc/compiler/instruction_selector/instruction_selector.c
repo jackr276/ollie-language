@@ -636,8 +636,8 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 
 
 /**
- * Handle a left shift operation. These are simpler than right shifting
- * because we don't need to account for the possibility of sign extension
+ * Handle a left shift operation. In doing a left shift, we account
+ * for the possibility that we have a signed value
  */
 static void handle_left_shift_instruction(instruction_t* instruction){
 	//Is this a signed or unsigned instruction?
@@ -682,7 +682,40 @@ static void handle_left_shift_instruction(instruction_t* instruction){
  * need an arithmetic or a logical right shift dependant on the operation
  */
 static void handle_right_shift_instruction(instruction_t* instruction){
+	//Is this a signed or unsigned instruction?
+	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
 
+	//We'll also need the size of the variable
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	switch (size) {
+		case WORD:
+		case DOUBLE_WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = SARL;
+			} else {
+				instruction->instruction_type = SHRL;
+			}
+			break;
+		//Everything else falls here
+		default:
+			if(is_signed == TRUE){
+				instruction->instruction_type = SARQ;
+			} else {
+				instruction->instruction_type = SHRQ;
+			}
+			break;		
+	}
+
+	//Now we'll move over the operands
+	instruction->destination_register = instruction->assignee;
+	
+	//We can have an immediate value or we can have a register
+	if(instruction->op1_const != NULL){
+		instruction->source_immediate = instruction->op1_const;
+	} else {
+		instruction->source_register = instruction->op1;
+	}
 }
 
 
