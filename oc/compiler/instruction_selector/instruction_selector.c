@@ -18,11 +18,6 @@
 #define TRUE 1
 #define FALSE 0
 
-//A variable that we'll use to hold the AL register. We'll
-//have it here because we've never encountered a need for it
-//before in the compiler
-symtab_variable_record_t* al_reg = NULL;
-
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
@@ -733,7 +728,14 @@ static void handle_cmp_instruction(instruction_t* instruction){
 	//Since we have a comparison instruction, we don't actually have a destination
 	//register as the registers remain unmodified in this event
 	instruction->source_register = instruction->op1;
-	instruction->source_immediate = instruction->op1_const;
+
+	//If we have op2, we'll use source_register2
+	if(instruction->op2 != NULL){
+		instruction->source_register2 = instruction->op2;
+	} else {
+		//Otherwise we use an immediate value
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
@@ -749,8 +751,14 @@ static void handle_subtraction_instruction(instruction_t* instruction){
 
 	//Again we just need the source and dest registers
 	instruction->destination_register = instruction->assignee;
-	//And grab the immediate source
-	instruction->source_immediate = instruction->op1_const;
+
+	//If we have a register value, we add that
+	if(instruction->op2 != NULL){
+		instruction->source_register = instruction->op2;
+	} else {
+		//Otherwise grab the immediate source
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
@@ -766,8 +774,14 @@ static void handle_addition_instruction(instruction_t* instruction){
 
 	//We'll just need to set the source immediate and destination register
 	instruction->destination_register = instruction->assignee;
-	//And grab the immediate source
-	instruction->source_immediate = instruction->op1_const;
+
+	//If we have a register value, we add that
+	if(instruction->op2 != NULL){
+		instruction->source_register = instruction->op2;
+	} else {
+		//Otherwise grab the immediate source
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
@@ -788,13 +802,23 @@ static void handle_division_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a logical and instruction
+ *
+ * t34 <- t32 && t19
+ */
+static void handle_logical_and_instruction(instruction_t* instruction){
+	
+
+}
+
+
+/**
  * Handle a bin-op-with-const statement
  *
  * We can translate a bin op with const operation a few different ways based on the 
  * operand
  */
 static void handle_binary_operation_with_const_instruction(instruction_t* instruction){
-
 	//Go based on what we have as the operation
 	switch(instruction->op){
 		case PLUS:
@@ -821,6 +845,11 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 		case R_SHIFT:
 			handle_right_shift_instruction(instruction);
 			break;
+		//Handle a logical and instruction
+		case DOUBLE_AND:
+			handle_logical_and_instruction(instruction);
+			break;
+	
 
 		//All of these instructions require us to use the CMP or CMPQ command
 		case DOUBLE_EQUALS:
@@ -845,14 +874,48 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
  * We can translate a bin op statement a few differnet ways based on the operand
  */
 static void handle_binary_operation_instruction(instruction_t* instruction){
+	//Go based on what we have as the operation
 	switch(instruction->op){
 		case PLUS:
-
+			//Let the helper do it
+			handle_addition_instruction(instruction);
+			break;
 		case MINUS:
-
+			//Let the helper do it
+			handle_subtraction_instruction(instruction);
+			break;
 		case STAR:
-
+			//Let the helper do it
+			handle_multiplication_instruction(instruction);
+			break;
 		case F_SLASH:
+			//Let the helper do it
+			handle_division_instruction(instruction);
+			break;
+		//Hanlde a left shift instruction
+		case L_SHIFT:
+			handle_left_shift_instruction(instruction);
+			break;
+		//Handle a right shift operation
+		case R_SHIFT:
+			handle_right_shift_instruction(instruction);
+			break;
+		//Handle a logical and instruction
+		case DOUBLE_AND:
+			handle_logical_and_instruction(instruction);
+			break;
+	
+
+		//All of these instructions require us to use the CMP or CMPQ command
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+			//Let the helper do it
+			handle_cmp_instruction(instruction);
+			break;
 		default:
 			break;
 	}
@@ -953,7 +1016,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	test_inst->is_branch_ending = logical_not->is_branch_ending;
 
 	//Now we'll set the AL register to 1 if we're equal here
-	instruction_t* sete_inst = emit_sete_instruction(emit_var(al_reg, FALSE));
+	instruction_t* sete_inst = emit_sete_instruction(emit_temp_var(logical_not->assignee->type));
 	//Ensure that we set all these flags too
 	sete_inst->block_contained_in = logical_not->block_contained_in;
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
@@ -2460,9 +2523,6 @@ basic_block_t* select_all_instructions(cfg_t* cfg){
 	//straight line. This step is also able to recognize and exploit some early optimizations,
 	//such as when a block ends in a jump to the block right below it
 	basic_block_t* head_block = order_blocks(cfg);
-
-	//We'll know what this one is
-	al_reg = create_variable_record("al_reg", STORAGE_CLASS_NORMAL);
 
 	//DEBUG
 	//We'll first print before we simplify
