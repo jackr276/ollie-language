@@ -844,28 +844,53 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	//First comes the test command. We're testing this against itself
 	instruction_t* test_inst = emit_test_instruction(logical_not->assignee, logical_not->assignee); 
 	//Ensure that we set all these flags too
-	test_inst->block_contained_in = logical_not;
+	test_inst->block_contained_in = logical_not->block_contained_in;
 	test_inst->is_branch_ending = logical_not->is_branch_ending;
 
 	//Now we'll set the AL register to 1 if we're equal here
 	instruction_t* sete_inst = emit_sete_instruction(emit_var(al_reg, FALSE));
 	//Ensure that we set all these flags too
-	sete_inst->block_contained_in = logical_not;
+	sete_inst->block_contained_in = logical_not->block_contained_in;
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
 
 	//Finally we'll move the contents into t9
-	instruction_t* movzbl_inst = emit_movzbl_instruction(test_inst->assignee, sete_inst->assignee);
+	instruction_t* movzbl_inst = emit_movzbl_instruction(logical_not->assignee, sete_inst->destination_register);
 	//Ensure that we set all these flags too
-	movzbl_inst->block_contained_in = logical_not;
+	movzbl_inst->block_contained_in = logical_not->block_contained_in;
 	movzbl_inst->is_branch_ending = logical_not->is_branch_ending;
 
-	//Not we can scrap the dummy "logical not" instruction
-	delete_statement(cfg, logical_not->block_contained_in, logical_not);
+	//Grab the block out for convenience
+	basic_block_t* block = logical_not->block_contained_in;
+	//Preserve this before we lose it
+	instruction_t* after_logical_not = logical_not->next_statement;
 
-	//Now we'll add all of these instructions in order
-	add_statement(test_inst->block_contained_in, test_inst);
-	add_statement(sete_inst->block_contained_in, sete_inst);
-	add_statement(movzbl_inst->block_contained_in, movzbl_inst);
+	//If this is the case, we do a normal addition
+	if(logical_not->previous_statement != NULL){
+		//We'll sever the connection and delete 
+		logical_not->previous_statement->next_statement = test_inst;
+		test_inst->previous_statement = logical_not->previous_statement;
+	//Otherwise it's the head
+	} else {
+		block->leader_statement = test_inst;
+	}
+
+	//Now we'll add all of the individual linkages
+	test_inst->next_statement = sete_inst;
+	sete_inst->previous_statement = test_inst;
+
+	sete_inst->next_statement = movzbl_inst;
+	movzbl_inst->previous_statement = sete_inst;
+
+	//Now connect it back to the end
+	movzbl_inst->next_statement = after_logical_not;
+
+	//If this isn't null we can point back
+	if(after_logical_not != NULL){
+		after_logical_not->previous_statement = movzbl_inst;
+	} else {
+		//We know it's the exit block then
+		block->exit_statement = movzbl_inst;
+	}
 
 	//We now need to rework the window. We know that these are 
 	//the values of the three in-window items now

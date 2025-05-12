@@ -898,7 +898,50 @@ static void print_cmp_instruction(instruction_t* instruction){
 	//Now we'll need the source register. This may never be null
 	print_variable(instruction->source_register, PRINTING_VAR_INLINE);
 
-	//And give it a newlinw and we're done
+	//And give it a newline and we're done
+	printf("\n");
+}
+
+
+/**
+ * Print out a standard test instruction
+ */
+static void print_test_instruction(instruction_t* instruction){
+	//First we'll decide which version we need to print out
+	if(instruction->instruction_type == TEST){
+		printf("test ");
+	} else {
+		printf("testq ");
+	}
+
+	//Now we'll print out the source and source2 registers. Test instruction
+	//has no destination
+	print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	printf(",");
+	print_variable(instruction->source_register2, PRINTING_VAR_INLINE);
+
+	//And give it a newline
+	printf("\n");
+}
+
+
+/**
+ * Print out a movzbl instruction
+ */
+static void print_movzbl_instruction(instruction_t* instruction){
+	//First we'll just print out the opcode
+	printf("movzbl ");
+
+	//Now we'll need the source immediate/source
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Now our comma and the destination
+	printf(",");
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 	printf("\n");
 }
 
@@ -1017,6 +1060,21 @@ void print_instruction(instruction_t* instruction){
 		case CMP:
 		case CMPQ:
 			print_cmp_instruction(instruction);
+			break;
+		//Handle a simple sete instruction
+		case SETE:
+			printf("sete ");
+			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			printf("\n");
+			break;
+		//Handle a test instruction
+		case TEST:
+		case TESTQ:
+			print_test_instruction(instruction);
+			break;
+		//Handle a movzbl instruction
+		case MOVZBL:
+			print_movzbl_instruction(instruction);
 			break;
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements
