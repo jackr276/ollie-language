@@ -18,6 +18,11 @@
 #define TRUE 1
 #define FALSE 0
 
+//A variable that we'll use to hold the AL register. We'll
+//have it here because we've never encountered a need for it
+//before in the compiler
+symtab_variable_record_t* al_reg = NULL;
+
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
@@ -838,10 +843,41 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
 	instruction_t* test_inst = emit_test_instruction(logical_not->assignee, logical_not->assignee); 
-	instruction_t* sete_inst;
-	instruction_t* movzbl_inst;
+	//Ensure that we set all these flags too
+	test_inst->block_contained_in = logical_not;
+	test_inst->is_branch_ending = logical_not->is_branch_ending;
 
-	//We first need to test this value against itself
+	//Now we'll set the AL register to 1 if we're equal here
+	instruction_t* sete_inst = emit_sete_instruction(emit_var(al_reg, FALSE));
+	//Ensure that we set all these flags too
+	sete_inst->block_contained_in = logical_not;
+	sete_inst->is_branch_ending = logical_not->is_branch_ending;
+
+	//Finally we'll move the contents into t9
+	instruction_t* movzbl_inst = emit_movzbl_instruction(test_inst->assignee, sete_inst->assignee);
+	//Ensure that we set all these flags too
+	movzbl_inst->block_contained_in = logical_not;
+	movzbl_inst->is_branch_ending = logical_not->is_branch_ending;
+
+	//Not we can scrap the dummy "logical not" instruction
+	delete_statement(cfg, logical_not->block_contained_in, logical_not);
+
+	//Now we'll add all of these instructions in order
+	add_statement(test_inst->block_contained_in, test_inst);
+	add_statement(sete_inst->block_contained_in, sete_inst);
+	add_statement(movzbl_inst->block_contained_in, movzbl_inst);
+
+	//We now need to rework the window. We know that these are 
+	//the values of the three in-window items now
+	window->instruction1 = test_inst;
+	window->instruction2 = sete_inst;
+	window->instruction3 = movzbl_inst;
+	
+	//Now we'll cycle the window twice
+	slide_window(window);
+	slide_window(window);
+
+	//And we're done
 }
 
 
@@ -862,8 +898,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		handle_logical_not_instruction(cfg, window);
 
 		//This does count as a change
-		//changed = TRUE;
-
+		changed = TRUE;
 	}
 
 
@@ -2295,6 +2330,9 @@ basic_block_t* select_all_instructions(cfg_t* cfg){
 	//straight line. This step is also able to recognize and exploit some early optimizations,
 	//such as when a block ends in a jump to the block right below it
 	basic_block_t* head_block = order_blocks(cfg);
+
+	//We'll know what this one is
+	al_reg = create_variable_record("al_reg", STORAGE_CLASS_NORMAL);
 
 	//DEBUG
 	//We'll first print before we simplify
