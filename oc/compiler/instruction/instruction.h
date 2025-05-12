@@ -63,6 +63,12 @@ typedef enum{
 	SUBL,
 	SUBQ,
 	ASM_INLINE, //ASM inline statements aren't really instructions
+	SARQ,
+	SAR,
+	SALQ,
+	SAL,
+	SHRQ,
+	SHR,
 	INC,
 	INCQ,
 	DEC,

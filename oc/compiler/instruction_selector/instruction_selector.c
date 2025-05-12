@@ -635,6 +635,73 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 }
 
 
+/**
+ * Handle a left shift operation
+ */
+static void handle_left_shift_instruction(instruction_t* instruction){
+
+}
+
+
+/**
+ * Handle a right shift operation. This helper will determine if we
+ * need an arithmetic or a logical right shift dependant on the operation
+ */
+static void handle_right_shift_instruction(instruction_t* instruction){
+
+}
+
+
+/**
+ * Handle a cmp operation. This is used whenever we have
+ * relational operation
+ */
+static void handle_cmp_instruction(instruction_t* instruction){
+	//Determine what our size is off the bat
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//Select this instruction
+	instruction->instruction_type = select_cmp_instruction(size);
+	
+	//Since we have a comparison instruction, we don't actually have a destination
+	//register as the registers remain unmodified in this event
+	instruction->source_register = instruction->op1;
+	instruction->source_immediate = instruction->op1_const;
+}
+
+
+/**
+ * Handle a subtraction operation
+ */
+static void handle_subtraction_instruction(instruction_t* instruction){
+	//Determine what our size is off the bat
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//Select the appropriate level of minus instruction
+	instruction->instruction_type = select_sub_instruction(size);
+
+	//Again we just need the source and dest registers
+	instruction->destination_register = instruction->assignee;
+	//And grab the immediate source
+	instruction->source_immediate = instruction->op1_const;
+}
+
+
+/**
+ * Handle an addition operation
+ */
+static void handle_addition_instruction(instruction_t* instruction){
+	//Determine what our size is off the bat
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//Grab the add instruction that we want
+	instruction->instruction_type = select_add_instruction(size);
+
+	//We'll just need to set the source immediate and destination register
+	instruction->destination_register = instruction->assignee;
+	//And grab the immediate source
+	instruction->source_immediate = instruction->op1_const;
+}
 
 
 /**
@@ -644,72 +711,23 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
  * operand
  */
 static void handle_binary_operation_with_const_instruction(instruction_t* instruction){
-	//Determine what our size is off the bat
-	variable_size_t size = select_variable_size(instruction->assignee);
 
 	//Go based on what we have as the operation
 	switch(instruction->op){
-		/**
-		 * There are 2 routes we could take with a plus. 
-		 * 	1.) t4 <- t2 + 3: since the operand and assignee are different, we can
-		 * 		use an address calculation instruction to do this. 
-		 * 		We'll make this lea(q) 3(t2), t4
-		 *
-		 * 	2.) x3 <- x2 + 4: since the operand and assignee are the same, we're fine overwriting.
-		 * 		This can be a regular addition instruction.
-		 * 		We'll make this: add(w/l/q) $4, x3
-		 */
 		case PLUS:
-			//Let's see if we have case 1
-			if(variables_equal_no_ssa(instruction->assignee, instruction->op1, FALSE) == FALSE){
-				//Grab the lea that we need and set it to be the instruction type
-				instruction->instruction_type = select_lea_instruction(size);
-
-				//We'll need to perform an address calculation via LEA instruction. This will fall under
-				//the category of ADDRESS_CALCULATION_MODE_CONST_ONLY
-				//Set this flag for later
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_CONST_ONLY;
-
-				//Now assign the constants appropriately
-				instruction->destination_register = instruction->assignee;
-
-				//The source register is op1
-				instruction->source_register = instruction->op1;
-				//And the constant additive is op1 const
-				instruction->constant_additive = instruction->op1_const;
-
-			//Else we've got case 2
-			} else {
-				//Grab the add instruction that we want
-				instruction->instruction_type = select_add_instruction(size);
-
-				//We'll just need to set the source immediate and destination register
-				instruction->destination_register = instruction->assignee;
-				//And grab the immediate source
-				instruction->source_immediate = instruction->op1_const;
-			}
-
+			//Let the helper do it
+			handle_addition_instruction(instruction);
 			break;
-
-		/**
-		 * For subtraction there isn't much of a choice. We'll just use the subq operation
-		 */
 		case MINUS:
-			//Select the appropriate level of minus instruction
-			instruction->instruction_type = select_sub_instruction(size);
-
-			//Again we just need the source and dest registers
-			instruction->destination_register = instruction->assignee;
-			//And grab the immediate source
-			instruction->source_immediate = instruction->op1_const;
+			//Let the helper do it
+			handle_subtraction_instruction(instruction);
 			break;
-
-		
 
 		case STAR:
 			break;
 		case F_SLASH:
 			break;
+		//Handle a right shift operation
 
 		//All of these instructions require us to use the CMP or CMPQ command
 		case DOUBLE_EQUALS:
@@ -718,14 +736,8 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 		case G_THAN_OR_EQ:
 		case L_THAN:
 		case L_THAN_OR_EQ:
-			//Select this instruction
-			instruction->instruction_type = select_cmp_instruction(size);
-			
-			//Since we have a comparison instruction, we don't actually have a destination
-			//register as the registers remain unmodified in this event
-			instruction->source_register = instruction->op1;
-			instruction->source_immediate = instruction->op1_const;
-
+			//Let the helper do it
+			handle_cmp_instruction(instruction);
 			break;
 		default:
 			break;
