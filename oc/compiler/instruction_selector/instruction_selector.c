@@ -232,7 +232,7 @@ static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_va
 /**
  * Emit a sete instruction
  *
- * The sete instruction is typically used with the %al register, but not always
+ * The sete instruction is used on a byte
  */
 static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
 	//First we'll allocate it
@@ -243,6 +243,52 @@ static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a setne instruction
+ *
+ * The setne instruction is used on a byte
+ */
+static instruction_t* emit_setne_instruction(three_addr_var_t* destination){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//And we'll set the class
+	instruction->instruction_type = SETNE;
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit an ANDx instruction
+ */
+static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size of the variable
+	variable_size_t size = select_variable_size(destination);
+
+	//Set the instruction accordingly
+	if(size == QUAD_WORD){
+		instruction->instruction_type = ANDQ;
+	} else {
+		instruction->instruction_type = ANDL;
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_register = source;
 
 	//And now we'll give it back
 	return instruction;
@@ -1078,7 +1124,84 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
+	//Preserve this for ourselves
+	instruction_t* after_logical_and = logical_and->next_statement;
+
+	//Grab the block out too
+	basic_block_t* block = logical_and->block_contained_in;
+
+	//Let's first emit our test instruction
+	instruction_t* first_test = emit_test_instruction(logical_and->op1, logical_and->op1);
+
+	//Now we'll need a setne instruction that will set a new temp
+	instruction_t* first_set = emit_setne_instruction(emit_temp_var(logical_and->assignee->type));
 	
+	//Link these two
+	first_test->next_statement = first_set;
+	first_set->previous_statement = first_test;
+
+	//Now we'll need the second test
+	instruction_t* second_test = emit_test_instruction(logical_and->op2, logical_and->op2);
+
+	//Link it to the prior
+	first_set->next_statement = second_test;
+	second_test->previous_statement = first_set;
+
+	//Now the second setne
+	instruction_t* second_set = emit_setne_instruction(emit_temp_var(logical_and->assignee->type));
+
+	//Link to the prior
+	second_test->next_statement = second_set;
+	second_set->previous_statement = second_test;
+
+	//Now we'll need to ANDx these two values together to see if they're both 1
+	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
+
+	//Again link it
+	second_set->next_statement = and_inst;
+	and_inst->previous_statement = second_set;
+
+	//The final thing that we need is a movzbl
+	instruction_t* final_move = emit_movzbl_instruction(logical_and->assignee, and_inst->destination_register);
+
+	//Do this one's linkage
+	and_inst->next_statement = final_move;
+	final_move->previous_statement = and_inst;
+	
+	//Now connect it back to the end
+	final_move->next_statement = after_logical_and;
+
+	//Let's now delete the statement
+	//If this is the case, we do a normal addition
+	if(logical_and->previous_statement != NULL){
+		//We'll sever the connection and delete 
+		logical_and->previous_statement->next_statement = first_test;
+		first_test->previous_statement = logical_and->previous_statement;
+	//Otherwise it's the head
+	} else {
+		block->leader_statement = first_test;
+	}
+
+	//If this isn't null we can point back
+	if(after_logical_and != NULL){
+		after_logical_and->previous_statement = final_move;
+	} else {
+		//We know it's the exit block then
+		block->exit_statement = final_move;
+	}
+
+	//We now need to rework the window. We know that these are 
+	//the values of the three in-window items now
+	window->instruction1 = first_test;
+	window->instruction2 = first_set;
+	window->instruction3 = second_test;
+	
+	//Now we'll cycle the window five times
+	slide_window(window);
+	slide_window(window);
+	slide_window(window);
+	slide_window(window);
+	slide_window(window);
 }
 
 
@@ -1105,6 +1228,11 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 	//We could see logical and/logical or
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+		//Handle the logical and case
+		if(window->instruction1->op == DOUBLE_AND){
+			handle_logical_and_instruction(cfg, window);
+
+		}
 
 	}
 

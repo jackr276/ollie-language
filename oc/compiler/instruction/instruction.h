@@ -91,13 +91,14 @@ typedef enum{
 	XORQ,
 	ORL,
 	ORQ,
-	AND,
+	ANDL,
 	ANDQ,
 	CMP,
 	CMPQ,
 	TEST,
 	TESTQ,
 	SETE, //Set if equal
+	SETNE,
 	MOVZBL, //move if zero or below long word
 } instruction_type_t;
 
