@@ -1022,6 +1022,31 @@ static void print_sar_instruction(instruction_t* instruction){
 
 
 /**
+ * Print out a bitwise AND instruction
+ */
+static void print_and_instruction(instruction_t* instruction){
+	//Print out the appropriate opcode based on size
+	if(instruction->instruction_type == ANDL){
+		printf("andl ");
+	} else {
+		printf("andq ");
+	}
+
+	//Now we'll need the source immediate/source
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Now our comma and the destination
+	printf(",");
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
  * Print out a logical right shift instruction
  */
 static void print_shr_instruction(instruction_t* instruction){
@@ -1167,6 +1192,12 @@ void print_instruction(instruction_t* instruction){
 			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
 			break;
+		//Handle a simple setne instruction
+		case SETNE:
+			printf("setne ");
+			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			printf("\n");
+			break;
 		//Handle a test instruction
 		case TEST:
 		case TESTQ:
@@ -1195,6 +1226,11 @@ void print_instruction(instruction_t* instruction){
 		case SARL:
 		case SARQ:
 			print_sar_instruction(instruction);
+			break;
+		//Handle a bitwise and instruction
+		case ANDL:
+		case ANDQ:
+			print_and_instruction(instruction);
 			break;
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements

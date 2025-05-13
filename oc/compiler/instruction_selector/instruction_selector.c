@@ -2181,6 +2181,41 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//Regardless of what happened here, we did change the window so we'll set the flag
 			changed = TRUE;
+
+		//We could also have a scenario like this that will apply only to logical combination(&& and ||) operators.
+		/**
+		 * t33 <- t34 && t35
+		 * x_0 <- t33
+		 *
+		 * Because of the way that we handle logical and/logical or, we can actuall eliminate the second assignment
+		 * with no issue
+		 * x_0 <- t34 && t35
+		 */
+		} else if((first->op == DOUBLE_AND || first->op == DOUBLE_OR)
+				&& first->assignee->is_temporary == TRUE 
+				&& variables_equal(first->assignee, second->op1, FALSE) == TRUE){
+
+			//Set these to be equal
+			first->assignee = second->assignee;
+
+			//We can now scrap the second statement
+			delete_statement(cfg, second->block_contained_in, second);
+
+			//Now we'll modify the window to be as we need
+			window->instruction2 = third;
+
+			//If this one is already NULL, we know we're at the end
+			if(third == NULL){
+				window->instruction3 = NULL;
+			} else {
+				window->instruction3 = third->next_statement;
+			}
+
+			//Allow the helper to set the status
+			set_window_status(window);
+
+			//This counts as a change
+			changed = TRUE;
 		}
 	}
 
