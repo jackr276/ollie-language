@@ -308,6 +308,9 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 			case SINGLE_OR:
 				op = "|";
 				break;
+			case CARROT:
+				op = "^";
+				break;
 			case DOUBLE_OR:
 				op = "||";
 				break;
@@ -384,6 +387,9 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 				break;
 			case SINGLE_OR:
 				op = "|";
+				break;
+			case CARROT:
+				op = "^";
 				break;
 			case DOUBLE_OR:
 				op = "||";

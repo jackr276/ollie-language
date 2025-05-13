@@ -2870,12 +2870,6 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 		
-		//Additionally, if it's a negative shift amount, we'll throw a warning
-		if(right_child_type == S_INT8 || right_child_type == S_INT16 || right_child_type == S_INT32 
-		   || right_child_type == S_INT64){
-			print_parse_message(WARNING, "Negative shift amounts will be treated as unsigned. Highly advised against using", parser_line_num);
-		}
-
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 		//The return type is always the left child's type
@@ -2920,8 +2914,6 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//For hold the return type: always u_int8
-	generic_type_t* rel_expr_ret_type = lookup_type(type_symtab, "u8")->type;
 
 	//No matter what, we do need to first see a valid shift expression
 	generic_ast_node_t* sub_tree_root = shift_expression(fl);
@@ -3001,7 +2993,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		}
 
 		//Store what the type of this operation is
-		sub_tree_root->inferred_type = rel_expr_ret_type;
+		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
@@ -3038,8 +3030,6 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//Grab and hold what we'll be returning
-	generic_type_t* equality_expr_ret_type = lookup_type(type_symtab, "u8")->type;
 
 	//No matter what, we do need to first see a valid relational expression
 	generic_ast_node_t* sub_tree_root = relational_expression(fl);
@@ -3120,7 +3110,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		add_child_node(sub_tree_root, right_child);
 
 		//Store what our return type is too
-		sub_tree_root->inferred_type = equality_expr_ret_type;
+		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -3241,7 +3231,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		add_child_node(sub_tree_root, right_child);
 
 		//Make sure we mark the root node's return type after it's been anded
-		sub_tree_root->inferred_type = temp_holder_type;
+		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -3362,7 +3352,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 		add_child_node(sub_tree_root, right_child);
 
 		//Ensure that we denote what type this subtree is now
-		sub_tree_root->inferred_type = temp_holder_type;
+		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -3398,8 +3388,6 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//Hold the return type if we need it
-	generic_type_t* i_or_ret_type = lookup_type(type_symtab, "i64")->type;
 
 	//No matter what, we do need to first see a valid exclusive or expression
 	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl);
@@ -3482,8 +3470,8 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
-		//Add what the type is in here(always an s_int64)
-		sub_tree_root->inferred_type = i_or_ret_type;
+		//Grab the inferred type
+		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -3519,8 +3507,6 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//Grab and hold this just in case we need it later
-	generic_type_t* l_and_ret_type = lookup_type(type_symtab, "u8")->type;
 
 	//No matter what, we do need to first see a valid inclusive or expression
 	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl);
@@ -3605,7 +3591,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		add_child_node(sub_tree_root, right_child);
 
 		//We now know that the subtree root has a type of u_int8(boolean)
-		sub_tree_root->inferred_type = l_and_ret_type;
+		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -3644,8 +3630,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//Hold this type just in case we need it
-	generic_type_t* l_or_ret_type = lookup_type(type_symtab, "u8")->type;
 
 	//No matter what, we do need to first see a logical and expression
 	generic_ast_node_t* sub_tree_root = logical_and_expression(fl);
@@ -3731,8 +3715,8 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 		
-		//This means that the sub-tree-root has a type of u_int8(boolean value)
-		sub_tree_root->inferred_type = l_or_ret_type;
+		//Grab the inferred type
+		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
