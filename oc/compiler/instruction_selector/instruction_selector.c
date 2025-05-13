@@ -296,6 +296,32 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 
 
 /**
+ * Emit an ORx instruction
+ */
+static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size of the variable
+	variable_size_t size = select_variable_size(destination);
+
+	//Set the instruction accordingly
+	if(size == QUAD_WORD){
+		instruction->instruction_type = ORQ;
+	} else {
+		instruction->instruction_type = ORL;
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
  * Emit a movzbl instruction
  *
  * This specialized conditional move is normally used in conjuction with test and sete
@@ -1098,6 +1124,34 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	slide_window(window);
 
 	//And we're done
+}
+
+
+/**
+ * Handle a logical OR instruction
+ * 
+ * t32 <- t32 || t19
+ *
+ * Will become:
+ *
+ * orq t19, t32 <---------- bitwise or
+ * setne t33 <------------ if it isn't 0, we eval to TRUE(1)
+ * movzbl t33, t32  <-------------- move this into the result
+ *
+ * NOTE: We guarantee that the first instruction in the window is the one that
+ * we're after in this case
+ */
+static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* window){
+	//Grab it out for convenience
+	instruction_t* logical_or = window->instruction1;
+
+	//Save the after instruction
+	instruction_t* after_logical_or = window->instruction2;
+
+	//And grab the block out
+	basic_block_t* block = logical_or->block_contained_in;
+
+
 }
 
 
@@ -2187,11 +2241,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		 * t33 <- t34 && t35
 		 * x_0 <- t33
 		 *
-		 * Because of the way that we handle logical and/logical or, we can actuall eliminate the second assignment
+		 * Because of the way that we handle logical and, we can actuall eliminate the second assignment
 		 * with no issue
 		 * x_0 <- t34 && t35
+		 *
+		 * NOTE: This does not work for logical or, due to the way we handle logical OR
 		 */
-		} else if((first->op == DOUBLE_AND || first->op == DOUBLE_OR)
+		} else if(first->op == DOUBLE_AND
 				&& first->assignee->is_temporary == TRUE 
 				&& variables_equal(first->assignee, second->op1, FALSE) == TRUE){
 

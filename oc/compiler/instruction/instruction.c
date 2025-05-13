@@ -1047,6 +1047,31 @@ static void print_and_instruction(instruction_t* instruction){
 
 
 /**
+ * Print out a bitwise OR instruction
+ */
+static void print_or_instruction(instruction_t* instruction){
+	//Print out the appropriate opcode based on size
+	if(instruction->instruction_type == ORL){
+		printf("orl ");
+	} else {
+		printf("orq ");
+	}
+
+	//Now we'll need the source immediate/source
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Now our comma and the destination
+	printf(",");
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
  * Print out a logical right shift instruction
  */
 static void print_shr_instruction(instruction_t* instruction){
