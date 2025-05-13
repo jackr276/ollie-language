@@ -801,16 +801,6 @@ static void handle_division_instruction(instruction_t* instruction){
 }
 
 
-/**
- * Handle a logical and instruction
- *
- * t34 <- t32 && t19
- */
-static void handle_logical_and_instruction(instruction_t* instruction){
-	
-
-}
-
 
 /**
  * Handle a bin-op-with-const statement
@@ -844,10 +834,6 @@ static void handle_binary_operation_with_const_instruction(instruction_t* instru
 		//Handle a right shift operation
 		case R_SHIFT:
 			handle_right_shift_instruction(instruction);
-			break;
-		//Handle a logical and instruction
-		case DOUBLE_AND:
-			handle_logical_and_instruction(instruction);
 			break;
 	
 
@@ -900,11 +886,6 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		case R_SHIFT:
 			handle_right_shift_instruction(instruction);
 			break;
-		//Handle a logical and instruction
-		case DOUBLE_AND:
-			handle_logical_and_instruction(instruction);
-			break;
-	
 
 		//All of these instructions require us to use the CMP or CMPQ command
 		case DOUBLE_EQUALS:
@@ -1075,6 +1056,34 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 
 
 /**
+ * Handle a logical and instruction
+ *
+ * t32 <- t32 && t19
+ *
+ * This will translate to:
+ * testq t32, t32 <----- is this 0?
+ * setne t33 <----------- if it's not make this one
+ * testq t19, 19 <------- Is this 0?
+ * setne t34 <------------ If it's not, make it a one
+ * andq t33, t34 <---------- let's see if they're both 0, both 1, etc
+ * movzbl t34, t32 <---------- store t34 with the result
+ *
+ * Since this will spawn multiple instructions, it will be invoked from the multiple instruction
+ * pattern selector
+ * 
+ * NOTE: We guarantee that the first instruction in the window is the one that we're after
+ * in this case
+ */
+static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* window){
+	//Grab it out for convenience
+	instruction_t* logical_and = window->instruction1;
+
+	
+}
+
+
+
+/**
  * The first part of the instruction selector to run is the pattern selector. This 
  * first set of passes will determine if there are any large patterns that we can optimize
  * with our instructions. This will likely leave a lot of instructions not selected, 
@@ -1093,6 +1102,12 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//This does count as a change
 		changed = TRUE;
 	}
+
+	//We could see logical and/logical or
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+
+	}
+
 
 
 	//============================= The "Grand Patterns" ==============================
@@ -1718,8 +1733,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE &&
-			variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+		if(window->instruction1->assignee->is_temporary == TRUE
+			&& window->instruction2->op != DOUBLE_AND  //Due to the way we use these, we can't optimize in this way
+			&& window->instruction2->op != DOUBLE_OR
+			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
 			instruction_t* const_assignment = window->instruction1;
@@ -1760,8 +1777,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction3 != NULL && window->instruction3->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE &&
-			variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
+		if(window->instruction1->assignee->is_temporary == TRUE
+			&& window->instruction3->op != DOUBLE_AND  //Due to the way we use these, we can't optimize in this way
+			&& window->instruction3->op != DOUBLE_OR
+			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
 			instruction_t* const_assignment = window->instruction1;

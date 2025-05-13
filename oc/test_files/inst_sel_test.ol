@@ -24,8 +24,8 @@ fn main(arg:i32, argv:char**) -> i32 {
 
 	a := (x * -128) + (x - 11);
 	x := x / 8;
-	x := x + 21;
-	x := x - 32;
+	x := x && 21;
+	x := x || 32;
 
 
 	ret x + y + a;
