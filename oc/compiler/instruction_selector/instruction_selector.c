@@ -1122,8 +1122,6 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	//Now we'll cycle the window twice
 	slide_window(window);
 	slide_window(window);
-
-	//And we're done
 }
 
 
@@ -1151,7 +1149,53 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	//And grab the block out
 	basic_block_t* block = logical_or->block_contained_in;
 
+	//Let's first emit the or instructio
+	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
+	//Now we need the setne instruction
+	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(or_instruction->destination_register->type));
+
+	//Let's link the two together
+	or_instruction->next_statement = setne_instruction;
+	setne_instruction->previous_statement = or_instruction;
+
+	//Following that we'll need the final movzbl instruction
+	instruction_t* movzbl_instruction = emit_movzbl_instruction(logical_or->assignee, setne_instruction->destination_register);
+
+	//Now we'll link this one too
+	setne_instruction->next_statement = movzbl_instruction;
+	movzbl_instruction->previous_statement = setne_instruction;
+
+	//Now everything is complete, we're able to do the final linkage
+	//If this is the case, we do a normal addition
+	if(logical_or->previous_statement != NULL){
+		//We'll sever the connection and delete 
+		logical_or->previous_statement->next_statement = or_instruction;
+		or_instruction->previous_statement = logical_or->previous_statement;
+	//Otherwise it's the head
+	} else {
+		block->leader_statement = or_instruction;
+	}
+
+	//No matter what this will point to whatever came next
+	movzbl_instruction->next_statement = after_logical_or;
+
+	//Now we'll need to sever the end
+	if(after_logical_or != NULL){
+		after_logical_or->previous_statement = movzbl_instruction;
+	} else {
+		//We know it's the exit block then
+		block->exit_statement = movzbl_instruction;
+	}
+
+	//Now that we're all linked, we need to redo the window
+	window->instruction1 = or_instruction;
+	window->instruction2 = setne_instruction;
+	window->instruction3 = movzbl_instruction;
+
+	//Slide the window twice so we don't waste a cycle
+	slide_window(window);
+	slide_window(window);
 }
 
 
@@ -1285,9 +1329,9 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//Handle the logical and case
 		if(window->instruction1->op == DOUBLE_AND){
 			handle_logical_and_instruction(cfg, window);
-
+		} else if(window->instruction1->op == DOUBLE_OR){
+			handle_logical_or_instruction(cfg, window);
 		}
-
 	}
 
 

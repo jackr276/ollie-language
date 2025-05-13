@@ -1257,6 +1257,11 @@ void print_instruction(instruction_t* instruction){
 		case ANDQ:
 			print_and_instruction(instruction);
 			break;
+		//Handle a bitwise or instruction
+		case ORL:
+		case ORQ:
+			print_or_instruction(instruction);
+			break;
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements
 		case INDIRECT_JMP:
