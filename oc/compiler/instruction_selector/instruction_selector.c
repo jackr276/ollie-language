@@ -814,6 +814,33 @@ static void handle_bitwise_or_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a bitwise and operation
+ */
+static void handle_bitwise_and_instruction(instruction_t* instruction){
+	//We need to know what size we're dealing with
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//First we'll select the appropriate instruction
+	if(size == QUAD_WORD){
+		instruction->instruction_type = ANDQ;
+	} else {
+		instruction->instruction_type = ANDL;
+	}
+	
+	//Now that we've done that, we'll move over the operands
+	if(instruction->op1_const != NULL){
+		instruction->source_immediate = instruction->op1_const;
+	} else {
+		//Otherwise we have a register source here
+		instruction->source_register = instruction->op2;
+	}
+
+	//And we always have a destination register
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
  * Handle a cmp operation. This is used whenever we have
  * relational operation
  */
@@ -935,6 +962,10 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		//Handle the (|) operator
 		case SINGLE_OR:
 			handle_bitwise_or_instruction(instruction);
+			break;
+		//Handle the (&) operator in a binary operation context
+		case SINGLE_AND:
+			handle_bitwise_and_instruction(instruction);
 			break;
 
 		//All of these instructions require us to use the CMP or CMPQ command
@@ -2802,4 +2833,3 @@ basic_block_t* select_all_instructions(cfg_t* cfg){
 	//FOR NOW
 	return NULL;
 }
-
