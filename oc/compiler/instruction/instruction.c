@@ -889,7 +889,7 @@ static void print_cmp_instruction(instruction_t* instruction){
 	if(instruction->instruction_type == CMPQ){
 		printf("cmpq ");
 	} else {
-		printf("cmp ");
+		printf("cmpl ");
 	}
 
 	//If we have an immediate value, print it
@@ -1078,6 +1078,31 @@ static void print_or_instruction(instruction_t* instruction){
 
 
 /**
+ * Print out a bitwise XOR instruction
+ */
+static void print_xor_instruction(instruction_t* instruction){
+	//Print out the appropriate opcode based on size
+	if(instruction->instruction_type == XORL){
+		printf("xorl ");
+	} else {
+		printf("xorq ");
+	}
+
+	//Now we'll need the source immediate/source
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Now our comma and the destination
+	printf(",");
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
  * Print out a logical right shift instruction
  */
 static void print_shr_instruction(instruction_t* instruction){
@@ -1213,7 +1238,7 @@ void print_instruction(instruction_t* instruction){
 			print_not_instruction(instruction);
 			break;
 		//Handle our CMP instructions
-		case CMP:
+		case CMPL:
 		case CMPQ:
 			print_cmp_instruction(instruction);
 			break;
@@ -1263,10 +1288,15 @@ void print_instruction(instruction_t* instruction){
 		case ANDQ:
 			print_and_instruction(instruction);
 			break;
-		//Handle a bitwise or instruction
+		//Handle a bitwise inclusive or instruction
 		case ORL:
 		case ORQ:
 			print_or_instruction(instruction);
+			break;
+		//Handle a bitwise exclusive or instruction
+		case XORL:
+		case XORQ:
+			print_xor_instruction(instruction);
 			break;
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements

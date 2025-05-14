@@ -93,7 +93,7 @@ typedef enum{
 	ORQ,
 	ANDL,
 	ANDQ,
-	CMP,
+	CMPL,
 	CMPQ,
 	TEST,
 	TESTQ,
