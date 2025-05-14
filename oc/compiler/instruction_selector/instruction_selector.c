@@ -739,7 +739,7 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	if(instruction->op1_const != NULL){
 		instruction->source_immediate = instruction->op1_const;
 	} else {
-		instruction->source_register = instruction->op1;
+		instruction->source_register = instruction->op2;
 	}
 }
 
@@ -781,8 +781,35 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 	if(instruction->op1_const != NULL){
 		instruction->source_immediate = instruction->op1_const;
 	} else {
-		instruction->source_register = instruction->op1;
+		instruction->source_register = instruction->op2;
 	}
+}
+
+
+/**
+ * Handle a bitwise inclusive or operation
+ */
+static void handle_bitwise_or_instruction(instruction_t* instruction){
+	//We need to know what size we're dealing with
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//First we'll select the appropriate instruction
+	if(size == QUAD_WORD){
+		instruction->instruction_type = ORQ;
+	} else {
+		instruction->instruction_type = ORL;
+	}
+	
+	//Now that we've done that, we'll move over the operands
+	if(instruction->op1_const != NULL){
+		instruction->source_immediate = instruction->op1_const;
+	} else {
+		//Otherwise we have a register source here
+		instruction->source_register = instruction->op2;
+	}
+
+	//And we always have a destination register
+	instruction->destination_register = instruction->assignee;
 }
 
 
@@ -873,59 +900,6 @@ static void handle_division_instruction(instruction_t* instruction){
 }
 
 
-
-/**
- * Handle a bin-op-with-const statement
- *
- * We can translate a bin op with const operation a few different ways based on the 
- * operand
- */
-static void handle_binary_operation_with_const_instruction(instruction_t* instruction){
-	//Go based on what we have as the operation
-	switch(instruction->op){
-		case PLUS:
-			//Let the helper do it
-			handle_addition_instruction(instruction);
-			break;
-		case MINUS:
-			//Let the helper do it
-			handle_subtraction_instruction(instruction);
-			break;
-		case STAR:
-			//Let the helper do it
-			handle_multiplication_instruction(instruction);
-			break;
-		case F_SLASH:
-			//Let the helper do it
-			handle_division_instruction(instruction);
-			break;
-		//Hanlde a left shift instruction
-		case L_SHIFT:
-			handle_left_shift_instruction(instruction);
-			break;
-		//Handle a right shift operation
-		case R_SHIFT:
-			handle_right_shift_instruction(instruction);
-			break;
-	
-
-		//All of these instructions require us to use the CMP or CMPQ command
-		case DOUBLE_EQUALS:
-		case NOT_EQUALS:
-		case G_THAN:
-		case G_THAN_OR_EQ:
-		case L_THAN:
-		case L_THAN_OR_EQ:
-			//Let the helper do it
-			handle_cmp_instruction(instruction);
-			break;
-		default:
-			break;
-	}
-
-}
-
-
 /**
  * Handle a bin-op-with-const statement
  *
@@ -957,6 +931,10 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		//Handle a right shift operation
 		case R_SHIFT:
 			handle_right_shift_instruction(instruction);
+			break;
+		//Handle the (|) operator
+		case SINGLE_OR:
+			handle_bitwise_or_instruction(instruction);
 			break;
 
 		//All of these instructions require us to use the CMP or CMPQ command
@@ -1544,12 +1522,9 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 				handle_dec_instruction(current);
 				break;
 			//Let the helper handle this one
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 				handle_binary_operation_instruction(current);
-				break;
-			//Same here
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				handle_binary_operation_with_const_instruction(current);
 				break;
 			//For a phi function, we perform an exact 1:1 mapping
 			case THREE_ADDR_CODE_PHI_FUNC:

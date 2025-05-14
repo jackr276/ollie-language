@@ -4,7 +4,6 @@
  */
 
 #include "heapstack.h"
-#include <bits/types/stack_t.h>
 #include <stdio.h>
 #include <stdlib.h>
 
