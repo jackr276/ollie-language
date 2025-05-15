@@ -762,6 +762,45 @@ static void print_to_memory_move(instruction_t* instruction){
 
 
 /**
+ * Print a multiplication instruction, in all the forms it can take
+ */
+static void print_multiplication_instruction(instruction_t* instruction){
+	//First we'll print out the appropriate variety of addition
+	switch(instruction->instruction_type){
+		case MULL:
+			printf("mull ");
+			break;
+		case MULQ:
+			printf("mulq ");
+			break;
+		case IMULL:
+			printf("imull ");
+			break;
+		case IMULQ:
+			printf("imulq ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//Print the appropriate variable here
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Needed comma
+	printf(", ");
+
+	//Now print our destination
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
  * Print an addition instruction, in all the forms it can take
  */
 static void print_addition_instruction(instruction_t* instruction){
@@ -1195,6 +1234,12 @@ void print_instruction(instruction_t* instruction){
 			printf("decq ");
 			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 			printf("\n");
+			break;
+		case MULL:
+		case MULQ:
+		case IMULQ:
+		case IMULL:
+			print_multiplication_instruction(instruction);
 			break;
 		//Handle the special addressing modes that we could have here
 		case REG_TO_MEM_MOVL:

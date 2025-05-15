@@ -940,14 +940,55 @@ static void handle_addition_instruction(instruction_t* instruction){
 
 /**
  * Handle a multiplication operation
+ *
+ * A multiplication operation can be different based on size and sign
  */
 static void handle_multiplication_instruction(instruction_t* instruction){
+	//We'll need to know the variables size
+	variable_size_t size = select_variable_size(instruction->assignee);
 
+	//We also need to determine if it's signed or not due to there being separate instructions
+	u_int8_t is_variable_signed = is_type_signed(instruction->assignee->type);
+
+	//We determine the instruction that we need based on signedness and size
+	switch (size) {
+		case WORD:
+		case DOUBLE_WORD:
+			if(is_variable_signed == TRUE){
+				instruction->instruction_type = IMULL;
+			} else {
+				instruction->instruction_type = MULL;
+			}
+			break;
+		//Everything else falls here
+		default:
+			if(is_variable_signed == TRUE){
+				instruction->instruction_type = IMULQ;
+			} else {
+				instruction->instruction_type = MULQ;
+			}
+			break;
+	}
+
+	//Following this, we'll set the assignee and source
+	instruction->destination_register = instruction->assignee;
+
+	//Are we using an immediate or register?
+	if(instruction->op2 != NULL){
+		//This is the case where we have a source register
+		instruction->source_register = instruction->op2;
+	} else {
+		//In this case we'll have an immediate source
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
 /**
  * Handle a division operation
+ *
+ * NOTE: These are also used for the modulus operator. The remainder is always stored in
+ * a separate register
  */
 static void handle_division_instruction(instruction_t* instruction){
 
