@@ -484,24 +484,6 @@ static instruction_type_t select_move_instruction(variable_size_t size){
 
 
 /**
- * A very simple helper function that selects the right lea instruction based
- * solely on variable size. Done to avoid code duplication
- */
-static instruction_type_t select_lea_instruction(variable_size_t size){
-	//Go based on size
-	switch(size){
-		case WORD:
-		case DOUBLE_WORD:
-			return LEA;
-		case QUAD_WORD:
-			return LEAQ;
-		default:
-			return LEAQ;
-	}
-}
-
-
-/**
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
@@ -986,9 +968,6 @@ static void handle_multiplication_instruction(instruction_t* instruction){
 
 /**
  * Handle a division operation
- *
- * NOTE: These are also used for the modulus operator. The remainder is always stored in
- * a separate register
  */
 static void handle_division_instruction(instruction_t* instruction){
 
@@ -996,9 +975,15 @@ static void handle_division_instruction(instruction_t* instruction){
 
 
 /**
- * Handle a bin-op-with-const statement
- *
- * We can translate a bin op statement a few differnet ways based on the operand
+ * Handle a modulus(remainder) operation
+ */
+static void handle_modulus_instruction(instruction_t* instruction){
+
+}
+
+
+/**
+ * We can translate a bin op statement a few different ways based on the operand
  */
 static void handle_binary_operation_instruction(instruction_t* instruction){
 	//Go based on what we have as the operation
@@ -1018,6 +1003,10 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		case F_SLASH:
 			//Let the helper do it
 			handle_division_instruction(instruction);
+			break;
+		case MOD:
+			//Let the helper do it
+			handle_modulus_instruction(instruction);
 			break;
 		//Hanlde a left shift instruction
 		case L_SHIFT:
@@ -1117,6 +1106,40 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
 	
 	//We've already set the sources, now we set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
+ * Handle a lea statement(in the three address code statement form)
+ *
+ * Lea statements(by the time we get here..) have the following in them:
+ * op1: usually a memory address source
+ * op2: the offset we're adding
+ * lea_multiplicator: a multiple of 2 that we're multiplying op2 by
+ */
+static void handle_lea_statement(instruction_t* instruction){
+	//Select the size of our variable
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//This is a pretty common case
+	if(size == QUAD_WORD){
+		instruction->instruction_type = LEAQ;
+	//Everything else falls under here
+	} else {
+		instruction->instruction_type = LEAL;
+	}
+
+	//We already know what mode we'll need to use here
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+
+	//Now we can set the values
+	instruction->destination_register = instruction->assignee;
+
+	//Add op1 and op2
+	instruction->source_register = instruction->op1;
+	instruction->source_register2 = instruction->op2;
+
+	//And the lea multiplicator is already in place..
 }
 
 
@@ -1592,6 +1615,9 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 			case THREE_ADDR_CODE_ASSN_STMT:
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
 				handle_to_register_move_instruction(current);
+				break;
+			case THREE_ADDR_CODE_LEA_STMT:
+				handle_lea_statement(current);
 				break;
 			//One-to-one mapping to nop
 			case THREE_ADDR_CODE_IDLE_STMT:

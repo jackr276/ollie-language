@@ -677,6 +677,35 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 
 
 /**
+ * Print out a complex addressing mode expression
+ */
+static void print_addressing_mode_expression(instruction_t* instruction){
+	switch (instruction->calculation_mode) {
+		/**
+		 * If we get here, that means we have this kind
+		 * of address mode
+		 *
+		 * (%rax, %rbx, 2)
+		 * (source, source2, lea_mult)
+		 */
+		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE:
+			printf("(");
+			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+			printf(", ");
+			print_variable(instruction->source_register2, PRINTING_VAR_INLINE);
+			printf(", ");
+			printf("%ld", instruction->lea_multiplicator);
+			printf(")\n");
+			break;
+	
+		//Do nothing
+		default:
+			break;
+	}
+}
+
+
+/**
  * Print a constant as an immediate($ prefixed) value
  */
 static void print_immediate_value(three_addr_const_t* constant){
@@ -877,7 +906,20 @@ static void print_subtraction_instruction(instruction_t* instruction){
  * complex addressing modes
  */
 static void print_lea_instruction(instruction_t* instruction){
+	//We'll always print out the lea value and the destination first
+	if(instruction->instruction_type == LEAQ){
+		printf("leaq ");
+	} else {
+		printf("leal ");
+	}
 
+	//Now we print out the destination
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+
+	printf(", ");
+
+	//Now we'll print out one of the various complex addressing modes
+	print_addressing_mode_expression(instruction);
 }
 
 
@@ -1267,7 +1309,7 @@ void print_instruction(instruction_t* instruction){
 			print_register_to_register_move(instruction);
 			break;
 		//Handle lea printing
-		case LEA:
+		case LEAL:
 		case LEAQ:
 			//Invoke the helper
 			print_lea_instruction(instruction);
