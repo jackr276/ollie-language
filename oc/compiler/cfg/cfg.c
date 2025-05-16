@@ -2048,7 +2048,7 @@ static void rename_all_variables(cfg_t* cfg){
  */
 static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(base_type);
+	three_addr_var_t* assignee = emit_temp_var(u64);
 
 	//If the base addr is not temporary, this counts as a read
 	if(base_addr->is_temporary == FALSE){
@@ -2596,8 +2596,11 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 	generic_ast_node_t* cursor = postfix_parent->first_child;
 
 	//In theory the first child should always be some kind of postfix expression. As such, we'll first call that helper
-	//to get what we need
+	//to get what we need. We'll keep track of whatever we last assigned to in the current var
 	three_addr_var_t* current_var = emit_primary_expr_code(basic_block, cursor, use_temp, side, is_branch_ending);
+
+	//What is the current type that we've got
+	generic_type_t* current_type = current_var->type;
 
 	//Let's now advance to the next child. We will keep advancing until we hit the very end,
 	//or we hit some kind of terminal node
@@ -2617,7 +2620,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//We either have a postincrement or postdecrement here. Either way,
 			//we'll need to first save the current variable
 			//Declare a temporary here
-			three_addr_var_t* temp_var = emit_temp_var(current_var->type);
+			three_addr_var_t* temp_var = emit_temp_var(current_type);
 			
 			//Save the current variable into this new temporary one. This is what allows
 			//us to achieve the "Increment/decrement after use" effect
@@ -2647,6 +2650,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//We are officially done. What we actually give back here
 			//is not the current var, but whatever temp was assigned to it
 			return temp_var;
+
 		//Otherwise we have some kind of array access here
 		} else if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//Let's find the logical or expression that we have here. It should
@@ -2657,17 +2661,14 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//This should be guaranteed to be a pointer or array. Current var is either
 			//an array or pointer type. We'll need to extract the base type here
 
-			generic_type_t* base_type;
 			//Is this an array or a pointer
-			TYPE_CLASS class;
-
 			//We can either have an array or pointer, extract either or accordingly
-			if(current_var->type->type_class == TYPE_CLASS_ARRAY){
-				base_type = current_var->type->array_type->member_type;
-				class = TYPE_CLASS_ARRAY;
+			if(current_type->type_class == TYPE_CLASS_ARRAY){
+				//We'll dereference the current type
+				current_type = current_type->array_type->member_type;
 			} else {
-				base_type = current_var->type->pointer_type->points_to;
-				class = TYPE_CLASS_POINTER;
+				//We'll dereference the current type
+				current_type = current_type->pointer_type->points_to;
 			}
 
 			/**
@@ -2675,7 +2676,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			 *
 			 * This can be done using a lea instruction, so we will emit that directly
 			 */
-			three_addr_var_t* address = emit_lea(basic_block, current_var, offset, base_type, is_branch_ending);
+			three_addr_var_t* address = emit_lea(basic_block, current_var, offset, current_type, is_branch_ending);
 
 			//The current var is always updated to be the address
 			current_var = address;
@@ -2716,13 +2717,16 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//Remember - when we get here, current var will hold the base address of the construct
 
 			//Now we'll grab the associated construct record
-			constructed_type_field_t* field = get_construct_member(current_var->type->construct_type, var->var_name);
+			constructed_type_field_t* field = get_construct_member(current_type->construct_type, var->var_name);
 
 			//The field we have
 			symtab_variable_record_t* member = field->variable;
 
 			//The constant that represents the offset
 			three_addr_const_t* offset = emit_int_constant_direct(field->offset, type_symtab);
+
+			//This is now the member's type
+			current_type = member->type;
 
 			//Now that we have the construct field, we can calculate what we need by grabbing the offset
 			current_var = emit_construct_access_lea(basic_block, current_var, offset, is_branch_ending);
@@ -2743,7 +2747,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 					current_var->access_type = MEMORY_ACCESS_READ;
 
 					//We will perform the deref here, as we can't do it in the lea 
-					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_var->type), current_var);
+					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
@@ -2763,9 +2767,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 		}
 
 		//Advance the pointer up here
-		cursor = cursor->next_sibling;
-	}
-
+		cursor = cursor->next_sibling; }
 	return current_var;
 }
 
