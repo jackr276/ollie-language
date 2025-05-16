@@ -2678,8 +2678,6 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				current_type = current_type->pointer_type->points_to;
 			}
 
-			printf("%s\n", current_type->type_name);
-
 			/**
 			 * The formula for array subscript is: base_address + type_size * subscript
 			 * 

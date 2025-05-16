@@ -482,7 +482,12 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 	u_int32_t needed_padding;
 	
 	if(current_end < new_entry_size){
-		needed_padding = new_entry_size - current_end;
+		//If it's more than 16(i.e an array), the most we'd need is 16-byte aligned
+		if(new_entry_size > 16){
+			needed_padding = 16 - current_end;
+		} else {
+			needed_padding = new_entry_size - current_end;
+		}
 	} else {
 		needed_padding = current_end % new_entry_size;
 	}
