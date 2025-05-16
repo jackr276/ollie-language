@@ -2588,6 +2588,90 @@ static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, gene
 
 
 /**
+ * Handle a postincrement/postdecrement operation
+ */
+static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, three_addr_var_t* current_var, Token unary_operator, side_type_t side, u_int8_t is_branch_ending){
+	//This is either a postincrement or postdecrement. Regardless, we emit
+	//a temp var for this because we assign before we mutate
+
+	//Emit the temp var with the current type
+	three_addr_var_t* temp_var = emit_temp_var(current_var->type);
+
+	//Now we'll need to emit the assignment operation
+	instruction_t* assignment = emit_assignment_instruction(temp_var, current_var);
+
+	//Mark this for later
+	assignment->is_branch_ending = is_branch_ending;
+
+	//Ensure that we add this into the block
+	add_statement(basic_block, assignment);
+
+	//We'll now perform the actual operation
+	if(unary_operator == PLUSPLUS){
+		//Use the helper for this
+		emit_inc_code(basic_block, current_var, is_branch_ending);
+
+	//Otherwise we know that it has to be minusminus
+	} else {
+		//Use the helper here as well
+		emit_dec_code(basic_block, current_var, is_branch_ending);
+	}
+
+	//This is the variable that we'll use if we make use of this after
+	//the fact
+	return temp_var;
+}
+
+
+/**
+ * Emit the abstract machine code for various different kinds of postfix expressions
+ * that we could see. The two that we'll need to be concerned about are construct
+ * and array access
+ */
+static three_addr_var_t* emit_postfix_expr_code2(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
+	//We'll first want a cursor
+	generic_ast_node_t* cursor = postfix_parent->first_child;
+
+	//We should always have a primary expression first. We'll first call the primary expression
+	three_addr_var_t* current_var = emit_primary_expr_code(basic_block, cursor, use_temp, side, is_branch_ending);
+
+	//What is the type of our current variable?
+	generic_type_t* current_type = current_var->type;
+
+	//Move the cursor along
+	cursor = cursor->next_sibling;
+
+	//This will happen a lot - we'll have nowhere else to go. When that happens,
+	//all we need to do is give back the first variable
+	if(cursor == NULL){
+		return current_var;
+	
+	//We could also go right into a terminal expression like a unary operator. If so
+	//handle it and then bail
+	} else if(cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
+		//Let the helper do it
+		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, side, is_branch_ending);
+	}
+
+
+
+	//So long as we're hitting arrays or constructs, we need to be memory conscious
+	while(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
+
+	}
+
+
+	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
+	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
+		//Let the helper do it
+		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, side, is_branch_ending);
+	} else {
+		return current_var;
+	}
+}
+
+
+/**
  * Emit the abstract machine code for the various different kinds of postfix expressions
  * that we could see(array access, decrement/increment, etc)
  */
@@ -2767,7 +2851,9 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 		}
 
 		//Advance the pointer up here
-		cursor = cursor->next_sibling; }
+		cursor = cursor->next_sibling; 
+	}
+
 	return current_var;
 }
 
