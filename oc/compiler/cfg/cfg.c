@@ -2660,6 +2660,9 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 	//when we dereference
 	generic_type_t* current_type = current_var->type;
 
+	//Keep track of the array/construct variable here
+	symtab_variable_record_t* array_or_construct_var = current_var->linked_var;
+
 	//So long as we're hitting arrays or constructs, we need to be memory conscious
 	while(cursor != NULL &&
 		(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR)){
@@ -2669,6 +2672,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
 			three_addr_var_t* offset = emit_binary_operation(basic_block, cursor->first_child, is_branch_ending).assignee;
 
+			
 			//What is the internal type that we're pointing to? This will determine our scale
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
 				//We'll dereference the current type
@@ -2708,6 +2712,13 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 					current_var = emit_mem_code(basic_block, address);
 					//It's a write
 					current_var->access_type = MEMORY_ACCESS_WRITE;
+
+					//This is related to a write of a var. We'll need to set this flag for later processing
+					//by the optimizer
+					address->related_write_var = array_or_construct_var;
+					offset->related_write_var = array_or_construct_var;
+					current_var->related_write_var = array_or_construct_var;
+
 				//Otherwise we're dealing with a read
 				} else {
 					//Still emit the memory code

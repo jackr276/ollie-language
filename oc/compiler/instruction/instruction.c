@@ -34,6 +34,7 @@ static int32_t increment_and_get_temp_id(){
 	return current_temp_id;
 }
 
+
 /**
  * Declare that we are in a new function
  */

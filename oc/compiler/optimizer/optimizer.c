@@ -1058,7 +1058,6 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 }
 
 
-
 /**
  * The sweep algorithm will go through and remove every operation that has not been marked
  */
@@ -1349,70 +1348,23 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 		//out the statements that are doing it
 		
 		//Grab a cursor out	of this block. We'll need to traverse to see which statements in here are important
-		instruction_t* cursor = current->leader_statement;
+		instruction_t* cursor = current->exit_statement;
 		
 		//Run through every statement in here
 		while(cursor != NULL){
-			//The statements that really matter here are lea statements
-			if(cursor->CLASS != THREE_ADDR_CODE_LEA_STMT){
-				//Move onto the next one, this isn't what we want
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			//If we get here, we know that we have a lea statement. First, we need to check if the lea statement's "op1" is
-			//the same as our variable
-			if(cursor->op1->linked_var != var->linked_var){
-				//Move onto the next one, this isn't one that we want
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			//Save this lea statement for later
-			instruction_t* lea_stmt = cursor;
-
-			//If we make it here, we know that we have a lea statement whose assignee is an address within or array of interest
-			//Let's save that assignee for searching
-			three_addr_var_t* address = lea_stmt->assignee;
-
-			//Now that we know we're good, we need to advance until this variable is used in some way. That could either happen
-			//in a read or a write. Either way, we need to keep searching until it does happen
-
-			//Grab another cursor
-			instruction_t* assignee_used = cursor->next_statement;
-
-			//So long as this isn't NULL
-			while(assignee_used != NULL){
-				//If we're writing to this address, we need to mark that statement
-				if(variables_equal(assignee_used->assignee, address, TRUE) == TRUE){
-					//Mark the LEA too
-					if(lea_stmt->mark == FALSE){
-						//Mark it
-						lea_stmt->mark = TRUE;
-						//Add to the list
-						dynamic_array_add(worklist, lea_stmt);
-					}
-
-					//If it's not marked
-					if(assignee_used->mark == FALSE){
-						//Mark it
-						assignee_used->mark = TRUE;
-						//Add to the worklist
-						dynamic_array_add(worklist, assignee_used);
-					}
-
-					//We're done here, we've already used it
-					break;
+			//This will be in our "related write var" field. All we need to do is see
+			//if the related write field matches our var
+			if(cursor->assignee != NULL && cursor->assignee->related_write_var != NULL &&
+				cursor->assignee->related_write_var == var->linked_var){
+				//This is a case where we mark
+				if(cursor->mark == FALSE){
+					cursor->mark = TRUE;
+					dynamic_array_add(worklist, cursor);
 				}
-				
-				//Just becuase we found one doesn't mean there aren't more. The search must continue.
-				//Advance it
-				assignee_used = assignee_used->next_statement;
 			}
 
-			//Advance up
-			cursor = cursor->next_statement;
-		}
+			cursor = cursor->previous_statement;
+		}	
 	}
 }
 
@@ -1424,15 +1376,36 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
  *
  * 	2.) We are reading from a construct member: Since the location of the fields in a construct *are* known at compile time, we can optimize this one further by only
  * 	marking writes to that specific field as important
+ *
+ * Edge case: 2D array write
+ * t23 <- arr_0 + x_0 * 8
+ * t24 <- 1
+ * t25 <- t23 + t24 * 4
+ * t26 <- 3
+ * (t25) <- t26
+ *
+ * We first find where t25 is assigned
+ * We'll next reassign "looking_for" to be t23
+ * We then find where t23 is assigned, and that leads to our arr_0 reference
  */
 static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, instruction_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//Let's see what kind of statement preceeds this one. If it's a LEA statement, we could have either a pointer or an array
 	instruction_t* previous = stmt->previous_statement;
 
+	//What is the variable that we're looking for - this may change if we have an array write
+	three_addr_var_t* looking_for = variable;
+
 	//We first need to crawl back to where this variable was assigned
 	while(previous != NULL){
-		if(variables_equal(previous->assignee, variable, TRUE) == TRUE){
-			break;
+		//Does this statement assign the given variable
+		if(variables_equal(previous->assignee, looking_for, TRUE) == TRUE){
+			//If this isn't temporary, we break
+			if(previous->op1->is_temporary == FALSE){
+				break;
+			} else {
+				//Otherwise, we need to keep looking
+				looking_for = previous->op1;
+			}
 		}
 
 		//Keep going backwards

@@ -233,6 +233,8 @@ struct three_addr_var_t{
 	symtab_variable_record_t* linked_var;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
+	//What is this related to the writing of?
+	symtab_variable_record_t* related_write_var;
 	//For memory management
 	three_addr_var_t* next_created;
 	//What is the ssa generation level?
