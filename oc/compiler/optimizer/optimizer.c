@@ -1217,103 +1217,43 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
  * Mark all statements that write to a given field in a structure. We're able to be more specific
  * here because a construct's layout is determined when the parser hits it. As such, if we're only
  * ever using a certain field, we need only worry about writes to that given field
- *
  */
-static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, instruction_t* stmt){
-	//Grab these out for quick access
-	three_addr_var_t* construct_base_address = stmt->op1;
-	//And the offset
-	u_int32_t offset = stmt->op1_const->int_const;
-	
-	//Run through every single block in the CFG. We're looking for areas that calculate
-	//this value with a certain op1
+static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
+	//Run through every single block in the CFG
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
-		//Grab the block out
-		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, _);
+		//Grab the given block out
+		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, _);	
 
-		//Optimization - if this block does not match the one that we're in, and the variable
+		//If this block does not match the function that we're currently in, and the variable
 		//itself is not global, we'll skip it
-		if(construct_base_address->linked_var != NULL && construct_base_address->linked_var->function_declared_in != NULL
-		   && construct_base_address->linked_var->function_declared_in != current->function_defined_in){
-			//Skip to the next one, this block can't be what we want
+		if(var->linked_var != NULL && var->linked_var->function_declared_in != NULL &&
+			var->linked_var->function_declared_in != current->function_defined_in){
+			//Skip to the next one, this can't possibly be what we want
 			continue;
 		}
 
-		//If this block does not assign to the given variable, we don't want it
-		if(construct_base_address->is_temporary == FALSE && variable_dynamic_array_contains(current->assigned_variables, construct_base_address) == NOT_FOUND){
-			//Not in here so we don't want it
-			continue;
-		}
-
-		//Now, we know that the current block writes to this construct. What remains is to identify the statements, if any,
-		//that write to the exact location in memory that we want. 
-
-		//Grab a cursor
-		instruction_t* cursor = current->leader_statement;
-
-		//So long as this isn't NULL
+		//If we make it down here, we know that this block is writing to said memory address. Now we just need to figure
+		//out the statements that are doing it
+		
+		//Grab a cursor out	of this block. We'll need to traverse to see which statements in here are important
+		instruction_t* cursor = current->exit_statement;
+		
+		//Run through every statement in here
 		while(cursor != NULL){
-			//If it's not a "binary op with const" statement, then it can't be what we want
-			if(cursor->CLASS != THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT && cursor->CLASS != THREE_ADDR_CODE_CONSTRUCT_ACCESS_LEA_STMT){
-				//Advance the pointer and get out
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			//Now that we know it's the kind of statement that we want, we'll see if we have the
-			//right operands
-			//If these operands don't match, we're done
-			if(cursor->op1->linked_var != construct_base_address->linked_var){
-				//Advance the pointer and get out
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			//And if the constants don't have the same offset, we're also done
-			if(cursor->op1_const->int_const != offset){
-				//Advance the pointer and get out
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			//At this point, we know this is the statement that we're after
-			instruction_t* address_calc = cursor;
-
-			//Following this, we'll need to see where this is used. Let's keep crawling through to find out
-			instruction_t* assignee_used = cursor->next_statement;
-
-			//So long as this isn't NULL, we'll hunt for where this assignee is used
-			while(assignee_used != NULL){
-				//If these are the same, we've gotten what we're after
-				if(variables_equal(assignee_used->assignee, address_calc->assignee, TRUE) == TRUE){
-					//Mark the address calculation
-					if(address_calc->mark == FALSE){
-						//Add it
-						address_calc->mark = TRUE;
-						//This goes in our worklist
-						dynamic_array_add(worklist, address_calc);
-					}
-
-					//Same treatment for where we use this
-					if(assignee_used->mark == FALSE){
-						//Add it
-						assignee_used->mark = TRUE;
-						//This goes into our worklist
-						dynamic_array_add(worklist, assignee_used);
-					}
-
-					//We're done here. Remember these temporary address calc variables
-					//are single use in OIR
-					break;
+			//This will be in our "related write var" field. All we need to do is see
+			//if the related write field matches our var
+			if(cursor->assignee != NULL && cursor->assignee->related_write_var != NULL
+				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
+				&& cursor->assignee->related_write_var == var->related_write_var){
+				//This is a case where we mark
+				if(cursor->mark == FALSE){
+					cursor->mark = TRUE;
+					dynamic_array_add(worklist, cursor);
 				}
-
-				//Otherwise advance the search, keep going
-				assignee_used = assignee_used->next_statement;
 			}
 
-			//There may be more here, so we need to keep going
-			cursor = cursor->next_statement;
-		}
+			cursor = cursor->previous_statement;
+		}	
 	}
 }
 
@@ -1354,8 +1294,8 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 		while(cursor != NULL){
 			//This will be in our "related write var" field. All we need to do is see
 			//if the related write field matches our var
-			if(cursor->assignee != NULL && cursor->assignee->related_write_var != NULL &&
-				cursor->assignee->related_write_var == var->linked_var){
+			if(cursor->assignee != NULL 
+				&& cursor->assignee->related_write_var == var->linked_var){
 				//This is a case where we mark
 				if(cursor->mark == FALSE){
 					cursor->mark = TRUE;
@@ -1389,7 +1329,7 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
  * We then find where t23 is assigned, and that leads to our arr_0 reference
  */
 static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, instruction_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	//Let's see what kind of statement preceeds this one. If it's a LEA statement, we could have either a pointer or an array
+	//Let's see what kind of statement preceeds this one
 	instruction_t* previous = stmt->previous_statement;
 
 	//What is the variable that we're looking for - this may change if we have an array write
@@ -1427,8 +1367,16 @@ static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable
 	//If we get here, we know that we're doing an address calculation for a construct field. As such, we'll
 	//mark it as important
 	} else if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_CONSTRUCT){
-		//We'll pass in the entire statement here, just because we'll end up using both op1 and the op1 const
-		mark_and_add_all_construct_field_writes(cfg, worklist, previous);
+		if(previous->assignee->related_write_var == NULL){
+			printf("BAD NEWS\n");
+		}
+		
+		printf("On variable:");
+		print_variable(previous->assignee, PRINTING_VAR_INLINE);
+		printf("\n");
+
+		//Now we'll pass in the assignee. This should contain a "related_write_var" reference
+		mark_and_add_all_construct_field_writes(cfg, worklist, previous->assignee);
 	}
 }
 
