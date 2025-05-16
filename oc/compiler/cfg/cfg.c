@@ -2628,7 +2628,7 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
  * that we could see. The two that we'll need to be concerned about are construct
  * and array access
  */
-static three_addr_var_t* emit_postfix_expr_code2(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
 	//We'll first want a cursor
 	generic_ast_node_t* cursor = postfix_parent->first_child;
 
@@ -2653,13 +2653,85 @@ static three_addr_var_t* emit_postfix_expr_code2(basic_block_t* basic_block, gen
 		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, side, is_branch_ending);
 	}
 
+	//If we get here we know that we have at least one construct/array access statement
 
+	//The currently calculated address
+	three_addr_var_t* current_address = NULL;
 
 	//So long as we're hitting arrays or constructs, we need to be memory conscious
-	while(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
+	while(cursor != NULL &&
+		(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR)){
 
+		//First of two potentialities is the array accessor
+		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
+			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
+			three_addr_var_t* offset = emit_binary_operation(basic_block, cursor->first_child, is_branch_ending).assignee;
+
+			//What is the internal type that we're pointing to? This will determine our scale
+			if(current_type->type_class == TYPE_CLASS_ARRAY){
+				//We'll dereference the current type
+				current_type = current_type->array_type->member_type;
+			} else {
+				//We'll dereference the current type
+				current_type = current_type->pointer_type->points_to;
+			}
+
+			/**
+			 * The formula for array subscript is: base_address + type_size * subscript
+			 * 
+			 * However, if we're on our second or third round, the current var may be an address
+			 *
+			 * This can be done using a lea instruction, so we will emit that directly
+			 */
+			three_addr_var_t* address;
+			//Calculate the address using the current var or current address
+			if(current_address == NULL){
+				address = emit_lea(basic_block, current_var, offset, current_type, is_branch_ending);
+			} else {
+				address = emit_lea(basic_block, current_address, offset, current_type, is_branch_ending);
+			}
+
+			//Now this is the current address
+			current_address = address;
+
+			//If we see that the next sibling is NULL or it's not an array accessor(i.e. construct accessor),
+			//we're done here. We'll emit our memory code and leave this part of the loop
+			if(cursor->next_sibling == NULL || cursor->next_sibling->CLASS != AST_NODE_CLASS_ARRAY_ACCESSOR){
+				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
+				if(side == SIDE_TYPE_LEFT){
+					//Emit the indirection for this one
+					current_var = emit_mem_code(basic_block, current_var);
+					//It's a write
+					current_var->access_type = MEMORY_ACCESS_WRITE;
+				//Otherwise we're dealing with a read
+				} else {
+					//Still emit the memory code
+					current_var = emit_mem_code(basic_block, address);
+					//It's a read
+					current_var->access_type = MEMORY_ACCESS_READ;
+
+					//We will perform the deref here, as we can't do it in the lea 
+					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+					//Is this branch ending?
+					deref_stmt->is_branch_ending = is_branch_ending;
+					//And add it in
+					add_statement(basic_block, deref_stmt);
+
+					//Update the current bar too
+					current_var = deref_stmt->assignee;
+				}
+			}
+
+		//This has to be a construct accessor, we've no other choice
+		} else {
+
+		}
+
+		//Advance to the next sibling 
+		cursor = cursor->next_sibling;
 	}
 
+	//We
 
 	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
 	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
@@ -2675,7 +2747,7 @@ static three_addr_var_t* emit_postfix_expr_code2(basic_block_t* basic_block, gen
  * Emit the abstract machine code for the various different kinds of postfix expressions
  * that we could see(array access, decrement/increment, etc)
  */
-static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_postfix_expr_code2(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
 	//The very first child should be some kind of prefix expression
 	generic_ast_node_t* cursor = postfix_parent->first_child;
 
