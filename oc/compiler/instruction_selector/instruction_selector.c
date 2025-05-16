@@ -2265,7 +2265,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  We can also go one further by performing the said multiplication to get out the value that we want
 	 */
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT && 1 == 0){
 		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
 		if(window->instruction1->assignee->is_temporary == TRUE &&
 	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){

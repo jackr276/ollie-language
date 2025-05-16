@@ -2,10 +2,10 @@
 * This program is made for the purposes of testing case statements
 */
 
-fn main(arg:i32, argv:char**) -> i32{
+fn not_main(arg:i32, argv:char**) -> i64 {
 	define construct my_struct{
 		mut ch:char;
-		mut x:i32;
+		mut x:i64;
 		mut lch:char;
 		mut y:i32;
 
@@ -27,8 +27,14 @@ fn main(arg:i32, argv:char**) -> i32{
 	}
 
 	//structure:x := 7;
-	let x:i32 := structure:x;
+	let x:i64 := structure:x;
 
 	//So it isn't optimized away
 	ret x;
+}
+
+
+fn main(arg:i32, argv:char**) -> i32{
+	@not_main(arg, argv);
+	ret arg;
 }

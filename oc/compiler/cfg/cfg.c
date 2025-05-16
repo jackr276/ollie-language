@@ -39,6 +39,8 @@ symtab_function_record_t* current_function;
 basic_block_t* function_exit_block = NULL;
 //Keep ahold of our stack pointer
 symtab_variable_record_t* stack_pointer = NULL;
+//Store this for usage
+generic_type_t* u64 = NULL;
 
 //A package of values that each visit function uses
 typedef struct {
@@ -2045,7 +2047,7 @@ static void rename_all_variables(cfg_t* cfg){
  * form of address computations
  */
 static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
-	//We need a new temp var for the assignee
+	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(base_type);
 
 	//If the base addr is not temporary, this counts as a read
@@ -2055,6 +2057,32 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 
 	//Now we leverage the helper to emit this
 	instruction_t* stmt = emit_lea_instruction(assignee, base_addr, offset, base_type->type_size);
+
+	//Mark this with whatever was passed through
+	stmt->is_branch_ending = is_branch_ending;
+
+	//Now add the statement into the block
+	add_statement(basic_block, stmt);
+
+	//And give back the assignee
+	return assignee;
+}
+
+
+/**
+ * Emit a construct access lea statement
+ */
+static three_addr_var_t* emit_construct_access_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
+	//We need a new temp var for the assignee. We know it's an address always
+	three_addr_var_t* assignee = emit_temp_var(u64);
+
+	//If the base addr is not temporary, this counts as a read
+	if(base_addr->is_temporary == FALSE){
+		add_used_variable(basic_block, base_addr);
+	}
+
+	//Now we leverage the helper to emit this
+	instruction_t* stmt = emit_construct_access_lea_instruction(assignee, base_addr, offset);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2636,9 +2664,6 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//We can either have an array or pointer, extract either or accordingly
 			if(current_var->type->type_class == TYPE_CLASS_ARRAY){
 				base_type = current_var->type->array_type->member_type;
-				//if(base_type->type_class == TYPE_CLASS_ARRAY){
-				//	base_type = base_type->array_type->member_type;
-				//}
 				class = TYPE_CLASS_ARRAY;
 			} else {
 				base_type = current_var->type->pointer_type->points_to;
@@ -2700,13 +2725,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			three_addr_const_t* offset = emit_int_constant_direct(field->offset, type_symtab);
 
 			//Now that we have the construct field, we can calculate what we need by grabbing the offset
-			instruction_t* address_calc = emit_binary_operation_with_const_instruction(emit_temp_var(member->type), current_var, PLUS, offset);
-
-			//Add this into the block
-			add_statement(basic_block, address_calc);
-
-			//The current var is the address we've created
-			current_var = address_calc->assignee;
+			current_var = emit_construct_access_lea(basic_block, current_var, offset, is_branch_ending);
 
 			//Do we need to do more memory work? We can tell if the array accessor node is next
 			if(cursor->next_sibling == NULL || cursor->next_sibling->CLASS != AST_NODE_CLASS_ARRAY_ACCESSOR){
@@ -5718,6 +5737,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Add this in
 	type_symtab = results.type_symtab;
+
+	//Keep this on hand
+	u64 = lookup_type(type_symtab, "u64")->type;
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));

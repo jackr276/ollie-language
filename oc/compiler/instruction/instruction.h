@@ -213,6 +213,8 @@ typedef enum{
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
 	//A "Load effective address(lea)" instruction
 	THREE_ADDR_CODE_LEA_STMT,
+	//A construct access version of the same thing
+	THREE_ADDR_CODE_CONSTRUCT_ACCESS_LEA_STMT,
 	//An indirect jump address calculation instruction, very similar to lea
 	THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT,
 	//A phi function - for SSA analysis only
@@ -384,6 +386,11 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* type)
  * Emit a statement that is in LEA form
  */
 instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
+
+/**
+ * Emit a construct access lea instruction
+ */
+instruction_t* emit_construct_access_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* const_offset);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form

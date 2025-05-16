@@ -118,6 +118,7 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	return emitted_var;
 }
 
+
 /**
  * Emit a statement that is in LEA form
  */
@@ -133,8 +134,27 @@ instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t
 	stmt->lea_multiplicator = type_size;
 	//What function are we in
 	stmt->function = current_function;
-	//This is an address, so it must be a quad word
-	assignee->variable_size = QUAD_WORD;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a construct access lea statement
+ */
+instruction_t* emit_construct_access_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* const_offset){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->CLASS = THREE_ADDR_CODE_CONSTRUCT_ACCESS_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op1_const = const_offset;
+	//We don't need the multiplicator here
+	//What function are we in
+	stmt->function = current_function;
 
 	//And now we give it back
 	return stmt;
@@ -590,13 +610,30 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 		if(stmt->op1_const != NULL){
 			//Print the constant out
 			print_three_addr_constant(stmt->op1_const);
+			printf("\n");
 		} else {
 			//Then we have the third one, times some multiplier
 			print_variable(stmt->op2, PRINTING_VAR_INLINE);
+			//And the finishing sequence
+			printf(" * %ld\n", stmt->lea_multiplicator);
 		}
 
-		//And the finishing sequence
-		printf(" * %ld\n", stmt->lea_multiplicator);
+	//A special kind of construct access lea
+	} else if(stmt->CLASS == THREE_ADDR_CODE_CONSTRUCT_ACCESS_LEA_STMT){
+		//Var name comes first
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+
+		//Print the assignment operator
+		printf(" <- ");
+
+		//Now print out the rest in order
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+		//Then we have a plus
+		printf(" + ");
+
+		//Print the constant out
+		print_three_addr_constant(stmt->op1_const);
+		printf("\n");
 
 	//Print out a phi function 
 	} else if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){

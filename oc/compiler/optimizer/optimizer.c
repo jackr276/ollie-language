@@ -1255,7 +1255,7 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
 		//So long as this isn't NULL
 		while(cursor != NULL){
 			//If it's not a "binary op with const" statement, then it can't be what we want
-			if(cursor->CLASS != THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+			if(cursor->CLASS != THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT && cursor->CLASS != THREE_ADDR_CODE_CONSTRUCT_ACCESS_LEA_STMT){
 				//Advance the pointer and get out
 				cursor = cursor->next_statement;
 				continue;
