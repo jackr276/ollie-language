@@ -1317,6 +1317,23 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
 				if(cursor->mark == FALSE){
 					cursor->mark = TRUE;
 					dynamic_array_add(worklist, cursor);
+
+					//Keep track of the old assignee
+					three_addr_var_t* old_assignee = cursor->assignee;
+
+					//Push it back by one to start
+					cursor = cursor->previous_statement;
+
+					//Keep going so long as we don't know where this came from. We need to ignore
+					//indirection levels for this to work
+					while(variables_equal(old_assignee, cursor->assignee, TRUE) == FALSE){
+						cursor = cursor->previous_statement;
+					}
+
+					//Once we get here we know we got it
+					cursor->mark = TRUE;
+					dynamic_array_add(worklist, cursor);
+
 				}
 			}
 
