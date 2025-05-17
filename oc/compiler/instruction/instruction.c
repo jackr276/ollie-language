@@ -715,6 +715,44 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 
 
 /**
+ * Print a constant as an immediate($ prefixed) value
+ */
+static void print_immediate_value(three_addr_const_t* constant){
+	//We'll now interpret what we have here
+	if(constant->const_type == INT_CONST){
+		printf("$%d", constant->int_const);
+	} else if(constant->const_type == HEX_CONST){
+		printf("$0x%x", constant->int_const);
+	} else if(constant->const_type == LONG_CONST){
+		printf("$%ld", constant->long_const);
+	} else if(constant->const_type == FLOAT_CONST){
+		printf("$%f", constant->float_const);
+	} else if(constant->const_type == CHAR_CONST){
+		printf("$%d", constant->char_const);
+	} 
+}
+
+
+/**
+ * Print a constant as an immediate(not $ prefixed) value
+ */
+static void print_immediate_value_no_prefix(three_addr_const_t* constant){
+	//We'll now interpret what we have here
+	if(constant->const_type == INT_CONST){
+		printf("%d", constant->int_const);
+	} else if(constant->const_type == HEX_CONST){
+		printf("0x%x", constant->int_const);
+	} else if(constant->const_type == LONG_CONST){
+		printf("%ld", constant->long_const);
+	} else if(constant->const_type == FLOAT_CONST){
+		printf("%f", constant->float_const);
+	} else if(constant->const_type == CHAR_CONST){
+		printf("%d", constant->char_const);
+	} 
+}
+
+
+/**
  * Print out a complex addressing mode expression
  */
 static void print_addressing_mode_expression(instruction_t* instruction){
@@ -735,30 +773,26 @@ static void print_addressing_mode_expression(instruction_t* instruction){
 			printf("%ld", instruction->lea_multiplicator);
 			printf(")\n");
 			break;
-	
+
+		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
+			print_immediate_value_no_prefix(instruction->offset);
+			printf("(");
+			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+			printf(")\n");
+			break;
+
+		case ADDRESS_CALCULATION_MODE_REGISTERS_ONLY:
+			printf("(");
+			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+			printf(", ");
+			print_variable(instruction->source_register2, PRINTING_VAR_INLINE);
+			printf(")");
+			break;
+			
 		//Do nothing
 		default:
 			break;
 	}
-}
-
-
-/**
- * Print a constant as an immediate($ prefixed) value
- */
-static void print_immediate_value(three_addr_const_t* constant){
-	//We'll now interpret what we have here
-	if(constant->const_type == INT_CONST){
-		printf("$%d", constant->int_const);
-	} else if(constant->const_type == HEX_CONST){
-		printf("$0x%x", constant->int_const);
-	} else if(constant->const_type == LONG_CONST){
-		printf("$%ld", constant->long_const);
-	} else if(constant->const_type == FLOAT_CONST){
-		printf("$%f", constant->float_const);
-	} else if(constant->const_type == CHAR_CONST){
-		printf("$%d", constant->char_const);
-	} 
 }
 
 

@@ -146,10 +146,10 @@ typedef enum{
  */
 typedef enum{
 	ADDRESS_CALCULATION_MODE_NONE = 0, //default is always none
-	ADDRESS_CALCULATION_MODE_CONST_ONLY, // 4(%rax)
+	ADDRESS_CALCULATION_MODE_OFFSET_ONLY, // 4(%rax)
 	ADDRESS_CALCULATION_MODE_REGISTERS_ONLY, // (%rax, %rcx)
+	ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET, // 4(%rax, %rcx)
 	ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE, // (%rax, rcx, 8)
-
 } address_calculation_mode_t;
 
 /**
@@ -307,7 +307,7 @@ struct instruction_t{
 	 * (<source>/<dest>, <register_additive>) = <source>/<dest> + <register_additive>
 	 * Register additive stored in varibale register_additive
 	 */
-	three_addr_const_t* constant_additive;
+	three_addr_const_t* offset;
 	//The offset
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;

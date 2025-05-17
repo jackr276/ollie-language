@@ -2715,8 +2715,6 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 					//This is related to a write of a var. We'll need to set this flag for later processing
 					//by the optimizer
 					current_var->related_write_var = array_or_construct_var;
-					print_variable(current_var, PRINTING_VAR_INLINE);
-					printf(" has related var: %s\n", current_var->related_write_var->var_name);
 
 				//Otherwise we're dealing with a read
 				} else {

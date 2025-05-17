@@ -503,6 +503,24 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 
 
 /**
+ * A very simple helper function that selects the right lea instruction based
+ * solely on variable size. Done to avoid code duplication
+ */
+static instruction_type_t select_lea_instruction(variable_size_t size){
+	//Go based on size
+	switch(size){
+		case WORD:
+		case DOUBLE_WORD:
+			return LEAL;
+		case QUAD_WORD:
+			return LEAQ;
+		default:
+			return LEAQ;
+	}
+}
+
+
+/**
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
@@ -883,6 +901,13 @@ static void handle_subtraction_instruction(instruction_t* instruction){
 
 /**
  * Handle an addition operation
+ *
+ * There are 2 varieties of addition instructions, we can split based on if
+ * op1 and assignee are the same
+ *
+ * CASE 1:
+ * t23 <- t23 + 34
+ * addl $34, t23
  */
 static void handle_addition_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
@@ -900,6 +925,43 @@ static void handle_addition_instruction(instruction_t* instruction){
 	} else {
 		//Otherwise grab the immediate source
 		instruction->source_immediate = instruction->op1_const;
+	}
+}
+
+
+/**
+ * Handle the case where we have different assignee and op1 values
+ * 
+ * CASE 2:
+ * t25 <- t15 + t17
+ * leal t25, (t15, t17)
+ */
+static void handle_addition_instruction_lea_modification(instruction_t* instruction){
+	//Determines what instruction to use
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//Now we'll get the appropriate lea instruction
+	instruction->instruction_type = select_lea_instruction(size);
+
+	//We always know what the destination register will be
+	instruction->destination_register = instruction->assignee;
+
+	//We always have this
+	instruction->source_register = instruction->op1;
+
+	//Now, we'll need to set the appropriate address calculation mode based
+	//on what we're given
+	//If we have op2, we'll have 2 registers
+	if(instruction->op2 != NULL){
+		//2 registers in this case
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+		instruction->source_register2 = instruction->op2;
+
+	//Otherise it's just an offset
+	} else {
+		//We'll just have an offset here
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		instruction->offset = instruction->op1_const;
 	}
 }
 
@@ -972,9 +1034,30 @@ static void handle_modulus_instruction(instruction_t* instruction){
 static void handle_binary_operation_instruction(instruction_t* instruction){
 	//Go based on what we have as the operation
 	switch(instruction->op){
+		/**
+		 * 2 options here
+		 *
+		 * CASE 1:
+		 * t23 <- t23 + 34
+		 * addl $34, t23
+		 *
+		 * OR
+		 *
+		 * CASE 2:
+		 * t25 <- t15 + t17
+		 * leal t25, (t15, t17)
+		 */
 		case PLUS:
-			//Let the helper do it
-			handle_addition_instruction(instruction);
+			//This is our first case
+			if(variables_equal(instruction->op1, instruction->assignee, FALSE) == TRUE){
+				//Let the helper do it
+				handle_addition_instruction(instruction);
+			//Otherwise we need to handle case 2
+			} else {
+				//Let this different version do it
+				handle_addition_instruction_lea_modification(instruction);
+			}
+
 			break;
 		case MINUS:
 			//Let the helper do it
