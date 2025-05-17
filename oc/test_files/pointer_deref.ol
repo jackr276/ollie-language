@@ -3,7 +3,7 @@ fn main(argc:i32, argv:char**) -> i32 {
 	
 	let mut y:u32* := &x;
 
-	*(y + 1) := 32;
+	*y := 32 + *y;
 
 	ret *y;
 }

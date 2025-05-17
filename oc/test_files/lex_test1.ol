@@ -14,7 +14,7 @@ fn test_func(my_float:u32, ptr:void*) -> void{
 
 	declare mut my_arr:i32[100];
 
-	my_arr[3] := 2.23;
+	my_arr[3] := 2;
 
 	let my:void := ptr;
 	let z:i32 := 3;
