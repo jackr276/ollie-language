@@ -1451,6 +1451,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
 		&& window->instruction2->assignee->indirection_level == 1){
 
+		printf("HERE\n");
+
 		/*
 		//Use the helper to keep things somewhat clean in here
 		handle_address_calc_to_memory_move(window->instruction1, window->instruction2);
@@ -2245,9 +2247,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  into the lea statement.
 	 *
 	 *  We can also go one further by performing the said multiplication to get out the value that we want
+	 *
+	 * NOTE: This will actually produce invalid binary operation instructions in the short run. However, 
+	 * when the instruction selector gets to them, we will turn them into memory move operations
 	 */
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT && 1 == 0){
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
 		if(window->instruction1->assignee->is_temporary == TRUE &&
 	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
@@ -2310,6 +2315,52 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 	
+	/**
+	 * ============================== Redundant copy folding =======================
+	 * If we have some random temp assignment that's in the middle of everything, we can
+	 * fold it to get rid of it
+	 *
+	 * t12 <- arr_0 + 476 
+	 * t14 <- t12 <----------- assignment that's leftover from other simplifications
+	 * (t14) <- 2
+	 */
+	if(window->instruction1 != NULL && window->instruction2 != NULL && window->instruction3 != NULL
+	 	&& window->instruction1->assignee != NULL && window->instruction3->assignee != NULL
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2->assignee->is_temporary == TRUE
+		&& window->instruction2->op1->is_temporary == TRUE
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
+
+		//The third instruction's assignee is now going to be the first instruction's assignee
+		three_addr_var_t* old_assignee = window->instruction3->assignee;
+
+		//Emit a copy of this one
+		window->instruction3->assignee = emit_var_copy(window->instruction1->assignee);
+
+		//Now we'll be sure to update the indirection level
+		window->instruction3->assignee->indirection_level = old_assignee->indirection_level;
+
+		//We can remove the second instruction
+		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+
+		//We'll need to update the window now
+		window->instruction2 = window->instruction3;
+		window->instruction3 = window->instruction2->next_statement;
+
+		//Update the window status
+		set_window_status(window);
+		
+		//This counts as a change
+		changed = TRUE;
+
+		//If we make it here we know that we have a case where this is doable
+		printf("FOUND OPPORTUNITY\n");
+
+	}
+
+
+
 	/**
 	 * =================== Adjacent assignment statement folding ====================
 	 * If we have a binary operation or a bin op with const statement followed by an
