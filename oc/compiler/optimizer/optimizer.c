@@ -1247,6 +1247,23 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
 				&& cursor->assignee->related_write_var == var->related_write_var){
 				//This is a case where we mark
 				if(cursor->mark == FALSE){
+					//Mark the statement itself
+					cursor->mark = TRUE;
+					dynamic_array_add(worklist, cursor);
+
+					//Keep track of the old assignee
+					three_addr_var_t* old_assignee = cursor->assignee;
+
+					//Push it back by one to start
+					cursor = cursor->previous_statement;
+
+					//Keep going so long as we don't know where this came from. We need to ignore
+					//indirection levels for this to work
+					while(variables_equal(old_assignee, cursor->assignee, TRUE) == FALSE){
+						cursor = cursor->previous_statement;
+					}
+
+					//Once we get here we know we got it
 					cursor->mark = TRUE;
 					dynamic_array_add(worklist, cursor);
 				}
@@ -1329,54 +1346,55 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
  * We then find where t23 is assigned, and that leads to our arr_0 reference
  */
 static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, instruction_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+	//This means that we have a construct write
+	if(stmt->assignee->related_write_var != NULL && stmt->assignee->related_write_var->is_construct_member == TRUE){
+		//Mark all of these writes
+		mark_and_add_all_construct_field_writes(cfg, worklist, stmt->assignee);
+
+		//And we're done
+		return;
+	}
+
+	//Otherwise, we know that we have an array
+
 	//Let's see what kind of statement preceeds this one
-	instruction_t* previous = stmt->previous_statement;
+	instruction_t* current = stmt->previous_statement;
 
 	//What is the variable that we're looking for - this may change if we have an array write
 	three_addr_var_t* looking_for = variable;
 
 	//We first need to crawl back to where this variable was assigned
-	while(previous != NULL){
+	while(current != NULL){
 		//Does this statement assign the given variable
-		if(variables_equal(previous->assignee, looking_for, TRUE) == TRUE){
+		if(variables_equal(current->assignee, looking_for, TRUE) == TRUE){
 			//If this isn't temporary, we break
-			if(previous->op1->is_temporary == FALSE){
+			if(current->op1->is_temporary == FALSE){
 				break;
 			} else {
 				//Otherwise, we need to keep looking
-				looking_for = previous->op1;
+				looking_for = current->op1;
 			}
 		}
 
 		//Keep going backwards
-		previous = previous->previous_statement;
+		current = current->previous_statement;
 	}
 
 	//Now that we get here, we know that previous holds the statement where this variable, which is an address,
 	//was assigned
 
 	//We know that we have an array if the previous statement's operand is one
-	if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_ARRAY){
+	if(current->op1 != NULL && current->op1->type->type_class == TYPE_CLASS_ARRAY){
 		//Now that we've made it here, we need to mark all times that this "op1" has been
 		//written to. Since we are unable to determine *which* array addresses are written
 		//to at compile time, we need to indiscriminantly mark all times that this array is written
 		//to
 		//When calling here, we know that op1 is the array base address that we're writing to
-		mark_and_add_all_array_writes(cfg, worklist, previous->op1);
+		mark_and_add_all_array_writes(cfg, worklist, current->op1);
 
-	//If we get here, we know that we're doing an address calculation for a construct field. As such, we'll
-	//mark it as important
-	} else if(previous->op1 != NULL && previous->op1->type->type_class == TYPE_CLASS_CONSTRUCT){
-		if(previous->assignee->related_write_var == NULL){
-			printf("BAD NEWS\n");
-		}
-		
-		printf("On variable:");
-		print_variable(previous->assignee, PRINTING_VAR_INLINE);
-		printf("\n");
-
-		//Now we'll pass in the assignee. This should contain a "related_write_var" reference
-		mark_and_add_all_construct_field_writes(cfg, worklist, previous->assignee);
+	} else {
+		printf("FATAL MEMORY MARKER ERROR\n");
+		exit(1);
 	}
 }
 

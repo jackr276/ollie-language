@@ -26,6 +26,9 @@ fn not_main(arg:i32, argv:char**) -> i64 {
 		structure:y := 5;
 	}
 
+	//Useless assign
+	let mut z:i64 := structure:x;
+
 	//structure:x := 7;
 	let x:i64 := structure:x;
 
