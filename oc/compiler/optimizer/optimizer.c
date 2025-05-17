@@ -1218,7 +1218,7 @@ static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, 
  * here because a construct's layout is determined when the parser hits it. As such, if we're only
  * ever using a certain field, we need only worry about writes to that given field
  */
-static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
+static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
 	//Run through every single block in the CFG
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the given block out
@@ -1276,152 +1276,6 @@ static void mark_and_add_all_construct_field_writes(cfg_t* cfg, dynamic_array_t*
 
 
 /**
- * Mark all statements that write to a given array. We are unable
- * to be discriminating here. If one array write is marked as important,
- * then every other write to that same array is going to be marked as important
- *
- * NOTE: var is the base address of the array that we're writing to
- */
-static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
-	//Run through every single block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
-		//Grab the given block out
-		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, _);	
-
-		//If this block does not match the function that we're currently in, and the variable
-		//itself is not global, we'll skip it
-		if(var->linked_var != NULL && var->linked_var->function_declared_in != NULL &&
-			var->linked_var->function_declared_in != current->function_defined_in){
-			//Skip to the next one, this can't possibly be what we want
-			continue;
-		}
-		
-		//Check to see if this blocks assigns said variable
-		if(var->is_temporary == FALSE && variable_dynamic_array_contains(current->assigned_variables, var) == NOT_FOUND){
-			continue;
-		}
-
-		//If we make it down here, we know that this block is writing to said memory address. Now we just need to figure
-		//out the statements that are doing it
-		
-		//Grab a cursor out	of this block. We'll need to traverse to see which statements in here are important
-		instruction_t* cursor = current->exit_statement;
-		
-		//Run through every statement in here
-		while(cursor != NULL){
-			//This will be in our "related write var" field. All we need to do is see
-			//if the related write field matches our var
-			if(cursor->assignee != NULL 
-				&& cursor->assignee->related_write_var == var->linked_var){
-				//This is a case where we mark
-				if(cursor->mark == FALSE){
-					cursor->mark = TRUE;
-					dynamic_array_add(worklist, cursor);
-
-					//Keep track of the old assignee
-					three_addr_var_t* old_assignee = cursor->assignee;
-
-					//Push it back by one to start
-					cursor = cursor->previous_statement;
-
-					//Keep going so long as we don't know where this came from. We need to ignore
-					//indirection levels for this to work
-					while(variables_equal(old_assignee, cursor->assignee, TRUE) == FALSE){
-						cursor = cursor->previous_statement;
-					}
-
-					//Once we get here we know we got it
-					cursor->mark = TRUE;
-					dynamic_array_add(worklist, cursor);
-
-				}
-			}
-
-			cursor = cursor->previous_statement;
-		}	
-	}
-}
-
-
-/**
- * Handle marking in the event that we're reading from a memory address. If we're reading from a memory address, there are two options that we need to consider:
- * 	1.) We are reading from an array: Since an array is just a contiguous chunk of memory, it is not possible for us to determine *which* area of that
- * 	memory we are reading from at compile time reliably. As such, if a read from an array is marked as important, than any/all writes to that array are also important
- *
- * 	2.) We are reading from a construct member: Since the location of the fields in a construct *are* known at compile time, we can optimize this one further by only
- * 	marking writes to that specific field as important
- *
- * Edge case: 2D array write
- * t23 <- arr_0 + x_0 * 8
- * t24 <- 1
- * t25 <- t23 + t24 * 4
- * t26 <- 3
- * (t25) <- t26
- *
- * We first find where t25 is assigned
- * We'll next reassign "looking_for" to be t23
- * We then find where t23 is assigned, and that leads to our arr_0 reference
- */
-static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, instruction_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	//This means that we have a construct write
-	if(stmt->assignee->related_write_var != NULL){
-		if(stmt->assignee->related_write_var->is_construct_member == TRUE){
-			//Mark all of these writes
-			mark_and_add_all_construct_field_writes(cfg, worklist, stmt->assignee);
-
-			//And we're done
-			return;
-		} else {
-			print_variable(stmt->assignee, PRINTING_VAR_INLINE);
-			printf(" has related write var %s\n", stmt->assignee->related_write_var->var_name);
-		}
-	}
-
-	//Otherwise, we know that we have an array
-
-	//Let's see what kind of statement preceeds this one
-	instruction_t* current = stmt->previous_statement;
-
-	//What is the variable that we're looking for - this may change if we have an array write
-	three_addr_var_t* looking_for = variable;
-
-	//We first need to crawl back to where this variable was assigned
-	while(current != NULL){
-		//Does this statement assign the given variable
-		if(variables_equal(current->assignee, looking_for, TRUE) == TRUE){
-			//If this isn't temporary, we break
-			if(current->op1->is_temporary == FALSE){
-				break;
-			} else {
-				//Otherwise, we need to keep looking
-				looking_for = current->op1;
-			}
-		}
-
-		//Keep going backwards
-		current = current->previous_statement;
-	}
-
-	//Now that we get here, we know that previous holds the statement where this variable, which is an address,
-	//was assigned
-
-	//We know that we have an array if the previous statement's operand is one
-	if(current->op1 != NULL && current->op1->type->type_class == TYPE_CLASS_ARRAY){
-		//Now that we've made it here, we need to mark all times that this "op1" has been
-		//written to. Since we are unable to determine *which* array addresses are written
-		//to at compile time, we need to indiscriminantly mark all times that this array is written
-		//to
-		//When calling here, we know that op1 is the array base address that we're writing to
-		mark_and_add_all_array_writes(cfg, worklist, current->op1);
-
-	} else {
-		printf("FATAL MEMORY MARKER ERROR\n");
-		exit(1);
-	}
-}
-
-
-/**
  * Mark definitions(assignment) of a three address variable within
  * the current function. If a definition is not marked, it must be added to the worklist
  */
@@ -1437,7 +1291,7 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 	//in memory as important
 	if(variable->access_type == MEMORY_ACCESS_READ){
 		//Use the helper for memory address marking
-		handle_memory_address_marking(cfg, variable, stmt, current_function, worklist);
+		mark_and_add_all_field_writes(cfg, worklist, stmt->assignee);
 	}
 
 	//Run through everything here

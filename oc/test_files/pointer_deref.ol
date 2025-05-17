@@ -1,7 +1,9 @@
 fn main(argc:i32, argv:char**) -> i32 {
-	let x:u32 := 32;
+	let mut x:u32 := 32;
 	
-	let y:u32* := &x;
+	let mut y:u32* := &x;
+
+	*(y + 1) := 32;
 
 	ret *y;
 }
