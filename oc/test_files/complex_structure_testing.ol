@@ -15,7 +15,7 @@ fn main(arg:i32, argv:char**) -> i32{
 
 	structure:ch := 'a';
 	structure:x[3] := 3;
-	//structure:x[5] := 2;
+	structure:x[5] := 2;
 	structure:lch := 'b';
 	structure:y := 5;
 

@@ -574,15 +574,7 @@ variable_size_t select_constant_size(three_addr_const_t* constant){
  */
 static void handle_address_calc_to_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
 	//Select the variable size
-	variable_size_t size;
-
-	//Select the appropriate size for later
-	if(memory_access->op1 != NULL){
-		size = select_variable_size(memory_access->op1);
-	//Otherwise it must be a constant
-	} else {
-		size = select_constant_size(memory_access->op1_const);
-	}
+	variable_size_t size = select_variable_size(memory_access->assignee);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
@@ -623,15 +615,7 @@ static void handle_address_calc_to_memory_move(instruction_t* address_calculatio
  */
 static void handle_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
 	//Select the variable size
-	variable_size_t size;
-
-	//Select the appropriate size for later
-	if(memory_access->op1 != NULL){
-		size = select_variable_size(memory_access->op1);
-	//Otherwise it must be a constant
-	} else {
-		size = select_constant_size(memory_access->op1_const);
-	}
+	variable_size_t size = select_variable_size(memory_access->assignee);
 
 	//Use the helper to get the right sized move instruction
 	memory_access->instruction_type = select_move_instruction(size);
@@ -1087,16 +1071,14 @@ static void handle_dec_instruction(instruction_t* instruction){
  */
 static void handle_to_register_move_instruction(instruction_t* instruction){
 	//Select the variable size
-	variable_size_t size;
+	variable_size_t size = select_variable_size(instruction->assignee);
 
-	//Select the appropriate size for later
+	//Set the source appropriately for later
 	if(instruction->op1 != NULL){
-		size = select_variable_size(instruction->op1);
-		//May as well set this here
+		//We'll have a register source
 		instruction->source_register = instruction->op1;
 	//Otherwise it must be a constant
 	} else {
-		size = select_constant_size(instruction->op1_const);
 		//Set this as well if we can
 		instruction->source_immediate = instruction->op1_const;
 	}
