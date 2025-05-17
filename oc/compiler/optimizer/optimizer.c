@@ -1364,12 +1364,17 @@ static void mark_and_add_all_array_writes(cfg_t* cfg, dynamic_array_t* worklist,
  */
 static void handle_memory_address_marking(cfg_t* cfg, three_addr_var_t* variable, instruction_t* stmt, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//This means that we have a construct write
-	if(stmt->assignee->related_write_var != NULL && stmt->assignee->related_write_var->is_construct_member == TRUE){
-		//Mark all of these writes
-		mark_and_add_all_construct_field_writes(cfg, worklist, stmt->assignee);
+	if(stmt->assignee->related_write_var != NULL){
+		if(stmt->assignee->related_write_var->is_construct_member == TRUE){
+			//Mark all of these writes
+			mark_and_add_all_construct_field_writes(cfg, worklist, stmt->assignee);
 
-		//And we're done
-		return;
+			//And we're done
+			return;
+		} else {
+			print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+			printf(" has related write var %s\n", stmt->assignee->related_write_var->var_name);
+		}
 	}
 
 	//Otherwise, we know that we have an array

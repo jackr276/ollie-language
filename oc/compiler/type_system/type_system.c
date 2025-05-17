@@ -553,7 +553,10 @@ void finalize_construct_alignment(generic_type_t* type){
 	type->construct_type->construct_table[type->construct_type->next_index - 1].padding = needed_padding;
 
 	//Increment the size accordingly
-	type->type_size += needed_padding;
+	type->construct_type->size += needed_padding;
+
+	//Now we move this over to size
+	type->type_size = type->construct_type->size;
 }
 
 
