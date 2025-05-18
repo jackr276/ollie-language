@@ -1184,8 +1184,19 @@ static void handle_dec_instruction(instruction_t* instruction){
  * Handle a regular move condition
  */
 static void handle_to_register_move_instruction(instruction_t* instruction){
-	//Select the variable size
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size;
+
+	//Select the variable size based on the assignee, unless it's an address
+	if(instruction->assignee->indirection_level == 0){
+		size = select_variable_size(instruction->assignee);
+	} else {
+		if(instruction->op1 != NULL){
+			size = select_variable_size(instruction->op1);
+		} else {
+			//Use the const
+			size = select_constant_size(instruction->op1_const);
+		}
+	}
 
 	//Set the source appropriately for later
 	if(instruction->op1 != NULL){
@@ -2110,10 +2121,17 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 * This can be folded into simply:
 	 * 	t11 <- x_2
+	 *
+	 * HOWEVER: There's a special case where we can't do this
+	 * t30 <- (t29)
+	 * (t25) <- t30
+	 *
+	 * (t25) <- (t29) <--------- WRONG! memory-to-memory moves are impossible!
+	 * So we'll need to ensure that we aren't doing this optimization if op1 of instruction1 is an indirect value
 	 */
 	//If we have two consecutive assignment statements
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT &&
-		window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+		window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT && window->instruction1->op1->indirection_level == 0){
 		//Grab these out for convenience
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;

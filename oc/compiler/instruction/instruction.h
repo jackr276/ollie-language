@@ -388,6 +388,11 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* type);
 
 /**
+ * Emit a long constant direct from value
+ */
+three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* symtab);
+
+/**
  * Emit a statement that is in LEA form
  */
 instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);

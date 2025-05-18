@@ -109,6 +109,44 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 
+
+/**
+ * Let's determine if a value is a positive power of 2.
+ * Here's how this will work. In binary, powers of 2 look like:
+ * 0010
+ * 0100
+ * 1000
+ * ....
+ *
+ * In other words, they have exactly 1 on bit that is not in the LSB position
+ *
+ * Here's an example: 5 = 0101, so 5-1 = 0100
+ *
+ * 0101 & (0100) = 0100 which is 4, not 0
+ *
+ * How about 8?
+ * 8 is 1000
+ * 8 - 1 = 0111
+ *
+ * 1000 & 0111 = 0, so 8 is a power of 2
+ *
+ * Therefore, the formula we will use is value & (value - 1) == 0
+ */
+static u_int8_t is_power_of_2(int64_t value){
+	//If it's negative or 0, we're done here
+	if(value <= 0){
+		return FALSE;
+	}
+
+	//Using the bitwise formula described above
+	if((value & (value - 1)) == 0){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
 /**
  * This is a very simple helper function that will pack values for us. This is done to avoid repeated code
  */
@@ -2070,6 +2108,39 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 
 
 /**
+ * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
+ */
+static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+	//We'll need the size to multiply by
+	three_addr_const_t* type_size = emit_int_constant_direct(base_type->type_size, type_symtab);
+
+	//We'll need a temp assignment if this isn't temporary
+	if(offset->is_temporary == FALSE){
+		//Create the statement
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(offset->type), offset);
+
+		//Add it to the block
+		add_statement(basic_block, temp_assignment);
+
+		//Reassign this
+		offset = temp_assignment->assignee;
+	}
+
+	//Now we emit the offset multiplication
+	three_addr_var_t* total_offset = emit_binary_operation_with_constant(basic_block, offset, offset, STAR, type_size, is_branch_ending);
+
+	//Once we have the total offset, we add it to the base address
+	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), base_addr, PLUS, total_offset);
+	
+	//Add this into the block
+	add_statement(basic_block, result);
+
+	//Give back whatever we assigned
+	return result->assignee;
+}
+
+
+/**
  * Emit a construct access lea statement
  */
 static three_addr_var_t* emit_construct_access_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
@@ -2691,9 +2762,19 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			three_addr_var_t* address;
 			//Calculate the address using the current var or current address
 			if(current_address == NULL){
-				address = emit_lea(basic_block, current_var, offset, current_type, is_branch_ending);
+				//Remember, we can only use lea if we have a power of 2 
+				if(is_power_of_2(current_type->type_size) == TRUE){
+					address = emit_lea(basic_block, current_var, offset, current_type, is_branch_ending);
+				} else {
+					address = emit_address_offset_calc(basic_block, current_var, offset, current_type, is_branch_ending);
+				}
 			} else {
-				address = emit_lea(basic_block, current_address, offset, current_type, is_branch_ending);
+				//Remember, we can only use lea if we have a power of 2 
+				if(is_power_of_2(current_type->type_size) == TRUE){
+					address = emit_lea(basic_block, current_address, offset, current_type, is_branch_ending);
+				} else {
+					address = emit_address_offset_calc(basic_block, current_address, offset, current_type, is_branch_ending);
+				}
 			}
 
 			//Now this is the current address

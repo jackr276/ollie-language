@@ -20,7 +20,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	//j := j + 1;
 	
 	if(arg == 2) then {
-		arr[x][1] := 3;
+		arr[x][1] := arr[5][2];
 	} else {
 		i := arr[0][0];
 	}
