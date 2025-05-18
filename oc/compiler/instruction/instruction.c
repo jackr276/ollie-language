@@ -836,7 +836,27 @@ static void print_register_to_memory_move(instruction_t* instruction){
  * Handle a complex memory to register move with a complex address offset calculation
  */
 static void print_memory_to_register_move(instruction_t* instruction){
-
+	//First thing we'll do is print the appropriate move statement
+	switch(instruction->instruction_type){
+		case MEM_TO_REG_MOVW:
+			printf("movw ");
+			break;
+		case MEM_TO_REG_MOVL:
+			printf("movl ");
+			break;
+		case MEM_TO_REG_MOVQ:
+			printf("movq ");
+			break;
+		//Should never hit this
+		default:
+			break;
+	}
+	
+	//The address mode expression comes firsj
+	print_addressing_mode_expression(instruction);
+	printf(", ");
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	printf("\n");
 }
 
 

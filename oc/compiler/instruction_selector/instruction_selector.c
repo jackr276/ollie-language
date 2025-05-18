@@ -684,7 +684,7 @@ static void handle_address_calc_to_memory_move(instruction_t* address_calculatio
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
-	//Select the variable size
+	//Select the variable size based on the assignee
 	variable_size_t size = select_variable_size(memory_access->assignee);
 
 	//Use the helper to get the right sized move instruction
@@ -693,10 +693,10 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
 		case WORD:
-			memory_access->instruction_type = MEM_TO_REG_MOVL;
+			memory_access->instruction_type = MEM_TO_REG_MOVW;
 			break;
 		case DOUBLE_WORD:
-			memory_access->instruction_type = MEM_TO_REG_MOVW;
+			memory_access->instruction_type = MEM_TO_REG_MOVL;
 			break;
 		case QUAD_WORD:
 			memory_access->instruction_type = MEM_TO_REG_MOVQ;
@@ -719,22 +719,26 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 	 *     op1_const  op2_const assignee
 	 */
 	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		//Assign memory access's op1_const to be this value
-		//memory_access->op2_const = address_calculation->op1_const;
+		//So we know that the destination will be t26, the destination will remain unchanged
+		//We'll have a register source and an offset
+		memory_access->offset = address_calculation->op1_const;
+		memory_access->address_calc_reg1 = address_calculation->op1;
+		//This is offset only mode
+		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		
+	//Otherwise, we just have a regular bin op statement
+	} else {
+ 		//So we know that the destination will be t26, the destination will remain unchanged
+		//We'll have a register source and an offset
+		memory_access->address_calc_reg1 = address_calculation->op1;
+		memory_access->address_calc_reg2 = address_calculation->op2;
 
-		//Now we'll need to set the assignee to be the base address. This makes the most sense
-		//memory_access->assignee = address_calculation->assignee;
-
-		//That should really be all. After we do all of this, the actual address calculation instruction is useless.
-		//The helper will delete it
-
-	//Or if we have a statement like this(rare but may happen, covering our bases)
-	} else if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
- 
-	//Another very common case - a lea statement
-	} else if(address_calculation->CLASS == THREE_ADDR_CODE_LEA_STMT){
-
+		//This is offset only mode
+		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 	}
+
+	//Set the destination as well
+	memory_access->destination_register = memory_access->assignee;
 }
 
 
@@ -1649,15 +1653,25 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//Use the helper to avoid an explosion of code here
 		handle_address_calc_from_memory_move(window->instruction1, window->instruction2);
 
-		//This will become the first address calculation register
-		window->instruction2->address_calc_reg1 = window->instruction1->op1;
-
-
 		//We can scrap instruction 1 now, it's useless
-		//delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+
+		//Push everyting back by 1
+		window->instruction1 = window->instruction2;
+		window->instruction2 = window->instruction3;
+
+		//Avoid any null pointer dereference
+		if(window->instruction2 == NULL){
+			window->instruction3 = NULL;
+		} else {
+			window->instruction3 = window->instruction2->next_statement;
+		}
+
+		//Let the helper update the status
+		set_window_status(window);
 
 		//This counts as a change
-		//changed = TRUE;
+		changed = TRUE;
 	}
 
 
