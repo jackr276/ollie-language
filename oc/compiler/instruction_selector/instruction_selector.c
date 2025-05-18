@@ -2748,9 +2748,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					changed = TRUE;
 				//We'll need to throw a warning here about 0 division
 				// TODO ADD MORE
-				} else {
+				} else if (current_instruction->op == F_SLASH || current_instruction->op == MOD){
 					//Throw a warning, not much else to do here
-					print_parse_message(WARNING, "Division by 0 will always error", 0);
+					print_parse_message(PARSE_ERROR, "Division by 0 will always error", 0);
+					//Throw a failure in this case
+					exit(0);
 				}
 
 				//Notice how we do NOT mark any change as true here. This is because, even though yes we
