@@ -762,30 +762,30 @@ static void print_addressing_mode_expression(instruction_t* instruction){
 		 * of address mode
 		 *
 		 * (%rax, %rbx, 2)
-		 * (source, source2, lea_mult)
+		 * (address_calc_reg1, address_calc_reg2, lea_mult)
 		 */
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE:
 			printf("(");
-			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
 			printf(", ");
-			print_variable(instruction->source_register2, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg2, PRINTING_VAR_INLINE);
 			printf(", ");
 			printf("%ld", instruction->lea_multiplicator);
-			printf(")\n");
+			printf(")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
 			print_immediate_value_no_prefix(instruction->offset);
 			printf("(");
-			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
-			printf(")\n");
+			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
+			printf(")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_ONLY:
 			printf("(");
-			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
 			printf(", ");
-			print_variable(instruction->source_register2, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg2, PRINTING_VAR_INLINE);
 			printf(")");
 			break;
 			
@@ -793,25 +793,6 @@ static void print_addressing_mode_expression(instruction_t* instruction){
 		default:
 			break;
 	}
-}
-
-
-/**
- * Use the variety of address calculation modes that we have to print one out
- *
- * NOTE: this function only prints out the address calculation portion. Everything
- * else is handled by the caller
- *
- * PRINTING RULES:
- * Assignee is off limits
- * op1 and op1_const are what will be moved into, so those are also off limits
- *
- * That leaves us with op2, op2_const, lea_multiplicator
- */
-static void print_address_calculation(instruction_t* instruction){
-	//Going through here. If we see that op2_const and assignee are both not NULL,
-	//that leaves us with this pattern: op2_const(assignee) = assignee + op2_const
-
 }
 
 
@@ -857,8 +838,36 @@ static void print_register_to_register_move(instruction_t* instruction){
  * Handle a complex register(or immediate) to memory move with a complex
  * address offset calculation
  */
-static void print_to_memory_move(instruction_t* instruction){
+static void print_register_to_memory_move(instruction_t* instruction){
+	//First let's print out the appropriate instruction
+	switch(instruction->instruction_type){
+		case REG_TO_MEM_MOVW:
+			printf("movw ");
+			break;
+		case REG_TO_MEM_MOVL:
+			printf("movl ");
+			break;
+		case REG_TO_MEM_MOVQ:
+			printf("movq ");
+			break;
+		//Should never hit this
+		default:
+			break;
+	}
 
+
+	//First we'll print out the source
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	} else {
+		//Otherwise we have an immediate value source
+		print_immediate_value(instruction->source_immediate);
+	}
+	
+	printf(", ");
+	//Let this handle it now
+	print_addressing_mode_expression(instruction);
+	printf("\n");
 }
 
 
@@ -992,6 +1001,7 @@ static void print_lea_instruction(instruction_t* instruction){
 
 	//Now we'll print out one of the various complex addressing modes
 	print_addressing_mode_expression(instruction);
+	printf("\n");
 }
 
 
@@ -1359,7 +1369,7 @@ void print_instruction(instruction_t* instruction){
 		case REG_TO_MEM_MOVL:
 		case REG_TO_MEM_MOVW:
 		case REG_TO_MEM_MOVQ:
-			print_to_memory_move(instruction);
+			print_register_to_memory_move(instruction);
 			break;
 		//Handle addition instructions
 		case ADDW:

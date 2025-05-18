@@ -592,7 +592,14 @@ variable_size_t select_constant_size(three_addr_const_t* constant){
  */
 static void handle_address_calc_to_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
 	//Select the variable size
-	variable_size_t size = select_variable_size(memory_access->assignee);
+	variable_size_t size;
+
+	//Select the size based on what we're moving in
+	if(memory_access->op1 != NULL){
+		size = select_variable_size(memory_access->op1);
+	} else {
+		size = select_constant_size(memory_access->op1_const);
+	}
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
@@ -612,17 +619,41 @@ static void handle_address_calc_to_memory_move(instruction_t* address_calculatio
 	}
 
 	//If we have a bin op with const statement, we'll have a constant in our answer
+	/**
+	 * If we have this case, we expect to see something like this
+	 * t26 <- t24 + 4
+	 * (t26) <- 3
+	 */
 	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-
+		//So we know that the destination will be t26, the destination will remain unchanged
+		//We'll have a register source and an offset
+		memory_access->offset = address_calculation->op1_const;
+		memory_access->address_calc_reg1 = address_calculation->op1;
+		//This is offset only mode
+		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		
 	//Or if we have a statement like this(rare but may happen, covering our bases)
 	} else if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+		//So we know that the destination will be t26, the destination will remain unchanged
+		//We'll have a register source and an offset
+		memory_access->address_calc_reg1 = address_calculation->op1;
+		memory_access->address_calc_reg2 = address_calculation->op2;
+
+		//This is offset only mode
+		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
  
 	//Another very common case - a lea statement
 	} else if(address_calculation->CLASS == THREE_ADDR_CODE_LEA_STMT){
 
 	}
 
+	//It's either an assign const or regular assignment. Either way,
+	//we'll need to set the appropriate source value
+	if(memory_access->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		memory_access->source_immediate = memory_access->op1_const;
+	} else {
+		memory_access->source_register = memory_access->op1;
+	}
 }
 
 
@@ -947,7 +978,7 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 	instruction->destination_register = instruction->assignee;
 
 	//We always have this
-	instruction->source_register = instruction->op1;
+	instruction->address_calc_reg1 = instruction->op1;
 
 	//Now, we'll need to set the appropriate address calculation mode based
 	//on what we're given
@@ -955,7 +986,7 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 	if(instruction->op2 != NULL){
 		//2 registers in this case
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-		instruction->source_register2 = instruction->op2;
+		instruction->address_calc_reg2 = instruction->op2;
 
 	//Otherise it's just an offset
 	} else {
@@ -1201,8 +1232,8 @@ static void handle_lea_statement(instruction_t* instruction){
 	instruction->destination_register = instruction->assignee;
 
 	//Add op1 and op2
-	instruction->source_register = instruction->op1;
-	instruction->source_register2 = instruction->op2;
+	instruction->address_calc_reg1 = instruction->op1;
+	instruction->address_calc_reg2 = instruction->op2;
 
 	//And the lea multiplicator is already in place..
 }
@@ -1525,18 +1556,13 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	 */
 	//If we have some kind of offset calculation followed by a dereferencing assingment, we have either a 
 	//register to memory or immediate to memory move. Either way, we can rewrite this using address computation mode
-	if(window->instruction1->instruction_type == NONE 
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+	if(window->instruction2 != NULL
+		&& (window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT)
 		&& window->instruction1->op == PLUS 
-		&& window->instruction2 != NULL
-		&& window->instruction2->instruction_type == NONE 
 		&& (window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
 		&& window->instruction2->assignee->indirection_level == 1){
 
-		printf("HERE\n");
-
-		/*
 		//Use the helper to keep things somewhat clean in here
 		handle_address_calc_to_memory_move(window->instruction1, window->instruction2);
 
@@ -1553,11 +1579,11 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 			window->instruction3 = window->instruction2->next_statement;
 		}
 
+		//We'll need to update the status accordingly
 		set_window_status(window);
 
 		//This counts as a change
-		//changed = TRUE;
-		*/
+		changed = TRUE;
 	}
 
 	//We also need to perform the exact same kind of optimization for instructions 2 and 3

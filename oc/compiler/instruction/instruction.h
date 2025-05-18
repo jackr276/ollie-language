@@ -290,7 +290,7 @@ struct instruction_t{
 	three_addr_var_t* assignee;
 	//Now for the assembly operations, we have a source and destination
 	three_addr_var_t* source_register;
-	//We can have more than one source
+	//We can have more than one source, usually for CMP instructions
 	three_addr_var_t* source_register2;
 	//If we're trying to move a constant in
 	three_addr_const_t* source_immediate;
@@ -308,6 +308,9 @@ struct instruction_t{
 	 * Register additive stored in varibale register_additive
 	 */
 	three_addr_const_t* offset;
+	//The address calculation registers
+	three_addr_var_t* address_calc_reg1;
+	three_addr_var_t* address_calc_reg2;
 	//The offset
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;
