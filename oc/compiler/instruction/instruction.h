@@ -385,7 +385,12 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 /**
  * Emit an int constant in a very direct way
  */
-three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* type);
+three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symtab);
+
+/**
+ * Emit an unsigned int constant directly
+ */
+three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab_t* symtab);
 
 /**
  * Emit a long constant direct from value

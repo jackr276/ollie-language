@@ -1802,6 +1802,30 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 
 
 /**
+ * Emit an unsigned in constant directly. Used for address calculations
+ */
+three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab_t* symtab){
+
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Attach it for memory management
+	constant->next_created = emitted_consts;
+	emitted_consts = constant;
+
+	//Store the class
+	constant->const_type = INT_CONST;
+	//Store the int value
+	constant->int_const = int_const;
+
+	//Lookup what we have in here(u32)
+	constant->type = lookup_type(symtab, "u32")->type;
+
+	//Return out
+	return constant;
+}
+
+
+/**
  * Emit a long constant direct 
  */
 three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* symtab){

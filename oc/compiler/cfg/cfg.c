@@ -2112,7 +2112,7 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
  */
 static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
 	//We'll need the size to multiply by
-	three_addr_const_t* type_size = emit_int_constant_direct(base_type->type_size, type_symtab);
+	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(base_type->type_size, type_symtab);
 
 	//We'll need a temp assignment if this isn't temporary
 	if(offset->is_temporary == FALSE){
