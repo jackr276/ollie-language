@@ -1557,12 +1557,21 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	}
 
 	//We could see logical and/logical or
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
+	  	|| window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//Handle the logical and case
 		if(window->instruction1->op == DOUBLE_AND){
 			handle_logical_and_instruction(cfg, window);
 		} else if(window->instruction1->op == DOUBLE_OR){
 			handle_logical_or_instruction(cfg, window);
+
+		//Division is a bit unique
+		} else if(window->instruction1->op == F_SLASH){
+
+		//Mod is very similar to division but there are some differences
+		//that warrant a separate function
+		} else if(window->instruction1->op == MOD){
+
 		}
 	}
 
@@ -2234,6 +2243,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
 	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
 	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
+	 *
+	 * NOTE: This does not work for division or modulus instructions
 	 */
 	//Check first with 1 and 2
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
@@ -2242,6 +2253,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction1->assignee->is_temporary == TRUE
 			&& window->instruction2->op != DOUBLE_AND  //Due to the way we use these, we can't optimize in this way
 			&& window->instruction2->op != DOUBLE_OR
+			&& window->instruction2->op != F_SLASH //These are also excluded due to the way x86 division works
+			&& window->instruction2->op != MOD
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
@@ -2286,6 +2299,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction1->assignee->is_temporary == TRUE
 			&& window->instruction3->op != DOUBLE_AND  //Due to the way we use these, we can't optimize in this way
 			&& window->instruction3->op != DOUBLE_OR
+			&& window->instruction3->op != F_SLASH //These are also excluded due to the way x86 division works
+			&& window->instruction3->op != MOD
 			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
