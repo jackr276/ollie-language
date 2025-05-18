@@ -70,6 +70,29 @@ static void set_window_status(instruction_window_t* window){
 
 
 /**
+ * Multiply two constants together
+ * 
+ * NOTE: The result is always stored in the first one
+ */
+static void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Handle our multiplications
+	if(constant1->const_type == INT_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->int_const *= constant2->int_const;
+		} else {
+			constant1->int_const *= constant2->long_const;
+		}
+	} else if(constant1->const_type == LONG_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->long_const *= constant2->int_const;
+		} else {
+			constant1->long_const *= constant2->long_const;
+		}
+	}
+}
+
+
+/**
  * Select the size of a given variable based on its type
  */
 static variable_size_t select_variable_size(three_addr_var_t* variable){
@@ -2113,6 +2136,50 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * ================= Handling redundant multiplications ========================
+	 * t27 <- 5
+	 * t27 <- t27 * 68
+	 *
+	 * Can become: t27 <- 340
+	 */
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
+		&& window->instruction2 != NULL
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
+
+		//We can multiply the constants now. The result will be stored in op1 const
+		multiply_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+
+		//Instruction 2 is now simply an assign const statement
+		window->instruction2->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+		//Null out where the old value was
+		window->instruction2->op1 = NULL;
+
+		//Instruction 1 is now completely useless
+		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+
+		//We now need to rearrange this window
+		window->instruction1 = window->instruction2;
+		window->instruction2 = window->instruction2->next_statement;
+
+		//Avoid any null pointer derefence
+		if(window->instruction2 == NULL){
+			window->instruction3 = NULL;
+		} else {
+			window->instruction3 = window->instruction2->next_statement;
+		}
+
+		//Update the window status
+		set_window_status(window);
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
+
 	/**
 	 * --------------------- Redundnant copying elimination ------------------------------------
 	 *  Let's now fold redundant copies. Here is an example of a redundant copy
@@ -2812,12 +2879,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
-	/**
-	 * ------------------------ Optimizing adjacent statements into LEA statements ----------------
-	 *  In cases where we have a multiplication statement next to an addition statement, or vice versa,
-	 *  odds are we can write it as a lea statement
-	 *
-	 */
+
+
 	//Return whether or not we changed the block return changed;
 	return changed;
 }
