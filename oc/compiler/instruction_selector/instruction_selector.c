@@ -666,8 +666,6 @@ static void handle_address_calc_to_memory_move(instruction_t* address_calculatio
 		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
  
 	//Another very common case - a lea statement
-	} else if(address_calculation->CLASS == THREE_ADDR_CODE_LEA_STMT){
-
 	}
 
 	//It's either an assign const or regular assignment. Either way,
@@ -695,17 +693,17 @@ static void handle_address_calc_from_memory_move(instruction_t* address_calculat
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
 		case WORD:
-			memory_access->instruction_type = REG_TO_MEM_MOVW;
+			memory_access->instruction_type = MEM_TO_REG_MOVL;
 			break;
 		case DOUBLE_WORD:
-			memory_access->instruction_type = REG_TO_MEM_MOVL;
+			memory_access->instruction_type = MEM_TO_REG_MOVW;
 			break;
 		case QUAD_WORD:
-			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			memory_access->instruction_type = MEM_TO_REG_MOVQ;
 			break;
 		//WE DO NOT DO FLOATS YET
 		default:
-			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			memory_access->instruction_type = MEM_TO_REG_MOVQ;
 			break;
 	}
 
@@ -1576,7 +1574,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	}
 
 
-
 	//============================= The "Grand Patterns" ==============================
 	//These are patterns that span multiple instructions. Often we're able to
 	//condense these multiple instructions into one singular x86 instruction
@@ -1629,21 +1626,40 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		changed = TRUE;
 	}
 
-	//We also need to perform the exact same kind of optimization for instructions 2 and 3
-	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT && window->instruction2->op == PLUS 
-		&& window->instruction3 != NULL &&
-		(window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
-		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE
-		&& window->instruction3->assignee->indirection_level == 1){
 
-		/*
-		//Use the helper to keep things somewhat clean in here
-		handle_address_calc_to_memory_move(window->instruction2, window->instruction3);
+	/**
+	 * ====================================== FROM MEMORY MOVEMENT ==================================
+	 *
+	 * Example:
+	 * t43 <- oneDi32_0 + 8
+	 * t44 <- (t43)
+	 *
+	 * should become
+	 * mov(w/l/q) 8(oneDi32_0), t44
+	 *
+	 * Unlike the prior case, we won't need to worry about immediate source operands here
+	 */
+	if(window->instruction2 != NULL
+		&& (window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT)
+		&& window->instruction1->op == PLUS
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE
+		&& window->instruction2->op1->indirection_level == 1){
+
+		//Use the helper to avoid an explosion of code here
+		handle_address_calc_from_memory_move(window->instruction1, window->instruction2);
+
+		//This will become the first address calculation register
+		window->instruction2->address_calc_reg1 = window->instruction1->op1;
+
+
+		//We can scrap instruction 1 now, it's useless
+		//delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 
 		//This counts as a change
 		//changed = TRUE;
-		*/
 	}
+
 
 	//Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT && window->instruction2->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){

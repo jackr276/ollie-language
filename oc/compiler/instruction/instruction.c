@@ -833,6 +833,14 @@ static void print_register_to_memory_move(instruction_t* instruction){
 
 
 /**
+ * Handle a complex memory to register move with a complex address offset calculation
+ */
+static void print_memory_to_register_move(instruction_t* instruction){
+
+}
+
+
+/**
  * Print a multiplication instruction, in all the forms it can take
  */
 static void print_multiplication_instruction(instruction_t* instruction){
@@ -1331,6 +1339,11 @@ void print_instruction(instruction_t* instruction){
 		case REG_TO_MEM_MOVW:
 		case REG_TO_MEM_MOVQ:
 			print_register_to_memory_move(instruction);
+			break;
+		case MEM_TO_REG_MOVL:
+		case MEM_TO_REG_MOVW:
+		case MEM_TO_REG_MOVQ:
+			print_memory_to_register_move(instruction);
 			break;
 		//Handle addition instructions
 		case ADDW:

@@ -309,6 +309,8 @@ struct instruction_t{
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
+	//The remainder register(used for div & mod)
+	three_addr_var_t* remainder_register;
 	//The offset
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;

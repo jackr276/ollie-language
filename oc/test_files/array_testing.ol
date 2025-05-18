@@ -6,12 +6,13 @@ fn main(arg:i32, argv:char**) -> i32{
 	//The array that we have
 	declare mut arr:i32[14][17];
 	declare mut oneD:i64[2];
+	declare mut oneDi32:i32[2];
 	
 	arr[3][1] := 3;
 	arr[5][2] := 3;
 	arr[7][0] := 2;
 
-	oneD[1] := 3;
+	oneDi32[1] := 3;
 
 	let mut x:i32 := 33;
 
@@ -28,5 +29,5 @@ fn main(arg:i32, argv:char**) -> i32{
 
 
 	//So it isn't optimized away
-	ret arr[7][2];// + *(j+1);
+	ret arr[7][2] + oneDi32[2];// + *(j+1);
 }
