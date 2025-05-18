@@ -2143,7 +2143,7 @@ static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, th
 /**
  * Emit a construct access lea statement
  */
-static three_addr_var_t* emit_construct_access_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_construct_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(u64);
 
@@ -2153,7 +2153,7 @@ static three_addr_var_t* emit_construct_access_lea(basic_block_t* basic_block, t
 	}
 
 	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_construct_access_lea_instruction(assignee, base_addr, offset);
+	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, base_addr, PLUS, offset);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2847,9 +2847,9 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 			//we've already gotten
 			if(current_address == NULL){
-				address = emit_construct_access_lea(basic_block, current_var, offset, is_branch_ending);
+				address = emit_construct_address_calculation(basic_block, current_var, offset, is_branch_ending);
 			} else {
-				address = emit_construct_access_lea(basic_block, current_address, offset, is_branch_ending);
+				address = emit_construct_address_calculation(basic_block, current_address, offset, is_branch_ending);
 			}
 
 			//Do we need to do more memory work? We can tell if the array accessor node is next
