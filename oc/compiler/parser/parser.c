@@ -86,6 +86,8 @@ static generic_ast_node_t* logical_or_expression(FILE* fl);
 static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node);
 static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
+static generic_ast_node_t* defer_statement(FILE* fl);
+static generic_ast_node_t* idle_statement(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee);
@@ -6628,6 +6630,189 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 
 /**
+ * This special modification of the statement rule prohibits us seeing any switch, case or
+ * default statements. This statement type is intended to be used inside of swtich statements
+ */
+static generic_ast_node_t* statement_in_block(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//Let's grab the next item and see what we have here
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we see a label ident, we know we're seeing a labeled statement
+	if(lookahead.tok == LABEL_IDENT){
+		//This rule relies on these tokens, so we'll push them back
+		push_back_token(lookahead);
+	
+		//Just return whatever the rule gives us
+		return labeled_statement(fl);
+	
+	//If we see an L_CURLY, we are seeing a compound statement
+	} else if(lookahead.tok == L_CURLY){
+		//The rule relies on it, so put it back
+		push_back_token(lookahead);
+
+		//Return whatever the rule gives us
+		return compound_statement(fl);
+	
+	//If we see for, we are seeing a for statement
+	} else if(lookahead.tok == FOR){
+		//This rule relies on for already being consumed, so we won't put it back
+		return for_statement(fl);
+
+	//If we see this, we are seeing a defer statment
+	} else if(lookahead.tok == DEFER){
+		//This rule relies on the defer keyword already being consumed, so we won't put it back
+		return defer_statement(fl);
+	
+	//If we see this, we have an idle statement
+	} else if(lookahead.tok == IDLE){
+		return idle_statement(fl);
+
+	//While statement
+	} else if(lookahead.tok == WHILE){
+		//This rule relies on while already being consumed, so we won't put it back
+		return while_statement(fl);
+
+	//Do while statement
+	} else if(lookahead.tok == DO){
+		//This rule relies on do already being consumed, so we won't put it back
+		return do_while_statement(fl);
+
+	//Switch statement -- not allowed here
+	} else if(lookahead.tok == SWITCH){
+		print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested switch statements", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+
+	//Nested case statements -- should not happen
+	} else if(lookahead.tok == CASE || lookahead.tok == DEFAULT){
+		print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested case or default statements", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	
+	//If statement
+	} else if(lookahead.tok == IF){
+		//This rule relies on if already being consumed, so we won't put it back
+		return if_statement(fl);
+
+	//Continue or break statements - these aren't allows
+	} else if(lookahead.tok == BREAK || lookahead.tok == CONTINUE){
+		print_parse_message(PARSE_ERROR, "Ollie language does not allow continue or break in switch statments", parser_line_num);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+
+	//Some kind of branch statement
+	} else if(lookahead.tok == JUMP || lookahead.tok == RETURN){
+		//The branch rule needs these, so we'll put them back
+		push_back_token(lookahead);
+		//return whatever this gives us
+		return branch_statement(fl);
+
+	//Let statement
+	} else if(lookahead.tok == LET){
+		return let_statement(fl, FALSE);
+
+	} else if(lookahead.tok == DECLARE){
+		return declare_statement(fl, FALSE);
+
+	} else {
+		//Otherwise, this is some kind of expression statement. We'll put the token back and
+		//return that
+		push_back_token(lookahead);
+		return expression_statement(fl);
+	}
+}
+
+
+/**
+ * A compound statement is denoted by the {} braces, and can decay in to 
+ * statements and declarations. It also represents the start of a brand new
+ * lexical scope for types and variables. Like all rules, this rule returns
+ * a reference to the root node that it creates
+ *
+ * NOTE: We assume that we have NOT consumed the { token by the time we make
+ * it here
+ *
+ * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}* {<definition>}*}
+ */
+static generic_ast_node_t* switch_compound_statement(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//We must first see a left curly
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	//If we don't see one, we fail out
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Left curly brace required at beginning of compound statement", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Push onto the grouping stack so we can check matching
+	push_token(grouping_stack, lookahead);
+
+	//Now if we make it here, we're safe to create the actual node
+	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
+	//Store the line number here
+	compound_stmt_node->line_number = parser_line_num;
+
+	//Begin a new lexical scope for types and variables
+	initialize_type_scope(type_symtab);
+	initialize_variable_scope(variable_symtab);
+
+	//Now we can keep going until we see a closing curly
+	//We'll seed the search
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we don't reach the end
+	while(lookahead.tok != R_CURLY){
+		//Put whatever we saw back
+		push_back_token(lookahead);
+		
+		//We now need to see a valid statement that is allowed inside of a case block
+		generic_ast_node_t* stmt_node = statement_in_block(fl);
+
+		//If it's invalid we'll pass right through, no error printing
+		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Send it right back
+			return stmt_node;
+		}
+
+		//Otherwise, we'll add it as a child node
+		add_child_node(compound_stmt_node, stmt_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//Once we've escaped out of the while loop, we know that the token we currently have
+	//is an R_CURLY
+	//We still must check for matching
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		printf("%d\n", lookahead.tok);
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
+		num_errors++;
+		//Return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
+	//"finalize" both of these scopes
+	finalize_type_scope(type_symtab);
+	finalize_variable_scope(variable_symtab);
+	//Add in the line number
+	compound_stmt_node->line_number = parser_line_num;
+
+	//And we're all done, so we'll return the reference to the root node
+	return compound_stmt_node;
+}
+
+
+/**
  * A compound statement is denoted by the {} braces, and can decay in to 
  * statements and declarations. It also represents the start of a brand new
  * lexical scope for types and variables. Like all rules, this rule returns
@@ -7024,103 +7209,6 @@ static generic_ast_node_t* statement(FILE* fl){
 
 
 /**
- * This special modification of the statement rule prohibits us seeing any switch, case or
- * default statements. This statement type is intended to be used inside of swtich statements
- */
-static generic_ast_node_t* statement_in_block(FILE* fl){
-	//Lookahead token
-	Lexer_item lookahead;
-
-	//Let's grab the next item and see what we have here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we see a label ident, we know we're seeing a labeled statement
-	if(lookahead.tok == LABEL_IDENT){
-		//This rule relies on these tokens, so we'll push them back
-		push_back_token(lookahead);
-	
-		//Just return whatever the rule gives us
-		return labeled_statement(fl);
-	
-	//If we see an L_CURLY, we are seeing a compound statement
-	} else if(lookahead.tok == L_CURLY){
-		//The rule relies on it, so put it back
-		push_back_token(lookahead);
-
-		//Return whatever the rule gives us
-		return compound_statement(fl);
-	
-	//If we see for, we are seeing a for statement
-	} else if(lookahead.tok == FOR){
-		//This rule relies on for already being consumed, so we won't put it back
-		return for_statement(fl);
-
-	//If we see this, we are seeing a defer statment
-	} else if(lookahead.tok == DEFER){
-		//This rule relies on the defer keyword already being consumed, so we won't put it back
-		return defer_statement(fl);
-	
-	//If we see this, we have an idle statement
-	} else if(lookahead.tok == IDLE){
-		return idle_statement(fl);
-
-	//While statement
-	} else if(lookahead.tok == WHILE){
-		//This rule relies on while already being consumed, so we won't put it back
-		return while_statement(fl);
-
-	//Do while statement
-	} else if(lookahead.tok == DO){
-		//This rule relies on do already being consumed, so we won't put it back
-		return do_while_statement(fl);
-
-	//Switch statement -- not allowed here
-	} else if(lookahead.tok == SWITCH){
-		print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested switch statements", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-
-	//Nested case statements -- should not happen
-	} else if(lookahead.tok == CASE || lookahead.tok == DEFAULT){
-		print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested case or default statements", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	
-	//If statement
-	} else if(lookahead.tok == IF){
-		//This rule relies on if already being consumed, so we won't put it back
-		return if_statement(fl);
-
-	//Continue or break statements - these aren't allows
-	} else if(lookahead.tok == BREAK || lookahead.tok == CONTINUE){
-		print_parse_message(PARSE_ERROR, "Ollie language does not allow continue or break in switch statments", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-
-	//Some kind of branch statement
-	} else if(lookahead.tok == JUMP || lookahead.tok == RETURN){
-		//The branch rule needs these, so we'll put them back
-		push_back_token(lookahead);
-		//return whatever this gives us
-		return branch_statement(fl);
-
-	//Let statement
-	} else if(lookahead.tok == LET){
-		return let_statement(fl, FALSE);
-
-	} else if(lookahead.tok == DECLARE){
-		return declare_statement(fl, FALSE);
-
-	} else {
-		//Otherwise, this is some kind of expression statement. We'll put the token back and
-		//return that
-		push_back_token(lookahead);
-		return expression_statement(fl);
-	}
-}
-
-
-/**
  * Handle a default statement. A default statement cannot terminate until we see a "case" or "}"
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
@@ -7138,58 +7226,24 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we don't see one, we need to scrap it
-	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required after default statement", current_line);
+	if(lookahead.tok != ARROW){
+		print_parse_message(PARSE_ERROR, "Arrow required after default statement", current_line);
 		num_errors++;
 		//Error node return
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	/**
-	 * IMPORTANT NOTE: Once we get here, we have officially reached a new lexical scope. To officiate this, 
-	 * we will initialize a new scope for both the variable and type symtabs. This scope will be finalized once
-	 * we leave the switch statement
-	 */
-	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab);
+	//We now need to see a valid switch compound statement
+	generic_ast_node_t* switch_compound_stmt = switch_compound_statement(fl);
 
-	//Seed the search
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Now we need to go through and process the statement
-	while(lookahead.tok != CASE && lookahead.tok != R_CURLY){
-		//If for some reason it's another default statement, we have a duplicate
-		if(lookahead.tok == DEFAULT){
-			print_parse_message(PARSE_ERROR, "Duplicate \"default\" clause found in switch statements. Only one default per statement is allowed", parser_line_num);
-			num_errors++;
-			//Error out
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Push it back
-		push_back_token(lookahead);
-
-		//Handle whatever it is that we have in here
-		generic_ast_node_t* stmt = statement_in_block(fl);
-
-		//If it's an error send it up
-		if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return stmt;
-		}
-
-		//Now that it's good, add this into the statement umbrella
-		add_child_node(default_stmt, stmt);
-
-		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//If this is an error, we fail out
+	if(switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//Send it back up
+		return switch_compound_stmt;
 	}
 
-	//Push it back, we're done here
-	push_back_token(lookahead);
-
-	//We can now finalize these scopes 
-	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
+	//Otherwise, we add this in as a child
+	add_child_node(default_stmt, switch_compound_stmt);
 
 	//Otherwise it all worked, so we'll just return
 	return default_stmt;
@@ -7363,67 +7417,24 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we don't see one, we need to scrap it
-	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required after case statement", current_line);
+	if(lookahead.tok != ARROW){
+		print_parse_message(PARSE_ERROR, "Arrow required after case statement", current_line);
 		num_errors++;
 		//Error node return
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	/**
-	 * IMPORTANT NOTE: Once we get here, we have officially reached a new lexical scope. To officiate this, 
-	 * we will initialize a new scope for both the variable and type symtabs. This scope will be finalized once
-	 * we leave the switch statement
-	 */
-	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab);
+	//We'll let the helper deal with it
+	generic_ast_node_t* switch_compound_stmt = switch_compound_statement(fl);
 
-	//Now we get to the main part of our case statement. We can keep seeing extra tokens so long as they are not 
-	//"case", "default" or "}"(indicates end of switch statement)
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//We have already seen a break for this case statement
-	u_int8_t seen_break = FALSE;
-
-	//So long as we don't have the aforementioned keywords
-	while(lookahead.tok != CASE && lookahead.tok != DEFAULT && lookahead.tok != R_CURLY){
-		//Put it back
-		push_back_token(lookahead);
-
-		//We will use our special statement rule to handle this
-		generic_ast_node_t* stmt_node = statement_in_block(fl);
-
-		//If this fails, we error out
-		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return stmt_node;
-		}
-
-		//If we have a break statement, we want to make sure that we only have one of these
-		if(stmt_node->CLASS == AST_NODE_CLASS_BREAK_STMT){
-			//Check here for violations
-			if(seen_break == TRUE){
-				print_parse_message(PARSE_ERROR, "More than one \"break\" or \"break when\" statements inside of case statement", stmt_node->line_number);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
-
-			//We've definitely seen one now
-			seen_break = TRUE;
-		}
-
-		//Otherwise we add this in as a child under the case statement umbrella
-		add_child_node(case_stmt, stmt_node);
-
-		//And refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//If this is an error, we fail out
+	if(switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//Send it back up
+		return switch_compound_stmt;
 	}
 
-	//Push it back, we're done here
-	push_back_token(lookahead);
-
-	//We can now finalize these scopes 
-	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
+	//Otherwise, we add this in as a child
+	add_child_node(case_stmt, switch_compound_stmt);
 
 	//Finally give this back
 	return case_stmt;
@@ -7457,7 +7468,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
 	//If we see a specifier here, we'll record it
 	if(lookahead.tok == REGISTER){
 		storage_class = STORAGE_CLASS_REGISTER;

@@ -6,27 +6,35 @@ fn main(arg:i32, argv:char**) -> i32{
 	let mut x:i32 := 32;
 
 	switch on(x){
-		case 2:
+		case 2 -> {
 			x := 32;
-			//++x;
-		case 1:
+		}
+		case 1 -> {
 			x := -3;
-		case 3:
+		}
+		case 3 -> {
 			x := 211;
-		case 5:
+		}
+
+		case 5 -> {
 			x := 22;
-		default:
+		}
+
+		default -> {
 			x := x - 22;
+		}
 	}
 
 	idle;
 	
 	
 	switch on(x){
-		default:
+		default -> {
 			let i:i32 := 2;
-		case 2:
+		}
+		case 2 -> {
 			let i:i32 := 3;
+		}
 	}
 	
 	
