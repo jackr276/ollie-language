@@ -1801,6 +1801,18 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	 * Should become
 	 * mov(w/l/q) 8(arr_0, t25), t29
 	 */
+	if(window->instruction2 != NULL && window->instruction3 != NULL
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction3->op1->indirection_level == 1 //Only works for memory movement
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& variables_equal(window->instruction2->assignee, window->instruction3->op1, TRUE) == TRUE){
+
+		printf("HERE with:");
+		print_instruction_window_three_address_code(window);
+
+	}
 
 	
 	/**
@@ -1811,6 +1823,19 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	 * Should become
 	 * mov(w/l/q) t29, 8(arr_0, t25)
 	 */
+	if(window->instruction2 != NULL && window->instruction3 != NULL
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
+		&& window->instruction3->assignee->indirection_level == 1 //Only works for memory movement
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
+
+		printf("HERE with:");
+		print_instruction_window_three_address_code(window);
+
+	}
+
 
 
 
