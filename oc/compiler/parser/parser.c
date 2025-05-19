@@ -29,6 +29,9 @@
 #define TRUE 1
 #define FALSE 0
 
+//The max switch/case range is 1024
+#define MAX_SWITCH_RANGE 1024
+
 //All error sizes are 1000 unless specified
 #define ERROR_SIZE 1500
 #define LARGE_ERROR_SIZE 2000
@@ -83,7 +86,7 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(FILE* fl);
-static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node);
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, u_int32_t* values);
 static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* defer_statement(FILE* fl);
@@ -6060,7 +6063,16 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Push to stack for later matching
 	push_token(grouping_stack, lookahead);
 
-		//Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
+	//We'll need to keep track of whether or not we have any duplicated values. As such, we'll keep an array
+	//of all the values that we do have. Since we can only have 1024 values, this array need only be 1024
+	//long. Every time we see a value in a case statement, we'll need to cross reference it with the
+	//values in here
+	u_int32_t values[MAX_SWITCH_RANGE];
+
+	//Wipe the entire thing so they're all 0's(FALSE)
+	memset(values, 0, MAX_SWITCH_RANGE * sizeof(u_int32_t));
+
+	//Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
 	//our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
 	//that switch statements have at least one thing in them
 
@@ -6077,7 +6089,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		if(lookahead.tok == CASE){
 			//Handle a case statement here. We'll need to pass
 			//the node in because of the type checking that we do
-			stmt = case_statement(fl, switch_stmt_node);
+			stmt = case_statement(fl, switch_stmt_node, values);
 
 			//If it fails, then we're done
 			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -6126,14 +6138,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//If these are too far apart, we won't go for it
-	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= 256){
-		sprintf(info, "Range from %d to %d exceeds 256, too large for a switch statement. Use a compound if statement instead", switch_stmt_node->lower_bound, switch_stmt_node->upper_bound);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
+	
 	//By the time we reach this, we should have seen a right curly
 	//However, we could still have matching issues, so we'll check for that here
 	if(pop_token(grouping_stack).tok != L_CURLY){
@@ -7256,7 +7261,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node){
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, u_int32_t* values){
 	//For error printing
 	char info[ERROR_SIZE];
 
@@ -7412,6 +7417,27 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	if(case_stmt->case_statement_value < switch_stmt_node->lower_bound){
 		switch_stmt_node->lower_bound = case_stmt->case_statement_value;
 	}
+
+	//If these are too far apart, we won't go for it. We'll check here, because once
+	//we hit this, there's no point in going on
+	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= MAX_SWITCH_RANGE){
+		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead", switch_stmt_node->lower_bound, switch_stmt_node->upper_bound, MAX_SWITCH_RANGE);
+		print_parse_message(PARSE_ERROR, info, current_line);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now let's see if we have any duplicates. If there are, we error out
+	if(values[case_stmt->case_statement_value % MAX_SWITCH_RANGE] == TRUE){
+		sprintf(info, "Value %ld is duplicated in the switch statement", case_stmt->case_statement_value);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		//Error out
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Let's now store it for the future
+	values[case_stmt->case_statement_value % MAX_SWITCH_RANGE] = TRUE;
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

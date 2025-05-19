@@ -17,7 +17,7 @@ fn main(arg:i32, argv:char**) -> i32{
 			x := 211;
 		}
 
-		case 5 -> {
+		case 6 -> {
 			x := 22;
 		}
 

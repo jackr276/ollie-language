@@ -8,12 +8,12 @@ fn main(arg:i32, argv:char**) -> i32{
 	let mut _:u32 := 2;
 
 	//for(let _:u32 := 0; _ < 32; _++) do{
-	while (_ < 33) do {
+	while (_ < 65) do {
 		let mut i:u32 := 2;
 		if(i == 2) then {
 			i := 3;
 		}
-		break when(x == 3222);
+		break when(x > 33 || x <= 55);
 		x := x * 37;
 		_++;
 	
