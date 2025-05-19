@@ -7,13 +7,14 @@ fn main(argc:u32, argv:char**) -> i32 {
 	let mut x:u64 := 1;
 	
 	switch on(x){
-		case 1:
+		case 1 -> {
 			declare i : u32;
 			i := 32;
-			break;
+		}
 
-		default:
-			break;
+		default -> {
+			x := 222;
+		}
 	}
 	
 	ret x % y;

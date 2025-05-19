@@ -81,15 +81,13 @@ fn main() -> i32{
 
 	//Empty case statement testing
 	switch on(x){
-		case 1:
-		case 2:
-		case 3:
+		case 3 ->
 			{
 			x := x + 3;
 			}
-		default:
+		default -> {
 			x := x + 76;
-
+		}
 	}
 
 	ret x;
