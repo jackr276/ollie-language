@@ -32,9 +32,11 @@
 //The max switch/case range is 1024
 #define MAX_SWITCH_RANGE 1024
 
-//All error sizes are 1000 unless specified
-#define ERROR_SIZE 1500
-#define LARGE_ERROR_SIZE 2000
+//All error sizes are 2000
+#define ERROR_SIZE 2000
+
+//Define a generic error array global variable
+char info[ERROR_SIZE];
 
 //The function is reentrant
 //Variable and function symbol tables
@@ -141,9 +143,6 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t
  * Note all actual string parsing and validation is handled by the lexer
  */
 static generic_ast_node_t* identifier(FILE* fl){
-	//In case of error printing
-	char info[ERROR_SIZE];
-
 	//Grab the next token
 	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
@@ -176,9 +175,6 @@ static generic_ast_node_t* identifier(FILE* fl){
  * Note all actual string parsing and validation is handled by the lexer
  */
 static generic_ast_node_t* label_identifier(FILE* fl){
-	//In case of error printing
-	char info[ERROR_SIZE];
-
 	//Grab the next token
 	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
@@ -374,8 +370,6 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
  * BNF Rule: <function-call> ::= @<identifier>({<logical-or-expression>}?{, <logical-or-expression>}*)
  */
 static generic_ast_node_t* function_call(FILE* fl){
-	//For generic error printing
-	char info[ERROR_SIZE];
 	//The current line num
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -582,8 +576,6 @@ static generic_ast_node_t* function_call(FILE* fl){
 static generic_ast_node_t* primary_expression(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -729,8 +721,6 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  *
  */
 static generic_ast_node_t* assignment_expression(FILE* fl){
-	//Info array for error printing
-	char info[ERROR_SIZE];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -901,8 +891,6 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  * 								    | : <variable-identifier>
  */
 static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_type){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -1014,8 +1002,6 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
  *
  */
 static generic_ast_node_t* array_accessor(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Freeze the current line
@@ -1102,8 +1088,6 @@ static generic_ast_node_t* array_accessor(FILE* fl){
  *						  | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Freeze the current line number
@@ -1468,8 +1452,6 @@ static void bitwise_not_constant_value(generic_ast_node_t* constant_node){
  * 								| --
  */
 static generic_ast_node_t* unary_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Is this assignable
@@ -1913,8 +1895,6 @@ static generic_ast_node_t* unary_expression(FILE* fl){
  * 						    	| < <type-specifier> > <unary-expression>
  */
 static generic_ast_node_t* cast_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 
@@ -2038,8 +2018,6 @@ static generic_ast_node_t* cast_expression(FILE* fl){
  * BNF Rule: <multiplicative-expression> ::= <cast-expression>{ (* | / | %) <cast-expression>}*
  */
 static generic_ast_node_t* multiplicative_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2375,8 +2353,6 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
  * BNF Rule: <additive-expression> ::= <multiplicative-expression>{ (+ | -) <multiplicative-expression>}*
  */
 static generic_ast_node_t* additive_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2789,8 +2765,6 @@ static generic_ast_node_t* additive_expression(FILE* fl){
  *								 |  <additive-expression> >> <additive-expression>
  */
 static generic_ast_node_t* shift_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -2911,8 +2885,6 @@ static generic_ast_node_t* shift_expression(FILE* fl){
  * 						     | <shift-expression> <= <shift-expression>
  */
 static generic_ast_node_t* relational_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3027,8 +2999,6 @@ static generic_ast_node_t* relational_expression(FILE* fl){
  * BNF Rule: <equality-expression> ::= <relational-expression>{ (==|!=) <relational-expression> }*
  */
 static generic_ast_node_t* equality_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3145,8 +3115,6 @@ static generic_ast_node_t* equality_expression(FILE* fl){
  * BNF Rule: <and-expression> ::= <equality-expression>{& <equality-expression>}* 
  */
 static generic_ast_node_t* and_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3265,8 +3233,6 @@ static generic_ast_node_t* and_expression(FILE* fl){
  * BNF Rule: <exclusive-or-expression> ::= <and-expression>{^ <and-expression}*
  */
 static generic_ast_node_t* exclusive_or_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3385,8 +3351,6 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
  * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression>{ | <exclusive-or-expression>}*
  */
 static generic_ast_node_t* inclusive_or_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3504,8 +3468,6 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
  * BNF Rule: <logical-and-expression> ::= <inclusive-or-expression>{&&<inclusive-or-expression>}*
  */
 static generic_ast_node_t* logical_and_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3627,8 +3589,6 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
 static generic_ast_node_t* logical_or_expression(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//Temp holder for our use
@@ -3750,8 +3710,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  * BNF Rule: <construct-member> ::= {mut}? <identifier> : <type-specifier> 
  */
 static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
-	//The error printing string
-	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Is this mutable? False by default
@@ -3948,8 +3906,6 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
  * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
 static u_int8_t construct_definer(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Freeze the line num
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
@@ -4152,9 +4108,6 @@ static u_int8_t construct_definer(FILE* fl){
  * BNF Rule: <enum-member> ::= <identifier>
  */
 static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
-	//For error printing
-	char info[ERROR_SIZE];
-
 	//We really just need to see a valid identifier here
 	generic_ast_node_t* ident = identifier(fl);
 
@@ -4305,8 +4258,6 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
  * BNF Rule: <enum-definer> ::= define enum <identifier> { <enum-member-list> } {as <identifier>}?;
  */
 static u_int8_t enum_definer(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -4560,8 +4511,6 @@ static u_int8_t enum_definer(FILE* fl){
  * 						   | <identifier>
  */
 static symtab_type_record_t* type_name(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 	//A temporary holder for the type name
@@ -4916,8 +4865,6 @@ static generic_type_t* type_specifier(FILE* fl){
  * BNF Rule: <parameter-declaration> ::= {mut}? <identifier> : <type-specifier>
  */
 static generic_ast_node_t* parameter_declaration(FILE* fl){
-	//For any needed error printing -- need more size
-	char info[ERROR_SIZE + 500];
 	//Is it mutable?
 	u_int8_t is_mut = 0;
 	//Lookahead token
@@ -5194,8 +5141,6 @@ static generic_ast_node_t* expression_statement(FILE* fl){
  * <labeled-statement> ::= <label-identifier> : 
  */
 static generic_ast_node_t* labeled_statement(FILE* fl){
-	//For error printing -- need more
-	char info[ERROR_SIZE + 500];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -5289,9 +5234,6 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
  * BNF Rule: <if-statement> ::= if( <logical-or-expression> ) then <compound-statement> {else if statement}* {else-statement}?
  */
 static generic_ast_node_t* if_statement(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
-
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead tokens
@@ -5786,8 +5728,6 @@ static generic_ast_node_t* break_statement(FILE* fl){
  * BNF Rule: <return-statement> ::= ret {<logical-or-expression>}?;
  */
 static generic_ast_node_t* return_statement(FILE* fl){
-	//For error printing
-	char info[1500];
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -5939,8 +5879,6 @@ static generic_ast_node_t* branch_statement(FILE* fl){
  * BNF Rule: <switch-statement> ::= switch on( <logical-or-expression> ) from(<constant>, <constant>) { {<case-statement | default-statement>}+ }
  */
 static generic_ast_node_t* switch_statement(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -6165,8 +6103,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  * BNF Rule: <while-statement> ::= while( <logical-or-expression> ) do <compound-statement> 
  */
 static generic_ast_node_t* while_statement(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//The lookahead token
 	Lexer_item lookahead;
 	//Freeze the line number
@@ -6276,8 +6212,6 @@ static generic_ast_node_t* while_statement(FILE* fl){
  * BNF Rule: <do-while-statement> ::= do <compound-statement> while( <logical-or-expression> );
  */
 static generic_ast_node_t* do_while_statement(FILE* fl){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -7262,9 +7196,6 @@ static generic_ast_node_t* default_statement(FILE* fl){
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
 static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, u_int32_t* values){
-	//For error printing
-	char info[ERROR_SIZE];
-
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -7478,8 +7409,6 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
  * BNF Rule: <declare-statement> ::= declare {register | static}? {mut}? <identifier> : <type-specifier>;
  */
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
-	//For error printing
-	char info[LARGE_ERROR_SIZE];
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -7671,8 +7600,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
  * BNF Rule: <let-statement> ::= let {register | static}? {mut}? <identifier> : <type-specifier> := <conditional-expression>;
  */
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
-	//For error printing
-	char info[LARGE_ERROR_SIZE];
 	//The line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -7924,8 +7851,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
  * BNF Rule: <alias-statement> ::= alias <type-specifier> as <identifier>;
  */
 static u_int8_t alias_statement(FILE* fl){
-	//For error printing
-	char info[LARGE_ERROR_SIZE];
 	//Store the ident name locally
 	char ident_name[MAX_TYPE_NAME_LENGTH];
 	//Our lookahead token
@@ -8093,8 +8018,6 @@ static u_int8_t definition(FILE* fl){
  * 				   | <let-statement> 
  */
 static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
-	//For error printing
-	char info[LARGE_ERROR_SIZE];
 	//Lookahead token
 	Lexer_item lookahead;
 
@@ -8162,8 +8085,6 @@ static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicate
  * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
  */
 static int8_t check_jump_labels(){
-	//For error printing
-	char info[ERROR_SIZE];
 	//Grab a reference to our current jump statement
 	generic_ast_node_t* current_jump_statement;
 
@@ -8217,8 +8138,6 @@ static int8_t check_jump_labels(){
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
 static generic_ast_node_t* function_definition(FILE* fl){
-	//This will be used for error printing
-	char info[LARGE_ERROR_SIZE];
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -8703,8 +8622,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
  * #replace MY_INT with 2;
  */
 static u_int8_t replace_statement(FILE* fl){
-	//For error printing
-	char info[1500];
 	//Lookahead token
 	Lexer_item lookahead;
 

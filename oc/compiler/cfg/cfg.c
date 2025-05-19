@@ -41,6 +41,8 @@ basic_block_t* function_exit_block = NULL;
 symtab_variable_record_t* stack_pointer = NULL;
 //Store this for usage
 generic_type_t* u64 = NULL;
+//For any/all error printing
+char error_info[1500];
 
 //A package of values that each visit function uses
 typedef struct {
@@ -5118,9 +5120,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
  * will always have it's own separate block
  */
 static basic_block_t* visit_function_definition(generic_ast_node_t* function_node){
-	//For error printing
-	char info[1000];
-
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
 	//We will now store this as the current function
@@ -5162,8 +5161,8 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//blocks as successors
 	if(compound_stmt_block == NULL){
 		//We'll also throw a warning
-		sprintf(info, "Function \"%s\" was given no body", function_node->func_record->func_name);
-		print_cfg_message(WARNING, info, func_cursor->line_number);
+		sprintf(error_info, "Function \"%s\" was given no body", function_node->func_record->func_name);
+		print_cfg_message(WARNING, error_info, func_cursor->line_number);
 		//One more warning
 		(*num_warnings_ref)++;
 
