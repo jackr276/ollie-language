@@ -679,6 +679,70 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 
 
 /**
+ * Handle the case where we can condense three instructions into one big address calculation for a to-memory move
+ * t7 <- arr_0 + 340
+ * t8 <- t7 + arg_0 * 4
+ * (t8) <- 3
+ *
+ * Should become
+ * mov(w/l/q) $3, 340(arr_0, arg_0, 4)
+
+ *
+ * NOTE: Does not do deletion or reordering
+ */
+static void handle_three_instruction_address_calc_to_memory_move(instruction_t* offset_calc, instruction_t* lea_statement, instruction_t* memory_access){
+	//Select the variable size
+	variable_size_t size;
+
+	//Select the size based on what we're moving in
+	if(memory_access->op1 != NULL){
+		size = select_variable_size(memory_access->op1);
+	} else {
+		size = select_constant_size(memory_access->op1_const);
+	}
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
+	//Set the address calculation mode
+	memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTER_OFFSET_AND_SCALE;
+	
+	//The offset comes from the first instruction
+	memory_access->offset = offset_calc->op1_const;
+
+	//The first operand also comes from the first instruction
+	memory_access->address_calc_reg1 = offset_calc->op1;
+
+	//The second instruction gives us the second register and lea offset
+	memory_access->address_calc_reg2 = lea_statement->op2;
+	memory_access->lea_multiplicator = lea_statement->lea_multiplicator;
+
+	//Now we'll set the sources that we have
+	if(memory_access->op1 != NULL){
+		memory_access->source_register = memory_access->op1;
+	} else {
+		memory_access->source_immediate = memory_access->op1_const;
+	}
+
+	//And that's all
+}
+
+
+/**
  * Handle a memory to register move type instruction selection with an address calculation
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
@@ -1618,7 +1682,29 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		print_three_addr_code_stmt(window->instruction2);
 		print_three_addr_code_stmt(window->instruction3);
 
+		//Let the helper deal with everything related to this
+		handle_three_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2, window->instruction3);
 
+		//Once we're done doing this, the first 2 instructions are now useless
+		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+
+		//Now we'll rearrange the window to reflect this
+		window->instruction1 = window->instruction3;
+		window->instruction2 = window->instruction1->next_statement;
+
+		//Avoid any null pointer dereference
+		if(window->instruction2 == NULL){
+			window->instruction3 = NULL;
+		} else {
+			window->instruction3 = window->instruction2->next_statement;
+		}
+
+		//Let the helper handle the status
+		set_window_status(window);
+
+		//This counts as a change
+		changed = TRUE;
 	}
 
 	/**
