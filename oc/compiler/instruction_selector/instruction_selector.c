@@ -719,7 +719,7 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 	}
 
 	//Set the address calculation mode
-	memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTER_OFFSET_AND_SCALE;
+	memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 	
 	//The offset comes from the first instruction
 	memory_access->offset = offset_calc->op1_const;
