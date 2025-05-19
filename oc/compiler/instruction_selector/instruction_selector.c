@@ -613,7 +613,7 @@ variable_size_t select_constant_size(three_addr_const_t* constant){
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
-static void handle_address_calc_to_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+static void handle_two_instruction_address_calc_to_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
 	//Select the variable size
 	variable_size_t size;
 
@@ -683,7 +683,7 @@ static void handle_address_calc_to_memory_move(instruction_t* address_calculatio
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
-static void handle_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+static void handle_two_instruction_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
 	//Select the variable size based on the assignee
 	variable_size_t size = select_variable_size(memory_access->assignee);
 
@@ -1578,26 +1578,107 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	}
 
 
-	//============================= The "Grand Patterns" ==============================
+	//============================= Address Calculation Optimization  ==============================
 	//These are patterns that span multiple instructions. Often we're able to
 	//condense these multiple instructions into one singular x86 instruction
+	//
+	//We want to ensure that we get the best possible outcome for memory movement address calculations.
+	//This is where *a lot* of instructions get generated, so it's worth it to spend compilation time
+	//compressing these
 
 	/**
 	 * =========================== Memory Movement Instructions =======================
+	 * The to-memory case
+	 *
 	 * Moving from memory to a register or vice versa often presents opportunities, because
 	 * we're able to make use of memory addressing mode. This will arise whenever we do
 	 * a register-to-memory "store" or a memory-to-register "load". Remember, in x86 assembly
 	 * we can't go from memory-to-memory, so every memory access operation will fall within
 	 * this category
 	 *
-	 * First handle to memory movement
-	 * Example:
-	 * t26 <- t24 + 4
-	 * (t26) <- 3
+	 * t7 <- arr_0 + 340
+	 * t8 <- t7 + arg_0 * 4
+	 * (t8) <- 3
 	 *
-	 * should become:
-	 * mov(w/l/q) $3, 4(t24)
+	 * Should become
+	 * mov(w/l/q) $3, 340(arr_0, arg_0, 4)
 	 */
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2 != NULL && window->instruction3 != NULL
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
+		&& (window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT || window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT)
+		&& window->instruction3->assignee->indirection_level == 1
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
+
+		//Once we're in here, we know that we can eliminate instructions 1 and 2, and create one big complex movement instruction
+
+		printf("HERE with:");
+		print_three_addr_code_stmt(window->instruction1);
+		print_three_addr_code_stmt(window->instruction2);
+		print_three_addr_code_stmt(window->instruction3);
+
+
+	}
+
+	/**
+	 * The from-memory case
+	 *
+	 * t7 <- arr_0 + 340
+	 * t8 <- t7 + arg_0 * 4
+	 * t9 <- (t8)
+	 *
+	 * Should become
+	 * mov(w/l/q) 340(arr_0, arg_0, 4), t9
+	 */
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2 != NULL && window->instruction3 != NULL
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction3->op1->indirection_level == 1
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& variables_equal(window->instruction2->assignee, window->instruction3->op1, TRUE) == TRUE){
+
+		//Once we're in here, we know that we can eliminate instructions 1 and 2, and create one big complex movement instruction
+
+		printf("HERE with:");
+		print_three_addr_code_stmt(window->instruction1);
+		print_three_addr_code_stmt(window->instruction2);
+		print_three_addr_code_stmt(window->instruction3);
+	}
+
+
+	/**
+	 * t26 <- arr_0 + t25
+	 * t28 <- t26 + 8
+	 * t29 <- (t28)
+	 *
+	 * Should become
+	 * mov(w/l/q) 8(arr_0, t25), t29
+	 */
+
+	
+	/**
+	 * t26 <- arr_0 + t25
+	 * t28 <- t26 + 8
+	 * (t28) <- t29
+	 *
+	 * Should become
+	 * mov(w/l/q) t29, 8(arr_0, t25)
+	 */
+
+
+
+	 /**
+	  * Handle to-memory movement with 2 operands
+	  *
+	  * Example:
+	  * t25 <- t24 + 4
+	  * (t25) <- 3
+	  *
+	  * Should become
+	  * mov(w/l/q) 4(t24), t25
+	  */
 	//If we have some kind of offset calculation followed by a dereferencing assingment, we have either a 
 	//register to memory or immediate to memory move. Either way, we can rewrite this using address computation mode
 	if(window->instruction2 != NULL
@@ -1608,7 +1689,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		&& window->instruction2->assignee->indirection_level == 1){
 
 		//Use the helper to keep things somewhat clean in here
-		handle_address_calc_to_memory_move(window->instruction1, window->instruction2);
+		handle_two_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2);
 
 		//We can now delete instruction 1
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
@@ -1651,7 +1732,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		&& window->instruction2->op1->indirection_level == 1){
 
 		//Use the helper to avoid an explosion of code here
-		handle_address_calc_from_memory_move(window->instruction1, window->instruction2);
+		handle_two_instruction_address_calc_from_memory_move(window->instruction1, window->instruction2);
 
 		//We can scrap instruction 1 now, it's useless
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
