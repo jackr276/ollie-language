@@ -10,6 +10,7 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>
@@ -751,9 +752,6 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 	//Select the variable size based on the assignee
 	variable_size_t size = select_variable_size(memory_access->assignee);
 
-	//Use the helper to get the right sized move instruction
-	memory_access->instruction_type = select_move_instruction(size);
-	
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
 		case WORD:
@@ -803,6 +801,57 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 
 	//Set the destination as well
 	memory_access->destination_register = memory_access->assignee;
+}
+
+
+/**
+ * Handle the case where we can condense three instructions into one big address calculation for a to-memory move
+ * t7 <- arr_0 + 340
+ * t8 <- t7 + arg_0 * 4
+ * t9 <- (t8)
+ *
+ * Should become
+ * mov(w/l/q) 340(arr_0, arg_0, 4), t9
+ *
+ * NOTE: Does not do deletion or reordering
+ */
+static void handle_three_instruction_address_calc_from_memory_move(instruction_t* offset_calc, instruction_t* lea_statement, instruction_t* memory_access){
+	//We'll first select the variable size based on the destination
+	variable_size_t size = select_variable_size(memory_access->assignee);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case WORD:
+			memory_access->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			memory_access->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			memory_access->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			memory_access->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+	}
+
+	//Set the calculation mode
+	memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+	//The offset and first register come from the offset calculation
+	memory_access->offset = offset_calc->op1_const;
+	memory_access->address_calc_reg1 = offset_calc->op1;
+
+	//And the second register and scale come from the lea statement
+	memory_access->address_calc_reg2 = lea_statement->op2;
+	memory_access->lea_multiplicator = lea_statement->lea_multiplicator;
+
+	//Now we'll set the destination register. We don't need to worry about any
+	//immediate values here, because we can't load into an immediate
+	memory_access->destination_register = memory_access->assignee;
+
+	//And we're set
 }
 
 
@@ -1675,13 +1724,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
 
-		//Once we're in here, we know that we can eliminate instructions 1 and 2, and create one big complex movement instruction
-
-		printf("HERE with:");
-		print_three_addr_code_stmt(window->instruction1);
-		print_three_addr_code_stmt(window->instruction2);
-		print_three_addr_code_stmt(window->instruction3);
-
 		//Let the helper deal with everything related to this
 		handle_three_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2, window->instruction3);
 
@@ -1725,12 +1767,29 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->op1, TRUE) == TRUE){
 
-		//Once we're in here, we know that we can eliminate instructions 1 and 2, and create one big complex movement instruction
+		//Let the helper deal with it
+		handle_three_instruction_address_calc_from_memory_move(window->instruction1, window->instruction2, window->instruction3);
 
-		printf("HERE with:");
-		print_three_addr_code_stmt(window->instruction1);
-		print_three_addr_code_stmt(window->instruction2);
-		print_three_addr_code_stmt(window->instruction3);
+		//Once we're done doing this, the first 2 instructions are now useless
+		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+
+		//Now we'll rearrange the window to reflect this
+		window->instruction1 = window->instruction3;
+		window->instruction2 = window->instruction1->next_statement;
+
+		//Avoid any null pointer dereference
+		if(window->instruction2 == NULL){
+			window->instruction3 = NULL;
+		} else {
+			window->instruction3 = window->instruction2->next_statement;
+		}
+
+		//Let the helper handle the status
+		set_window_status(window);
+
+		//This counts as a change
+		changed = TRUE;
 	}
 
 
