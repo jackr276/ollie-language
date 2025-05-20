@@ -901,6 +901,66 @@ static void handle_three_instruction_registers_and_offset_only_from_memory_move(
 
 
 /**
+ * This is the to-memory equivalent of above
+ *
+ * t26 <- arr_0 + t25
+ * t28 <- t26 + 8
+ * (t28) <- 3
+ *
+ * Should become
+ * mov(w/l/q) $3, 8(arr_0, t25)
+ */
+static void handle_three_instruction_registers_and_offset_only_to_memory_move(instruction_t* additive_statement, instruction_t* offset_calc, instruction_t* memory_access){
+	//Let's first decide the variable size based on what we'll be moving in
+	variable_size_t size;
+
+	//Use the op1 if it's there
+	if(memory_access->op1 != NULL){
+		size = select_variable_size(memory_access->op1);
+	//Otherwise we need to use the constant
+	} else {
+		size = select_constant_size(memory_access->op1_const);
+	}
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
+	//Now we can put in the address calculation type
+	memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+	//We'll get the first and second register from the additive statement
+	memory_access->address_calc_reg1 = additive_statement->op1;
+	memory_access->address_calc_reg2 = additive_statement->op2;
+
+	//We'll get the offset from offset_calc
+	memory_access->offset = offset_calc->op1_const;
+
+	//Now we'll set the source/source immediate based on what we're given
+	//Use the op1 if it's there
+	if(memory_access->op1 != NULL){
+		memory_access->source_register = memory_access->op1;
+	//Otherwise we need to use the constant
+	} else {
+		memory_access->source_immediate = memory_access->op1_const;
+	}
+}
+
+
+/**
  * Handle a left shift operation. In doing a left shift, we account
  * for the possibility that we have a signed value
  */
@@ -1854,9 +1914,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->op1, TRUE) == TRUE){
 
-		printf("HERE with:");
-		print_instruction_window_three_address_code(window);
-
 		//Let the helper deal with it
 		handle_three_instruction_registers_and_offset_only_from_memory_move(window->instruction1, window->instruction2, window->instruction3);
 		
@@ -1899,8 +1956,29 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
 
-		printf("HERE2 with:");
-		print_instruction_window_three_address_code(window);
+		//Let the helper deal with it
+		handle_three_instruction_registers_and_offset_only_to_memory_move(window->instruction1, window->instruction2, window->instruction3);
+		
+		//Once the helper is done, we need to delete instructions 1 and 2
+		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+
+		//Now we'll shift the window appropriately
+		window->instruction1 = window->instruction3;
+		window->instruction2 = window->instruction1->next_statement;
+
+		//Avoid a null pointer dereference
+		if(window->instruction2 == NULL){
+			window->instruction3 = NULL;
+		} else {
+			window->instruction3 = window->instruction2->next_statement;
+		}
+
+		//Update the window after this
+		set_window_status(window);
+
+		//This counts as a change
+		changed = TRUE;
 
 	}
 
