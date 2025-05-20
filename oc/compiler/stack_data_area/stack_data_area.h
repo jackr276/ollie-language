@@ -15,12 +15,17 @@
 
 #include <sys/types.h>
 
+
 //An overall structure that holds our stack data area
 typedef struct stack_data_area_t stack_data_area_t;
 //Each node represents the allocation of a certain variable of a certain size
 typedef struct stack_data_area_node_t stack_data_area_node_t;
 
 
+/**
+ * A structure that contains an automatically organizing linked
+ * list. This linked list contains all of our data
+ */
 struct stack_data_area_t{
 	//The head node of the data area.
 	//This will always be the highest(i.e. *lowest* offset) node 
@@ -30,9 +35,34 @@ struct stack_data_area_t{
 };
 
 
+/**
+ * Each individual node contains a reference
+ * to a given three address code variable
+ */
 struct stack_data_area_node_t{
-
+	//The next node
+	stack_data_area_node_t* next;
+	//TODO may or may not need
+	stack_data_area_node_t* previous;
+	//The variable that this node references
+	void* variable;
+	//The size of the node(may not be the same as the var due to alignment)
+	u_int32_t variable_size;
 };
 
+/**
+ * Add a node into the stack data area
+ */
+void add_variable_to_stack(stack_data_area_t* area, void* variable);
+
+/**
+ * Remove a node from the stack if it is deemed useless
+ */
+void remove_variable_from_stack(stack_data_area_t* area, void* variable);
+
+/**
+ * Deallocate the internal linked list of the stack data area
+ */
+void stack_data_area_dealloc(stack_data_area_t* stack_data_area);
 
 #endif /* STACK_DATA_AREA_H */

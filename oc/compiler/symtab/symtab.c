@@ -1042,6 +1042,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				free(temp->call_graph_node);
 			}
 
+			//Deallocate the data area itself
+			stack_data_area_dealloc(&(temp->data_area));
+
 			free(temp);
 		}
 	}
