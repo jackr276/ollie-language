@@ -750,6 +750,15 @@ static void print_addressing_mode_expression(instruction_t* instruction){
 			printf(")");
 			break;
 
+		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
+			print_immediate_value_no_prefix(instruction->offset);
+			printf("(");
+			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
+			printf(", ");
+			print_variable(instruction->address_calc_reg2, PRINTING_VAR_INLINE);
+			printf(")");
+			break;
+
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
 			print_immediate_value_no_prefix(instruction->offset);
 			printf("(");

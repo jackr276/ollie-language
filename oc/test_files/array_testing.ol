@@ -16,6 +16,7 @@ fn main(mut arg:i32, argv:char**) -> i32{
 	oneDi32[1] := 3;
 
 	let mut x:i32 := 33;
+	x := arr[arg][13];
 
 	let mut i:i32 := 3;
 	//let mut j:i32* := arr;
