@@ -46,6 +46,8 @@ typedef enum{
 	LEAL,
 	LEAQ,
 	INDIRECT_JMP, //For our switch statements
+	CQTO, //convert quad-to-octa word
+	CLTD, //convert long-to-double-long(quad)
 	NOP,
 	JMP,
 	JNE,

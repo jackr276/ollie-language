@@ -1288,6 +1288,7 @@ static void handle_multiplication_instruction(instruction_t* instruction){
 
 /**
  * Handle a division operation
+ * 
  */
 static void handle_division_instruction(instruction_t* instruction){
 
@@ -1340,14 +1341,6 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		case STAR:
 			//Let the helper do it
 			handle_multiplication_instruction(instruction);
-			break;
-		case F_SLASH:
-			//Let the helper do it
-			handle_division_instruction(instruction);
-			break;
-		case MOD:
-			//Let the helper do it
-			handle_modulus_instruction(instruction);
 			break;
 		//Hanlde a left shift instruction
 		case L_SHIFT:
@@ -1787,11 +1780,14 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 		//Division is a bit unique
 		} else if(window->instruction1->op == F_SLASH){
+			//This will generate more than one instruction
+			handle_division_instruction(window->instruction1);
 
 		//Mod is very similar to division but there are some differences
 		//that warrant a separate function
 		} else if(window->instruction1->op == MOD){
-
+			//This will generate more than one instruction
+			handle_modulus_instruction(window->instruction1);
 		}
 	}
 

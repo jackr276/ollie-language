@@ -1312,6 +1312,12 @@ void print_instruction(instruction_t* instruction){
 		case NOP:
 			printf("nop\n");
 			break;
+		case CQTO:
+			printf("cqto\n");
+			break;
+		case CLTD:
+			printf("cltd\n");
+			break;
 		case JMP:
 			printf("jmp .L%d\n", jumping_to_block->block_id);
 			break;
