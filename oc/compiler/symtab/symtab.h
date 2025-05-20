@@ -14,6 +14,8 @@
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
 #include "../stack/lightstack.h"
+//Every function record has one of these
+#include "../stack_data_area/stack_data_area.h"
 
 
 //We define that each lexical scope can have 5000 symbols at most
@@ -82,6 +84,10 @@ struct symtab_function_record_t{
 	char func_name[MAX_IDENT_LENGTH];
 	//The module it was defined in
 	char module_defined_in[MAX_IDENT_LENGTH];
+	//The parameters
+	parameter_t func_params[MAX_FUNCTION_PARAMS];
+	//The data area for the whole function
+	stack_data_area_t data_area;
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
@@ -92,8 +98,6 @@ struct symtab_function_record_t{
 	u_int64_t offset;
 	//Number of parameters
 	u_int8_t number_of_params;
-	//The parameters
-	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
 	//What's the return type?
