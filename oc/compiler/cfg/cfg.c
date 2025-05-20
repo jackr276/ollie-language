@@ -41,6 +41,8 @@ basic_block_t* function_exit_block = NULL;
 symtab_variable_record_t* stack_pointer = NULL;
 //Store this for usage
 generic_type_t* u64 = NULL;
+//The current stack offset for any given function
+u_int64_t stack_offset = 0;
 //For any/all error printing
 char error_info[1500];
 
@@ -3129,7 +3131,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		generic_type_t* type = expr_node->variable->type;
 
 		//If we have an array, we'll need to decrement the stack
-		if(type->type_class == TYPE_CLASS_ARRAY){
+		if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
 			//Grab the size out, we'll need to subtract this from the stack
 			u_int32_t array_size = type->type_size;
 
@@ -3156,8 +3158,6 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 			//Add the assignment in
 			add_statement(basic_block, assignment);
 		}
-
-		//TODO do structs
 
 	//Convert our let statement into abstract machine code 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_LET_STMT){
@@ -5116,6 +5116,14 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 
 /**
+ * We need to add the data area calculation into the function starting block
+ */
+static void add_data_area_allocation(basic_block_t* function_starting_block){
+
+}
+
+
+/**
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
@@ -5124,6 +5132,8 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	symtab_function_record_t* func_record = function_node->func_record;
 	//We will now store this as the current function
 	current_function = func_record;
+	//We also need to zero out the current stack offset value
+	stack_offset = 0;
 
 	//Reset the three address code accordingly
 	set_new_function(func_record);

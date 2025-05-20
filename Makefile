@@ -5,6 +5,7 @@ CFLAGSLINK = -Wall -Wextra
 TEST_SUITE_PATH = ./oc/compiler/test_suites
 LEX_PATH = ./oc/compiler/lexer
 STACK_PATH = ./oc/compiler/stack
+STACK_DATA_AREA_PATH = ./oc/compiler/stack_data_area
 SYMTAB_PATH = ./oc/compiler/symtab
 PARSER_PATH = ./oc/compiler/parser
 TYPE_SYSTEM_PATH = ./oc/compiler/type_system
@@ -94,6 +95,12 @@ dependency_tree.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
 
 dependency_treed.o: $(DEPENDENCY_TREE_PATH)/dependency_tree.c
 	$(CC) $(CFLAGS) -g $(DEPENDENCY_TREE_PATH)/dependency_tree.c -o $(OUT)/dependency_treed.o
+
+stack_data_area.o: $(STACK_DATA_AREA_PATH)/stack_data_area.c
+	$(CC) $(CFLAGS) $(STACK_DATA_AREA_PATH)/stack_data_area.c -o $(OUT)/stack_data_area.o
+
+stack_data_aread.o: $(STACK_DATA_AREA_PATH)/stack_data_area.c
+	$(CC) $(CFLAGS) -g $(STACK_DATA_AREA_PATH)/stack_data_area.c -o $(OUT)/stack_data_area.o
 
 symtab.o: $(SYMTAB_PATH)/symtab.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT)/symtab.o
