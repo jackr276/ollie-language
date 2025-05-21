@@ -917,6 +917,35 @@ static void print_multiplication_instruction(instruction_t* instruction){
 
 
 /**
+ * Print a division instruction, in all the forms it can take
+ */
+static void print_division_instruction(instruction_t* instruction){
+	//First we'll print out the appropriate variety of addition
+	switch(instruction->instruction_type){
+		case DIVL:
+			printf("divl ");
+			break;
+		case DIVQ:
+			printf("divq ");
+			break;
+		case IDIVL:
+			printf("idivl ");
+			break;
+		case IDIVQ:
+			printf("idivq ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//We'll only have a source register here
+	print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	printf("\n");
+}
+
+
+/**
  * Print an addition instruction, in all the forms it can take
  */
 static void print_addition_instruction(instruction_t* instruction){
@@ -1377,6 +1406,13 @@ void print_instruction(instruction_t* instruction){
 		case IMULL:
 			print_multiplication_instruction(instruction);
 			break;
+		case DIVL:
+		case DIVQ:
+		case IDIVL:
+		case IDIVQ:
+			print_division_instruction(instruction);
+			break;
+
 		//Handle the special addressing modes that we could have here
 		case REG_TO_MEM_MOVL:
 		case REG_TO_MEM_MOVW:

@@ -1432,10 +1432,13 @@ static void handle_division_instruction(instruction_window_t* window){
 	//This may become the cl instruction
 	instruction_t* current_end = move_to_rax;
 
+	//Let's determine signedness
+	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
+
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
-	if(is_type_signed(division_instruction->assignee->type) == TRUE){
+	if(is_signed == TRUE){
 		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_cl_instruction(move_to_rax->assignee);
+		instruction_t* cl_instruction = emit_cl_instruction(move_to_rax->destination_register);
 
 		//Link it with our move statement
 		move_to_rax->next_statement = cl_instruction;
@@ -1445,6 +1448,42 @@ static void handle_division_instruction(instruction_window_t* window){
 		current_end = cl_instruction;
 	}
 
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(window->instruction1->op2, is_signed);
+
+	//Once it's been emitted, we link it in like all the rest
+	current_end->next_statement = division;
+	division->previous_statement = current_end;
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, move_to_rax->destination_register);
+
+	//Tie it in here
+	division->next_statement = result_movement;
+	result_movement->previous_statement = division;
+
+	//And now we can tie it in to our overall statement
+	result_movement->next_statement = after_division;
+	
+	//Avoid any null pointer dereference here
+	if(after_division != NULL){
+		after_division->previous_statement = result_movement;
+	} else {
+		//This is the new exit statement
+		block->exit_statement = result_movement;
+	}
+
+	//Now we need to repopulate the window
+	window->instruction1 = move_to_rax;
+	window->instruction2 = window->instruction1->next_statement;
+	window->instruction3 = window->instruction2->next_statement;
+
+	//Now we'll cycle the window to get to the end
+	slide_window(window);
+	slide_window(window);
+
+	//Set the status
+	set_window_status(window);
 }
 
 
@@ -1944,13 +1983,17 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//Handle the logical and case
 		if(window->instruction1->op == DOUBLE_AND){
 			handle_logical_and_instruction(cfg, window);
+			changed = TRUE;
+			
 		} else if(window->instruction1->op == DOUBLE_OR){
 			handle_logical_or_instruction(cfg, window);
+			changed = TRUE;
 
 		//Division is a bit unique
 		} else if(window->instruction1->op == F_SLASH){
 			//This will generate more than one instruction
-			//handle_division_instruction(window);
+			handle_division_instruction(window);
+			changed = TRUE;
 
 		//Mod is very similar to division but there are some differences
 		//that warrant a separate function
