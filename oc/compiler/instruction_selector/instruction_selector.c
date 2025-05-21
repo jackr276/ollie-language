@@ -257,6 +257,8 @@ static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_va
  * Emit a cqto or a cltd instruction
  *
  * We use this during the process of emitting division instructions
+ *
+ * NOTE: This is only needed for signed division
  */
 static instruction_t* emit_cl_instruction(three_addr_var_t* converted){
 	//First we'll allocate it
@@ -373,9 +375,6 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 
 /**
  * Emit a movzbl instruction
- *
- * This specialized conditional move is normally used in conjuction with test and sete
- * for logical inversion
  */
 static instruction_t* emit_movzbl_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First we'll allocate it
@@ -391,6 +390,87 @@ static instruction_t* emit_movzbl_instruction(three_addr_var_t* destination, thr
 	//And now we'll give it back
 	return instruction;
 }
+
+
+/**
+ * Emit a movX instruction
+ *
+ * This is used for when we need extra moves(after a division/modulus)
+ */
+static instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We set the size based on the destination 
+	variable_size_t size = select_variable_size(destination);
+
+	switch (size) {
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+		//Should never reach this
+		default:
+			break;
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a divX or idivX instruction
+ *
+ * Division instructions have no destination that need be written out. They only have a source
+ */
+static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is_signed){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We set the size based on the destination 
+	variable_size_t size = select_variable_size(source);
+
+	//Now we'll decide this based on size and signedness
+	switch (size) {
+		case WORD:
+		case DOUBLE_WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = IDIVL;
+			} else {
+				instruction->instruction_type = DIVL;
+			}
+			break;
+
+		case QUAD_WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = IDIVQ;
+			} else {
+				instruction->instruction_type = DIVQ;
+			}
+			break;
+
+		//Should never reach this
+		default:
+			break;
+	}
+
+	//Finally we set the source
+	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
 
 
 /**
@@ -1315,13 +1395,12 @@ static void handle_multiplication_instruction(instruction_t* instruction){
 /**
  * Handle a division operation
  *
- * t3 <- t4 / 3
+ * t4 <- t2 / t3 
  *
  * Will become:
- * movl t4, t5(rax)
+ * movl t2, t5(rax)
  * cltd
- * movl $3, t6
- * idivl t6
+ * idivl t3(divide by t3, we already guarantee this is a temp var(register))
  * t3 <- t5(rax has quotient)
  * 
  * As such, this will generate additional instructions for us, making it not
@@ -1331,7 +1410,40 @@ static void handle_multiplication_instruction(instruction_t* instruction){
  * instruction in the window
  */
 static void handle_division_instruction(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* division_instruction = window->instruction1;
+	//Also have this as a reference
+	instruction_t* after_division = window->instruction2;
+	//And we'll want this for reference too
+	basic_block_t* block = division_instruction->block_contained_in;
 
+	//We first need to perform a move of the dividence into rax
+	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+
+	//Let's now attach this where division was
+	if(division_instruction->previous_statement != block->leader_statement){
+		//This effectively deletes the old division instruction
+		division_instruction->previous_statement->next_statement = move_to_rax;
+	} else {
+		//Otherwise, this is the leader statement of its block
+		block->leader_statement = move_to_rax;
+	}
+
+	//This may become the cl instruction
+	instruction_t* current_end = move_to_rax;
+
+	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
+	if(is_type_signed(division_instruction->assignee->type) == TRUE){
+		//Emit the cl instruction
+		instruction_t* cl_instruction = emit_cl_instruction(move_to_rax->assignee);
+
+		//Link it with our move statement
+		move_to_rax->next_statement = cl_instruction;
+		cl_instruction->previous_statement = move_to_rax;
+
+		//Keep this reference so we don't get tangled up
+		current_end = cl_instruction;
+	}
 
 }
 
@@ -1838,13 +1950,13 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//Division is a bit unique
 		} else if(window->instruction1->op == F_SLASH){
 			//This will generate more than one instruction
-			handle_division_instruction(window);
+			//handle_division_instruction(window);
 
 		//Mod is very similar to division but there are some differences
 		//that warrant a separate function
 		} else if(window->instruction1->op == MOD){
 			//This will generate more than one instruction
-			handle_modulus_instruction(window);
+			//andle_modulus_instruction(window);
 		}
 	}
 
