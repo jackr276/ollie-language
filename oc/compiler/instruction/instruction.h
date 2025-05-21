@@ -238,6 +238,9 @@ struct three_addr_var_t{
 	symtab_variable_record_t* related_write_var;
 	//For memory management
 	three_addr_var_t* next_created;
+	//The related stack data area node. Not all variables have these,
+	//but "spilled" variables and address variables do
+	stack_data_area_node_t* related_node;
 	//What is the stack offset(i.e. %rsp + __) of this variable?
 	u_int32_t stack_offset;
 	//What is the ssa generation level?

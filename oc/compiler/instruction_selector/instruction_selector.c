@@ -254,6 +254,32 @@ static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_va
 
 
 /**
+ * Emit a cqto or a cltd instruction
+ *
+ * We use this during the process of emitting division instructions
+ */
+static instruction_t* emit_cl_instruction(three_addr_var_t* converted){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size to select the appropriate instruction
+	variable_size_t size = select_variable_size(converted);
+
+	//Now based on the size we'll give the instruction
+	if(size == QUAD_WORD){
+		//Convert-quad-to-octal
+		instruction->instruction_type = CQTO;
+	} else {
+		//Convert-long-to-double-long(aka quad)
+		instruction->instruction_type = CLTD;
+	}
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
  * Emit a sete instruction
  *
  * The sete instruction is used on a byte
@@ -1288,17 +1314,48 @@ static void handle_multiplication_instruction(instruction_t* instruction){
 
 /**
  * Handle a division operation
+ *
+ * t3 <- t4 / 3
+ *
+ * Will become:
+ * movl t4, t5(rax)
+ * cltd
+ * movl $3, t6
+ * idivl t6
+ * t3 <- t5(rax has quotient)
  * 
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
  */
-static void handle_division_instruction(instruction_t* instruction){
+static void handle_division_instruction(instruction_window_t* window){
+
 
 }
 
 
 /**
  * Handle a modulus(remainder) operation
+ * Handle a division operation
+ *
+ * t3 <- t4 / 3
+ *
+ * Will become:
+ * movl t4, t5(rax)
+ * cltd
+ * movl $3, t6
+ * idivl t6
+ * t3 <- t6(rdx has remainder)
+ *
+ * As such, this will generate additional instructions for us, making it not
+ * a "single instruction" pattern
+ *
+ * NOTE: We guarantee that the instruction we're after is always the first
+ * instruction in the window
  */
-static void handle_modulus_instruction(instruction_t* instruction){
+static void handle_modulus_instruction(instruction_window_t* window){
 
 }
 
@@ -1781,13 +1838,13 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//Division is a bit unique
 		} else if(window->instruction1->op == F_SLASH){
 			//This will generate more than one instruction
-			handle_division_instruction(window->instruction1);
+			handle_division_instruction(window);
 
 		//Mod is very similar to division but there are some differences
 		//that warrant a separate function
 		} else if(window->instruction1->op == MOD){
 			//This will generate more than one instruction
-			handle_modulus_instruction(window->instruction1);
+			handle_modulus_instruction(window);
 		}
 	}
 
