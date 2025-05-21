@@ -10,6 +10,15 @@
 #include <stdlib.h>
 #include "../instruction/instruction.h"
 
+/**
+ * Add a node into the stack data area
+ */
+void add_variable_to_stack(stack_data_area_t* area, void* variable){
+	//We already know it's one of these
+	three_addr_var_t* var = variable;
+	//TODO
+	
+}
 
 /**
  * Remove a node from the stack if it is deemed useless
@@ -56,6 +65,16 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 		free(current);
 	}
 }
+
+
+/**
+ * Print the stack data area out in its entirety
+ */
+void print_stack_data_area(stack_data_area_t* area){
+	//TODO
+
+}
+
 
 
 /**

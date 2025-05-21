@@ -102,6 +102,12 @@ stack_data_area.o: $(STACK_DATA_AREA_PATH)/stack_data_area.c
 stack_data_aread.o: $(STACK_DATA_AREA_PATH)/stack_data_area.c
 	$(CC) $(CFLAGS) -g $(STACK_DATA_AREA_PATH)/stack_data_area.c -o $(OUT)/stack_data_area.o
 
+stack_data_area_test.o: $(TEST_SUITE_PATH)/stack_data_area_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/stack_data_area_test.c -o $(OUT)/stack_data_area_test.o
+
+stack_data_area_testd.o: $(TEST_SUITE_PATH)/stack_data_area_test.c
+	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATH)/stack_data_area_test.c -o $(OUT)/stack_data_area_testd.o
+
 symtab.o: $(SYMTAB_PATH)/symtab.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT)/symtab.o
 
@@ -186,6 +192,12 @@ symtab_test: symtab.o symtab_test.o lexer.o type_system.o lexstack.o lightstack.
 symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o
 	$(CC) -o $(OUT)/symtab_testd $(OUT)/lexerd.o $(OUT)/symtab_testd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/lexstackd.o $(OUT)/lightstackd.o $(OUT)/stack_data_aread.o
 
+stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o
+	$(CC) -o $(OUT)/stack_data_area_test $(OUT)/lexer.o $(OUT)/stack_data_area_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o $(OUT)/lightstack.o $(OUT)/stack_data_area.o
+	
+stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o
+	$(CC) -o $(OUT)/stack_data_area_test $(OUT)/lexer.o $(OUT)/stack_data_area_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o $(OUT)/lightstack.o $(OUT)/stack_data_area.o
+
 call_graph.o : $(CALL_GRAPH_PATH)/call_graph.c
 	$(CC) $(CFLAGS) $(CALL_GRAPH_PATH)/call_graph.c -o $(OUT)/call_graph.o
 
@@ -237,6 +249,9 @@ stest: symtab_test
 stestd: symtab_testd
 	$(OUT)/symtab_testd
 
+test_data_area: stack_data_area_test
+	$(OUT)/stack_data_area_test
+
 ptest: parser_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/parser_test
 
@@ -245,6 +260,7 @@ front_test: front_end_test
 
 middle_test: middle_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/middle_end_test
+
 
 compiler_test: oc
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/oc

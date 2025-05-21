@@ -61,6 +61,11 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable);
 void remove_variable_from_stack(stack_data_area_t* area, void* variable);
 
 /**
+ * Print the stack data area out in its entirety
+ */
+void print_stack_data_area(stack_data_area_t* area);
+
+/**
  * Deallocate the internal linked list of the stack data area
  */
 void stack_data_area_dealloc(stack_data_area_t* stack_data_area);
