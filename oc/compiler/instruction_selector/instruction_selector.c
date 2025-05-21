@@ -1401,7 +1401,7 @@ static void handle_multiplication_instruction(instruction_t* instruction){
  * movl t2, t5(rax)
  * cltd
  * idivl t3(divide by t3, we already guarantee this is a temp var(register))
- * t3 <- t5(rax has quotient)
+ * movl t5, t4 (rax has quotient)
  * 
  * As such, this will generate additional instructions for us, making it not
  * a "single instruction" pattern
@@ -1419,6 +1419,8 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//We first need to perform a move of the dividence into rax
 	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+	//This has to be %rax
+	move_to_rax->destination_register->variable_register = RAX;
 
 	//Let's now attach this where division was
 	if(division_instruction->previous_statement != block->leader_statement){
@@ -1515,6 +1517,8 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//We first need to perform a move of the dividence into rax
 	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+	//This has to be %rax
+	move_to_rax->destination_register->variable_register = RAX;
 
 	//Let's now attach this where division was
 	if(modulus_instruction->previous_statement != block->leader_statement){
@@ -1553,6 +1557,8 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, emit_temp_var(modulus_instruction->op1->type));
+	//This is guaranteed to be RDX
+	result_movement->source_register->variable_register = RDX;
 
 	//Tie it in here
 	division->next_statement = result_movement;

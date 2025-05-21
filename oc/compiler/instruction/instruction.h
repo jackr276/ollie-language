@@ -111,7 +111,11 @@ typedef enum{
 typedef enum{
 	NO_REG = 0, //Default is that there's no register used
 	AL, //%al register
-} register_64_t;
+	RAX,
+	RDX,
+	RSP, //Stack pointer
+	RIP, //Instruction pointer
+} register_holder_t;
 
 
 /**
@@ -256,6 +260,8 @@ struct three_addr_var_t{
 	//Store the type info for faster access
 	//Memory access type, if one exists
 	memory_access_type_t access_type;
+	//What register is this in?
+	register_holder_t variable_register;
 };
 
 
@@ -302,17 +308,6 @@ struct instruction_t{
 	three_addr_const_t* source_immediate;
 	//Our destination register/variable
 	three_addr_var_t* destination_register;
-	/**
-	 * ADDRESS CALCULATIONS
-	 *
-	 * ADDRESS_CALCULATION_MODE_CONST_ONLY
-	 * <constant_additive>(<source/dest>) = <constant_additive> + <source/dest>
-	 * Constant additive is stored in variable constant_additive
-	 * 
-	 * ADDRESS_CALCULATION_MODE_REGISTER_ONLY
-	 * (<source>/<dest>, <register_additive>) = <source>/<dest> + <register_additive>
-	 * Register additive stored in varibale register_additive
-	 */
 	three_addr_const_t* offset;
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
