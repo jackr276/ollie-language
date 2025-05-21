@@ -18,6 +18,17 @@ fn unsigned_shift() -> u32 {
 	ret x + y;
 }
 
+fn modulus() -> u32 {
+	let mut z:u32 := 23;
+	let mut x:u32 := z << 3;
+	let mut y:i32 := z >> 5;
+
+	//Modulus
+	y := y % x;
+
+	ret x + y;
+}
+
 
 fn main(arg:i32, argv:char**) -> i32 {
 
@@ -27,6 +38,8 @@ fn main(arg:i32, argv:char**) -> i32 {
 	x := x + y * 8;
 	a := x - 0;
 	x := !a;
+	//Modulus
+	x := x % -3;
 
 	a := (x * -128) + (x - 11);
 	x := x / 8;

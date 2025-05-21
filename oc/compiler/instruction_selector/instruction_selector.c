@@ -1491,14 +1491,13 @@ static void handle_division_instruction(instruction_window_t* window){
  * Handle a modulus(remainder) operation
  * Handle a division operation
  *
- * t3 <- t4 / 3
+ * t3 <- t4 % t5
  *
  * Will become:
- * movl t4, t5(rax)
+ * movl t4, t6 (rax)
  * cltd
- * movl $3, t6
- * idivl t6
- * t3 <- t6(rdx has remainder)
+ * idivl t5
+ * t3 <- t7 (rdx has remainder)
  *
  * As such, this will generate additional instructions for us, making it not
  * a "single instruction" pattern
@@ -1507,7 +1506,80 @@ static void handle_division_instruction(instruction_window_t* window){
  * instruction in the window
  */
 static void handle_modulus_instruction(instruction_window_t* window){
+	//Firstly, the instruction that we're looking for is the very first one
+	instruction_t* modulus_instruction = window->instruction1;
+	//Also have this as a reference
+	instruction_t* after_mod = window->instruction2;
+	//And we'll want this for reference too
+	basic_block_t* block = modulus_instruction->block_contained_in;
 
+	//We first need to perform a move of the dividence into rax
+	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+
+	//Let's now attach this where division was
+	if(modulus_instruction->previous_statement != block->leader_statement){
+		//This effectively deletes the old division instruction
+		modulus_instruction->previous_statement->next_statement = move_to_rax;
+	} else {
+		//Otherwise, this is the leader statement of its block
+		block->leader_statement = move_to_rax;
+	}
+
+	//This may become the cl instruction
+	instruction_t* current_end = move_to_rax;
+
+	//Let's determine signedness
+	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
+
+	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
+	if(is_signed == TRUE){
+		//Emit the cl instruction
+		instruction_t* cl_instruction = emit_cl_instruction(move_to_rax->destination_register);
+
+		//Link it with our move statement
+		move_to_rax->next_statement = cl_instruction;
+		cl_instruction->previous_statement = move_to_rax;
+
+		//Keep this reference so we don't get tangled up
+		current_end = cl_instruction;
+	}
+
+	//Now we should have what we need, so we can emit the division instruction
+	instruction_t* division = emit_div_instruction(window->instruction1->op2, is_signed);
+
+	//Once it's been emitted, we link it in like all the rest
+	current_end->next_statement = division;
+	division->previous_statement = current_end;
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, emit_temp_var(modulus_instruction->op1->type));
+
+	//Tie it in here
+	division->next_statement = result_movement;
+	result_movement->previous_statement = division;
+
+	//And now we can tie it in to our overall statement
+	result_movement->next_statement = after_mod;
+	
+	//Avoid any null pointer dereference here
+	if(after_mod != NULL){
+		after_mod->previous_statement = result_movement;
+	} else {
+		//This is the new exit statement
+		block->exit_statement = result_movement;
+	}
+
+	//Now we need to repopulate the window
+	window->instruction1 = move_to_rax;
+	window->instruction2 = window->instruction1->next_statement;
+	window->instruction3 = window->instruction2->next_statement;
+
+	//Now we'll cycle the window to get to the end
+	slide_window(window);
+	slide_window(window);
+
+	//Set the status
+	set_window_status(window);
 }
 
 
@@ -1999,7 +2071,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//that warrant a separate function
 		} else if(window->instruction1->op == MOD){
 			//This will generate more than one instruction
-			//andle_modulus_instruction(window);
+			handle_modulus_instruction(window);
+			changed = TRUE;
 		}
 	}
 
