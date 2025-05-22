@@ -28,7 +28,7 @@ typedef struct stack_data_area_node_t stack_data_area_node_t;
  */
 struct stack_data_area_t{
 	//The head node of the data area.
-	//This will always be the highest(i.e. *lowest* offset) node 
+	//This will always be the highest(i.e. *highest* offset) node 
 	stack_data_area_node_t* highest;
 	//The total size of the data area
 	u_int32_t total_size;

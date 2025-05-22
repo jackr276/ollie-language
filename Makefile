@@ -180,23 +180,23 @@ parser_test.o: $(TEST_SUITE_PATH)/parser_test.c
 parser_testd.o: $(TEST_SUITE_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/parser_test.c -o $(OUT)/parser_testd.o
 
-parser_test: parser.o lexer.o parser_test.o symtab.o lexstack.o heapstack.o type_system.o ast.o call_graph.o heap_queue.o lightstack.o dynamic_array.o stack_data_area.o
-	$(CC) -o $(OUT)/parser_test $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexstack.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/call_graph.o $(OUT)/heap_queue.o $(OUT)/lightstack.o $(OUT)/dynamic_array.o $(OUT)/stack_data_area.o
+parser_test: parser.o lexer.o parser_test.o symtab.o lexstack.o heapstack.o type_system.o ast.o call_graph.o heap_queue.o lightstack.o dynamic_array.o stack_data_area.o instruction.o
+	$(CC) -o $(OUT)/parser_test $(OUT)/parser_test.o $(OUT)/parser.o $(OUT)/lexstack.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/call_graph.o $(OUT)/heap_queue.o $(OUT)/lightstack.o $(OUT)/dynamic_array.o $(OUT)/stack_data_area.o $(OUT)/instruction.o
 
-parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o lexstack.o heapstackd.o type_systemd.o astd.o call_graphd.o heap_queued.o lightstackd.o dynamic_arrayd.o stack_data_aread.o
-	$(CC) -g -o $(OUT)/debug $(OUT)/parser_testd.o $(OUT)/parserd.o $(OUT)/lexstackd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/call_graphd.o $(OUT)/heap_queued.o $(OUT)/lightstackd.o $(OUT)/dynamic_arrayd.o $(OUT)/stack_data_aread.o
+parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o lexstack.o heapstackd.o type_systemd.o astd.o call_graphd.o heap_queued.o lightstackd.o dynamic_arrayd.o stack_data_aread.o instructiond.o
+	$(CC) -g -o $(OUT)/debug $(OUT)/parser_testd.o $(OUT)/parserd.o $(OUT)/lexstackd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/call_graphd.o $(OUT)/heap_queued.o $(OUT)/lightstackd.o $(OUT)/dynamic_arrayd.o $(OUT)/stack_data_aread.o $(OUT)/instructiond.o
 
-symtab_test: symtab.o symtab_test.o lexer.o type_system.o lexstack.o lightstack.o stack_data_area.o
-	$(CC) -o $(OUT)/symtab_test $(OUT)/lexer.o $(OUT)/symtab_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o $(OUT)/lightstack.o $(OUT)/stack_data_area.o
+symtab_test: symtab.o symtab_test.o lexer.o type_system.o lexstack.o lightstack.o stack_data_area.o instruction.o dynamic_array.o parser.o cfg.o ast.o call_graph.o heap_queue.o heapstack.o jump_table.o 
+	$(CC) -o $(OUT)/symtab_test $(OUT)/lexer.o $(OUT)/symtab_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o $(OUT)/lightstack.o $(OUT)/stack_data_area.o $(OUT)/instruction.o $(OUT)/dynamic_array.o $(OUT)/parser.o $(OUT)/cfg.o $(OUT)/ast.o $(OUT)/call_graph.o $(OUT)/heap_queue.o $(OUT)/heapstack.o $(OUT)/jump_table.o
 
-symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o
-	$(CC) -o $(OUT)/symtab_testd $(OUT)/lexerd.o $(OUT)/symtab_testd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/lexstackd.o $(OUT)/lightstackd.o $(OUT)/stack_data_aread.o
+symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o instructiond.o dynamic_arrayd.o
+	$(CC) -o $(OUT)/symtab_testd $(OUT)/lexerd.o $(OUT)/symtab_testd.o $(OUT)/symtabd.o $(OUT)/type_systemd.o $(OUT)/lexstackd.o $(OUT)/lightstackd.o $(OUT)/stack_data_aread.o $(OUT)/instructiond.o $(OUT)/dynamic_arrayd.o
 
-stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o
-	$(CC) -o $(OUT)/stack_data_area_test $(OUT)/lexer.o $(OUT)/stack_data_area_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o $(OUT)/lightstack.o $(OUT)/stack_data_area.o
+stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o instruction.o stack_data_area.o dynamic_array.o
+	$(CC) -o $(OUT)/stack_data_area_test $(OUT)/lexer.o $(OUT)/stack_data_area_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o $(OUT)/lightstack.o $(OUT)/stack_data_area.o $(OUT)/instruction.o $(OUT)/stack_data_area.o $(OUT)/dynamic_array.o
 	
-stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o
-	$(CC) -o $(OUT)/stack_data_area_test $(OUT)/lexer.o $(OUT)/stack_data_area_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o $(OUT)/lightstack.o $(OUT)/stack_data_area.o
+stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o instructiond.o stack_data_aread.o dynamic_arrayd.o
+	$(CC) -o $(OUT)/stack_data_area_test $(OUT)/lexer.o $(OUT)/stack_data_area_test.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/lexstack.o $(OUT)/lightstack.o $(OUT)/stack_data_aread.o $(OUT)/instructiond.o $(OUT)/stack_data_aread.o $(OUT)/dynamic_arrayd.o
 
 call_graph.o : $(CALL_GRAPH_PATH)/call_graph.c
 	$(CC) $(CFLAGS) $(CALL_GRAPH_PATH)/call_graph.c -o $(OUT)/call_graph.o

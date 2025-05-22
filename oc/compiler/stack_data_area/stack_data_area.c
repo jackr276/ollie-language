@@ -71,8 +71,26 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
  * Print the stack data area out in its entirety
  */
 void print_stack_data_area(stack_data_area_t* area){
-	//TODO
+	printf("======== Stack Layout ============\n");
 
+	//Easiest case here
+	if(area->highest == NULL){
+		printf("EMPTY\n");
+	} else {
+		//Otherwise we run through everything
+		stack_data_area_node_t* current = area->highest;
+
+		while(current != NULL){
+			//We'll take the variable and the size
+			print_variable(current->variable, PRINTING_VAR_INLINE);
+			printf("\t%d\n", current->variable_size);
+
+			//Advance the node
+			current = current->next;
+		}
+	}
+
+	printf("======== Stack Layout ============\n");
 }
 
 
