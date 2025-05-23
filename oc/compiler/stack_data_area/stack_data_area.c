@@ -88,15 +88,16 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 	//Otherwise, we'll need to do some more complex operations. We'll keep
 	//searching until we get to the place where the node is larger
 	//than the one before it
-	while(current != NULL && current->variable_size < node->variable_size){
+	while(current->next != NULL && current->variable_size < node->variable_size){
 		current = current->next;
 	}
 
 	//Once we get here, there are are three options
 	//This means that we hit the tail, and we're at the very end
-	if(current == NULL){
+	if(current->next == NULL){
 		//Add this in here at the very end
 		current->next = node;
+		node->previous = current;
 
 	//This means that we have a new highest
 	} else if(current == area->highest){
@@ -192,7 +193,7 @@ void print_stack_data_area(stack_data_area_t* area){
 		while(current != NULL){
 			//We'll take the variable and the size
 			print_variable(current->variable, PRINTING_VAR_INLINE);
-			printf("\t%d\n", current->variable_size);
+			printf("\t%8d\t%8d\n", current->variable_size, current->offset);
 
 			//Advance the node
 			current = current->next;

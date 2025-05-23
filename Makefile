@@ -250,7 +250,7 @@ stestd: symtab_testd
 	$(OUT)/symtab_testd
 
 test_data_area: stack_data_area_test
-	$(OUT)/stack_data_area_test
+	$(OUT)/stack_data_area_test ./oc/test_files/data_area_test_input.ol
 
 ptest: parser_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 ./oc/out/parser_test
