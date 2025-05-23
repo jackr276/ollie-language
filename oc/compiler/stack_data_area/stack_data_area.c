@@ -10,15 +10,84 @@
 #include <stdlib.h>
 #include "../instruction/instruction.h"
 
+
+static void recalculate_all_offsets(stack_data_area_t* area){
+
+}
+
+
 /**
  * Add a node into the stack data area
+ * 
+ * NOTE: We guarantee that each address in the stack will be at least
+ * 4-byte aligned. As such, the size of the variable on the stack may not 
+ * match the size of the variable in the stack data area
  */
 void add_variable_to_stack(stack_data_area_t* area, void* variable){
 	//We already know it's one of these
 	three_addr_var_t* var = variable;
-	//TODO
-	
+
+	//First, let's create what we'll use to store this 
+	stack_data_area_node_t* node = calloc(1, sizeof(stack_data_area_node_t));
+	//Tie this in
+	node->variable = variable;
+
+	//Let's make this a multiple of 4 by first adding three(set the 2 lsb's), and 
+	//then rounding up by anding with a value with the 2 lsb's as 0
+	node->variable_size = (var->type->type_size + 3) & ~0x3;
+
+	//We can now increment the total size here
+	area->total_size += node->variable_size;
+
+	//Once we have all of this, we're able to add this into the stack. We add into the stack
+	//in a priority-queue like way, where the smallest values reside at the top, and the largest
+	//values reside at the bottom. We always start at the top and work our way down
+	stack_data_area_node_t* current = area->highest;
+
+	//Special case - inserting at the head
+	if(current == NULL){
+		//This one is the highest
+		area->highest = node;
+		//No offset - it's the lowest
+		node->offset = 0;
+		//We're done here
+		return;
+	}
+
+	//Otherwise, we'll need to do some more complex operations. We'll keep
+	//searching until we get to the place where the node is larger
+	//than the one before it
+	while(current != NULL && current->variable_size < node->variable_size){
+		current = current->next;
+	}
+
+	//Once we get here, there are are three options
+	//This means that we hit the tail, and we're at the very end
+	if(current == NULL){
+		//Add this in here at the very end
+		current->next = node;
+
+	//This means that we have a new highest
+	} else if(current == area->highest){
+		//Tie it in
+		current->previous = node;
+		node->next = current;
+
+		//Reassign this pointer
+		area->highest = node;
+
+	//Otherwise we aren't at the very end. We'll insert
+	//the node before the previous
+	} else {
+		//Let's break the chain here
+		current->previous->next = node;
+		node->previous = current->previous;
+		//Now attach it to current
+		node->next = current;
+		current->previous = node;
+	}
 }
+
 
 /**
  * Remove a node from the stack if it is deemed useless

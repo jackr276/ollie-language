@@ -48,6 +48,8 @@ struct stack_data_area_node_t{
 	void* variable;
 	//The size of the node(may not be the same as the var due to alignment)
 	u_int32_t variable_size;
+	//What is the offset(%rsp + __) for this node
+	u_int32_t offset;
 };
 
 /**
