@@ -8,11 +8,42 @@
 #include "stack_data_area.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include "../instruction/instruction.h"
 
 
-static void recalculate_all_offsets(stack_data_area_t* area){
+/**
+ * Whenever we delete or insert something, we'll need to recompute all of the offsets
+ * of anything that is above that node. This function will recompute the offsets
+ * of anything above the value passed in as "node"
+ */
+static void recalculate_all_offsets(stack_data_area_t* area, stack_data_area_node_t* node){
+	//If this is Null just get out
+	if(node == NULL){
+		return;
+	}
 
+	//Hang onto our current offset. This will initially be whatever this node's offset is plus
+	//it's variable size. So, the *next* node that we encounter will have an offset of current
+	//offset
+	u_int32_t current_offset = node->offset + node->variable_size;
+
+	//Grab the one above this in the stack
+	stack_data_area_node_t* current = node->previous;
+
+	//So long as we don't hit the end here
+	while(current != NULL){
+		//Assign the offset
+		current->offset = current_offset;
+
+		//Now recompute the overall offset
+		current_offset = current_offset + current->variable_size;
+
+		//Now we advance the pointer upwards
+		current = current->previous;
+	}
+
+	//By the time we get out down here, we should have reassessed all of the offsets
 }
 
 
@@ -86,6 +117,9 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 		node->next = current;
 		current->previous = node;
 	}
+
+	//Once we're done here, we need to redo all of the variable offsets
+	recalculate_all_offsets(area, node->next);
 }
 
 
@@ -115,6 +149,9 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 	
 	//First remove the space
 	area->total_size -= current->variable_size;
+
+	//Let's hang onto the current's next field. We'll need it when we recalculate offsets
+	stack_data_area_node_t* next = current->next;
 	
 	//Special case - it's the head
 	if(area->highest == current){
@@ -133,6 +170,9 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 		current->next->previous = current->previous;
 		free(current);
 	}
+
+	//Finally, we'll need to recalculate all of our offsets
+	recalculate_all_offsets(area, next);
 }
 
 
