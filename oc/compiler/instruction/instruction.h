@@ -97,7 +97,8 @@ typedef enum{
 	ANDQ,
 	CMPL,
 	CMPQ,
-	TEST,
+	TESTW,
+	TESTL,
 	TESTQ,
 	SETE, //Set if equal
 	SETNE,

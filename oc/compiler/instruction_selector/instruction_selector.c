@@ -240,8 +240,10 @@ static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_va
 	//Now based on the size we'll give the instruction
 	if(size == QUAD_WORD){
 		instruction->instruction_type = TESTQ;
+	} else if(size == DOUBLE_WORD){
+		instruction->instruction_type = TESTL;
 	} else {
-		instruction->instruction_type = TEST;
+		instruction->instruction_type = TESTW;
 	}
 
 	//Then we'll set op1 and op2 to be the source registers

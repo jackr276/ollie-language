@@ -1112,8 +1112,10 @@ static void print_cmp_instruction(instruction_t* instruction){
  */
 static void print_test_instruction(instruction_t* instruction){
 	//First we'll decide which version we need to print out
-	if(instruction->instruction_type == TEST){
-		printf("test ");
+	if(instruction->instruction_type == TESTL){
+		printf("testl ");
+	} else if(instruction->instruction_type == TESTW){
+		printf("testw ");
 	} else {
 		printf("testq ");
 	}
@@ -1477,7 +1479,8 @@ void print_instruction(instruction_t* instruction){
 			printf("\n");
 			break;
 		//Handle a test instruction
-		case TEST:
+		case TESTL:
+		case TESTW:
 		case TESTQ:
 			print_test_instruction(instruction);
 			break;
