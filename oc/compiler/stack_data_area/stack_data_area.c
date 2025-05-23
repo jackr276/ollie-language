@@ -18,11 +18,6 @@
  * of anything above the value passed in as "node"
  */
 static void recalculate_all_offsets(stack_data_area_t* area, stack_data_area_node_t* node){
-	//If this is Null just get out
-	if(node == NULL){
-		return;
-	}
-
 	//Hang onto our current offset. This will initially be whatever this node's offset is plus
 	//it's variable size. So, the *next* node that we encounter will have an offset of current
 	//offset
@@ -81,7 +76,8 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 		area->highest = node;
 		//No offset - it's the lowest
 		node->offset = 0;
-		//We're done here
+		//We're done here. No need to calculate offsets because there's only one thing
+		//here
 		return;
 	}
 
@@ -92,12 +88,19 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 		current = current->next;
 	}
 
+	//When we get down here, we know that our node is smaller than
+	//the current node's size, so we'll want to insert our node *above* the current node
+
 	//Once we get here, there are are three options
 	//This means that we hit the tail, and we're at the very end
-	if(current->next == NULL){
+	if(current->next == NULL && current->variable_size < node->variable_size){
 		//Add this in here at the very end
 		current->next = node;
 		node->previous = current;
+
+		//In this case, recalculate all of the offsets based on node because it's our
+		//very lowest value(0 offset)
+		recalculate_all_offsets(area, node);
 
 	//This means that we have a new highest
 	} else if(current == area->highest){
@@ -117,10 +120,12 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 		//Now attach it to current
 		node->next = current;
 		current->previous = node;
-	}
 
-	//Once we're done here, we need to redo all of the variable offsets
-	recalculate_all_offsets(area, node->next);
+		//In this case, recalculate all of the offsets based on current
+		//because current comes below node, so we'll need to use it's offset
+		//as a seed value
+		recalculate_all_offsets(area, current);
+	}
 }
 
 
@@ -191,9 +196,9 @@ void print_stack_data_area(stack_data_area_t* area){
 		stack_data_area_node_t* current = area->highest;
 
 		while(current != NULL){
+			three_addr_var_t* current_var = current->variable;
 			//We'll take the variable and the size
-			print_variable(current->variable, PRINTING_VAR_INLINE);
-			printf("\t%8d\t%8d\n", current->variable_size, current->offset);
+			printf("%10s\t%8d\t%8d\n", current_var->linked_var->var_name, current->variable_size, current->offset);
 
 			//Advance the node
 			current = current->next;

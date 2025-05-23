@@ -42,7 +42,6 @@ struct stack_data_area_t{
 struct stack_data_area_node_t{
 	//The next node
 	stack_data_area_node_t* next;
-	//TODO may or may not need
 	stack_data_area_node_t* previous;
 	//The variable that this node references
 	void* variable;
