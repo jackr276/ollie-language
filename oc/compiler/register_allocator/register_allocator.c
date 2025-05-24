@@ -10,6 +10,10 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+//For standardization
+#define TRUE 1
+#define FALSE 0
+
 //The atomically increasing live range id
 u_int16_t live_range_id = 0;
 
@@ -82,6 +86,34 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 
 
 /**
+ * Does a live range for a given variable already exist? If so, we'll need to 
+ * coalesce the two live ranges in a union
+ *
+ * Returns NULL if we found nothing
+ */
+static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
+	//Run through all of the live ranges that we currently have
+	for(u_int16_t _ = 0; _ < live_ranges->current_index; _++){
+		//Grab the given live range out
+		live_range_t* current = dynamic_array_get_at(live_ranges, _);
+
+		//If the variables are equal(ignoring SSA and dereferencing) then we have a match
+		if(variables_equal_no_ssa(variable, dynamic_array_get_at(current->variables, 0), TRUE) == TRUE){
+			return current;
+		}
+	}
+
+	//If we get here we didn't find anything
+	return NULL;
+}
+
+
+static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
+
+}
+
+
+/**
  * Construct the live ranges for all variables that we'll need to concern ourselves with
  *
  * Conveniently, all code in OIR is translated into SSA form by the front end. In doing this, we're able
@@ -98,9 +130,23 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
  * 		mark said variable 
  */
 static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
+	//First create the set of live ranges
+	dynamic_array_t* live_ranges = dynamic_array_alloc();
+
+	//Since the blocks are already ordered, this is very simple
+	basic_block_t* current = cfg->head_block;
+
+	//Run through every single block
+	while(current != NULL){
+		//Let the helper do this
+		construct_live_ranges_in_block(live_ranges, current);
+
+		//Advance to the next
+		current = current->direct_successor;
+	}
 
 	//Placehold
-	return NULL;
+	return live_ranges;
 }
 
 
@@ -108,5 +154,11 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
  * Perform our register allocation algorithm on the entire cfg
  */
 void allocate_all_registers(cfg_t* cfg){
+	//The first thing that we'll do is reconstruct everything in terms of live ranges
+	//This should be simplified by our values already being in SSA form
+	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
+
+	//Print whatever live ranges we did find
+	print_all_live_ranges(live_ranges);
 
 }

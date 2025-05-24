@@ -3778,6 +3778,9 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 	//Destroy the queue when done
 	heap_queue_dealloc(queue);
 
+	//Set this for later on
+	cfg->head_block = head_block;
+
 	//Give back the head block
 	return head_block;
 }

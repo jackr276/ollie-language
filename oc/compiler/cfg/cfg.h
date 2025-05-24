@@ -80,6 +80,8 @@ struct cfg_t{
 	//An array of all blocks that are 
 	//All created blocks
 	dynamic_array_t* created_blocks;
+	//The head block
+	basic_block_t* head_block;
 };
 
 
