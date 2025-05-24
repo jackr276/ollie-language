@@ -26,10 +26,19 @@ static void recalculate_all_offsets(stack_data_area_t* area, stack_data_area_nod
 	//Grab the one above this in the stack
 	stack_data_area_node_t* current = node->previous;
 
+	//Hold onto the current var
+	three_addr_var_t* current_var;
+
 	//So long as we don't hit the end here
 	while(current != NULL){
+		//Grab this for convenience
+		current_var = current->variable;
+
 		//Assign the offset
 		current->offset = current_offset;
+
+		//This needs to be recomputed too
+		current_var->stack_offset = current_offset;
 
 		//Now recompute the overall offset
 		current_offset = current_offset + current->variable_size;
@@ -156,23 +165,33 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 	//First remove the space
 	area->total_size -= current->variable_size;
 
+	//Let's also update this variable's related offset to avoid confusion down the line
+	((three_addr_var_t*)(variable))->stack_offset = 0;
+
 	//Special case - it's the head
 	if(area->highest == current){
 		//Reserve this one's address
 		stack_data_area_node_t* temp = area->highest;
 		//Advance to the next one
 		area->highest = area->highest->next;
-		//Forget the reference to the dead node
-		area->highest->previous = NULL;
 		//Now we deallocate temp
 		free(temp);
-		//Recalculate all of these offsets
-		recalculate_all_offsets(area, area->highest);
+
+		//If this is the case we can recalculate
+		if(area->highest != NULL){
+			//Forget the reference to the dead node
+			area->highest->previous = NULL;
+			//Recalculate all of these offsets
+			recalculate_all_offsets(area, area->highest);
+		}
 
 	//Other special case - it's the tail
 	} else if(current->next == NULL){
 		//Just NULL this out and we're good
 		current->previous->next = NULL;
+
+		//This offset is now nothing - it's at the bottom
+		current->previous->offset = 0;
 
 		//Now redo all of our offsets
 		recalculate_all_offsets(area, current->previous);

@@ -11,6 +11,7 @@
 #include "../parser/parser.h"
 #include "../dynamic_array/dynamic_array.h"
 #include <stdio.h>
+#include <sys/types.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -82,9 +83,18 @@ int main(int argc, char** argv){
 		}
 	}
 
-	//Now let's run through and remove everything to test that
-	
+	printf("###################### Now testing removal ####################\n");
 
+	//Now let's run through and remove everything to test that
+	for(u_int16_t i = 0; i < array_of_vars->current_index; i++){
+		//Delete it
+		remove_variable_from_stack(&(main_function->data_area), dynamic_array_get_at(array_of_vars, i));
+		//Reprint the whole thing
+		print_stack_data_area(&(main_function->data_area));
+	}
+
+	//We can scrap the dynamic array once here
+	dynamic_array_dealloc(array_of_vars);
 
 	//Ensure that we can fully deallocate
 	stack_data_area_dealloc(&(main_function->data_area));
