@@ -9,6 +9,7 @@
 //Link to the instruction selector. This is the first part
 //of codegen
 #include "../instruction_selector/instruction_selector.h"
+#include "../register_allocator/register_allocator.h"
 
 /**
  * Generate the assembly code for this file
