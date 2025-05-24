@@ -256,6 +256,8 @@ struct three_addr_var_t{
 	u_int16_t indirection_level;
 	//Is this a temp variable?
 	u_int8_t is_temporary;
+	//Is this a stack pointer?
+	u_int8_t is_stack_pointer;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//Store the type info for faster access

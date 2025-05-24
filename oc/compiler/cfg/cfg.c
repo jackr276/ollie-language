@@ -39,6 +39,8 @@ symtab_function_record_t* current_function;
 basic_block_t* function_exit_block = NULL;
 //Keep ahold of our stack pointer
 symtab_variable_record_t* stack_pointer = NULL;
+//Keep a variable for it too
+three_addr_var_t* stack_pointer_var = NULL;
 //Store this for usage
 generic_type_t* u64 = NULL;
 //The current stack offset for any given function
@@ -3132,31 +3134,15 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 		//If we have an array, we'll need to decrement the stack
 		if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
-			//Grab the size out, we'll need to subtract this from the stack
-			u_int32_t array_size = type->type_size;
-
-			//We need to align this as well. We'll add 15 and then 0 out
-			//the last 4 bits so that this is 16 byte aligned
-			array_size = (array_size + 15) & -16;
-
-			//Emit this stack pointer variables
-			three_addr_var_t* assignee = emit_var(stack_pointer, FALSE);
-			three_addr_var_t* operand = emit_var(stack_pointer, FALSE);
-
-			//Spit out the subtraction here
-			three_addr_var_t* stack = emit_binary_operation_with_constant(basic_block, assignee, operand, MINUS, emit_int_constant_direct(array_size, type_symtab), is_branch_ending);
-
 			//Now we emit the variable for the array base address
-			three_addr_var_t* array = emit_var(expr_node->variable, FALSE);
+			three_addr_var_t* base_addr = emit_var(expr_node->variable, FALSE);
 
-			//Now we assign the bottom of the stack to be this
-			instruction_t* assignment = emit_assignment_instruction(array, stack);
+			//Add this variable into the current function's stack. This is what we'll use
+			//to store the address
+			add_variable_to_stack(&(current_function->data_area), base_addr);
 
-			//This variable was assigned
-			add_assigned_variable(basic_block, assignment->assignee); 
-			
-			//Add the assignment in
-			add_statement(basic_block, assignment);
+			//We'll now emit the actual address calculation using the offset
+			emit_binary_operation_with_constant(basic_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, type_symtab), is_branch_ending);
 		}
 
 	//Convert our let statement into abstract machine code 
@@ -3378,6 +3364,12 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
 		//We'll need a queue for our BFS
 		heap_queue_t* queue = heap_queue_alloc();
+
+		//Grab this out for convenience
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, i);
+
+		//We'll want to see what the stack looks like
+		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
 		//Seed the search by adding the funciton block into the queue
 		enqueue(queue, dynamic_array_get_at(cfg->function_blocks, i));
@@ -5422,6 +5414,10 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 
 	//Create the stack pointer
 	stack_pointer = initialize_stack_pointer(results.variable_symtab, results.type_symtab);
+	//Initialize the variable to
+	stack_pointer_var = emit_var(stack_pointer, FALSE);
+	//Mark it
+	stack_pointer_var->is_stack_pointer = TRUE;
 
 	//For dev use here
 	if(results.root->CLASS != AST_NODE_CLASS_PROG){

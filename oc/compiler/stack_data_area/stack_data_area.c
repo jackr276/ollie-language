@@ -110,6 +110,7 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 
 	//Special case - inserting at the head
 	if(current == NULL){
+		printf("HERE\n");
 		//This one is the highest
 		area->highest = node;
 		//No offset - it's the lowest
@@ -148,6 +149,9 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 
 		//Reassign this pointer
 		area->highest = node;
+
+		//Redo all the offsets based on previous
+		recalculate_all_offsets(area, current);
 
 	//Otherwise we aren't at the very end. We'll insert
 	//the node before the previous
@@ -259,7 +263,7 @@ void print_stack_data_area(stack_data_area_t* area){
 		while(current != NULL){
 			three_addr_var_t* current_var = current->variable;
 			//We'll take the variable and the size
-			printf("%10s\t%8d\t%8d\n", current_var->linked_var->var_name, current->variable_size, current->offset);
+			printf("%10s\t%8d\t%8d\n", current_var->linked_var->var_name, current->variable_size, current_var->stack_offset);
 
 			//Advance the node
 			current = current->next;
