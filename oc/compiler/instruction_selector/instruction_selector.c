@@ -2733,16 +2733,6 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 
 
 /**
- * Take in two constant and a binary operand and combine them in whichever way we can
- */
-three_addr_const_t* combine_constants(three_addr_const_t* const1, three_addr_const_t* const2, Token operator){
-
-	//We always give back the result in const1
-	return const1;
-}
-
-
-/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
