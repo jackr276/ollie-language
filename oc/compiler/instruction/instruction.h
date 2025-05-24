@@ -14,6 +14,7 @@
 #include "../symtab/symtab.h"
 #include "../lexer/lexer.h"
 #include "../ast/ast.h"
+#include "../dynamic_array/dynamic_array.h"
 #include <sys/types.h>
 
 //An overall structure for an instruction. Instructions start their life
@@ -241,6 +242,22 @@ typedef enum{
 	THREE_ADDR_CODE_MEM_ACCESS_STMT
 } instruction_stmt_class_t;
 
+
+//A struct that stores all of our live ranges
+typedef struct live_range_t live_range_t;
+
+/**
+ * For our live ranges, we'll really only need the name and
+ * the variables
+ */
+struct live_range_t{
+	//and the variables that it has
+	dynamic_array_t* variables;
+	//Store the id of the live range
+	u_int16_t live_range_id;
+};
+
+
 /**
  * A three address var may be a temp variable or it may be
  * linked to a non-temp variable. It keeps a generation counter
@@ -258,6 +275,8 @@ struct three_addr_var_t{
 	//The related stack data area node. Not all variables have these,
 	//but "spilled" variables and address variables do
 	stack_data_area_node_t* related_node;
+	//What live range is this variable associate with
+	live_range_t* associate_live_range;
 	//What is the stack offset(i.e. %rsp + __) of this variable?
 	u_int32_t stack_offset;
 	//What is the ssa generation level?
