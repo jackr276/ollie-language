@@ -15,6 +15,7 @@
 #include "../lexer/lexer.h"
 #include "../ast/ast.h"
 #include "../dynamic_array/dynamic_array.h"
+#include <stdint.h>
 #include <sys/types.h>
 
 //An overall structure for an instruction. Instructions start their life
@@ -255,6 +256,8 @@ struct live_range_t{
 	dynamic_array_t* variables;
 	//Store the id of the live range
 	u_int16_t live_range_id;
+	//Store the heuristic spill cost
+	int16_t spill_cost;
 };
 
 

@@ -71,7 +71,7 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		//Now we'll run through and print out all of its variables
 		for(u_int16_t j = 0; j < current->variables->current_index; j++){
 			//Print the variable name
-			print_variable_name(dynamic_array_get_at(current->variables, j));
+			print_variable(dynamic_array_get_at(current->variables, j), PRINTING_VAR_INLINE);
 
 			//Print a comma if appropriate
 			if(j != current->variables->current_index - 1){
@@ -108,8 +108,70 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
 }
 
 
-static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
+/**
+ * Add a variable to a live range, if it isn't already in there
+ */
+static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_t* variable){
+	//Run through the live range
+	for(u_int16_t _ = 0; _ < live_range->variables->current_index; _++){
+		//We already have it in here, no need to continue
+		if(variables_equal(variable, dynamic_array_get_at(live_range->variables, _), TRUE) == TRUE){
+			return;
+		}
+	}
 
+	//Otherwise we'll add this in here
+	dynamic_array_add(live_range->variables, variable);
+}
+
+
+/**
+ * Run through every instruction in a block and construct the live ranges
+ */
+static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
+	//Grab a pointer to the head
+	instruction_t* current = basic_block->leader_statement;
+
+	//Run through every instruction in the block
+	while(current != NULL){
+		//If we actually have a destination register
+		if(current->destination_register != NULL && current->destination_register->is_temporary == FALSE){
+			//Let's see if we can find this
+			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->destination_register);
+
+			//If it's null we need to make one
+			if(live_range == NULL){
+				//Create it
+				live_range = live_range_alloc();
+
+				//Add it into the overall set
+				dynamic_array_add(live_ranges, live_range);
+			}
+
+			//Add this into the live range
+			add_variable_to_live_range(live_range, current->destination_register);
+
+		//If we have a phi function, we need to add the assignee to a live range
+		} else if(current->instruction_type == PHI_FUNCTION){
+			//Let's see if we can find this
+			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->assignee);
+
+			//If it's null we need to make one
+			if(live_range == NULL){
+				//Create it
+				live_range = live_range_alloc();
+
+				//Add it into the overall set
+				dynamic_array_add(live_ranges, live_range);
+			}
+
+			//Add this into the live range
+			add_variable_to_live_range(live_range, current->assignee);
+		}
+
+		//Advance it down
+		current = current->next_statement;
+	}
 }
 
 
