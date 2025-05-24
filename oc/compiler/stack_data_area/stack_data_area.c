@@ -52,6 +52,35 @@ static void recalculate_all_offsets(stack_data_area_t* area, stack_data_area_nod
 
 
 /**
+ * Align the stack data area size to be 16-byte aligned
+ */
+void align_stack_data_area(stack_data_area_t* area){
+	//This means there's nothing in it
+	if(area->total_size == 0){
+		return;
+	}
+
+	//Otherwise we can align
+	
+	/**
+	 * Example: align 258 to 16-bytes by rounding up
+	 * 258 is 100000010
+	 * 15 is  000001111
+	 *
+	 * Add them we get 273: 100010001
+	 * 0XF is 1111
+	 * ~0XF is 1111110000
+	 *  100010001
+	 * &111110000
+	 * 100010000
+	 *
+	 * This is: 272, and it is now aligned
+	 */
+	area->total_size = (area->total_size + 15) & ~0xF;
+}
+
+
+/**
  * Add a node into the stack data area
  * 
  * NOTE: We guarantee that each address in the stack will be at least

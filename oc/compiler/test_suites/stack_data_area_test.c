@@ -83,6 +83,10 @@ int main(int argc, char** argv){
 		}
 	}
 
+	//Perform the alignment
+	align_stack_data_area(&(main_function->data_area));
+	printf("Total size: %d\n", main_function->data_area.total_size);
+
 	printf("###################### Now testing removal ####################\n");
 
 	//Now let's run through and remove everything to test that
