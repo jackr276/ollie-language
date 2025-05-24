@@ -18,6 +18,7 @@ DEPENDENCY_TREE_PATH = ./oc/compiler/dependency_tree
 DYNAMIC_ARRAY_PATH = ./oc/compiler/dynamic_array
 INSTRUCTION_PATH = ./oc/compiler/instruction
 INSTRUCTION_SELECTOR_PATH = ./oc/compiler/instruction_selector
+REGISTER_ALLOCATOR_PATH = ./oc/compiler/register_allocator
 CODE_GENERATOR_PATH = ./oc/compiler/code_generator
 JUMP_TABLE_PATH = ./oc/compiler/jump_table
 QUEUE_PATH = ./oc/compiler/queue
@@ -138,6 +139,12 @@ instruction_selector.o: $(INSTRUCTION_SELECTOR_PATH)/instruction_selector.c
 instruction_selectord.o: $(INSTRUCTION_SELECTOR_PATH)/instruction_selector.c
 	$(CC) $(CFLAGS) -g $(INSTRUCTION_SELECTOR_PATH)/instruction_selector.c -o $(OUT)/instruction_selectord.o
 
+register_allocator.o: $(REGISTER_ALLOCATOR_PATH)/register_allocator.c
+	$(CC) $(CFLAGS) $(REGISTER_ALLOCATOR_PATH)/register_allocator.c -o $(OUT)/register_allocator.o
+
+register_allocatord.o: $(REGISTER_ALLOCATOR_PATH)/register_allocator.c
+	$(CC) $(CFLAGS) -g $(REGISTER_ALLOCATOR_PATH)/register_allocator.c -o $(OUT)/register_allocatord.o
+
 code_generator.o: $(CODE_GENERATOR_PATH)/code_generator.c
 	$(CC) $(CFLAGS) $(CODE_GENERATOR_PATH)/code_generator.c -o $(OUT)/code_generator.o
 
@@ -237,11 +244,11 @@ front_end_testd: front_end_testd.o parser.o lexer.o symtab.o heapstack.o type_sy
 middle_end_test: middle_end_test.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o instruction.o heap_queue.o preproc.o dependency_tree.o priority_queue.o dynamic_array.o lightstack.o jump_table.o optimizer.o stack_data_area.o
 	$(CC) -o $(OUT)/middle_end_test $(OUT)/middle_end_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/instruction.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_tree.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o $(OUT)/optimizer.o $(OUT)/jump_table.o $(OUT)/stack_data_area.o
 
-oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o instruction.o heap_queue.o preproc.o dependency_tree.o priority_queue.o dynamic_array.o lightstack.o optimizer.o instruction_selector.o jump_table.o code_generator.o stack_data_area.o
-	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/instruction.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_tree.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o $(OUT)/optimizer.o $(OUT)/instruction_selector.o $(OUT)/jump_table.o $(OUT)/code_generator.o $(OUT)/stack_data_area.o
+oc: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o instruction.o heap_queue.o preproc.o dependency_tree.o priority_queue.o dynamic_array.o lightstack.o optimizer.o instruction_selector.o jump_table.o code_generator.o stack_data_area.o register_allocator.o
+	$(CC) -o $(OUT)/oc $(OUT)/compiler.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/instruction.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_tree.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o $(OUT)/optimizer.o $(OUT)/instruction_selector.o $(OUT)/jump_table.o $(OUT)/code_generator.o $(OUT)/stack_data_area.o $(OUT)/register_allocator.o
 
-oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o call_graphd.o lexstackd.o instructiond.o heap_queued.o preprocd.o dependency_treed.o priority_queued.o dynamic_arrayd.o lightstackd.o optimizerd.o instruction_selectord.o jump_tabled.o code_generatord.o stack_data_aread.o
-	$(CC) -o $(OUT)/ocd $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/lexstackd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o $(OUT)/instructiond.o $(OUT)/heap_queued.o $(OUT)/preprocd.o $(OUT)/dependency_treed.o $(OUT)/priority_queued.o $(OUT)/dynamic_arrayd.o $(OUT)/lightstackd.o $(OUT)/optimizerd.o $(OUT)/instruction_selectord.o $(OUT)/jump_tabled.o $(OUT)/code_generatord.o $(OUT)/stack_data_aread.o
+oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o astd.o cfgd.o call_graphd.o lexstackd.o instructiond.o heap_queued.o preprocd.o dependency_treed.o priority_queued.o dynamic_arrayd.o lightstackd.o optimizerd.o instruction_selectord.o jump_tabled.o code_generatord.o stack_data_aread.o register_allocatord.o
+	$(CC) -o $(OUT)/ocd $(OUT)/compilerd.o $(OUT)/parserd.o $(OUT)/lexerd.o $(OUT)/heapstackd.o $(OUT)/symtabd.o $(OUT)/lexstackd.o $(OUT)/type_systemd.o $(OUT)/astd.o $(OUT)/cfgd.o $(OUT)/call_graphd.o $(OUT)/instructiond.o $(OUT)/heap_queued.o $(OUT)/preprocd.o $(OUT)/dependency_treed.o $(OUT)/priority_queued.o $(OUT)/dynamic_arrayd.o $(OUT)/lightstackd.o $(OUT)/optimizerd.o $(OUT)/instruction_selectord.o $(OUT)/jump_tabled.o $(OUT)/code_generatord.o $(OUT)/stack_data_aread.o $(OUT)/register_allocatord.o
 
 stest: symtab_test
 	$(OUT)/symtab_test

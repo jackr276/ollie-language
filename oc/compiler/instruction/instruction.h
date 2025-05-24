@@ -111,11 +111,23 @@ typedef enum{
  */
 typedef enum{
 	NO_REG = 0, //Default is that there's no register used
-	AL, //%al register
 	RAX,
+	RBX,
+	RCX,
 	RDX,
+	RSI,
+	RDI,
+	RBP,
 	RSP, //Stack pointer
 	RIP, //Instruction pointer
+	R8,
+	R9,
+	R10,
+	R11,
+	R12,
+	R13,
+	R14,
+	R15
 } register_holder_t;
 
 
