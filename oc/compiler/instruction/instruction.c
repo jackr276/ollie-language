@@ -1029,13 +1029,14 @@ static void print_lea_instruction(instruction_t* instruction){
 		printf("leal ");
 	}
 
-	//Now we print out the destination
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	//Now we'll print out one of the various complex addressing modes
+	print_addressing_mode_expression(instruction);
 
 	printf(", ");
 
-	//Now we'll print out one of the various complex addressing modes
-	print_addressing_mode_expression(instruction);
+	//Now we print out the destination
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+
 	printf("\n");
 }
 
