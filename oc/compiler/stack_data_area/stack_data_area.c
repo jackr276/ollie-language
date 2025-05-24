@@ -84,7 +84,7 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 	//Otherwise, we'll need to do some more complex operations. We'll keep
 	//searching until we get to the place where the node is larger
 	//than the one before it
-	while(current->next != NULL && current->variable_size < node->variable_size){
+	while(current->next != NULL && current->variable_size <= node->variable_size){
 		current = current->next;
 	}
 
@@ -93,7 +93,7 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 
 	//Once we get here, there are are three options
 	//This means that we hit the tail, and we're at the very end
-	if(current->next == NULL && current->variable_size < node->variable_size){
+	if(current->next == NULL && current->variable_size <= node->variable_size){
 		//Add this in here at the very end
 		current->next = node;
 		node->previous = current;
@@ -156,9 +156,6 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 	//First remove the space
 	area->total_size -= current->variable_size;
 
-	//Let's hang onto the current's next field. We'll need it when we recalculate offsets
-	stack_data_area_node_t* next = current->next;
-	
 	//Special case - it's the head
 	if(area->highest == current){
 		//Reserve this one's address
@@ -169,16 +166,32 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 		area->highest->previous = NULL;
 		//Now we deallocate temp
 		free(temp);
+		//Recalculate all of these offsets
+		recalculate_all_offsets(area, area->highest);
+
+	//Other special case - it's the tail
+	} else if(current->next == NULL){
+		//Just NULL this out and we're good
+		current->previous->next = NULL;
+
+		//Now redo all of our offsets
+		recalculate_all_offsets(area, current->previous);
+
+		//And scrap current
+		free(current);
+
 	//Otherwise it's now the head
 	} else {
 		//This will cut out current completely
 		current->previous->next = current->next;
 		current->next->previous = current->previous;
+
+		//Use the next field to recalculate all offsets
+		recalculate_all_offsets(area, current->next);
+
+		//and now we scrap this one
 		free(current);
 	}
-
-	//Finally, we'll need to recalculate all of our offsets
-	recalculate_all_offsets(area, next);
 }
 
 
