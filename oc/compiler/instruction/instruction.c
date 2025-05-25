@@ -941,6 +941,9 @@ static void print_division_instruction(instruction_t* instruction){
 
 	//We'll only have a source register here
 	print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+
+	printf("-> ");
+	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
 	printf("\n");
 }
 

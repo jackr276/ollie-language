@@ -24,7 +24,7 @@ fn modulus() -> u32 {
 	let mut y:i32 := z >> 5;
 
 	//Modulus
-	//y := y % x;
+	y := y % x;
 
 	ret x + y;
 }
@@ -39,10 +39,10 @@ fn main(arg:i32, argv:char**) -> i32 {
 	a := x - 0;
 	x := !a;
 	//Modulus
-	//x := x % -3;
+	x := x % -3;
 
 	a := (x * -128) + (x - 11);
-	//x := x / 8;
+	x := x / 8;
 	x := x && 21;
 	x := x || 32;
 

@@ -12,6 +12,7 @@
 #include "../queue/heap_queue.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -1454,13 +1455,15 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//Now we should have what we need, so we can emit the division instruction
 	instruction_t* division = emit_div_instruction(window->instruction1->op2, is_signed);
+	//This is the assignee, we just don't see it
+	division->destination_register = emit_temp_var(division_instruction->assignee->type);
 
 	//Once it's been emitted, we link it in like all the rest
 	current_end->next_statement = division;
 	division->previous_statement = current_end;
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, move_to_rax->destination_register);
+	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, division->destination_register);
 
 	//Tie it in here
 	division->next_statement = result_movement;
@@ -1552,13 +1555,15 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//Now we should have what we need, so we can emit the division instruction
 	instruction_t* division = emit_div_instruction(window->instruction1->op2, is_signed);
+	//This is the assignee, we just don't see it
+	division->destination_register = emit_temp_var(modulus_instruction->assignee->type);
 
 	//Once it's been emitted, we link it in like all the rest
 	current_end->next_statement = division;
 	division->previous_statement = current_end;
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, emit_temp_var(modulus_instruction->op1->type));
+	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, division->destination_register);
 	//This is guaranteed to be RDX
 	result_movement->source_register->variable_register = RDX;
 
@@ -2491,6 +2496,8 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 			//The translation here takes the form of a call instruction
 			case THREE_ADDR_CODE_FUNC_CALL:
 				current->instruction_type = CALL;
+				//The destination register is itself the assignee
+				current->destination_register = current->assignee;
 				break;
 			//Let the helper deal with this
 			case THREE_ADDR_CODE_INC_STMT:
