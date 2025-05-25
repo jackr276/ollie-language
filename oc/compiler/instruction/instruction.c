@@ -226,8 +226,13 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 	}
 	
 	//If we're printing live ranges, we'll use the LR number
-	if(mode == PRINTING_LIVE_RANGES){
-		printf("LR%d", variable->associated_live_range->live_range_id);
+	if(mode == PRINTING_LIVE_RANGES && (variable->linked_var == NULL || variable->linked_var->is_function_paramater == FALSE)){
+		//Stack pointer has already been allocated
+		if(variable->is_stack_pointer == TRUE){
+			printf("%rsp");
+		} else {
+			printf("LR%d", variable->associated_live_range->live_range_id);
+		}
 	//Otherwise if it's a temp
 	} else if(variable->is_temporary == TRUE){
 		//Print out it's temp var number

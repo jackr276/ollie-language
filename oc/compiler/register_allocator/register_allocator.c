@@ -58,9 +58,9 @@ static void live_range_dealloc(live_range_t* live_range){
 
 
 /**
- * Print a block our for reading
+ * Print out the live ranges in a block
 */
-static void print_ordered_block(basic_block_t* block){
+static void print_block_with_live_ranges(basic_block_t* block){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
 		print_jump_table(&(block->jump_table));
@@ -99,14 +99,14 @@ static void print_ordered_block(basic_block_t* block){
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_ordered_blocks(basic_block_t* head_block){
+static void print_blocks_with_live_ranges(basic_block_t* head_block){
 	//Run through the direct successors so long as the block is not null
 	basic_block_t* current = head_block;
 
 	//So long as this one isn't NULL
 	while(current != NULL){
 		//Print it
-		print_ordered_block(current);
+		print_block_with_live_ranges(current);
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
@@ -327,4 +327,7 @@ void allocate_all_registers(cfg_t* cfg){
 	//Print whatever live ranges we did find
 	print_all_live_ranges(live_ranges);
 
+	printf("============= After Live Range Determination ==============\n");
+	print_blocks_with_live_ranges(cfg->head_block);
+	printf("============= After Live Range Determination ==============\n");
 }
