@@ -1638,6 +1638,81 @@ static void mark(cfg_t* cfg){
 
 
 /**
+ * Estimate an individual execution frequency
+ */
+static void estimate_individual_execution_frequency(basic_block_t* block){
+	//Assume once for a func entry
+	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		block->estimated_execution_frequency = 1;
+		return;
+	}
+
+
+
+}
+
+
+/**
+ * Estimate all execution frequencies in the CFG
+ *
+ * We do this using some simple heuristics in the 
+ */
+static void estimate_execution_frequencies(cfg_t* cfg){
+	//First, we'll reset every single block here
+	reset_visited_status(cfg, FALSE);
+
+	//This will always happen once
+	if(cfg->global_variables != NULL){
+		cfg->global_variables->estimated_execution_frequency = 1;
+	}
+
+	//For holding our blocks
+	basic_block_t* block;
+
+	//Now we'll print out each and every function inside of the function_blocks
+	//array. Each function will be printed using the BFS strategy
+	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		//We'll need a queue for our BFS
+		heap_queue_t* queue = heap_queue_alloc();
+
+		//Grab this out for convenience
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, i);
+
+		//We'll want to see what the stack looks like
+		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
+
+		//Seed the search by adding the funciton block into the queue
+		enqueue(queue, dynamic_array_get_at(cfg->function_blocks, i));
+
+		//So long as the queue isn't empty
+		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+			//Pop off of the queue
+			block = dequeue(queue);
+			
+			//Use the helper to estimate the individual frequency
+			estimate_individual_execution_frequency(block);
+
+			//Now we'll mark this as visited
+			block->visited = TRUE;
+
+			//And finally we'll add all of these onto the queue
+			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
+				//Add the successor into the queue, if it has not yet been visited
+				basic_block_t* successor = block->successors->internal_array[j];
+
+				if(successor->visited == FALSE){
+					enqueue(queue, successor);
+				}
+			}
+		}
+
+		//Destroy the heap queue when done
+		heap_queue_dealloc(queue);
+	}
+}
+
+
+/**
  * After mark and sweep and clean run, we'll almost certainly have a litany of blocks in all
  * of the dominance relations that are now useless. As such, we'll need to completely recompute all
  * of these key values
@@ -1715,6 +1790,11 @@ cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
 
+	//PASS 5: Estimate execution frequencies
+	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
+	//to decide where to allocate registers appropriately.
+	estimate_execution_frequencies(cfg);
+
 	//PASS 5: Shortcircuiting logic optimization
 	//Sometimes, we are able avoid extra work by using short-circuiting logic for compound logical statements(&& and ||). This
 	//only works for these kinds of statements, so the optimization is very specific. When the CFG is constructed, compound logic
@@ -1722,6 +1802,6 @@ cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes){
 	//that is useless, it's worth it to look at these statements and optimize them in one special pass
 	optimize_compound_logic(cfg);
 
-
+	//Give back the CFG
 	return cfg;
 }

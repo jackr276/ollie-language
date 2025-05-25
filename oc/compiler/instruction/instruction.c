@@ -229,7 +229,7 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 	if(mode == PRINTING_LIVE_RANGES && (variable->linked_var == NULL || variable->linked_var->is_function_paramater == FALSE)){
 		//Stack pointer has already been allocated
 		if(variable->is_stack_pointer == TRUE){
-			printf("%rsp");
+			printf("%%rsp");
 		} else {
 			printf("LR%d", variable->associated_live_range->live_range_id);
 		}

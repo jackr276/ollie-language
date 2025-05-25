@@ -25,6 +25,8 @@ typedef struct instruction_t instruction_t;
 typedef struct three_addr_var_t three_addr_var_t;
 //A struct that holds our three address constants
 typedef struct three_addr_const_t three_addr_const_t;
+//A struct that stores all of our live ranges
+typedef struct live_range_t live_range_t;
 
 
 /**
@@ -245,8 +247,6 @@ typedef enum{
 } instruction_stmt_class_t;
 
 
-//A struct that stores all of our live ranges
-typedef struct live_range_t live_range_t;
 
 /**
  * For our live ranges, we'll really only need the name and
@@ -259,6 +259,8 @@ struct live_range_t{
 	u_int16_t live_range_id;
 	//Store the heuristic spill cost
 	int16_t spill_cost;
+	//What register is this live range in?
+	register_holder_t reg; 
 };
 
 

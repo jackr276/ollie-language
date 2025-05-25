@@ -457,6 +457,9 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	//We always need the colon and newline
 	printf(":\n");
 
+	//First print out the estimate frequency of execution
+	printf("Estimated Execution Frequency: %d\n", block->estimated_execution_frequency);
+
 	printf("Predecessors: {");
 
 	for(u_int16_t i = 0; block->predecessors != NULL && i < block->predecessors->current_index; i++){

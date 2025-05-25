@@ -145,6 +145,8 @@ struct basic_block_t{
 	int64_t case_stmt_val;
 	//An integer ID
 	int32_t block_id;
+	//The estimated execution frequency
+	u_int32_t estimated_execution_frequency;
 	//What is the general classification of this block
 	block_type_t block_type;
 	//How does the block terminate? This is important for CFG drilling
@@ -158,11 +160,15 @@ struct basic_block_t{
 };
 
 
-//Build the entire CFG from the AST. This function returns the CFG struct, which
-//always has the root block
+/**
+ * Build the entire CFG from the AST. This function returns the CFG struct, which
+ * always has the root block
+ */
 cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
-//Add a statement to the basic block
+/**
+ * Add a statement to the basic block
+ */
 void add_statement(basic_block_t* target, instruction_t* statement_node);
 
 /**
