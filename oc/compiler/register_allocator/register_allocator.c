@@ -8,6 +8,7 @@
 //For live rnages
 #include "../dynamic_array/dynamic_array.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
 //For standardization
@@ -57,9 +58,66 @@ static void live_range_dealloc(live_range_t* live_range){
 
 
 /**
+ * Print a block our for reading
+*/
+static void print_ordered_block(basic_block_t* block){
+	//If this is some kind of switch block, we first print the jump table
+	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
+		print_jump_table(&(block->jump_table));
+	}
+
+	//If it's a function entry block, we need to print this out
+	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		printf("%s:\n", block->func_record->func_name);
+		print_stack_data_area(&(block->func_record->data_area));
+	} else {
+		printf(".L%d:\n", block->block_id);
+	}
+
+	//Now grab a cursor and print out every statement that we 
+	//have
+	instruction_t* cursor = block->leader_statement;
+
+	//So long as it isn't null
+	while(cursor != NULL){
+		//We actually no longer need these
+		if(cursor->instruction_type != PHI_FUNCTION){
+			print_instruction(cursor);
+		}
+
+		//Move along to the next one
+		cursor = cursor->next_statement;
+	}
+
+	//For spacing
+	printf("\n");
+}
+
+
+/**
+ * Run through using the direct successor strategy and print all ordered blocks.
+ * We print much less here than the debug printer in the CFG, because all dominance
+ * relations are now useless
+ */
+static void print_ordered_blocks(basic_block_t* head_block){
+	//Run through the direct successors so long as the block is not null
+	basic_block_t* current = head_block;
+
+	//So long as this one isn't NULL
+	while(current != NULL){
+		//Print it
+		print_ordered_block(current);
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
+}
+
+
+/**
  * Print all live ranges that we have
  */
 static void print_all_live_ranges(dynamic_array_t* live_ranges){
+	printf("============= All Live Ranges ==============\n");
 	//For each live range in the array
 	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
 		//Grab it out
@@ -82,6 +140,7 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		//And we'll close it out
 		printf("}\n");
 	}
+	printf("============= All Live Ranges ==============\n");
 }
 
 
@@ -126,6 +185,29 @@ static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_
 
 
 /**
+ * Figure out which live range a given variable was associated with
+ */
+static void assign_live_range_to_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
+	//Stack pointer is exempt
+	if(variable->is_stack_pointer == TRUE || (variable->linked_var != NULL && variable->linked_var->is_function_paramater == TRUE)){
+		return;
+	}
+
+	live_range_t* live_range = find_live_range_with_variable(live_ranges, variable);
+
+	//For developer flagging
+	if(live_range == NULL){
+		printf("Fatal compiler error: variable found with that has no live range\n");
+		print_variable(variable, PRINTING_VAR_INLINE);
+		exit(1);
+	}
+
+	//Otherwise we just assign it
+	variable->associated_live_range = live_range;
+}
+
+
+/**
  * Run through every instruction in a block and construct the live ranges
  */
 static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
@@ -135,7 +217,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 	//Run through every instruction in the block
 	while(current != NULL){
 		//If we actually have a destination register
-		if(current->destination_register != NULL && current->destination_register->is_temporary == FALSE){
+		if(current->destination_register != NULL /* && current->destination_register->is_temporary == FALSE*/){
 			//Let's see if we can find this
 			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->destination_register);
 
@@ -150,6 +232,9 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 			//Add this into the live range
 			add_variable_to_live_range(live_range, current->destination_register);
+
+			//Link the variable into this as well
+			current->destination_register->associated_live_range = live_range;
 
 		//If we have a phi function, we need to add the assignee to a live range
 		} else if(current->instruction_type == PHI_FUNCTION){
@@ -167,6 +252,24 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 			//Add this into the live range
 			add_variable_to_live_range(live_range, current->assignee);
+		}
+
+		//Let's also assign all the live ranges that we need to the given variables since we're already 
+		//iterating like this
+		if(current->source_register != NULL){
+			assign_live_range_to_variable(live_ranges, current->source_register);
+		}
+
+		if(current->source_register2 != NULL){
+			assign_live_range_to_variable(live_ranges, current->source_register2);
+		}
+
+		if(current->address_calc_reg1 != NULL){
+			assign_live_range_to_variable(live_ranges, current->address_calc_reg1);
+		}
+
+		if(current->address_calc_reg2 != NULL){
+			assign_live_range_to_variable(live_ranges, current->address_calc_reg2);
 		}
 
 		//Advance it down

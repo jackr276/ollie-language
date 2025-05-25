@@ -279,7 +279,7 @@ struct three_addr_var_t{
 	//but "spilled" variables and address variables do
 	stack_data_area_node_t* related_node;
 	//What live range is this variable associate with
-	live_range_t* associate_live_range;
+	live_range_t* associated_live_range;
 	//What is the stack offset(i.e. %rsp + __) of this variable?
 	u_int32_t stack_offset;
 	//What is the ssa generation level?

@@ -16,13 +16,9 @@ fn main() -> i32{
 
 	let mut b:i32 := arr[3][2];
 
-
-	//do{
-	//while(b < 32) do{
 	for(let _:i32 := 0; _ < 838; _++) do{
 		a++;
-	} //while(b < 32);
-
+	}
 
 	ret a;
 }
