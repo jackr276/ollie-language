@@ -90,10 +90,6 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	
 	//We'll remove this from the list of created blocks
 	dynamic_array_delete(cfg->created_blocks, b);
-
-	//And finally we'll deallocate b
-	//TODO FIX - DOES NOT WORK
-	//basic_block_dealloc(b);
 }
 
 
@@ -1641,14 +1637,42 @@ static void mark(cfg_t* cfg){
  * Estimate an individual execution frequency
  */
 static void estimate_individual_execution_frequency(basic_block_t* block){
-	//Assume once for a func entry
-	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		block->estimated_execution_frequency = 1;
-		return;
+	//Switch based on what kind of block that we have
+	switch(block->block_type){
+		case BLOCK_TYPE_FUNC_ENTRY:
+		case BLOCK_TYPE_FUNC_EXIT:
+			block->estimated_execution_frequency = 1;
+			break;
+			
+		//Any loop is estimated to execute 10 times
+		case BLOCK_TYPE_WHILE_ENTRY:
+		case BLOCK_TYPE_FOR_STMT_CONDITIONAL:
+		case BLOCK_TYPE_FOR_STMT_UPDATE:
+		case BLOCK_TYPE_DO_WHILE_END:
+			block->estimated_execution_frequency = 10;
+			break;
+
+		//Otherwise, the way that we do this is by looking at all of 
+		//the predecessors and taking the highest value
+		default:
+			//By default it's a 1
+			//block->estimated_execution_frequency = 1;
+
+			//Run through all of the predecessors
+			for(u_int16_t _ = 0; block->predecessors != NULL && _ < block->predecessors->current_index; _++){
+				printf("HERE\n");
+				//Grab it out
+				basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, _);
+
+				//If this predecessor executes more frequently than the one before, we update this execution to
+				//match that
+				if(predecessor->estimated_execution_frequency > block->estimated_execution_frequency){
+					block->estimated_execution_frequency = predecessor->estimated_execution_frequency;
+				}
+			}
+
+			break;
 	}
-
-
-
 }
 
 
@@ -1677,6 +1701,8 @@ static void estimate_execution_frequencies(cfg_t* cfg){
 
 		//Grab this out for convenience
 		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, i);
+		//Mark the type here
+		function_entry_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
 
 		//We'll want to see what the stack looks like
 		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
