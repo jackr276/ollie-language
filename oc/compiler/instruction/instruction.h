@@ -182,6 +182,7 @@ typedef enum{
 typedef enum{
 	PRINTING_VAR_INLINE,
 	PRINTING_VAR_BLOCK_HEADER,
+	PRINTING_LIVE_RANGES,
 } variable_printing_mode_t;
 
 /**
@@ -586,7 +587,7 @@ void print_three_addr_code_stmt(instruction_t* stmt);
 /**
  * Print an instruction that has not yet been given registers
  */
-void print_instruction(instruction_t* instruction);
+void print_instruction(instruction_t* instruction, variable_printing_mode_t mode);
 
 /**
  * Print a variable and everything about it. If the variable is in

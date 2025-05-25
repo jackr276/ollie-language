@@ -203,19 +203,19 @@ static void print_instruction_window(instruction_window_t* window){
 	printf("----------- Instruction Window ------------\n");
 	//We'll just print out all three instructions
 	if(window->instruction1 != NULL){
-		print_instruction(window->instruction1);
+		print_instruction(window->instruction1, PRINTING_VAR_INLINE);
 	} else {
 		printf("EMPTY\n");
 	}
 
 	if(window->instruction2 != NULL){
-		print_instruction(window->instruction2);
+		print_instruction(window->instruction2, PRINTING_VAR_INLINE);
 	} else {
 		printf("EMPTY\n");
 	}
 	
 	if(window->instruction3 != NULL){
-		print_instruction(window->instruction3);
+		print_instruction(window->instruction3, PRINTING_VAR_INLINE);
 	} else {
 		printf("EMPTY\n");
 	}
@@ -3822,7 +3822,7 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
 			//Hand off to printing method
 			print_three_addr_code_stmt(cursor);
 		} else {
-			print_instruction(cursor);
+			print_instruction(cursor, PRINTING_VAR_INLINE);
 		}
 
 

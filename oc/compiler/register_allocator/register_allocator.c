@@ -82,7 +82,7 @@ static void print_ordered_block(basic_block_t* block){
 	while(cursor != NULL){
 		//We actually no longer need these
 		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(cursor);
+			print_instruction(cursor, PRINTING_LIVE_RANGES);
 		}
 
 		//Move along to the next one
@@ -193,6 +193,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, three_ad
 		return;
 	}
 
+	//Lookup the live range that is associated with this
 	live_range_t* live_range = find_live_range_with_variable(live_ranges, variable);
 
 	//For developer flagging
@@ -217,7 +218,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 	//Run through every instruction in the block
 	while(current != NULL){
 		//If we actually have a destination register
-		if(current->destination_register != NULL /* && current->destination_register->is_temporary == FALSE*/){
+		if(current->destination_register != NULL){
 			//Let's see if we can find this
 			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->destination_register);
 

@@ -225,8 +225,11 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 		printf("(");
 	}
 	
-	//If this is a temp var
-	if(variable->is_temporary == TRUE){
+	//If we're printing live ranges, we'll use the LR number
+	if(mode == PRINTING_LIVE_RANGES){
+		printf("LR%d", variable->associated_live_range->live_range_id);
+	//Otherwise if it's a temp
+	} else if(variable->is_temporary == TRUE){
 		//Print out it's temp var number
 		printf("t%d", variable->temp_var_number);
 	} else {
@@ -716,7 +719,7 @@ static void print_immediate_value_no_prefix(three_addr_const_t* constant){
 /**
  * Print out a complex addressing mode expression
  */
-static void print_addressing_mode_expression(instruction_t* instruction){
+static void print_addressing_mode_expression(instruction_t* instruction, variable_printing_mode_t mode){
 	switch (instruction->calculation_mode) {
 		/**
 		 * If we get here, that means we have this kind
@@ -727,9 +730,9 @@ static void print_addressing_mode_expression(instruction_t* instruction){
 		 */
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE:
 			printf("(");
-			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg1, mode);
 			printf(", ");
-			print_variable(instruction->address_calc_reg2, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg2, mode);
 			printf(", ");
 			printf("%ld", instruction->lea_multiplicator);
 			printf(")");
@@ -738,33 +741,33 @@ static void print_addressing_mode_expression(instruction_t* instruction){
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
 			print_immediate_value_no_prefix(instruction->offset);
 			printf("(");
-			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg1, mode);
 			printf(")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_ONLY:
 			printf("(");
-			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg1, mode);
 			printf(", ");
-			print_variable(instruction->address_calc_reg2, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg2, mode);
 			printf(")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
 			print_immediate_value_no_prefix(instruction->offset);
 			printf("(");
-			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg1, mode);
 			printf(", ");
-			print_variable(instruction->address_calc_reg2, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg2, mode);
 			printf(")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
 			print_immediate_value_no_prefix(instruction->offset);
 			printf("(");
-			print_variable(instruction->address_calc_reg1, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg1, mode);
 			printf(", ");
-			print_variable(instruction->address_calc_reg2, PRINTING_VAR_INLINE);
+			print_variable(instruction->address_calc_reg2, mode);
 			printf(", %ld)", instruction->lea_multiplicator);
 			
 		//Do nothing
@@ -777,7 +780,7 @@ static void print_addressing_mode_expression(instruction_t* instruction){
 /**
  * Handle a simple register to register or immediate to register move
  */
-static void print_register_to_register_move(instruction_t* instruction){
+static void print_register_to_register_move(instruction_t* instruction, variable_printing_mode_t mode){
 	//Print out the appropriate flavor of move
 	if(instruction->instruction_type == MOVL){
 		printf("movl ");
@@ -793,7 +796,7 @@ static void print_register_to_register_move(instruction_t* instruction){
 		default:
 			//Print the appropriate variable here
 			if(instruction->source_register != NULL){
-				print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+				print_variable(instruction->source_register, mode);
 			} else {
 				print_immediate_value(instruction->source_immediate);
 			}
@@ -802,7 +805,7 @@ static void print_register_to_register_move(instruction_t* instruction){
 			printf(",");
 
 			//Now print our destination
-			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, mode);
 
 			break;
 	}
@@ -816,7 +819,7 @@ static void print_register_to_register_move(instruction_t* instruction){
  * Handle a complex register(or immediate) to memory move with a complex
  * address offset calculation
  */
-static void print_register_to_memory_move(instruction_t* instruction){
+static void print_register_to_memory_move(instruction_t* instruction, variable_printing_mode_t mode){
 	//First let's print out the appropriate instruction
 	switch(instruction->instruction_type){
 		case REG_TO_MEM_MOVW:
@@ -836,7 +839,7 @@ static void print_register_to_memory_move(instruction_t* instruction){
 
 	//First we'll print out the source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		//Otherwise we have an immediate value source
 		print_immediate_value(instruction->source_immediate);
@@ -844,7 +847,7 @@ static void print_register_to_memory_move(instruction_t* instruction){
 	
 	printf(", ");
 	//Let this handle it now
-	print_addressing_mode_expression(instruction);
+	print_addressing_mode_expression(instruction, mode);
 	printf("\n");
 }
 
@@ -852,7 +855,7 @@ static void print_register_to_memory_move(instruction_t* instruction){
 /**
  * Handle a complex memory to register move with a complex address offset calculation
  */
-static void print_memory_to_register_move(instruction_t* instruction){
+static void print_memory_to_register_move(instruction_t* instruction, variable_printing_mode_t mode){
 	//First thing we'll do is print the appropriate move statement
 	switch(instruction->instruction_type){
 		case MEM_TO_REG_MOVW:
@@ -870,9 +873,9 @@ static void print_memory_to_register_move(instruction_t* instruction){
 	}
 	
 	//The address mode expression comes firsj
-	print_addressing_mode_expression(instruction);
+	print_addressing_mode_expression(instruction, mode);
 	printf(", ");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -880,7 +883,7 @@ static void print_memory_to_register_move(instruction_t* instruction){
 /**
  * Print a multiplication instruction, in all the forms it can take
  */
-static void print_multiplication_instruction(instruction_t* instruction){
+static void print_multiplication_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
 		case MULL:
@@ -902,7 +905,7 @@ static void print_multiplication_instruction(instruction_t* instruction){
 
 	//Print the appropriate variable here
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
@@ -911,7 +914,7 @@ static void print_multiplication_instruction(instruction_t* instruction){
 	printf(", ");
 
 	//Now print our destination
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -919,7 +922,7 @@ static void print_multiplication_instruction(instruction_t* instruction){
 /**
  * Print a division instruction, in all the forms it can take
  */
-static void print_division_instruction(instruction_t* instruction){
+static void print_division_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
 		case DIVL:
@@ -940,10 +943,10 @@ static void print_division_instruction(instruction_t* instruction){
 	}
 
 	//We'll only have a source register here
-	print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->source_register, mode);
 
 	printf("-> ");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -951,7 +954,7 @@ static void print_division_instruction(instruction_t* instruction){
 /**
  * Print an addition instruction, in all the forms it can take
  */
-static void print_addition_instruction(instruction_t* instruction){
+static void print_addition_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
 		case ADDW:
@@ -970,7 +973,7 @@ static void print_addition_instruction(instruction_t* instruction){
 
 	//Print the appropriate variable here
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
@@ -979,7 +982,7 @@ static void print_addition_instruction(instruction_t* instruction){
 	printf(", ");
 
 	//Now print our destination
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -987,7 +990,7 @@ static void print_addition_instruction(instruction_t* instruction){
 /**
  * Print a subtraction instruction, in all the forms it can take
  */
-static void print_subtraction_instruction(instruction_t* instruction){
+static void print_subtraction_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of subtraction 
 	switch(instruction->instruction_type){
 		case SUBW:
@@ -1006,7 +1009,7 @@ static void print_subtraction_instruction(instruction_t* instruction){
 
 	//Print the appropriate variable here
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
@@ -1015,7 +1018,7 @@ static void print_subtraction_instruction(instruction_t* instruction){
 	printf(", ");
 
 	//Now print our destination
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1024,7 +1027,7 @@ static void print_subtraction_instruction(instruction_t* instruction){
  * Print a lea instruction. This will also handle all the complexities around
  * complex addressing modes
  */
-static void print_lea_instruction(instruction_t* instruction){
+static void print_lea_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//We'll always print out the lea value and the destination first
 	if(instruction->instruction_type == LEAQ){
 		printf("leaq ");
@@ -1033,12 +1036,12 @@ static void print_lea_instruction(instruction_t* instruction){
 	}
 
 	//Now we'll print out one of the various complex addressing modes
-	print_addressing_mode_expression(instruction);
+	print_addressing_mode_expression(instruction, mode);
 
 	printf(", ");
 
 	//Now we print out the destination
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 
 	printf("\n");
 }
@@ -1047,7 +1050,7 @@ static void print_lea_instruction(instruction_t* instruction){
 /**
  * Print a neg instruction
  */
-static void print_neg_instruction(instruction_t* instruction){
+static void print_neg_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll need to decide which version to print
 	if(instruction->instruction_type == NEGQ){
 		printf("negq ");
@@ -1056,7 +1059,7 @@ static void print_neg_instruction(instruction_t* instruction){
 	}
 
 	//Now we'll print out the destination register
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 
 	//And give it a newlinw and we're done
 	printf("\n");
@@ -1066,7 +1069,7 @@ static void print_neg_instruction(instruction_t* instruction){
 /**
  * Print a not instruction
  */
-static void print_not_instruction(instruction_t* instruction){
+static void print_not_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll need to decide which version to print
 	if(instruction->instruction_type == NOTQ){
 		printf("notq ");
@@ -1075,7 +1078,7 @@ static void print_not_instruction(instruction_t* instruction){
 	}
 
 	//Now we'll print out the destination register
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 
 	//And give it a newlinw and we're done
 	printf("\n");
@@ -1086,7 +1089,7 @@ static void print_not_instruction(instruction_t* instruction){
  * Print a cmp instruction. These instructions can have two registers or
  * one register and one immediate value
  */
-static void print_cmp_instruction(instruction_t* instruction){
+static void print_cmp_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll need to decide which version to print
 	if(instruction->instruction_type == CMPQ){
 		printf("cmpq ");
@@ -1098,13 +1101,13 @@ static void print_cmp_instruction(instruction_t* instruction){
 	if(instruction->source_immediate != NULL){
 		print_immediate_value(instruction->source_immediate);
 	} else {
-		print_variable(instruction->source_register2, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register2, mode);
 	}
 
 	printf(",");
 
 	//Now we'll need the source register. This may never be null
-	print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->source_register, mode);
 
 	//And give it a newline and we're done
 	printf("\n");
@@ -1114,7 +1117,7 @@ static void print_cmp_instruction(instruction_t* instruction){
 /**
  * Print out a standard test instruction
  */
-static void print_test_instruction(instruction_t* instruction){
+static void print_test_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll decide which version we need to print out
 	if(instruction->instruction_type == TESTL){
 		printf("testl ");
@@ -1126,9 +1129,9 @@ static void print_test_instruction(instruction_t* instruction){
 
 	//Now we'll print out the source and source2 registers. Test instruction
 	//has no destination
-	print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->source_register, mode);
 	printf(",");
-	print_variable(instruction->source_register2, PRINTING_VAR_INLINE);
+	print_variable(instruction->source_register2, mode);
 
 	//And give it a newline
 	printf("\n");
@@ -1138,20 +1141,20 @@ static void print_test_instruction(instruction_t* instruction){
 /**
  * Print out a movzbl instruction
  */
-static void print_movzbl_instruction(instruction_t* instruction){
+static void print_movzbl_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll just print out the opcode
 	printf("movzbl ");
 
 	//Now we'll need the source immediate/source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
 
 	//Now our comma and the destination
 	printf(",");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1159,7 +1162,7 @@ static void print_movzbl_instruction(instruction_t* instruction){
 /**
  * Print out an arithmetic left shift instruction
  */
-static void print_sal_instruction(instruction_t* instruction){
+static void print_sal_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//Print out the appropriate opcode based on size
 	if(instruction->instruction_type == SALL){
 		printf("sall ");
@@ -1169,14 +1172,14 @@ static void print_sal_instruction(instruction_t* instruction){
 
 	//Now we'll need the source immediate/source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
 
 	//Now our comma and the destination
 	printf(",");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1184,7 +1187,7 @@ static void print_sal_instruction(instruction_t* instruction){
 /**
  * Print out a logical left shift instruction
  */
-static void print_shl_instruction(instruction_t* instruction){
+static void print_shl_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//Print out the appropriate opcode based on size
 	if(instruction->instruction_type == SHLL){
 		printf("shll ");
@@ -1194,14 +1197,14 @@ static void print_shl_instruction(instruction_t* instruction){
 
 	//Now we'll need the source immediate/source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
 
 	//Now our comma and the destination
 	printf(",");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1209,7 +1212,7 @@ static void print_shl_instruction(instruction_t* instruction){
 /**
  * Print out an arithmetic right shift instruction
  */
-static void print_sar_instruction(instruction_t* instruction){
+static void print_sar_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//Print out the appropriate opcode based on size
 	if(instruction->instruction_type == SARL){
 		printf("sarl ");
@@ -1219,14 +1222,14 @@ static void print_sar_instruction(instruction_t* instruction){
 
 	//Now we'll need the source immediate/source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
 
 	//Now our comma and the destination
 	printf(",");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1234,7 +1237,7 @@ static void print_sar_instruction(instruction_t* instruction){
 /**
  * Print out a bitwise AND instruction
  */
-static void print_and_instruction(instruction_t* instruction){
+static void print_and_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//Print out the appropriate opcode based on size
 	if(instruction->instruction_type == ANDL){
 		printf("andl ");
@@ -1244,14 +1247,14 @@ static void print_and_instruction(instruction_t* instruction){
 
 	//Now we'll need the source immediate/source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
 
 	//Now our comma and the destination
 	printf(",");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1259,7 +1262,7 @@ static void print_and_instruction(instruction_t* instruction){
 /**
  * Print out a bitwise OR instruction
  */
-static void print_or_instruction(instruction_t* instruction){
+static void print_or_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//Print out the appropriate opcode based on size
 	if(instruction->instruction_type == ORL){
 		printf("orl ");
@@ -1269,14 +1272,14 @@ static void print_or_instruction(instruction_t* instruction){
 
 	//Now we'll need the source immediate/source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
 
 	//Now our comma and the destination
 	printf(",");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1284,7 +1287,7 @@ static void print_or_instruction(instruction_t* instruction){
 /**
  * Print out a bitwise XOR instruction
  */
-static void print_xor_instruction(instruction_t* instruction){
+static void print_xor_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//Print out the appropriate opcode based on size
 	if(instruction->instruction_type == XORL){
 		printf("xorl ");
@@ -1294,14 +1297,14 @@ static void print_xor_instruction(instruction_t* instruction){
 
 	//Now we'll need the source immediate/source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
 
 	//Now our comma and the destination
 	printf(",");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1309,7 +1312,7 @@ static void print_xor_instruction(instruction_t* instruction){
 /**
  * Print out a logical right shift instruction
  */
-static void print_shr_instruction(instruction_t* instruction){
+static void print_shr_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//Print out the appropriate opcode based on size
 	if(instruction->instruction_type == SHRL){
 		printf("shrl ");
@@ -1319,14 +1322,14 @@ static void print_shr_instruction(instruction_t* instruction){
 
 	//Now we'll need the source immediate/source
 	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+		print_variable(instruction->source_register, mode);
 	} else {
 		print_immediate_value(instruction->source_immediate);
 	}
 
 	//Now our comma and the destination
 	printf(",");
-	print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
 
@@ -1334,7 +1337,7 @@ static void print_shr_instruction(instruction_t* instruction){
 /**
  * Print an instruction that has not yet been given registers
  */
-void print_instruction(instruction_t* instruction){
+void print_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//This will be null often, but if we need it it'll be here
 	basic_block_t* jumping_to_block = instruction->jumping_to_block;
 
@@ -1388,144 +1391,144 @@ void print_instruction(instruction_t* instruction){
 			break;
 		case INCL:
 			printf("incl ");
-			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, mode);
 			printf("\n");
 			break;
 		case INCQ:
 			printf("incq ");
-			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, mode);
 			printf("\n");
 			break;
 		case DECL:
 			printf("decl ");
-			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, mode);
 			printf("\n");
 			break;
 		case DECQ:
 			printf("decq ");
-			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, mode);
 			printf("\n");
 			break;
 		case MULL:
 		case MULQ:
 		case IMULQ:
 		case IMULL:
-			print_multiplication_instruction(instruction);
+			print_multiplication_instruction(instruction, mode);
 			break;
 		case DIVL:
 		case DIVQ:
 		case IDIVL:
 		case IDIVQ:
-			print_division_instruction(instruction);
+			print_division_instruction(instruction, mode);
 			break;
 
 		//Handle the special addressing modes that we could have here
 		case REG_TO_MEM_MOVL:
 		case REG_TO_MEM_MOVW:
 		case REG_TO_MEM_MOVQ:
-			print_register_to_memory_move(instruction);
+			print_register_to_memory_move(instruction, mode);
 			break;
 		case MEM_TO_REG_MOVL:
 		case MEM_TO_REG_MOVW:
 		case MEM_TO_REG_MOVQ:
-			print_memory_to_register_move(instruction);
+			print_memory_to_register_move(instruction, mode);
 			break;
 		//Handle addition instructions
 		case ADDW:
 		case ADDL:
 		case ADDQ:
-			print_addition_instruction(instruction);
+			print_addition_instruction(instruction, mode);
 			break;
 		//Handle subtraction instruction
 		case SUBW:
 		case SUBL:
 		case SUBQ:
-			print_subtraction_instruction(instruction);
+			print_subtraction_instruction(instruction, mode);
 			break;
 		//Handle basic move instructions(no complex addressing)
 		case MOVW:
 		case MOVL:
 		case MOVQ:
 			//Invoke the helper
-			print_register_to_register_move(instruction);
+			print_register_to_register_move(instruction, mode);
 			break;
 		//Handle lea printing
 		case LEAL:
 		case LEAQ:
 			//Invoke the helper
-			print_lea_instruction(instruction);
+			print_lea_instruction(instruction, mode);
 			break;
 		//Handle neg printing
 		case NEGL:
 		case NEGQ:
-			print_neg_instruction(instruction);
+			print_neg_instruction(instruction, mode);
 			break;
 		//Handle not(one's complement) printing
 		case NOTL:
 		case NOTQ:
-			print_not_instruction(instruction);
+			print_not_instruction(instruction, mode);
 			break;
 		//Handle our CMP instructions
 		case CMPL:
 		case CMPQ:
-			print_cmp_instruction(instruction);
+			print_cmp_instruction(instruction, mode);
 			break;
 		//Handle a simple sete instruction
 		case SETE:
 			printf("sete ");
-			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, mode);
 			printf("\n");
 			break;
 		//Handle a simple setne instruction
 		case SETNE:
 			printf("setne ");
-			print_variable(instruction->destination_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->destination_register, mode);
 			printf("\n");
 			break;
 		//Handle a test instruction
 		case TESTL:
 		case TESTW:
 		case TESTQ:
-			print_test_instruction(instruction);
+			print_test_instruction(instruction, mode);
 			break;
 		//Handle a movzbl instruction
 		case MOVZBL:
-			print_movzbl_instruction(instruction);
+			print_movzbl_instruction(instruction, mode);
 			break;
 		//Handle an arithmetic left shift instruction
 		case SALL:
 		case SALQ:
-			print_sal_instruction(instruction);
+			print_sal_instruction(instruction, mode);
 			break;
 		//Handle a logical left shift instruction
 		case SHLL:
 		case SHLQ:
-			print_shl_instruction(instruction);
+			print_shl_instruction(instruction, mode);
 			break;
 		//Handle a logical right shift instruction
 		case SHRL:
 		case SHRQ:
-			print_shr_instruction(instruction);
+			print_shr_instruction(instruction, mode);
 			break;
 		//Handle an arithmentic right shift instruction
 		case SARL:
 		case SARQ:
-			print_sar_instruction(instruction);
+			print_sar_instruction(instruction, mode);
 			break;
 		//Handle a bitwise and instruction
 		case ANDL:
 		case ANDQ:
-			print_and_instruction(instruction);
+			print_and_instruction(instruction, mode);
 			break;
 		//Handle a bitwise inclusive or instruction
 		case ORL:
 		case ORQ:
-			print_or_instruction(instruction);
+			print_or_instruction(instruction, mode);
 			break;
 		//Handle a bitwise exclusive or instruction
 		case XORL:
 		case XORQ:
-			print_xor_instruction(instruction);
+			print_xor_instruction(instruction, mode);
 			break;
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements
@@ -1540,7 +1543,7 @@ void print_instruction(instruction_t* instruction){
 			printf(".JT%d(,", jumping_to_block->jump_table_id);
 
 			//Now we print out the source register
-			print_variable(instruction->source_register, PRINTING_VAR_INLINE);
+			print_variable(instruction->source_register, mode);
 
 			//And then a comma and the multplicator
 			printf(",%ld)\n", instruction->lea_multiplicator);
