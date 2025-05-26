@@ -598,6 +598,11 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode);
 
 /**
+ * Print a live range out
+ */
+void print_live_range(live_range_t* live_range);
+
+/**
  * Destroy a three address variable
 */
 void three_addr_var_dealloc(three_addr_var_t* var);

@@ -283,6 +283,23 @@ u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
 
 
 /**
+ * Reset a dynamic array by wiping the contents of its memory
+ */
+void reset_dynamic_array(dynamic_array_t* array){
+	//If this is the case then just bail
+	if(array == NULL || array->internal_array == NULL){
+		return;
+	}
+
+	//Otherwise we'll memset by wiping everything
+	memset(array->internal_array, 0, array->current_index * sizeof(void**));
+
+	//The current index is now 0
+	array->current_index = 0;
+}
+
+
+/**
  * Deallocate an entire dynamic array
 */
 void dynamic_array_dealloc(dynamic_array_t* array){

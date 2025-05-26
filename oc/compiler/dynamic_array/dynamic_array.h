@@ -93,6 +93,11 @@ void* dynamic_array_delete_from_back(dynamic_array_t* array);
 u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b);
 
 /**
+ * Reset a dynamic array by wiping the contents of its memory
+ */
+void reset_dynamic_array(dynamic_array_t* array);
+
+/**
  * Deallocate an entire dynamic array. 
  *
  * NOTE: This will not touch/free any pointers in the array itself,

@@ -250,6 +250,14 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 
 
 /**
+ * Print a live range out
+ */
+void print_live_range(live_range_t* live_range){
+	printf("LR%d", live_range->live_range_id);
+}
+
+
+/**
  * Print a constant. This is a helper method to avoid excessive code duplication
  */
 static void print_three_addr_constant(three_addr_const_t* constant){

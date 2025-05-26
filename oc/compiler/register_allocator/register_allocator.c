@@ -79,6 +79,36 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf(".L%d:\n", block->block_id);
 	}
 
+	//If we have some assigned variables, we will dislay those for debugging
+	if(block->assigned_variables != NULL){
+		printf("Assigned: (");
+
+		for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
+			print_live_range(dynamic_array_get_at(block->assigned_variables, i));
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->assigned_variables->current_index - 1){
+				printf(", ");
+			}
+		}
+		printf(")\n");
+	}
+
+	//If we have some used variables, we will dislay those for debugging
+	if(block->used_variables != NULL){
+		printf("Used: (");
+
+		for(u_int16_t i = 0; i < block->used_variables->current_index; i++){
+			print_live_range(dynamic_array_get_at(block->used_variables, i));
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->used_variables->current_index - 1){
+				printf(", ");
+			}
+		}
+		printf(")\n");
+	}
+
 	//Now grab a cursor and print out every statement that we 
 	//have
 	instruction_t* cursor = block->leader_statement;
@@ -196,13 +226,18 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 		//of this block times the number of instructions a load/store combo will take
 		live_range->spill_cost += LOAD_AND_STORE_COST * block->estimated_execution_frequency; 
 	}
+
+	//Adding a variable to a live range means that this live range is assigned to in this block
+	if(dynamic_array_contains(block->assigned_variables, live_range) == NOT_FOUND){
+		dynamic_array_add(block->assigned_variables, live_range);
+	}
 }
 
 
 /**
  * Figure out which live range a given variable was associated with
  */
-static void assign_live_range_to_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
+static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//Stack pointer is exempt
 	if(variable->is_stack_pointer == TRUE || (variable->linked_var != NULL && variable->linked_var->is_function_paramater == TRUE)){
 		return;
@@ -220,21 +255,11 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, three_ad
 
 	//Otherwise we just assign it
 	variable->associated_live_range = live_range;
-}
 
-
-/**
- * Does the dynamic array contain the given live range?
- */
-static void live_range_dynamic_array_contains(dynamic_array_t* dynamic_array, live_range_t* live_range){
-
-}
-
-
-/**
- * Add the given live range to the dynamic array
- */
-static void live_range_dynamic_array_add(dynamic_array_t* dynamic_array, live_range_t* live_range){
+	//Assigning a live range to a variable means that this variable was *used* in the block
+	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
+		dynamic_array_add(block->used_variables, live_range);
+	}
 
 }
 
@@ -366,6 +391,35 @@ static void calculate_liveness_sets(cfg_t* cfg){
  * Run through every instruction in a block and construct the live ranges
  */
 static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
+	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
+	//we'll allocate them fresh
+	if(basic_block->assigned_variables == NULL){
+		basic_block->assigned_variables = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(basic_block->assigned_variables);
+	}
+
+	//Do the same with the used variables
+	if(basic_block->used_variables == NULL){
+		basic_block->used_variables = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(basic_block->used_variables);
+	}
+
+	//Do the same with the live in 
+	if(basic_block->live_in == NULL){
+		basic_block->live_in = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(basic_block->live_in);
+	}
+
+	//Do the same with the live out
+	if(basic_block->live_in == NULL){
+		basic_block->live_in = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(basic_block->live_in);
+	}
+
 	//Grab a pointer to the head
 	instruction_t* current = basic_block->leader_statement;
 
@@ -412,19 +466,19 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 		//Let's also assign all the live ranges that we need to the given variables since we're already 
 		//iterating like this
 		if(current->source_register != NULL){
-			assign_live_range_to_variable(live_ranges, current->source_register);
+			assign_live_range_to_variable(live_ranges, basic_block, current->source_register);
 		}
 
 		if(current->source_register2 != NULL){
-			assign_live_range_to_variable(live_ranges, current->source_register2);
+			assign_live_range_to_variable(live_ranges, basic_block, current->source_register2);
 		}
 
 		if(current->address_calc_reg1 != NULL){
-			assign_live_range_to_variable(live_ranges, current->address_calc_reg1);
+			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1);
 		}
 
 		if(current->address_calc_reg2 != NULL){
-			assign_live_range_to_variable(live_ranges, current->address_calc_reg2);
+			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
 		}
 
 		//Advance it down
