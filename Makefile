@@ -111,6 +111,12 @@ stack_data_area_test.o: $(TEST_SUITE_PATH)/stack_data_area_test.c
 stack_data_area_testd.o: $(TEST_SUITE_PATH)/stack_data_area_test.c
 	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATH)/stack_data_area_test.c -o $(OUT)/stack_data_area_testd.o
 
+interference_graph_test.o: $(TEST_SUITE_PATH)/interference_graph_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/interference_graph_test.c -o $(OUT)/interference_graph_test.o
+
+interference_graph_testd.o: $(TEST_SUITE_PATH)/interference_graph_test.c
+	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATH)/interference_graph_test.c -o $(OUT)/interference_graph_testd.o
+
 symtab.o: $(SYMTAB_PATH)/symtab.c
 	$(CC) $(CFLAGS) $(SYMTAB_PATH)/symtab.c -o $(OUT)/symtab.o
 
@@ -249,6 +255,9 @@ middle_end_test.o: $(TEST_SUITE_PATH)/middle_end_test.c
 middle_end_testd.o: $(TEST_SUITE_PATH)/middle_end_test.c
 	$(CC) $(CFLAGS) -g -o $(OUT)/middle_end_testd.o $(TEST_SUITE_PATH)/middle_end_test.c
 
+interference_graph_tester: parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o instruction.o heap_queue.o priority_queue.o dynamic_array.o lightstack.o optimizer.o instruction_selector.o jump_table.o stack_data_area.o interference_graph.o interference_graph_test.o
+	$(CC) -o $(OUT)/interference_graph_test $(OUT)/interference_graph_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/instruction.o $(OUT)/heap_queue.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o $(OUT)/optimizer.o $(OUT)/instruction_selector.o $(OUT)/jump_table.o $(OUT)/stack_data_area.o $(OUT)/interference_graph.o
+
 front_end_test: front_end_test.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o instruction.o heap_queue.o preproc.o dependency_tree.o priority_queue.o dynamic_array.o lightstack.o jump_table.o stack_data_area.o
 	$(CC) -o $(OUT)/front_end_test $(OUT)/front_end_test.o $(OUT)/parser.o $(OUT)/lexer.o $(OUT)/heapstack.o $(OUT)/lexstack.o $(OUT)/symtab.o $(OUT)/type_system.o $(OUT)/ast.o $(OUT)/cfg.o $(OUT)/call_graph.o $(OUT)/instruction.o $(OUT)/heap_queue.o $(OUT)/preproc.o $(OUT)/dependency_tree.o $(OUT)/priority_queue.o $(OUT)/dynamic_array.o $(OUT)/lightstack.o $(OUT)/jump_table.o $(OUT)/stack_data_area.o
 
@@ -287,6 +296,9 @@ compiler_test: oc
 
 array_test: dynamic_array_test
 	$(OUT)/dynamic_array_test
+
+interference_graph_test: interference_graph_tester
+	$(OUT)/interference_graph_test
 
 clean:
 	rm -f ./oc/out/*

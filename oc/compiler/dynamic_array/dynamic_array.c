@@ -291,8 +291,6 @@ void reset_dynamic_array(dynamic_array_t* array){
 		return;
 	}
 
-	printf("HERE\n");
-
 	//Otherwise we'll memset by wiping everything
 	memset(array->internal_array, NULL, array->current_max_size * sizeof(void**));
 
