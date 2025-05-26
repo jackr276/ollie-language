@@ -282,7 +282,7 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_in
 	//If we are using the reverse tree, we'll need to reformulate entry to be exit
 	if(use_reverse_cfg == TRUE){
 		//Go all the way to the bottom
-		while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
+		while(entry->direct_successor != NULL && entry->block_type != BLOCK_TYPE_FUNC_EXIT){
 			entry = entry->direct_successor;
 		}
 	}
@@ -301,6 +301,30 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_in
 
 	//Give back the reverse post order traversal
 	return reverse_post_order_traversal;
+}
+
+
+/**
+ * Reset all reverse post order sets
+ */
+void reset_reverse_post_order_sets(cfg_t* cfg){
+	//Run through all of the function blocks
+	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, _);
+
+		//Set the RPO to be null
+		if(function_entry_block->reverse_post_order != NULL){
+			dynamic_array_dealloc(function_entry_block->reverse_post_order);
+			function_entry_block->reverse_post_order = NULL;
+		}
+
+		//Set the RPO reverse CFG to be null
+		if(function_entry_block->reverse_post_order_reverse_cfg != NULL){
+			dynamic_array_dealloc(function_entry_block->reverse_post_order_reverse_cfg);
+			function_entry_block->reverse_post_order_reverse_cfg = NULL;
+		}
+	}
 }
 
 

@@ -109,6 +109,36 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf(")\n");
 	}
 
+	//If we have some assigned variables, we will dislay those for debugging
+	if(block->live_in != NULL){
+		printf("LIVE IN: (");
+
+		for(u_int16_t i = 0; i < block->live_in->current_index; i++){
+			print_live_range(dynamic_array_get_at(block->live_in, i));
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->live_in->current_index - 1){
+				printf(", ");
+			}
+		}
+		printf(")\n");
+	}
+
+	//If we have some assigned variables, we will dislay those for debugging
+	if(block->live_out != NULL){
+		printf("LIVE OUT: (");
+
+		for(u_int16_t i = 0; i < block->live_out->current_index; i++){
+			print_live_range(dynamic_array_get_at(block->live_out, i));
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->live_out->current_index - 1){
+				printf(", ");
+			}
+		}
+		printf(")\n");
+	}
+
 	//Now grab a cursor and print out every statement that we 
 	//have
 	instruction_t* cursor = block->leader_statement;
@@ -286,6 +316,8 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 static void calculate_liveness_sets(cfg_t* cfg){
 	//Reset the visited status
 	reset_visited_status(cfg, FALSE);
+	//Reset the reverse-post-order as well
+	reset_reverse_post_order_sets(cfg);
 	//Did we find a difference
 	u_int8_t difference_found;
 
@@ -332,14 +364,15 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
 				for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
 					//Grab a reference for our use
-					three_addr_var_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+					live_range_t* live_out_var = dynamic_array_get_at(current->live_out, j);
 
 					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
-					//add it
-					//if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
+					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
+					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND
+						&& dynamic_array_contains(current->live_in, live_out_var)){
 						//If this is true we can add
-					//	variable_dynamic_array_add(current->live_in, live_out_var);
-				//	}
+						dynamic_array_add(current->live_in, live_out_var);
+					}
 				}
 
 				//Now we'll turn our attention to live out. The live out set for any block is the union of the
@@ -356,13 +389,14 @@ static void calculate_liveness_sets(cfg_t* cfg){
 					//Add everything in his live_in set into the live_out set
 					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
 						//Let's check to make sure we haven't already added this
-						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
+						live_range_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
 
-						//Let the helper method do it for us
-				//		variable_dynamic_array_add(current->live_out, successor_live_in_var);
+						//If it doesn't already contain this variable, we'll add it in
+						if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
+							dynamic_array_add(current->live_out, successor_live_in_var);
+						}
 					}
 				}
-
 
 				//Now we'll go through and check if the new live in and live out sets are different. If they are different,
 				//we'll be doing this whole thing again
@@ -370,11 +404,11 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				//For efficiency - if there was a difference in one block, it's already done - no use in comparing
 				if(difference_found == FALSE){
 					//So we haven't found a difference so far - let's see if we can find one now
-				//	if(variable_dynamic_arrays_equal(in_prime, current->live_in) == FALSE 
-				//	  || variable_dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
+					if(dynamic_arrays_equal(in_prime, current->live_in) == FALSE
+					  || dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
 						//We have in fact found a difference
-				//		difference_found = TRUE;
-				//	}
+						difference_found = TRUE;
+					}
 				}
 
 				//We made it down here, the prime variables are useless. We'll deallocate them
@@ -382,6 +416,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				dynamic_array_dealloc(out_prime);
 			}
 		}
+
 	//So long as we continue finding differences
 	} while(difference_found == TRUE);
 }
@@ -534,6 +569,9 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//Print whatever live ranges we did find
 	print_all_live_ranges(live_ranges);
+
+	//We now need to compute all of the LIVE OUT values
+	calculate_liveness_sets(cfg);
 
 	printf("============= After Live Range Determination ==============\n");
 	print_blocks_with_live_ranges(cfg->head_block);

@@ -244,4 +244,9 @@ dynamic_array_t* compute_post_order_traversal(basic_block_t* entry);
  */
 dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_int8_t use_reverse_cfg);
 
+/**
+ * Reset all reverse post order sets
+ */
+void reset_reverse_post_order_sets(cfg_t* cfg);
+
 #endif /* CFG_H */
