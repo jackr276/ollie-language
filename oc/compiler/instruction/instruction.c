@@ -221,7 +221,7 @@ instruction_t* emit_idle_instruction(){
 void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 	//If we have a block header, we will NOT print out any indirection info
 	//We will first print out any and all indirection("(") opening parens
-	for(u_int16_t i = 0; mode != PRINTING_VAR_BLOCK_HEADER && i < variable->indirection_level; i++){
+	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
 		printf("(");
 	}
 	
@@ -243,7 +243,7 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 	}
 
 	//Lastly we print out the remaining indirection characters
-	for(u_int16_t i = 0; mode != PRINTING_VAR_BLOCK_HEADER && i < variable->indirection_level; i++){
+	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
 		printf(")");
 	}
 }
@@ -735,6 +735,27 @@ static void print_immediate_value_no_prefix(three_addr_const_t* constant){
 static void print_addressing_mode_expression(instruction_t* instruction, variable_printing_mode_t mode){
 	switch (instruction->calculation_mode) {
 		/**
+		 * This is the case where we only have a deref
+		 */
+		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE:
+		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
+			for(u_int8_t i = 0; i < instruction->indirection_level; i++){
+				printf("(");
+			}
+
+			if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE){
+				print_variable(instruction->source_register, mode);
+			} else {
+				print_variable(instruction->destination_register, mode);
+			}
+
+			for(u_int8_t i = 0; i < instruction->indirection_level; i++){
+				printf(")");
+			}
+
+			break;
+
+		/**
 		 * If we get here, that means we have this kind
 		 * of address mode
 		 *
@@ -803,25 +824,27 @@ static void print_register_to_register_move(instruction_t* instruction, variable
 		printf("movq ");
 	}
 
-	switch(instruction->calculation_mode){
-
-		//This will handle our none case
-		default:
-			//Print the appropriate variable here
-			if(instruction->source_register != NULL){
-				print_variable(instruction->source_register, mode);
-			} else {
-				print_immediate_value(instruction->source_immediate);
-			}
-
-			//Needed comma
-			printf(",");
-
-			//Now print our destination
-			print_variable(instruction->destination_register, mode);
-
-			break;
+	//Print the appropriate variable here
+	if(instruction->source_register != NULL){
+		//If we have a source-only dereference print it
+		if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE){
+			print_addressing_mode_expression(instruction, mode);
+		} else {
+			print_variable(instruction->source_register, mode);
+		}
+	} else {
+		print_immediate_value(instruction->source_immediate);
 	}
+
+	//Needed comma
+	printf(",");
+
+	//Now print our destination
+	if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST){
+		print_addressing_mode_expression(instruction, mode);
+	} else {
+		print_variable(instruction->destination_register, mode);
+	} 
 
 	//A final newline is needed for all instructions
 	printf("\n");

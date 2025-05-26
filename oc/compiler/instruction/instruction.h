@@ -169,6 +169,8 @@ typedef enum{
  */
 typedef enum{
 	ADDRESS_CALCULATION_MODE_NONE = 0, //default is always none
+	ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE, //(%rax) - only the deref depending on how much indirection
+	ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST, //(%rax) - only the deref depending on how much indirection
 	ADDRESS_CALCULATION_MODE_OFFSET_ONLY, // 4(%rax)
 	ADDRESS_CALCULATION_MODE_REGISTERS_ONLY, // (%rax, %rcx)
 	ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET, // 4(%rax, %rcx)
@@ -184,6 +186,7 @@ typedef enum{
 typedef enum{
 	PRINTING_VAR_INLINE,
 	PRINTING_VAR_BLOCK_HEADER,
+	PRINTING_VAR_IN_INSTRUCTION,
 	PRINTING_LIVE_RANGES,
 } variable_printing_mode_t;
 
@@ -389,6 +392,8 @@ struct instruction_t{
 	//Are we jumping to if?(Affirmative jump) Our if statements and do while blocks
 	//use this in the conditional. Otherwise, we're jumping to else, which is an inverse jump
 	u_int8_t inverse_jump;
+	//What is the indirection level?
+	u_int8_t indirection_level;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
 	//Memory access type

@@ -6,7 +6,6 @@
 // Test function
 fn tester() -> i32 {
 	let mut x:u32 := 232;
-	defer x++;
 
 	if(x == 327) then {
 		ret x;
@@ -20,12 +19,9 @@ fn tester() -> i32 {
 
 
 fn main() -> i32{
-	declare x:i32;
 	let mut y:i32 := 23;
+	let mut x:i32 := 3;
 	let mut z:i32 := 322;
-
-	defer x - 3;
-	defer @tester();
 
 	//Statically known use - the goal of SSA
 	if(x > 4) then{

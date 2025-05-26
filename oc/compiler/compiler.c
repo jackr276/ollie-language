@@ -88,7 +88,7 @@ int main(int argc, char** argv){
 	fprintf(stderr, "==================================== Ollie Compiler ======================================\n");
 
 	//Display the filename for now
-	fprintf(stderr, "INPUT FILE: %s\n\n", argv[1]);
+	fprintf(stdout, "INPUT FILE: %s\n\n", argv[1]);
 
 	//Just hop out here
 	if(argc < 2){

@@ -164,7 +164,7 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		//Now we'll run through and print out all of its variables
 		for(u_int16_t j = 0; j < current->variables->current_index; j++){
 			//Print the variable name
-			print_variable(dynamic_array_get_at(current->variables, j), PRINTING_VAR_INLINE);
+			print_variable(dynamic_array_get_at(current->variables, j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
 			if(j != current->variables->current_index - 1){

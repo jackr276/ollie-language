@@ -203,19 +203,19 @@ static void print_instruction_window(instruction_window_t* window){
 	printf("----------- Instruction Window ------------\n");
 	//We'll just print out all three instructions
 	if(window->instruction1 != NULL){
-		print_instruction(window->instruction1, PRINTING_VAR_INLINE);
+		print_instruction(window->instruction1, PRINTING_VAR_IN_INSTRUCTION);
 	} else {
 		printf("EMPTY\n");
 	}
 
 	if(window->instruction2 != NULL){
-		print_instruction(window->instruction2, PRINTING_VAR_INLINE);
+		print_instruction(window->instruction2, PRINTING_VAR_IN_INSTRUCTION);
 	} else {
 		printf("EMPTY\n");
 	}
 	
 	if(window->instruction3 != NULL){
-		print_instruction(window->instruction3, PRINTING_VAR_INLINE);
+		print_instruction(window->instruction3, PRINTING_VAR_IN_INSTRUCTION);
 	} else {
 		printf("EMPTY\n");
 	}
@@ -1711,6 +1711,8 @@ static void handle_dec_instruction(instruction_t* instruction){
 
 /**
  * Handle a regular move condition
+ *
+ * We also account for cases where we have variables with indirection levels
  */
 static void handle_to_register_move_instruction(instruction_t* instruction){
 	variable_size_t size;
@@ -1742,6 +1744,16 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
 	
 	//We've already set the sources, now we set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
+
+	//Handle the indirection levels here if we have a deref only case
+	if(instruction->destination_register->indirection_level > 0){
+		instruction->indirection_level = instruction->destination_register->indirection_level;
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+
+	} else if(instruction->source_register != NULL && instruction->source_register->indirection_level > 0){
+		instruction->indirection_level = instruction->source_register->indirection_level;
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+	}
 }
 
 
@@ -3822,7 +3834,7 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
 			//Hand off to printing method
 			print_three_addr_code_stmt(cursor);
 		} else {
-			print_instruction(cursor, PRINTING_VAR_INLINE);
+			print_instruction(cursor, PRINTING_VAR_IN_INSTRUCTION);
 		}
 
 
