@@ -282,7 +282,7 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_in
 	//If we are using the reverse tree, we'll need to reformulate entry to be exit
 	if(use_reverse_cfg == TRUE){
 		//Go all the way to the bottom
-		while(entry->direct_successor != NULL && entry->block_type != BLOCK_TYPE_FUNC_EXIT){
+		while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
 			entry = entry->direct_successor;
 		}
 	}
@@ -5425,10 +5425,11 @@ void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
  *  3.) Dominance Frontiers
  *  4.) Postdominator sets
  *  5.) Reverse Dominance frontiers
+ *  6.) Reverse post order traversals
  *
  * For every block in the CFG
  */
-void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh){
+void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh, u_int8_t recalculate_rpo){
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
 	
@@ -5445,6 +5446,26 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh){
 	//We'll also now calculate the reverse dominance frontier that will be used
 	//in later analysis by the optimizer
 	calculate_reverse_dominance_frontiers(cfg);
+
+	if(recalculate_rpo == TRUE){
+		//Clear all of these old values out
+		reset_reverse_post_order_sets(cfg);
+
+		//For each function entry block, recompute all reverse post order
+		//CFG work
+		for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+			//Grab the block out
+			basic_block_t* block = dynamic_array_get_at(cfg->function_blocks, i);
+
+			//Recompute the reverse post order cfg
+			block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(block, TRUE);
+
+			for(u_int16_t a = 0; a < block->reverse_post_order_reverse_cfg->current_index; a++){
+				basic_block_t* internal_block = dynamic_array_get_at(block->reverse_post_order_reverse_cfg, a);
+				printf(".L%d\n", internal_block->block_id);
+			}
+		}
+	}
 }
 
 
@@ -5495,7 +5516,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	}
 
 	//Let the helper deal with this
-	calculate_all_control_relations(cfg, FALSE);
+	calculate_all_control_relations(cfg, FALSE, FALSE);
 
 	//now we calculate the liveness sets
 	calculate_liveness_sets(cfg);

@@ -42,7 +42,7 @@ dynamic_array_t* dynamic_array_alloc(){
  */
 dynamic_array_t* clone_dynamic_array(dynamic_array_t* array){
 	//If it's null then we'll just allocate for the user
-	if(array == NULL){
+	if(array == NULL || array->current_index == 0){
 		return dynamic_array_alloc();
 	}
 
@@ -291,8 +291,10 @@ void reset_dynamic_array(dynamic_array_t* array){
 		return;
 	}
 
+	printf("HERE\n");
+
 	//Otherwise we'll memset by wiping everything
-	memset(array->internal_array, 0, array->current_max_size * sizeof(void**));
+	memset(array->internal_array, NULL, array->current_max_size * sizeof(void**));
 
 	//The current index is now 0
 	array->current_index = 0;

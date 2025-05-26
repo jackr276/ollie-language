@@ -316,8 +316,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 static void calculate_liveness_sets(cfg_t* cfg){
 	//Reset the visited status
 	reset_visited_status(cfg, FALSE);
-	//Reset the reverse-post-order as well
-	reset_reverse_post_order_sets(cfg);
+
 	//Did we find a difference
 	u_int8_t difference_found;
 
@@ -336,13 +335,6 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		for(int16_t i = cfg->function_blocks->current_index - 1; i >= 0; i--){
 			//Grab the block out
 			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_blocks, i);
-
-			//Calculate the reverse post order in reverse mode for this block, if it doesn't
-			//already exist
-			if(func_entry->reverse_post_order_reverse_cfg == NULL){
-				//True because we want this in reverse mode
-				func_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(func_entry, TRUE);
-			}
 
 			//Now we can go through the entire RPO set
 			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order_reverse_cfg->current_index; _++){
@@ -369,7 +361,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
 					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
 					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND
-						&& dynamic_array_contains(current->live_in, live_out_var)){
+						&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
 						//If this is true we can add
 						dynamic_array_add(current->live_in, live_out_var);
 					}
@@ -441,18 +433,16 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 		reset_dynamic_array(basic_block->used_variables);
 	}
 
-	//Do the same with the live in 
-	if(basic_block->live_in == NULL){
-		basic_block->live_in = dynamic_array_alloc();
-	} else {
-		reset_dynamic_array(basic_block->live_in);
+	//Reset live in completely
+	if(basic_block->live_in != NULL){
+		dynamic_array_dealloc(basic_block->live_in);
+		basic_block->live_in = NULL;
 	}
 
-	//Do the same with the live out
-	if(basic_block->live_in == NULL){
-		basic_block->live_in = dynamic_array_alloc();
-	} else {
-		reset_dynamic_array(basic_block->live_in);
+	//Reset live out completely
+	if(basic_block->live_out != NULL){
+		dynamic_array_dealloc(basic_block->live_out);
+		basic_block->live_out = NULL;
 	}
 
 	//Grab a pointer to the head
