@@ -7,6 +7,7 @@
 #include "register_allocator.h"
 //For live rnages
 #include "../dynamic_array/dynamic_array.h"
+#include "../interference_graph/interference_graph.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -26,8 +27,7 @@ u_int16_t live_range_id = 0;
  * Increment and return the live range ID
  */
 static u_int16_t increment_and_get_live_range_id(){
-	live_range_id++;
-	return live_range_id;
+	return live_range_id++;
 }
 
 
