@@ -2975,10 +2975,25 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 				//We really just have an "inc" instruction here
 				return emit_dec_code(basic_block, assignee, is_branch_ending);
 			}
-		//Dereferencing here
+		//Dereferencing here. If we're on the lefthand side of an equation,
+		//we need to emit a temp var
 		} else if (unary_operator->unary_operator == STAR){
-			//Memory address
-			return emit_mem_code(basic_block, assignee);
+			//Get the dereferenced variable
+			three_addr_var_t* dereferenced = emit_mem_code(basic_block, assignee);
+
+			//If we're on the right hand side, we need to have a temp assignment
+			if(side == SIDE_TYPE_RIGHT){
+				//Emit the temp assignment
+				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type->pointer_type->points_to), dereferenced);
+				//Add it in
+				add_statement(basic_block, temp_assignment);
+				//Return the assignee of this
+				return temp_assignment->assignee;
+			//Otherwise just give back what we had
+			} else {
+				return dereferenced;
+			}
+
 		} else if (unary_operator->unary_operator == B_NOT){
 			//Bitwise not -- this does need to be assigned from
 			return emit_bitwise_not_expr_code(basic_block, assignee, use_temp, is_branch_ending);

@@ -2495,6 +2495,8 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 			//One to one mapping here as well
 			case THREE_ADDR_CODE_RET_STMT:
 				current->instruction_type = RET;
+				//We'll still store this, just in a hidden way
+				current->source_register = current->op1;
 				break;
 			case THREE_ADDR_CODE_JUMP_STMT:
 			case THREE_ADDR_CODE_DIR_JUMP_STMT:
@@ -2926,19 +2928,33 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * HOWEVER: There's a special case where we can't do this
 	 * t30 <- (t29)
 	 * (t25) <- t30
-	 *
+	 * 
 	 * (t25) <- (t29) <--------- WRONG! memory-to-memory moves are impossible!
 	 * So we'll need to ensure that we aren't doing this optimization if op1 of instruction1 is an indirect value
+	 *
+	 * t16 <- arr_0
+	 * t17 <- (t16)
+	 *
+	 * t17 <- (arr_0)
 	 */
 	//If we have two consecutive assignment statements
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT &&
-		window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT && window->instruction1->op1->indirection_level == 0){
+		window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 		//Grab these out for convenience
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, FALSE) == TRUE){
+		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
+			//If we bitwise AND their two indirection levels and get a value that isn't 0, we'd have our wrong case
+			&& (first->assignee->indirection_level & second->op1->indirection_level) == 0
+			&& (first->op1->indirection_level & second->assignee->indirection_level) == 0){
+
+			//This is a special case we're we'll need to transfer the indirection over
+			if(second->op1->indirection_level > 0 && first->op1->indirection_level == 0){
+				first->op1->indirection_level = second->op1->indirection_level;
+			}
+
 			//Reorder the op1's
 			second->op1 = first->op1;
 

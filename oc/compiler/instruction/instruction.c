@@ -1381,7 +1381,12 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 	switch (instruction->instruction_type) {
 		//These first ones are very simple - no real variations here
 		case RET:
-			printf("ret\n");
+			printf("ret");
+			if(instruction->source_register != NULL){
+				printf(" --> ");
+				print_variable(instruction->source_register, mode);
+			}
+			printf("\n");
 			break;
 		case NOP:
 			printf("nop\n");
