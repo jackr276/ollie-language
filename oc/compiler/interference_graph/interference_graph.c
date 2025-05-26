@@ -89,7 +89,7 @@ void print_interference_graph(interference_graph_t* graph){
 	//Column headers
 	for(u_int16_t i = 0; i < graph->live_range_count; i++){
 		sprintf(name, "LR%d", i);
-		printf(" %4s ", name);
+		printf(" %4s", name);
 	}
 
 	printf("\n");
@@ -98,20 +98,20 @@ void print_interference_graph(interference_graph_t* graph){
 	for(u_int16_t i = 0; i < graph->live_range_count; i++){
 		//Print the name first
 		sprintf(name, "LR%d", i);
-		printf("%4s ", name);
+		printf(" %4s ", name);
 
 		//Then for each column, we'll print out X for true or _ for false
 		for(u_int16_t j = 0; j < graph->live_range_count; j++){
 			if(graph->nodes[i * graph->live_range_count + j] == TRUE){
-				printf(" %4s ", "X");
+				printf(" %3s ", "X");
 			} else {
-				printf("%4s", "_");
+				printf(" %3s ", "_");
 			}
 		}
-	}
 
 	//Newline to end it out
 	printf("\n");
+	}
 }
 
 

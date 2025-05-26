@@ -7,6 +7,7 @@
 [![Front End Test](https://github.com/jackr276/ollie-language/actions/workflows/front_end_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/front_end_test.yml)
 [![Middle End Test](https://github.com/jackr276/ollie-language/actions/workflows/middle_end_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/middle_end_test.yml)
 [![Stack Data Area Test](https://github.com/jackr276/ollie-language/actions/workflows/stack_data_area_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/stack_data_area_test.yml)
+[![Interference Graph Test](https://github.com/jackr276/ollie-language/actions/workflows/interference_graph_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/interference_graph_test.yml)
 
 ## Ollie Language Front-End
 
