@@ -239,4 +239,9 @@ void basic_block_dealloc(basic_block_t* block);
  */
 dynamic_array_t* compute_post_order_traversal(basic_block_t* entry);
 
+/**
+ * Get and return a reverse post order traversal for the CFG
+ */
+dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_int8_t use_reverse_cfg);
+
 #endif /* CFG_H */
