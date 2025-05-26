@@ -23,6 +23,9 @@
 #define TRUE 1
 #define FALSE 0
 
+//For loops, we estimate that they'll execute 10 times each
+#define LOOP_ESTIMATED_COST 10
+
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
 static int32_t current_block_id = 0;
@@ -3320,7 +3323,7 @@ static int32_t increment_and_get(){
  * Allocate a basic block using calloc. NO data assignment
  * happens in this function
 */
-static basic_block_t* basic_block_alloc(){
+static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
@@ -3334,6 +3337,9 @@ static basic_block_t* basic_block_alloc(){
 
 	//Is it a global variable block? Almost always not
 	created->is_global_var_block = FALSE;
+
+	//What is the estimated execution cost of this block?
+	created->estimated_execution_frequency = estimated_execution_frequency;
 
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
@@ -3588,7 +3594,7 @@ void dealloc_cfg(cfg_t* cfg){
  */
 static basic_block_t* create_and_return_err(){
 	//Create the error
-	basic_block_t* err_block = basic_block_alloc();
+	basic_block_t* err_block = basic_block_alloc(1);
 	//Set the ID to -1
 	err_block->block_id = -1;
 
@@ -3737,6 +3743,11 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	a->block_terminal_type = b->block_terminal_type;
 
+	//If b executes more than A and it's now a part of A, we'll need to bump up A appropriately
+	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
+		a->estimated_execution_frequency = b->estimated_execution_frequency;
+	}
+
 	//For each statement in b, all of it's old statements are now "defined" in a
 	instruction_t* b_stmt = b->leader_statement;
 
@@ -3781,9 +3792,9 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  */
 static basic_block_t* visit_for_statement(values_package_t* values){
 	//Create our entry block
-	basic_block_t* for_stmt_entry_block = basic_block_alloc();
-	//Create our exit block
-	basic_block_t* for_stmt_exit_block = basic_block_alloc();
+	basic_block_t* for_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//Create our exit block. We assume that the exit only happens once
+	basic_block_t* for_stmt_exit_block = basic_block_alloc(1);
 	//We will explicitly declare that this is an exit here
 	for_stmt_exit_block->block_type = BLOCK_TYPE_FOR_STMT_END;
 	
@@ -3805,7 +3816,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
 	//The second and third condition in the for loop are the ones that execute continously. The third condition
 	//always executes at the end of each iteration
-	basic_block_t* condition_block = basic_block_alloc();
+	basic_block_t* condition_block = basic_block_alloc(LOOP_ESTIMATED_COST);
 
 	//The condition block is always a successor to the entry block
 	add_successor(for_stmt_entry_block, condition_block);
@@ -3838,7 +3849,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	ast_cursor = ast_cursor->next_sibling;
 
 	//Create the update block
-	basic_block_t* for_stmt_update_block = basic_block_alloc();
+	basic_block_t* for_stmt_update_block = basic_block_alloc(LOOP_ESTIMATED_COST);
 	for_stmt_update_block->block_type = BLOCK_TYPE_FOR_STMT_UPDATE;
 
 	//If the third one is not blank
@@ -3936,9 +3947,9 @@ static basic_block_t* visit_for_statement(values_package_t* values){
  */
 static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//Create our entry block. This in reality will be the compound statement
-	basic_block_t* do_while_stmt_entry_block = basic_block_alloc();
-	//The true ending block
-	basic_block_t* do_while_stmt_exit_block = basic_block_alloc();
+	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//The true ending block. We assume that the exit only happens once
+	basic_block_t* do_while_stmt_exit_block = basic_block_alloc(1);
 	//We will explicitly mark that this is an exit block
 	do_while_stmt_exit_block->block_type = BLOCK_TYPE_DO_WHILE_END;
 
@@ -4009,6 +4020,8 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	emit_jump(compound_stmt_end, do_while_stmt_entry_block, jump_type, TRUE, FALSE);
 	//Also emit a jump statement to the ending block
 	emit_jump(compound_stmt_end, do_while_stmt_exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+	//This is our condition block here, so we'll add the estimated cost
+	compound_stmt_end->estimated_execution_frequency = LOOP_ESTIMATED_COST;
 
 	//Always return the entry block
 	return do_while_stmt_entry_block;
@@ -4021,9 +4034,9 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
  */
 static basic_block_t* visit_while_statement(values_package_t* values){
 	//Create our entry block
-	basic_block_t* while_statement_entry_block = basic_block_alloc();
-	//And create our exit block
-	basic_block_t* while_statement_end_block = basic_block_alloc();
+	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//And create our exit block. We assume that this executes once
+	basic_block_t* while_statement_end_block = basic_block_alloc(1);
 	//We will specifically mark the end block here as an ending block
 	while_statement_end_block->block_type = BLOCK_TYPE_WHILE_END;
 
@@ -4116,9 +4129,10 @@ static basic_block_t* visit_while_statement(values_package_t* values){
  * Process the if-statement subtree into CFG form
  */
 static basic_block_t* visit_if_statement(values_package_t* values){
-	//We always have an entry block and an exit block
-	basic_block_t* entry_block = basic_block_alloc();
-	basic_block_t* exit_block = basic_block_alloc();
+	//We always have an entry block and an exit block. We assume initially that
+	//these both happen once
+	basic_block_t* entry_block = basic_block_alloc(1);
+	basic_block_t* exit_block = basic_block_alloc(1);
 	exit_block->block_type = BLOCK_TYPE_IF_STMT_END;
 
 	//Grab the cursor
@@ -4199,7 +4213,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//Save the old one
 		temp = current_entry_block;
 		//Make a new one
-		current_entry_block = basic_block_alloc();
+		current_entry_block = basic_block_alloc(1);
 		//The new one is a successor of the old one
 		add_successor(temp, current_entry_block);
 		//And we'll emit a direct jump from the old one to the new one
@@ -4333,8 +4347,8 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 
 	//Grab a cursor to our default statement
 	generic_ast_node_t* default_stmt_cursor = values->initial_node;
-	//Create it
-	basic_block_t* default_stmt = basic_block_alloc();
+	//Create it. We assume that this happens once
+	basic_block_t* default_stmt = basic_block_alloc(1);
 	//Treated as case statements
 	default_stmt->block_type = BLOCK_TYPE_CASE;
 
@@ -4350,7 +4364,7 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 	
 		//If this is the case, just allocate a dummy
 		if(compound_statement_start == NULL){
-			compound_statement_start = basic_block_alloc();
+			compound_statement_start = basic_block_alloc(1);
 		}	
 
 		//If we have an error
@@ -4374,7 +4388,7 @@ static basic_block_t* visit_default_statement(values_package_t* values){
  */
 static basic_block_t* visit_case_statement(values_package_t* values){
 	//We need to make the block first
-	basic_block_t* case_stmt = basic_block_alloc();
+	basic_block_t* case_stmt = basic_block_alloc(1);
 	case_stmt->block_type = BLOCK_TYPE_CASE;
 
 	//The case statement should have some kind of constant value here, whether
@@ -4400,7 +4414,7 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 
 		//If this is the case, just allocate a dummy
 		if(compound_statement_start == NULL){
-			compound_statement_start = basic_block_alloc();
+			compound_statement_start = basic_block_alloc(1);
 		}
 
 		//If we have an error
@@ -4425,13 +4439,13 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 static basic_block_t* visit_switch_statement(values_package_t* values){
 	//The starting block for the switch statement - we'll want this in a new
 	//block
-	basic_block_t* starting_block = basic_block_alloc();
+	basic_block_t* starting_block = basic_block_alloc(1);
 	//Mark that this is a switch statement
 	starting_block->block_type = BLOCK_TYPE_SWITCH;
 
 	//We also need to know the ending block here -- Knowing
 	//this is important for break statements
-	basic_block_t* ending_block = basic_block_alloc();
+	basic_block_t* ending_block = basic_block_alloc(1);
 
 	//We need a quick reference to the starting block ID
 	u_int16_t starting_block_id = starting_block->block_id;
@@ -4651,7 +4665,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		} else if (ast_cursor->CLASS == AST_NODE_CLASS_RET_STMT){
 			//If for whatever reason the block is null, we'll create it
 			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
+				//We assume that this only happens once
+				starting_block = basic_block_alloc(1);
 				current_block = starting_block;
 			}
 
@@ -4813,7 +4828,8 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//This could happen where we have nothing here
 			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
+				//We'll assume that this only happens once
+				starting_block = basic_block_alloc(1);
 				current_block = starting_block;
 			}
 
@@ -4852,7 +4868,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
 
 				//We'll need a new block here - this will count as a branch
-				basic_block_t* new_block = basic_block_alloc();
+				basic_block_t* new_block = basic_block_alloc(1);
 				
 				//Two divergent paths here -- whether or not we have a for loop
 				//Not a for loop
@@ -4899,7 +4915,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//This could happen where we have nothing here
 			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
+				starting_block = basic_block_alloc(1);
 				current_block = starting_block;
 			}
 
@@ -4921,7 +4937,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 			} else {
 				//We'll also need a new block to jump to, since this is a conditional break
-				basic_block_t* new_block = basic_block_alloc();
+				basic_block_t* new_block = basic_block_alloc(1);
 
 				//First let's emit the conditional code
 				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
@@ -4989,7 +5005,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LABEL_STMT){
 			//This really shouldn't happen, but it can't hurt
 			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
+				starting_block = basic_block_alloc(1);
 				current_block = starting_block;
 			}
 			
@@ -5000,7 +5016,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_JUMP_STMT){
 			//This really shouldn't happen, but it can't hurt
 			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
+				starting_block = basic_block_alloc(1);
 				current_block = starting_block;
 			}
 
@@ -5070,7 +5086,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//We'll need a new block here regardless
 			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
+				starting_block = basic_block_alloc(1);
 				current_block = starting_block;
 			}
 
@@ -5080,7 +5096,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IDLE_STMT){
 			//Do we need a new block?
 			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
+				starting_block = basic_block_alloc(1);
 				current_block = starting_block;
 			}
 
@@ -5091,7 +5107,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 		} else {
 			//This could happen where we have nothing here
 			if(starting_block == NULL){
-				starting_block = basic_block_alloc();
+				starting_block = basic_block_alloc(1);
 				current_block = starting_block;
 			}
 			
@@ -5111,14 +5127,6 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 
 /**
- * We need to add the data area calculation into the function starting block
- */
-static void add_data_area_allocation(basic_block_t* function_starting_block){
-
-}
-
-
-/**
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
@@ -5134,9 +5142,9 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	set_new_function(func_record);
 
 	//The starting block
-	basic_block_t* function_starting_block = basic_block_alloc();
+	basic_block_t* function_starting_block = basic_block_alloc(1);
 	//The function exit block
-	function_exit_block = basic_block_alloc();
+	function_exit_block = basic_block_alloc(1);
 	//Mark that this is a starting block
 	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
 	//Mark that this is an exit block
@@ -5207,22 +5215,22 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
  */
 static basic_block_t* visit_declaration_statement(values_package_t* values, variable_scope_type_t scope){
 	//What block are we emitting into?
-	basic_block_t* emittance_block;
+	basic_block_t* emitted_block;
 
 	//If we have a global scope, we're emitting into
 	//the global variables block
 	if(scope == VARIABLE_SCOPE_GLOBAL){
-		emittance_block = cfg_ref->global_variables;
+		emitted_block = cfg_ref->global_variables;
 	} else {
 		//Otherwise we've got our own block here
-		emittance_block = basic_block_alloc();
+		emitted_block = basic_block_alloc(1);
 	}
 
 	//Emit the expression code
-	emit_expr_code(emittance_block, values->initial_node, FALSE, FALSE);
+	emit_expr_code(emitted_block, values->initial_node, FALSE, FALSE);
 
 	//Give the block back
-	return emittance_block;
+	return emitted_block;
 }
 
 
@@ -5238,7 +5246,7 @@ static basic_block_t* visit_let_statement(values_package_t* values, variable_sco
 	if(scope == VARIABLE_SCOPE_GLOBAL){
 		emittance_block = cfg_ref->global_variables;
 	} else {
-		emittance_block = basic_block_alloc();
+		emittance_block = basic_block_alloc(1);
 	}
 
 	//Add the expresssion into the node
@@ -5284,7 +5292,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 
 			//If the cfg's global block is empty, we'll add it in here
 			if(cfg->global_variables == NULL){
-				cfg->global_variables = basic_block_alloc();
+				cfg->global_variables = basic_block_alloc(1);
 				//Mark this as true
 				cfg->global_variables->is_global_var_block = TRUE;
 			}
@@ -5302,7 +5310,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			
 			//If the cfg's global block is empty, we'll add it in here
 			if(cfg->global_variables == NULL){
-				cfg->global_variables = basic_block_alloc();
+				cfg->global_variables = basic_block_alloc(1);
 				//Mark this as true
 				cfg->global_variables->is_global_var_block = TRUE;
 			}
