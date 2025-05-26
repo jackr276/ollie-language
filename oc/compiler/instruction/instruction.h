@@ -255,10 +255,10 @@ typedef enum{
 struct live_range_t{
 	//and the variables that it has
 	dynamic_array_t* variables;
-	//Store the id of the live range
-	u_int16_t live_range_id;
 	//Store the heuristic spill cost
 	int16_t spill_cost;
+	//Store the id of the live range
+	u_int16_t live_range_id;
 	//What register is this live range in?
 	register_holder_t reg; 
 };

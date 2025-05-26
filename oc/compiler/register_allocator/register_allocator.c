@@ -15,6 +15,10 @@
 #define TRUE 1
 #define FALSE 0
 
+//A load and a store generate 2 instructions when we load
+//from the stack
+#define LOAD_AND_STORE_COST 2
+
 //The atomically increasing live range id
 u_int16_t live_range_id = 0;
 
@@ -138,7 +142,7 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		}
 		
 		//And we'll close it out
-		printf("}\n");
+		printf("}\tSpill Cost: %d\n", current->spill_cost);
 	}
 	printf("============= All Live Ranges ==============\n");
 }
@@ -170,7 +174,7 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
 /**
  * Add a variable to a live range, if it isn't already in there
  */
-static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_t* variable){
+static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
 	//Run through the live range
 	for(u_int16_t _ = 0; _ < live_range->variables->current_index; _++){
 		//We already have it in here, no need to continue
@@ -181,6 +185,16 @@ static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_
 
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
+
+	//If we have a temporary variable, the spill cost is essentially
+	//infinite because the live range is so short
+	if(variable->is_temporary == TRUE){
+		live_range->spill_cost = INT16_MAX;
+	} else {
+		//Otherwise it's not temporary, so we'll need to add the estimated execution frequency
+		//of this block times the number of instructions a load/store combo will take
+		live_range->spill_cost += LOAD_AND_STORE_COST * block->estimated_execution_frequency; 
+	}
 }
 
 
@@ -232,7 +246,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			}
 
 			//Add this into the live range
-			add_variable_to_live_range(live_range, current->destination_register);
+			add_variable_to_live_range(live_range, basic_block, current->destination_register);
 
 			//Link the variable into this as well
 			current->destination_register->associated_live_range = live_range;
@@ -252,7 +266,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			}
 
 			//Add this into the live range
-			add_variable_to_live_range(live_range, current->assignee);
+			add_variable_to_live_range(live_range, basic_block, current->assignee);
 		}
 
 		//Let's also assign all the live ranges that we need to the given variables since we're already 
