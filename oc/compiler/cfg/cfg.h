@@ -35,6 +35,7 @@ typedef enum {
 	BLOCK_TERM_TYPE_BREAK, //Ends in a break statement
 	BLOCK_TERM_TYPE_CONTINUE, //Ends in a continue statement
 	BLOCK_TERM_TYPE_RET, //The block ends in a return statement
+	BLOCK_TERM_TYPE_LOOP_END, //This block is the end of a loop
 } block_terminal_type_t;
 
 /**

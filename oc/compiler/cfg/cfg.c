@@ -3791,8 +3791,8 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  * leads us down and out
  */
 static basic_block_t* visit_for_statement(values_package_t* values){
-	//Create our entry block
-	basic_block_t* for_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//Create our entry block. The entry block also only executes once
+	basic_block_t* for_stmt_entry_block = basic_block_alloc(1);
 	//Create our exit block. We assume that the exit only happens once
 	basic_block_t* for_stmt_exit_block = basic_block_alloc(1);
 	//We will explicitly declare that this is an exit here
@@ -3916,6 +3916,9 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//Emit a direct jump from the condition block to the compound stmt start
 	emit_jump(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
 
+	//This is a loop ending block
+	condition_block->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
+
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_stmt_start;
 
@@ -4023,6 +4026,11 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	//This is our condition block here, so we'll add the estimated cost
 	compound_stmt_end->estimated_execution_frequency = LOOP_ESTIMATED_COST;
 
+	//Set the termination type of this block
+	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+		compound_stmt_end->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
+	}
+
 	//Always return the entry block
 	return do_while_stmt_entry_block;
 }
@@ -4119,6 +4127,11 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//Set this to make sure
 	compound_stmt_end->direct_successor = while_statement_end_block;
+
+	//Set the termination type of this block
+	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
+		compound_stmt_end->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
+	}
 
 	//Now we're done, so
 	return while_statement_entry_block;

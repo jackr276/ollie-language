@@ -1642,58 +1642,43 @@ static void mark(cfg_t* cfg){
 /**
  * Estimate all execution frequencies in the CFG
  *
- * We do this using some simple heuristics in the 
+ * All execution frequencies are already done by this point. What we'll
+ * do now is go through and update them using some simple rules
  */
 static void estimate_execution_frequencies(cfg_t* cfg){
-	//First, we'll reset every single block here
-	reset_visited_status(cfg, FALSE);
+	//Run through all of the created blocks
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the given block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
 
-	//This will always happen once
-	if(cfg->global_variables != NULL){
-		cfg->global_variables->estimated_execution_frequency = 1;
-	}
-
-	//For holding our blocks
-	basic_block_t* block;
-
-	//Now we'll print out each and every function inside of the function_blocks
-	//array. Each function will be printed using the BFS strategy
-	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
-		//We'll need a queue for our BFS
-		heap_queue_t* queue = heap_queue_alloc();
-
-		//Grab this out for convenience
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, i);
-		//Mark the type here
-		function_entry_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
-
-		//We'll want to see what the stack looks like
-		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
-
-		//Seed the search by adding the funciton block into the queue
-		enqueue(queue, dynamic_array_get_at(cfg->function_blocks, i));
-
-		//So long as the queue isn't empty
-		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
-			//Pop off of the queue
-			block = dequeue(queue);
-			
-			//Now we'll mark this as visited
-			block->visited = TRUE;
-
-			//And finally we'll add all of these onto the queue
-			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
-				//Add the successor into the queue, if it has not yet been visited
-				basic_block_t* successor = block->successors->internal_array[j];
-
-				if(successor->visited == FALSE){
-					enqueue(queue, successor);
-				}
-			}
+		//If we have a return statement, we won't do any updates to it. These
+		//are guarnateed to only execute once. Also, if we have no predecessors, we also
+		//won't bother going further
+		if(block->block_terminal_type == BLOCK_TERM_TYPE_RET 
+			|| block->predecessors == NULL
+			|| block->predecessors->current_index == 0){
+			continue;
 		}
 
-		//Destroy the heap queue when done
-		heap_queue_dealloc(queue);
+		//The sum of the execution frequencies
+		u_int16_t sum_execution_freq = 0;
+
+		//Now run through all of the predecessors
+		for(u_int16_t i = 0; i < block->predecessors->current_index; i++){
+			//Grab it out
+			basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, i);
+
+			//Add this to the overall sum
+			sum_execution_freq += predecessor->estimated_execution_frequency;
+		}
+
+		//Now we'll get the average
+		u_int16_t average_frequency = sum_execution_freq / block->predecessors->current_index;
+
+		//If this average is *more* than what we currently have, we'll update the estimated cost
+		if(average_frequency > block->estimated_execution_frequency){
+			block->estimated_execution_frequency = average_frequency;
+		}
 	}
 }
 
