@@ -6,7 +6,13 @@
 */
 
 #include "interference_graph.h"
+#include <stdio.h>
 #include <sys/types.h>
+
+//For standardization across all modules
+#define TRUE 1
+#define FALSE 0
+
 
 /**
  * Allocate an interference graph. The graph itself should be stack allocated,
@@ -20,6 +26,92 @@ void interference_graph_alloc(interference_graph_t* graph, u_int16_t live_range_
 	graph->nodes = calloc(live_range_count * live_range_count, sizeof(u_int8_t));
 
 	//and we're all set
+}
+
+
+/**
+ * Mark that live ranges a and b interfere
+ */
+void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b){
+	//To add the interference we'll first need to calculate the offsets for both
+	//b's and a's version
+	u_int16_t offset_a_b = a->live_range_id * graph->live_range_count + b->live_range_id;
+	u_int16_t offset_b_a = b->live_range_id * graph->live_range_count + a->live_range_id;
+
+	//Now we'll go to the adjacency matrix and add this in
+	graph->nodes[offset_a_b] = TRUE;
+	graph->nodes[offset_b_a] = TRUE;
+
+	//And that's all
+}
+
+
+/**
+ * Mark that live ranges a and b do not interfere. This can be used if an interference
+ * relation is removed
+ */
+void remove_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b){
+	//To add the interference we'll first need to calculate the offsets for both
+	//b's and a's version
+	u_int16_t offset_a_b = a->live_range_id * graph->live_range_count + b->live_range_id;
+	u_int16_t offset_b_a = b->live_range_id * graph->live_range_count + a->live_range_id;
+
+	//Now we'll go to the adjacency matrix and add this in
+	graph->nodes[offset_a_b] = FALSE;
+	graph->nodes[offset_b_a] = FALSE;
+
+	//And that's all
+}
+
+
+/**
+ * Check whether or not two live ranges interfere
+ *
+ * Returns true if yes, false if no
+ */
+u_int8_t do_live_ranges_interfere(interference_graph_t* graph, live_range_t* a, live_range_t* b){
+	//To determine this, we'll first need the offset
+	u_int16_t offset_a_b = a->live_range_id * graph->live_range_count + b->live_range_id;
+
+	//Now we'll need to return the graph at said value
+	return graph->nodes[offset_a_b];
+}
+
+
+/**
+ * Print out a visual representation of the interference graph
+ */
+void print_interference_graph(interference_graph_t* graph){
+	char name[50];
+	//Print out every column first
+	printf("%4s ", "#");
+	
+	//Column headers
+	for(u_int16_t i = 0; i < graph->live_range_count; i++){
+		sprintf(name, "LR%d", i);
+		printf(" %4s ", name);
+	}
+
+	printf("\n");
+
+	//Now we'll print every single row
+	for(u_int16_t i = 0; i < graph->live_range_count; i++){
+		//Print the name first
+		sprintf(name, "LR%d", i);
+		printf("%4s ", name);
+
+		//Then for each column, we'll print out X for true or _ for false
+		for(u_int16_t j = 0; j < graph->live_range_count; j++){
+			if(graph->nodes[i * graph->live_range_count + j] == TRUE){
+				printf(" %4s ", "X");
+			} else {
+				printf("%4s", "_");
+			}
+		}
+	}
+
+	//Newline to end it out
+	printf("\n");
 }
 
 

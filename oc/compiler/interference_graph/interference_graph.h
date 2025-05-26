@@ -36,7 +36,17 @@ void interference_graph_alloc(interference_graph_t* graph, u_int16_t num_nodes);
 /**
  * Mark that live ranges a and b interfere
  */
-void add_interference_relation(interference_graph_t* graph, live_range_t* a, live_range_t* b);
+void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b);
+
+/**
+ * Mark that live ranges a and b do not interfere
+ */
+void remove_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b);
+
+/**
+ * Print out a visual representation of the interference graph
+ */
+void print_interference_graph(interference_graph_t* graph);
 
 /**
  * Check whether or not two live ranges interfere
