@@ -258,6 +258,10 @@ typedef enum{
 struct live_range_t{
 	//and the variables that it has
 	dynamic_array_t* variables;
+	//Starting line number
+	u_int32_t starting_line_num;
+	//Ending line number
+	u_int32_t ending_line_num;
 	//Store the heuristic spill cost
 	int16_t spill_cost;
 	//Store the id of the live range
@@ -374,6 +378,8 @@ struct instruction_t{
 	void* phi_function_parameters;
 	//The list of temp variable parameters at most 6
 	void* function_parameters;
+	//The instruction's line number
+	u_int16_t instruction_line_number;
 	//What is the three address code class
 	instruction_stmt_class_t CLASS;
 	//What is the x86-64 instruction
