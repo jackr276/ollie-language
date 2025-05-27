@@ -562,7 +562,8 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 				|| operation->instruction_type == MOVL
 				|| operation->instruction_type == MOVQ)
 				&& operation->instruction_type == 0)
-				|| operation->destination_register == NULL){
+				|| operation->destination_register == NULL
+				|| operation->destination_register->associated_live_range == NULL){
 
 				//Skip it
 				operation = operation->next_statement;
@@ -584,22 +585,25 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 
 			//Now we'll add any other registers to LIVEOUT
 			//iterating like this
-			if(operation->source_register != NULL){
+			if(operation->source_register != NULL
+				&& dynamic_array_contains(current->live_out, operation->source_register->associated_live_range) == NOT_FOUND){
 				dynamic_array_add(current->live_out, operation->source_register->associated_live_range);
 			}
 
-			if(operation->source_register2 != NULL){
-				//assign_live_range_to_variable(live_ranges, basic_block, current->source_register2);
+			if(operation->source_register2 != NULL
+				&& dynamic_array_contains(current->live_out, operation->source_register2->associated_live_range) == NOT_FOUND){
+				dynamic_array_add(current->live_out, operation->source_register2->associated_live_range);
 			}
 
-			if(operation->address_calc_reg1 != NULL){
-				//assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1);
+			if(operation->address_calc_reg1 != NULL
+				&& dynamic_array_contains(current->live_out, operation->address_calc_reg1->associated_live_range) == NOT_FOUND){
+				dynamic_array_add(current->live_out, operation->address_calc_reg1->associated_live_range);
 			}
 
-			if(operation->address_calc_reg2 != NULL){
-				//assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
+			if(operation->address_calc_reg2 != NULL
+				&& dynamic_array_contains(current->live_out, operation->address_calc_reg2->associated_live_range) == NOT_FOUND){
+				dynamic_array_add(current->live_out, operation->address_calc_reg2->associated_live_range);
 			}
-
 
 			//Advance it
 			operation = operation->next_statement;
@@ -664,11 +668,14 @@ void allocate_all_registers(cfg_t* cfg){
 	//We now need to compute all of the LIVE OUT values
 	calculate_liveness_sets(cfg);
 
-	//We'll need an interference graph to store everything
-
 	printf("============= After Live Range Determination ==============\n");
 	print_blocks_with_live_ranges(cfg->head_block);
 	printf("============= After Live Range Determination ==============\n");
 
-	interference_graph_t graph;
+	//Now let's determine the interference graph
+	interference_graph_t graph = construct_interference_graph(cfg);
+
+	printf("================ Interference Graph =======================\n");
+	print_interference_graph(&graph);
+	printf("================ Interference Graph =======================\n");
 }

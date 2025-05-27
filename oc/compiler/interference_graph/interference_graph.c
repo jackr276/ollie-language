@@ -33,6 +33,12 @@ void interference_graph_alloc(interference_graph_t* graph, u_int16_t live_range_
  * Mark that live ranges a and b interfere
  */
 void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b){
+	//If these are the exact same live range, they can't interfere with eachother 
+	//so we'll skip this
+	if(a == b){
+		return;
+	}
+
 	//To add the interference we'll first need to calculate the offsets for both
 	//b's and a's version
 	u_int16_t offset_a_b = a->live_range_id * graph->live_range_count + b->live_range_id;
