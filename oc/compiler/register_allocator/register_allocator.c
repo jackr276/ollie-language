@@ -237,6 +237,25 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
 	return NULL;
 }
 
+/**
+ * Update the estimate on spilling this variable
+ */
+static void update_spill_cost(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
+	//If we have a temporary variable, the spill cost is essentially
+	//infinite because the live range is so short
+	if(block->is_global_var_block == TRUE && live_range->spill_cost == 0){
+		//Negative spill cost, we want this spilled
+		live_range->spill_cost = -10;
+	} else if(variable->is_temporary == TRUE){
+		live_range->spill_cost = INT16_MAX;
+	} else {
+		//Otherwise it's not temporary, so we'll need to add the estimated execution frequency
+		//of this block times the number of instructions a load/store combo will take
+		live_range->spill_cost += LOAD_AND_STORE_COST * block->estimated_execution_frequency; 
+	}
+}
+
+
 
 /**
  * Add a variable to a live range, if it isn't already in there
@@ -251,6 +270,8 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 	for(u_int16_t _ = 0; _ < live_range->variables->current_index; _++){
 		//We already have it in here, no need to continue
 		if(variables_equal(variable, dynamic_array_get_at(live_range->variables, _), TRUE) == TRUE){
+			//Update the cost
+			update_spill_cost(live_range, block, variable);
 			return;
 		}
 	}
@@ -258,18 +279,8 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
 
-	//If we have a temporary variable, the spill cost is essentially
-	//infinite because the live range is so short
-	if(block->is_global_var_block == TRUE){
-		//Negative spill cost, we want this spilled
-		live_range->spill_cost = -10;
-	} else if(variable->is_temporary == TRUE){
-		live_range->spill_cost = INT16_MAX;
-	} else {
-		//Otherwise it's not temporary, so we'll need to add the estimated execution frequency
-		//of this block times the number of instructions a load/store combo will take
-		live_range->spill_cost += LOAD_AND_STORE_COST * block->estimated_execution_frequency; 
-	}
+	//Update the cost
+	update_spill_cost(live_range, block, variable);
 
 	//Adding a variable to a live range means that this live range is assigned to in this block
 	if(dynamic_array_contains(block->assigned_variables, live_range) == NOT_FOUND){
@@ -294,13 +305,30 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 
 	//For developer flagging
 	if(live_range == NULL){
-		printf("Fatal compiler error: variable found with that has no live range\n");
-		print_variable(variable, PRINTING_VAR_INLINE);
-		exit(1);
+		//This is a function parameter, we need to make it ourselves
+		if(variable->linked_var->is_function_paramater == TRUE){
+			//Create it
+			live_range = live_range_alloc();
+			//Add it in
+			dynamic_array_add(live_range->variables, variable);
+			//Update the variable too
+			variable->associated_live_range = live_range;
+
+			//Finally add this into all of our live ranges
+			dynamic_array_add(live_ranges, live_range);
+
+		} else {
+			printf("Fatal compiler error: variable found with that has no live range\n");
+			print_variable(variable, PRINTING_VAR_INLINE);
+			exit(1);
+		}
 	}
 
 	//Otherwise we just assign it
 	variable->associated_live_range = live_range;
+
+	//Update the spill cost
+	update_spill_cost(live_range, block, variable);
 
 	//Assigning a live range to a variable means that this variable was *used* in the block
 	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
