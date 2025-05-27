@@ -66,6 +66,13 @@ int main(int argc, char** argv){
 	//Print the full one
 	print_interference_graph(&graph);
 
+	//Now run through and do the counts
+	for(u_int16_t i = 0; i < 20; i++){
+		live_range_t* range = dynamic_array_get_at(live_ranges, i);
+
+		printf("LR%d has %d neighbors\n", range->live_range_id, get_neighbor_count(&graph, range));
+	}
+
 	//Once we're done, deallocate it
 	interference_graph_dealloc(&graph);
 

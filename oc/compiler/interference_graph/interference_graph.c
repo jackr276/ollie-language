@@ -122,6 +122,34 @@ void print_interference_graph(interference_graph_t* graph){
 
 
 /**
+ * Get the number of neighbors for a certain node
+ */
+u_int16_t get_neighbor_count(interference_graph_t* graph, live_range_t* a){
+	//Overall count
+	u_int16_t count = 0;
+
+	//Grab the ID number out
+	u_int16_t id = a->live_range_id;
+
+	//Grab that "row" in the graph
+	u_int16_t row_index = graph->live_range_count * id * sizeof(u_int8_t);
+
+	//Grab a pointer to this
+	u_int8_t* row = graph->nodes + row_index;
+
+	//Run through until we hit the end
+	for(u_int16_t i = 0; i < graph->live_range_count; i++){
+		if(row[i] == TRUE){
+			count++;
+		}
+	}	
+
+	//And give it back
+	return count;
+}
+
+
+/**
  * Destroy the interference graph
 */
 void interference_graph_dealloc(interference_graph_t* graph){

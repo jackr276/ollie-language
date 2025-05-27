@@ -2,6 +2,9 @@
  * Author: Jack Robbins
  *
  * This file contains the implementations of the APIs defined in the header file with the same name
+ *
+ * The ollie compiler uses a global register allocator with a reduction to the graph-coloring problem.
+ * We make use of the interference graph to do this.
 */
 
 #include "register_allocator.h"
@@ -16,6 +19,8 @@
 //For standardization
 #define TRUE 1
 #define FALSE 0
+
+#define K_COLORS 15
 
 //A load and a store generate 2 instructions when we load
 //from the stack

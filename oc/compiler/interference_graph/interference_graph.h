@@ -49,6 +49,11 @@ void remove_interference(interference_graph_t* graph, live_range_t* a, live_rang
 void print_interference_graph(interference_graph_t* graph);
 
 /**
+ * Get the number of neighbors for a certain node
+ */
+u_int16_t get_neighbor_count(interference_graph_t* graph, live_range_t* a);
+
+/**
  * Check whether or not two live ranges interfere
  *
  * Returns true if yes, false if no
