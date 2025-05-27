@@ -249,7 +249,10 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 
 	//If we have a temporary variable, the spill cost is essentially
 	//infinite because the live range is so short
-	if(variable->is_temporary == TRUE){
+	if(block->is_global_var_block == TRUE){
+		//Negative spill cost, we want this spilled
+		live_range->spill_cost = -10;
+	} else if(variable->is_temporary == TRUE){
 		live_range->spill_cost = INT16_MAX;
 	} else {
 		//Otherwise it's not temporary, so we'll need to add the estimated execution frequency
@@ -513,6 +516,104 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 
 /**
+ * Construct the interference graph using LIVENOW sets
+ *
+ * Algorithm:
+ * 	create an interference graph
+ * 	for each block b:
+ * 		LIVENOW <- LIVEOUT(b)
+ * 		for each operation with form op LA, LB -> LC:
+ * 			for each LRi in LIVENOW:
+ * 				add(LC, LRi) to Interference Graph E 
+ * 			remove LC from LIVENOW
+ * 			Add LA an LB to LIVENOW
+ *
+ */
+static interference_graph_t construct_interference_graph(cfg_t* cfg){
+	//Stack allocate the interference graph
+	interference_graph_t graph;
+
+	//Let's construct it. The live range id is the number of live ranges we have
+	interference_graph_alloc(&graph, live_range_id);
+
+	//We'll first need a pointer
+	basic_block_t* current = cfg->head_block;
+
+	//Run through every block in the CFG's ordered set
+	while(current != NULL){
+		//Just check for this case first
+		if(current->live_out == NULL){
+			current = current->direct_successor;
+			continue;
+		}
+
+		//Even though we use the LIVENOW set in name, in reality it is just LIVEOUT. We'll
+		//keep using LIVEOUT for LIVENOW with that in mind
+		
+		//Grab a pointer to the operations
+		instruction_t* operation = current->leader_statement;
+
+		//For every operation that we have
+		while(operation != NULL){
+			//If we have an exact copy operation, we can
+			//skip it as it won't create any interference
+			if(operation->instruction_type == PHI_FUNCTION
+				|| ((operation->instruction_type == MOVW
+				|| operation->instruction_type == MOVL
+				|| operation->instruction_type == MOVQ)
+				&& operation->instruction_type == 0)
+				|| operation->destination_register == NULL){
+
+				//Skip it
+				operation = operation->next_statement;
+				continue;
+			}
+
+			//Now that we know this operation is valid, we will add interference between this and every
+			//other value in live_out
+			for(u_int16_t i = 0; current->live_out != NULL && i < current->live_out->current_index; i++){
+				//Graph the LR out
+				live_range_t* range = dynamic_array_get_at(current->live_out, i);
+
+				//Now we'll add this to the graph
+				add_interference(&graph, range, operation->destination_register->associated_live_range);
+			}
+
+			//Once we're done with this, we'll delete the destination's live range from the LIVE_NOW set
+			dynamic_array_delete(current->live_out, operation->destination_register->associated_live_range);
+
+			//Now we'll add any other registers to LIVEOUT
+			//iterating like this
+			if(operation->source_register != NULL){
+				dynamic_array_add(current->live_out, operation->source_register->associated_live_range);
+			}
+
+			if(operation->source_register2 != NULL){
+				//assign_live_range_to_variable(live_ranges, basic_block, current->source_register2);
+			}
+
+			if(operation->address_calc_reg1 != NULL){
+				//assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1);
+			}
+
+			if(operation->address_calc_reg2 != NULL){
+				//assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
+			}
+
+
+			//Advance it
+			operation = operation->next_statement;
+		}
+
+		//Advance this up
+		current = current->direct_successor;
+	}
+
+	return graph;
+}
+
+
+/**
  * Construct the live ranges for all variables that we'll need to concern ourselves with
  *
  * Conveniently, all code in OIR is translated into SSA form by the front end. In doing this, we're able
@@ -562,6 +663,8 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//We now need to compute all of the LIVE OUT values
 	calculate_liveness_sets(cfg);
+
+	//We'll need an interference graph to store everything
 
 	printf("============= After Live Range Determination ==============\n");
 	print_blocks_with_live_ranges(cfg->head_block);
