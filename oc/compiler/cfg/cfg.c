@@ -5503,6 +5503,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Mark it
 	stack_pointer_var->is_stack_pointer = TRUE;
 
+	//Store the stack pointer
+	cfg->stack_pointer = stack_pointer_var;
+
 	//For dev use here
 	if(results.root->CLASS != AST_NODE_CLASS_PROG){
 		print_parse_message(PARSE_ERROR, "Expected prog node as first node", results.root->line_number);

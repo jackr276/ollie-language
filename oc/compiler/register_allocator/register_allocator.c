@@ -12,6 +12,7 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../interference_graph/interference_graph.h"
 #include "../cfg/cfg.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -241,6 +242,11 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
  * Add a variable to a live range, if it isn't already in there
  */
 static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
+	//If it's the stack pointer just get out
+	if(variable->is_stack_pointer == TRUE){
+		return;
+	}
+
 	//Run through the live range
 	for(u_int16_t _ = 0; _ < live_range->variables->current_index; _++){
 		//We already have it in here, no need to continue
@@ -277,7 +283,9 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
  */
 static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//Stack pointer is exempt
-	if(variable->is_stack_pointer == TRUE || (variable->linked_var != NULL && variable->linked_var->is_function_paramater == TRUE)){
+	if(variable->is_stack_pointer == TRUE){
+		//We'll already have the live range
+		dynamic_array_add(block->used_variables, variable->associated_live_range);
 		return;
 	}
 
@@ -621,6 +629,28 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 	return graph;
 }
 
+/**
+ * Create the stack pointer live range
+ */
+static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
+	//Before we go any further, we'll construct the live
+	//range for the stack pointer
+	live_range_t* stack_pointer_live_range = live_range_alloc();
+	//This is guaranteed to be RSP - so it's already been allocated
+	stack_pointer_live_range->reg = RSP;
+	//And we absolutely *can not* spill it
+	stack_pointer_live_range->spill_cost = INT16_MAX;
+
+	//Add the stack pointer to the dynamic array
+	dynamic_array_add(stack_pointer_live_range->variables, stack_pointer);
+	
+	//Store this here as well
+	stack_pointer->associated_live_range = stack_pointer_live_range;
+
+	//Give it back
+	return stack_pointer_live_range;
+}
+
 
 /**
  * Construct the live ranges for all variables that we'll need to concern ourselves with
@@ -641,6 +671,9 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 	//First create the set of live ranges
 	dynamic_array_t* live_ranges = dynamic_array_alloc();
+
+	//Add it into the dynamic array
+	dynamic_array_add(live_ranges, construct_stack_pointer_live_range(cfg->stack_pointer));
 
 	//Since the blocks are already ordered, this is very simple
 	basic_block_t* current = cfg->head_block;

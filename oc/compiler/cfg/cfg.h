@@ -83,6 +83,8 @@ struct cfg_t{
 	dynamic_array_t* created_blocks;
 	//The head block
 	basic_block_t* head_block;
+	//We also need to hold onto the stack pointer
+	three_addr_var_t* stack_pointer;
 };
 
 
