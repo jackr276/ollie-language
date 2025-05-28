@@ -431,7 +431,6 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
  */
 symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name);
 
-
 /**
  * Check for and print out any unused functions
  */

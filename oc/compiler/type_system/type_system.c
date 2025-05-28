@@ -335,12 +335,9 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Let's first copy the type name in
 	strcpy(type->type_name, points_to->type_name);
 
-	//Let's construct the array bounds string
-	sprintf(array_bound_str, "[%d]", num_members);
-
 	//Concatenate it to the name of it
-	strcat(type->type_name, array_bound_str);
-	
+	sprintf(type->type_name, "%s[]", points_to->type_name);
+
 	//Now we'll make the actual pointer type
 	type->array_type = calloc(1, sizeof(array_type_t));
 
