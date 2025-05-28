@@ -2207,7 +2207,7 @@ static three_addr_var_t* emit_construct_address_calculation(basic_block_t* basic
  */
 static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* basic_block, jump_table_t* initial_address, three_addr_var_t* mutliplicand, u_int8_t is_branch_ending){
 	//We'll need a new temp var for the assignee
-	three_addr_var_t* assignee = emit_temp_var(lookup_type(type_symtab, "label")->type);
+	three_addr_var_t* assignee = emit_temp_var(lookup_type_name_only(type_symtab, "label")->type);
 
 	//If the multiplicand is not temporary we have a new used variable
 	if(mutliplicand->is_temporary == FALSE){
@@ -2427,7 +2427,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	if(use_temp == PRESERVE_ORIG_VAR || side == SIDE_TYPE_RIGHT){
 		//If it's an enum constant
 		if(ident_node->variable->is_enumeration_member == TRUE){
-			return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), lookup_type(type_symtab, "u32")->type, is_branch_ending);
+			return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), lookup_type_name_only(type_symtab, "u32")->type, is_branch_ending);
 		}
 
 		//Emit the variable
@@ -2451,7 +2451,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	//We will do an on-the-fly conversion to a number
 	} else if(ident_node->inferred_type->type_class == TYPE_CLASS_ENUMERATED) {
 		//Look up the type
-		symtab_type_record_t* type_record = lookup_type(type_symtab, "u32");
+		symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, "u32");
 		generic_type_t* type = type_record->type;
 		//Just create a constant here with the enum
 		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), type, is_branch_ending);
@@ -5481,7 +5481,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	type_symtab = results.type_symtab;
 
 	//Keep this on hand
-	u64 = lookup_type(type_symtab, "u64")->type;
+	u64 = lookup_type_name_only(type_symtab, "u64")->type;
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));

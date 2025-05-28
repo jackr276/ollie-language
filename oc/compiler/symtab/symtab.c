@@ -451,6 +451,10 @@ void add_all_basic_types(type_symtab_t* symtab){
 	//char type
 	type = create_basic_type("char", CHAR);
 	insert_type(symtab,  create_type_record(type));
+
+	//Create "char*" type
+	type = create_pointer_type(type, 0);
+	insert_type(symtab,  create_type_record(type));
 	
 	//u_int16 type
 	type = create_basic_type("u16", U_INT16);
@@ -496,7 +500,7 @@ void add_all_basic_types(type_symtab_t* symtab){
 symtab_variable_record_t* initialize_stack_pointer(variable_symtab_t* symtab, type_symtab_t* types){
 	symtab_variable_record_t* stack_pointer = create_variable_record("stack_pointer", STORAGE_CLASS_NORMAL);
 	//Set this type as a label(address)
-	stack_pointer->type = lookup_type(types, "label")->type;
+	stack_pointer->type = lookup_type_name_only(types, "label")->type;
 
 	//Give it back
 	return stack_pointer;
@@ -662,6 +666,41 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 
 	//If we found nothing give back NULL
 	return NULL;
+}
+
+/**
+ * Lookup a type name in the symtab by the name only. This does not
+ * do the array bound comparison that we need for strict equality
+ */
+symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
+	//Grab the hash
+	u_int16_t h = hash(name);
+
+	//Define the cursor so we don't mess with the original reference
+	symtab_type_sheaf_t* cursor = symtab->current;
+	symtab_type_record_t* records_cursor;
+
+	while(cursor != NULL){
+		//As long as the previous level is not null
+		records_cursor = cursor->records[h];
+		
+		//We could have had collisions so we'll have to hunt here
+		while(records_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strcmp(records_cursor->type->type_name, name) == 0){
+				return records_cursor;
+			}
+			//Advance it
+			records_cursor = records_cursor->next;
+		}
+
+		//Go up to a higher scope
+		cursor = cursor->previous_level;
+	}
+
+	//We found nothing
+	return NULL;
+
 }
 
 

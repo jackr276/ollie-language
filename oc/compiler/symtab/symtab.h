@@ -432,6 +432,12 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name);
 
 /**
+ * Lookup a type name in the symtab by the name only. This does not
+ * do the array bound comparison that we need for strict equality
+ */
+symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name);
+
+/**
  * Check for and print out any unused functions
  */
 void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings);

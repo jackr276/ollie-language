@@ -26,6 +26,13 @@ u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 		return FALSE;
 	}
 
+	//If these are both arrays
+	if(typeA->type_class == TYPE_CLASS_ARRAY
+		&& typeA->array_type->num_members != typeB->array_type->num_members){
+		//We can disqualify quickly if this happens
+		return FALSE;
+	}
+
 	//Now that we know they are in the same class, we need to check if they're the exact same
 	//If they are the exact same, return 1. Otherwise, return 0
 	if(strcmp(typeA->type_name, typeB->type_name) == 0){

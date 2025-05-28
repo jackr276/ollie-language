@@ -159,7 +159,7 @@ static generic_ast_node_t* identifier(FILE* fl){
 	//Copy the string we got into it
 	strcpy(ident_node->identifier, lookahead.lexeme);
 	//Default identifier type is s_int32
-	ident_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+	ident_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 	//Add the line number
 	ident_node->line_number = parser_line_num;
 
@@ -190,7 +190,7 @@ static generic_ast_node_t* label_identifier(FILE* fl){
 	//Copy the string we got into it
 	strcpy(label_ident_node->identifier, lookahead.lexeme);
 	//By default a label identifier is of type u_int64(memory address)
-	label_ident_node->inferred_type = lookup_type(type_symtab, "u64")->type;
+	label_ident_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 	//Add the line number
 	label_ident_node->line_number = parser_line_num;
 
@@ -233,10 +233,10 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//By default, int constants are of type s_int32
 			if(lookahead.tok == INT_CONST_FORCE_U){
-				constant_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+				constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 			} else {
 				//Otherwise it's signed
-				constant_node->inferred_type = lookup_type(type_symtab, "u32")->type;
+				constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
 			}
 			break;
 
@@ -248,7 +248,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			((constant_ast_node_t*)(constant_node->node))->int_val = hex_val;
 
 			//By default, int constants are of type s_int32
-			constant_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 			break;
 
 		case LONG_CONST:
@@ -261,10 +261,10 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//By default, int constants are of type s_int64 
 			if(lookahead.tok == LONG_CONST_FORCE_U){
-				constant_node->inferred_type = lookup_type(type_symtab, "u64")->type;
+				constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 			} else {
 				//Otherwise it's signed 
-				constant_node->inferred_type = lookup_type(type_symtab, "i64")->type;
+				constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
 			}
 
 			break;
@@ -278,7 +278,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			((constant_ast_node_t*)(constant_node->node))->float_val = float_val;
 
 			//By default, float constants are of type float32
-			constant_node->inferred_type = lookup_type(type_symtab, "f32")->type;
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f32")->type;
 			break;
 
 		case CHAR_CONST:
@@ -290,7 +290,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			((constant_ast_node_t*)(constant_node->node))->char_val = char_val;
 
 			//Char consts are of type char(obviously)
-			constant_node->inferred_type = lookup_type(type_symtab, "char")->type;
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "char")->type;
 			break;
 
 		case STR_CONST:
@@ -315,35 +315,9 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			//Increment 1 to account for the null terminator
 			length++;
 
-			//So our type here is of char[length+1] because we have our null terminator
-			char type_name[MAX_TYPE_NAME_LENGTH];
-			//Compute what the name would be
-			sprintf(type_name, "char[%d]", length);
-
 			//Let's find the type if it's in the symtab
-			symtab_type_record_t* found_type = lookup_type(type_symtab, type_name);
-
-			//If we find it, great, and if not, we'll add it in
-			if(found_type == NULL){
-				//Grab the char type
-				generic_type_t* char_type = lookup_type(type_symtab, "char")->type;
-
-				//Create the char array
-				generic_type_t* char_arr = create_array_type(char_type, parser_line_num, length);
-
-				//The record for the string
-				symtab_type_record_t* str_rec = create_type_record(char_arr);
-
-				//Add this type into the symtab
-				insert_type(type_symtab, str_rec);
-
-				//Assign the type
-				constant_node->inferred_type = char_arr;
-
-			//Otherwise the type was defined by someone else, so we'll just reuse it
-			} else {
-				constant_node->inferred_type = found_type->type;
-			}
+			symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, "char*");
+			constant_node->inferred_type = found_type->type;
 			
 			//By the time we make it down here, the type has been accounted for
 			//We'll now copy the lexeme in
@@ -1530,7 +1504,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		((constant_ast_node_t*)(const_node->node))->int_val = type_size;
 		//Grab and store type info
 		//Constants are ALWAYS of type s_int32
-		const_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+		const_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 
 		//Create the unary expression node
 		generic_ast_node_t* unary_expr = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
@@ -1604,7 +1578,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		((constant_ast_node_t*)(const_node->node))->int_val = return_type->type_size;
 		//Grab and store type info
 		//Constants are ALWAYS of type s_int32
-		const_node->inferred_type = lookup_type(type_symtab, "i32")->type;
+		const_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 
 		//The first child is always the constant type
 		add_child_node(unary_node, const_node); 
@@ -1722,8 +1696,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 			}
 
-			//Otherwise it is fine. Logical not returns 0 or 1, so it's return type will be of u_int8
-			return_type = lookup_type(type_symtab, "u8")->type;
+			//The return type is what this normally is
+			return_type = cast_expr->inferred_type;
 			
 			//This is not assignable
 			is_assignable = NOT_ASSIGNABLE;
@@ -2137,7 +2111,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		if(temp_holder_type == FLOAT32){
 			//If we make it here then the final return type will be a float64
 			if(right_child_type == U_INT64 || right_child_type == S_INT64){
-				return_type = lookup_type(type_symtab, "f64")->type;
+				return_type = lookup_type_name_only(type_symtab, "f64")->type;
 			//Otherwise the float dominates
 			} else {
 				return_type = temp_holder->inferred_type;
@@ -2151,7 +2125,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		//Let's now check for type compatibility
 		if(right_child_type == FLOAT32){
 			if(right_child_type == U_INT64 || right_child_type == S_INT64){
-				return_type = lookup_type(type_symtab, "f64")->type;
+				return_type = lookup_type_name_only(type_symtab, "f64")->type;
 			//Otherwise the float dominates
 			} else {
 				return_type = right_child->inferred_type;
@@ -2174,7 +2148,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			//If anything below this is unsigned, the whole thing becomes u_int64
 			if(right_child_type == U_INT32 || right_child_type == U_INT16 || right_child_type == U_INT8){
 				//Implicit case to unsigned
-				return_type = lookup_type(type_symtab, "u64")->type;
+				return_type = lookup_type_name_only(type_symtab, "u64")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what temp holder had
@@ -2189,7 +2163,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			//If anything below this is unsigned, the whole thing becomes u_int64
 			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
 				//Implicit case to signed
-				return_type = lookup_type(type_symtab, "u64")->type;
+				return_type = lookup_type_name_only(type_symtab, "u64")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2204,7 +2178,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			//If anything below this is unsigned, the whole thing becomes u_int64
 			if(right_child_type == U_INT32 || right_child_type == U_INT16 || right_child_type == U_INT8){
 				//Implicit case to signed
-				return_type = lookup_type(type_symtab, "u32")->type;
+				return_type = lookup_type_name_only(type_symtab, "u32")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2219,7 +2193,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			//If anything below this is unsigned, the whole thing becomes u_int64
 			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
 				//Implicit case to signed
-				return_type = lookup_type(type_symtab, "u32")->type;
+				return_type = lookup_type_name_only(type_symtab, "u32")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2237,7 +2211,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 				return_type = temp_holder->inferred_type;
 			} else if(temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
 				//Cast to unsigned
-				return_type = lookup_type(type_symtab, "u16")->type;
+				return_type = lookup_type_name_only(type_symtab, "u16")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2255,7 +2229,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 				return_type = right_child->inferred_type;
 			} else if(right_child_type == U_INT16 || right_child_type == U_INT8){
 				//Cast to unsigned
-				return_type = lookup_type(type_symtab, "u16")->type;
+				return_type = lookup_type_name_only(type_symtab, "u16")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2273,7 +2247,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 				return_type = right_child->inferred_type;
 			} else if(right_child_type == U_INT8){
 				//Cast to unsigned
-				return_type = lookup_type(type_symtab, "u8")->type;
+				return_type = lookup_type_name_only(type_symtab, "u8")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2291,7 +2265,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 				return_type = temp_holder->inferred_type;
 			} else if(right_child_type == U_INT8){
 				//Cast to unsigned
-				return_type = lookup_type(type_symtab, "u8")->type;
+				return_type = lookup_type_name_only(type_symtab, "u8")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2550,7 +2524,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		if(temp_holder_type == FLOAT32){
 			//If we make it here then the final return type will be a float64
 			if(right_child_type == U_INT64 || right_child_type == S_INT64){
-				return_type = lookup_type(type_symtab, "f64")->type;
+				return_type = lookup_type_name_only(type_symtab, "f64")->type;
 			//Otherwise the float dominates
 			} else {
 				return_type = temp_holder->inferred_type;
@@ -2564,7 +2538,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		//Let's now check for type compatibility
 		if(right_child_type == FLOAT32){
 			if(right_child_type == U_INT64 || right_child_type == S_INT64){
-				return_type = lookup_type(type_symtab, "f64")->type;
+				return_type = lookup_type_name_only(type_symtab, "f64")->type;
 			//Otherwise the float dominates
 			} else {
 				return_type = right_child->inferred_type;
@@ -2586,7 +2560,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			//If anything below this is unsigned, the whole thing becomes u_int64
 			if(right_child_type == U_INT32 || right_child_type == U_INT16 || right_child_type == U_INT8){
 				//Implicit case to unsigned
-				return_type = lookup_type(type_symtab, "u64")->type;
+				return_type = lookup_type_name_only(type_symtab, "u64")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what temp holder had
@@ -2601,7 +2575,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			//If anything below this is unsigned, the whole thing becomes u_int64
 			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
 				//Implicit case to signed
-				return_type = lookup_type(type_symtab, "u64")->type;
+				return_type = lookup_type_name_only(type_symtab, "u64")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2616,7 +2590,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			//If anything below this is unsigned, the whole thing becomes u_int64
 			if(right_child_type == U_INT32 || right_child_type == U_INT16 || right_child_type == U_INT8){
 				//Implicit case to signed
-				return_type = lookup_type(type_symtab, "u32")->type;
+				return_type = lookup_type_name_only(type_symtab, "u32")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2631,7 +2605,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			//If anything below this is unsigned, the whole thing becomes u_int64
 			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
 				//Implicit case to signed
-				return_type = lookup_type(type_symtab, "u32")->type;
+				return_type = lookup_type_name_only(type_symtab, "u32")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2649,7 +2623,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 				return_type = temp_holder->inferred_type;
 			} else if(temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
 				//Cast to unsigned
-				return_type = lookup_type(type_symtab, "u16")->type;
+				return_type = lookup_type_name_only(type_symtab, "u16")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2667,7 +2641,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 				return_type = right_child->inferred_type;
 			} else if(right_child_type == U_INT16 || right_child_type == U_INT8){
 				//Cast to unsigned
-				return_type = lookup_type(type_symtab, "u16")->type;
+				return_type = lookup_type_name_only(type_symtab, "u16")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2685,7 +2659,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 				return_type = right_child->inferred_type;
 			} else if(right_child_type == U_INT8){
 				//Cast to unsigned
-				return_type = lookup_type(type_symtab, "u8")->type;
+				return_type = lookup_type_name_only(type_symtab, "u8")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -2703,7 +2677,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 				return_type = temp_holder->inferred_type;
 			} else if(right_child_type == U_INT8){
 				//Cast to unsigned
-				return_type = lookup_type(type_symtab, "u8")->type;
+				return_type = lookup_type_name_only(type_symtab, "u8")->type;
 			//Otherwise it's signed so the top level one will be signed
 			} else {
 				//Otherwise it's what the right child had
@@ -3762,7 +3736,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//Fail out here
 	if(found_type!= NULL){
@@ -3937,7 +3911,7 @@ static u_int8_t construct_definer(FILE* fl){
 
 	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
 	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
-	symtab_type_record_t* found = lookup_type(type_symtab, type_name);
+	symtab_type_record_t* found = lookup_type_name_only(type_symtab, type_name);
 
 	//This means that we are attempting to redefine a type
 	if(found != NULL){
@@ -4076,7 +4050,7 @@ static u_int8_t construct_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, alias_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name);
 
 	//Fail out here
 	if(found_type!= NULL){
@@ -4152,7 +4126,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//Fail out here
 	if(found_type!= NULL){
@@ -4288,7 +4262,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Now we need to check that this name isn't already currently in use. We only need to check against the
 	//type symtable, because nothing else could have enum in the name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//If we found something, that's an illegal redefintion
 	if(found_type != NULL){
@@ -4459,7 +4433,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	found_type = lookup_type(type_symtab, alias_name);
+	found_type = lookup_type_name_only(type_symtab, alias_name);
 
 	//Fail out here
 	if(found_type!= NULL){
@@ -4525,7 +4499,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == FLOAT64 || lookahead.tok == CHAR){
 
 		//We will now grab this record from the symtable to make our life easier
-		symtab_type_record_t* record = lookup_type(type_symtab, lookahead.lexeme);
+		symtab_type_record_t* record = lookup_type_name_only(type_symtab, lookahead.lexeme);
 
 		//Sanity check, if this is null something is very wrong
 		if(record == NULL){
@@ -4939,7 +4913,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//Fail out here
 	if(found_type != NULL){
@@ -5192,7 +5166,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 	//Grab the label type
 	//The label type is one of our core types
-	symtab_type_record_t* label_type = lookup_type(type_symtab, "label");
+	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "label");
 
 	//Sanity check here
 	if(label_type == NULL){
@@ -5272,7 +5246,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	/**
 	 * The expression of this type must be compatible at the very list with a u_int64
 	 */
-	symtab_type_record_t* int_type = lookup_type(type_symtab, "u64");
+	symtab_type_record_t* int_type = lookup_type_name_only(type_symtab, "u64");
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(expression_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, expression_node->inferred_type) == NULL){
@@ -5365,7 +5339,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		/**
 		 * The expression of this type must be compatible at the very list with a u_int64
 		 */
-		symtab_type_record_t* int_type = lookup_type(type_symtab, "u64");
+		symtab_type_record_t* int_type = lookup_type_name_only(type_symtab, "u64");
 
 		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 		if(else_if_expression_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, else_if_expression_node->inferred_type) == NULL){
@@ -6139,7 +6113,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	/**
 	 * The expression of this type must be compatible at the very list with a u_int64
 	 */
-	symtab_type_record_t* int_type = lookup_type(type_symtab, "u64");
+	symtab_type_record_t* int_type = lookup_type_name_only(type_symtab, "u64");
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(conditional_expr->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, conditional_expr->inferred_type) == NULL){
@@ -6274,7 +6248,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	/**
 	 * The expression of this type must be compatible at the very list with a u_int64
 	 */
-	symtab_type_record_t* int_type = lookup_type(type_symtab, "u64");
+	symtab_type_record_t* int_type = lookup_type_name_only(type_symtab, "u64");
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(expr_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, expr_node->inferred_type) == NULL){
@@ -7480,10 +7454,10 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//Fail out here
-	if(found_type!= NULL){
+	if(found_type != NULL){
 		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
@@ -7672,10 +7646,10 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//Fail out here
-	if(found_type!= NULL){
+	if(found_type != NULL){
 		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
@@ -7943,10 +7917,10 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, ident_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, ident_name);
 
 	//Fail out here
-	if(found_type!= NULL){
+	if(found_type != NULL){
 		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", ident_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
@@ -8246,7 +8220,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Check for duplicated type names
-		symtab_type_record_t* found_type = lookup_type(type_symtab, function_name); 
+		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name); 
 
 		//Fail out if duplicate has been found
 		if(found_type != NULL){
@@ -8664,10 +8638,10 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//Fail out here
-	if(found_type!= NULL){
+	if(found_type != NULL){
 		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
