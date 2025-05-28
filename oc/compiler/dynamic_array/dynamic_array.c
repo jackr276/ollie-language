@@ -292,7 +292,7 @@ void reset_dynamic_array(dynamic_array_t* array){
 	}
 
 	//Otherwise we'll memset by wiping everything
-	memset(array->internal_array, NULL, array->current_max_size * sizeof(void**));
+	memset(array->internal_array, 0, array->current_max_size * sizeof(void**));
 
 	//The current index is now 0
 	array->current_index = 0;

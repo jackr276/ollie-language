@@ -214,6 +214,46 @@ static u_int16_t hash(char* name){
 
 
 /**
+ * Type hashing also includes the bounds of arrays, if we have them
+ *
+ * Hash a name before entry/search into the hash table
+ *
+ * Universal hashing algorithm:
+ * 	Start with an initial small prime
+ * 	key <- small_prime
+ *
+ * 	for each hashable value:
+ * 		key <- (key * prime) ^ (value * other prime)
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
+static u_int16_t hash_type(generic_type_t* type){
+	u_int32_t key = 37;
+	
+	char* cursor = type->type_name;
+	//Two primes(this should be good enough for us)
+	u_int32_t a = 54059;
+	u_int32_t b = 76963;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		//Sum this up for our key
+		key = (key * a) ^ (*cursor * b);
+	}
+
+	//If this is an array, we'll add the bounds in
+	if(type->type_class == TYPE_CLASS_ARRAY){
+		key += type->array_type->num_members;
+	}
+
+	//Cut it down to our keyspace
+	return key % KEYSPACE;
+}
+
+
+/**
  * Dynamically allocate a variable record
 */
 symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T storage_class){
@@ -266,7 +306,7 @@ symtab_type_record_t* create_type_record(generic_type_t* type){
 	symtab_type_record_t* record = (symtab_type_record_t*)calloc(1, sizeof(symtab_type_record_t));
 
 	//Hash the type name and store it
-	record->hash = hash(type->type_name);
+	record->hash = hash_type(type);
 	//Assign the type
 	record->type = type;
 
@@ -718,7 +758,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 	}
 
 	//Grab the hash
-	u_int16_t h = hash(type->type_name);
+	u_int16_t h = hash_type(type);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_type_sheaf_t* cursor = symtab->current;
@@ -732,6 +772,13 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
 			if(strcmp(records_cursor->type->type_name, type->type_name) == 0){
+				//If we have an array type, we must compare bounds and they must match
+				if(type->type_class == TYPE_CLASS_ARRAY
+					&& type->array_type->num_members != records_cursor->type->array_type->num_members){
+					return FALSE;
+				}
+
+				//No array type + successful array type end here
 				return records_cursor;
 			}
 			//Advance it

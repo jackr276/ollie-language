@@ -1895,7 +1895,7 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 	constant->int_const = int_const;
 
 	//Lookup what we have in here(i32)
-	constant->type = lookup_type(symtab, "i32")->type;
+	constant->type = lookup_type_name_only(symtab, "i32")->type;
 
 	//Return out
 	return constant;
@@ -1919,7 +1919,7 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab
 	constant->int_const = int_const;
 
 	//Lookup what we have in here(u32)
-	constant->type = lookup_type(symtab, "u32")->type;
+	constant->type = lookup_type_name_only(symtab, "u32")->type;
 
 	//Return out
 	return constant;
@@ -1942,7 +1942,7 @@ three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* sy
 	constant->long_const = long_const;
 
 	//Lookup what we have in here(i32)
-	constant->type = lookup_type(symtab, "i64")->type;
+	constant->type = lookup_type_name_only(symtab, "i64")->type;
 
 	//Return out
 	return constant;
