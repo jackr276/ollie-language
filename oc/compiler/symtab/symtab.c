@@ -711,9 +711,14 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
  * do not find it in the local scope, we then search the outer scope, until there are
  * no more outer scopes to search
  */
-symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name){
+symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
+	//Fail out if we have this
+	if(type == NULL){
+		return NULL;
+	}
+
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int16_t h = hash(type->type_name);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_type_sheaf_t* cursor = symtab->current;
@@ -726,7 +731,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name){
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name, name) == 0){
+			if(strcmp(records_cursor->type->type_name, type->type_name) == 0){
 				return records_cursor;
 			}
 			//Advance it

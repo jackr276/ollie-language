@@ -894,7 +894,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 		if(working_type->type_class != TYPE_CLASS_POINTER){
 			sprintf(info, "Type \"%s\" cannot be accessed with the => operator. First defined here:", working_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, working_type->type_name));
+			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
@@ -906,7 +906,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 		if(referenced_type->type_class != TYPE_CLASS_CONSTRUCT){
 			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, referenced_type->type_name));
+			print_type_name(lookup_type(type_symtab, referenced_type));
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
@@ -917,7 +917,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 		if(working_type->type_class != TYPE_CLASS_CONSTRUCT){
 			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, working_type->type_name));
+			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
@@ -1008,7 +1008,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	}
 
 	//We use a u_int32 as our reference
-	generic_type_t* reference_type = lookup_type(type_symtab, "u32")->type;
+	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u32")->type;
 
 	//Let's make sure that this is an int
 	if(types_compatible(reference_type, expr->inferred_type) == NULL){
@@ -1129,7 +1129,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Print it out
-				print_type_name(lookup_type(type_symtab, current_type->type_name));
+				print_type_name(lookup_type(type_symtab, current_type));
 				num_errors++;
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 			}
@@ -1167,7 +1167,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 				sprintf(info, "Type \"%s\" is not a construct. First declared here:", current_type->type_name);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Print it out
-				print_type_name(lookup_type(type_symtab, current_type->type_name));
+				print_type_name(lookup_type(type_symtab, current_type));
 				num_errors++;
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 			}
@@ -1663,7 +1663,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num);
 
 			//We'll check to see if this type is already in existence
-			symtab_type_record_t* type_record = lookup_type(type_symtab, pointer->type_name);
+			symtab_type_record_t* type_record = lookup_type(type_symtab, pointer);
 			
 			//It didn't exist, so we'll add it
 			if(type_record == NULL){
@@ -4538,7 +4538,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		strcat(type_name, type_ident->identifier);
 
 		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type(type_symtab, type_name);
+		symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
 
 		//If we didn't find it it's an instant fail
 		if(record == NULL){
@@ -4579,7 +4579,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		strcat(type_name, type_ident->identifier);
 
 		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type(type_symtab, type_name);
+		symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
 
 		//If we didn't find it it's an instant fail
 		if(record == NULL){
@@ -4622,7 +4622,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		char* temp_name = type_ident->identifier;
 
 		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type(type_symtab, temp_name);
+		symtab_type_record_t* record = lookup_type_name_only(type_symtab, temp_name);
 
 		//If we didn't find it it's an instant fail
 		if(record == NULL){
@@ -4637,7 +4637,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		generic_type_t* dealiased_type = dealias_type(record->type);
 
 		//The true type record
-		symtab_type_record_t* true_type = lookup_type(type_symtab, dealiased_type->type_name);
+		symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name);
 
 		//Once we make it here, we should be all set to get out
 		return true_type;
@@ -4689,7 +4689,7 @@ static generic_type_t* type_specifier(FILE* fl){
 
 		//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
 		//also not an issue
-		symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer->type_name);
+		symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer);
 
 		//If we did not find it, we will add it into the symbol table
 		if(found_pointer == NULL){
@@ -4803,7 +4803,7 @@ static generic_type_t* type_specifier(FILE* fl){
 		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds);
 
 		//Let's see if we can find this one
-		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type->type_name);
+		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type);
 
 		//If we did not find it, we will add it into the symbol table
 		if(found_array == NULL){
@@ -7759,7 +7759,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(expr_node->inferred_type->type_class == TYPE_CLASS_POINTER){
-		if(expr_node->variable->is_mutable == 0 && is_mutable == 1){
+		if(expr_node->variable != NULL && expr_node->variable->is_mutable == 0 && is_mutable == 1){
 			print_parse_message(PARSE_ERROR, "Mutable references to immutable variables are forbidden", parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);

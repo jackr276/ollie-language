@@ -429,7 +429,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 /**
  * Lookup a type name in the symtab
  */
-symtab_type_record_t* lookup_type(type_symtab_t* symtab, char* name);
+symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type);
 
 /**
  * Lookup a type name in the symtab by the name only. This does not
