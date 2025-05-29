@@ -271,6 +271,8 @@ struct live_range_t{
 	u_int16_t live_range_id;
 	//What register is this live range in?
 	register_holder_t reg; 
+	//The size of the variable in the live range
+	variable_size_t size;
 };
 
 

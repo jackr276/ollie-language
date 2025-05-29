@@ -189,6 +189,62 @@ static void print_blocks_with_live_ranges(basic_block_t* head_block){
 
 
 /**
+ * Print instructions with registers
+*/
+static void print_block_with_registers(basic_block_t* block){
+	//If this is some kind of switch block, we first print the jump table
+	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
+		print_jump_table(&(block->jump_table));
+	}
+
+	//If it's a function entry block, we need to print this out
+	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		printf("%s:\n", block->func_record->func_name);
+		print_stack_data_area(&(block->func_record->data_area));
+	} else {
+		printf(".L%d:\n", block->block_id);
+	}
+
+
+	//Now grab a cursor and print out every statement that we 
+	//have
+	instruction_t* cursor = block->leader_statement;
+
+	//So long as it isn't null
+	while(cursor != NULL){
+		//We actually no longer need these
+		if(cursor->instruction_type != PHI_FUNCTION){
+			print_instruction(cursor, PRINTING_REGISTERS);
+		}
+
+		//Move along to the next one
+		cursor = cursor->next_statement;
+	}
+
+	//For spacing
+	printf("\n");
+}
+
+
+/**
+ * Run through using the direct successor strategy and print all
+ * ordered blocks with their registers after allocation
+ */
+static void print_blocks_with_registers(basic_block_t* head_block){
+	//Run through the direct successors so long as the block is not null
+	basic_block_t* current = head_block;
+
+	//So long as this one isn't NULL
+	while(current != NULL){
+		//Print it
+		print_block_with_registers(current);
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
+}
+
+
+/**
  * Print all live ranges that we have
  */
 static void print_all_live_ranges(dynamic_array_t* live_ranges){
@@ -289,6 +345,10 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 	//Update the ending line number
 	if(live_range->ending_line_num < line_number){
 		live_range->ending_line_num = line_number;
+	}
+
+	if(variable->variable_size > live_range->size){
+		live_range->size = variable->variable_size;
 	}
 
 	//Adding a variable to a live range means that this live range is assigned to in this block
@@ -777,4 +837,8 @@ void allocate_all_registers(cfg_t* cfg){
 	printf("================ Interference Graph =======================\n");
 	//Show our live ranges once again
 	print_all_live_ranges(live_ranges);
+
+	printf("================ After Allocation ========================\n");
+	print_blocks_with_registers(cfg->head_block);
+	printf("================ After Allocation ========================\n");
 }
