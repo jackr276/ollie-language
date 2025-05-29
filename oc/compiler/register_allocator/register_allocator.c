@@ -637,6 +637,30 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 
 /**
+ * Some variables need to be in special registers at a given time. We can
+ * bind them to the right register at this stage and avoid having to worry about it later
+ */
+static void pre_color(instruction_t* instruction){
+	//Pre-color based on what kind of instruction it is
+	switch(instruction->instruction_type){
+		//If a return instruction has a
+		//value, it must be in %RAX so we can assign
+		//that entire live range to %RAX
+		case RET:
+			//If it has one, assign it
+			if(instruction->source_register != NULL){
+				instruction->source_register->associated_live_range->reg = RAX;
+			}
+			break;
+
+		//Most of the time we will get here
+		default:
+			break;
+	}
+}
+
+
+/**
  * Construct the interference graph using LIVENOW sets
  *
  * Algorithm:
@@ -676,6 +700,11 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 
 		//For every operation that we have
 		while(operation != NULL){
+			//While we're at it -- there are some live ranges that we can "pre-color" because we know that
+			//they must occupy certain registers. The perfect illustration of this is the return value register
+			//needing to be in rax
+			pre_color(operation);
+
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
 			if(operation->instruction_type == PHI_FUNCTION
