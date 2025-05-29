@@ -214,6 +214,137 @@ instruction_t* emit_idle_instruction(){
 
 
 /**
+ * Print a 32-bit register out. The names used for these are still
+ * 64 bits because 32 and 64 bit uses can't occupy the same register at the 
+ * same time
+ */
+static void print_32_bit_register_name(register_holder_t reg){
+	//One large switch based on what it is
+	switch (reg) {
+		case NO_REG:
+			printf("NOREG32");
+			break;
+		case RAX:
+			printf("%%eax");
+			break;
+		case RBX:
+			printf("%%ebx");
+			break;
+		case RCX:
+			printf("%%ecx");
+			break;
+		case RDX:
+			printf("%%edx");
+			break;
+		case RSI:
+			printf("%%esi");
+			break;
+		case RDI:
+			printf("%%edi");
+			break;
+		case RBP:
+			printf("%%ebp");
+			break;
+		case RSP:
+			printf("%%esp");
+			break;
+		//This one should never happen
+		case RIP:
+			printf("ERROR");
+			break;
+		case R8:
+			printf("%%r8d");
+			break;
+		case R9:
+			printf("%%r9d");
+			break;
+		case R10:
+			printf("%%r10d");
+			break;
+		case R11:
+			printf("%%r11");
+			break;
+		case R12:
+			printf("%%r12d");
+			break;
+		case R13:
+			printf("%%r13d");
+			break;
+		case R14:
+			printf("%%r14d");
+			break;
+		case R15:
+			printf("%%r15d");
+			break;
+	}
+}
+
+
+/**
+ * Print a 64 bit register name out
+ */
+static void print_64_bit_register_name(register_holder_t reg){
+	//One large switch based on what it is
+	switch (reg) {
+		case NO_REG:
+			printf("NOREG64");
+			break;
+		case RAX:
+			printf("%%rax");
+			break;
+		case RBX:
+			printf("%%rbx");
+			break;
+		case RCX:
+			printf("%%rcx");
+			break;
+		case RDX:
+			printf("%%rdx");
+			break;
+		case RSI:
+			printf("%%rsi");
+			break;
+		case RDI:
+			printf("%%rdi");
+			break;
+		case RBP:
+			printf("%%rbp");
+			break;
+		case RSP:
+			printf("%%rsp");
+			break;
+		case RIP:
+			printf("%%rip");
+			break;
+		case R8:
+			printf("%%r8");
+			break;
+		case R9:
+			printf("%%r9");
+			break;
+		case R10:
+			printf("%%r10");
+			break;
+		case R11:
+			printf("%%r11");
+			break;
+		case R12:
+			printf("%%r12");
+			break;
+		case R13:
+			printf("%%r13");
+			break;
+		case R14:
+			printf("%%r14");
+			break;
+		case R15:
+			printf("%%R15");
+			break;
+	}
+}
+
+
+/**
  * Print a variable in name only. There are no spaces around the variable, and there
  * will be no newline inserted at all. This is meant solely for the use of the "print_three_addr_code_stmt"
  * and nothing more. This function is also designed to take into account the indirection aspected as well

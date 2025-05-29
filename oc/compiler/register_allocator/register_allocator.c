@@ -21,7 +21,8 @@
 #define TRUE 1
 #define FALSE 0
 
-#define K_COLORS 15
+//The number of colors that we have for general use registers
+#define K_COLORS_GEN_USE 15
 
 //A load and a store generate 2 instructions when we load
 //from the stack
