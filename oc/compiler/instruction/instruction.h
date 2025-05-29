@@ -188,6 +188,7 @@ typedef enum{
 	PRINTING_VAR_BLOCK_HEADER,
 	PRINTING_VAR_IN_INSTRUCTION,
 	PRINTING_LIVE_RANGES,
+	PRINTING_REGISTERS, //Use the allocate registers for this
 } variable_printing_mode_t;
 
 /**
@@ -262,6 +263,8 @@ struct live_range_t{
 	u_int32_t starting_line_num;
 	//Ending line number
 	u_int32_t ending_line_num;
+	//The degree of this live range
+	u_int16_t degree;
 	//Store the heuristic spill cost
 	int16_t spill_cost;
 	//Store the id of the live range

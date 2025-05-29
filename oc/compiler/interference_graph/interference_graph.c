@@ -53,6 +53,10 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 	graph->nodes[offset_a_b] = TRUE;
 	graph->nodes[offset_b_a] = TRUE;
 
+	//Increment both of their degrees, since they have one more interference
+	(a->degree)++;
+	(b->degree)++;
+
 	//And that's all
 }
 
@@ -127,9 +131,10 @@ void print_interference_graph(interference_graph_t* graph){
 
 
 /**
- * Get the number of neighbors for a certain node
+ * Get the "degree" for a certain live range. The degree is the number of
+ * nodes that interfere with it. We also call these neighbors
  */
-u_int16_t get_neighbor_count(interference_graph_t* graph, live_range_t* a){
+u_int16_t get_live_range_degree(interference_graph_t* graph, live_range_t* a){
 	//Overall count
 	u_int16_t count = 0;
 

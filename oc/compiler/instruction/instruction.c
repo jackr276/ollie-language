@@ -359,6 +359,14 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 	//If we're printing live ranges, we'll use the LR number
 	if(mode == PRINTING_LIVE_RANGES){
 		printf("LR%d", variable->associated_live_range->live_range_id);
+	} else if(mode == PRINTING_REGISTERS){
+		//Print this out based on the size
+		if(variable->variable_size == QUAD_WORD){
+			print_64_bit_register_name(variable->associated_live_range->reg);
+		} else {
+			print_32_bit_register_name(variable->associated_live_range->reg);
+		}
+
 	//Otherwise if it's a temp
 	} else if(variable->is_temporary == TRUE){
 		//Print out it's temp var number

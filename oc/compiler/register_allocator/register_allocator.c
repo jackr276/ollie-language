@@ -213,7 +213,7 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		}
 		
 		//And we'll close it out
-		printf("}\tSpill Cost: %d\tStarts at line: %d Ends at line %d\n", current->spill_cost, current->starting_line_num, current->ending_line_num);
+		printf("}\tSpill Cost: %d\tDegree: %d\tStarts at line: %d Ends at line %d\n", current->spill_cost, current->degree, current->starting_line_num, current->ending_line_num);
 	}
 	printf("============= All Live Ranges ==============\n");
 }
@@ -775,4 +775,6 @@ void allocate_all_registers(cfg_t* cfg){
 	printf("================ Interference Graph =======================\n");
 	print_interference_graph(&graph);
 	printf("================ Interference Graph =======================\n");
+	//Show our live ranges once again
+	print_all_live_ranges(live_ranges);
 }

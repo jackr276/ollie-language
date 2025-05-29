@@ -161,6 +161,9 @@ static variable_size_t select_variable_size(three_addr_var_t* variable){
 		size = DOUBLE_WORD;
 	}
 
+	//It wouldn't hurt to store this
+	variable->variable_size = size;
+
 	//Give it back
 	return size;
 }
