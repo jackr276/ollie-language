@@ -8,7 +8,7 @@
 */
 
 #include "register_allocator.h"
-//For live rnages
+//For live ranges
 #include "../dynamic_array/dynamic_array.h"
 #include "../interference_graph/interference_graph.h"
 #include "../cfg/cfg.h"
@@ -845,6 +845,61 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 
 	//Placehold
 	return live_ranges;
+}
+
+
+/**
+ * Spill a live range to memory to make a graph N-colorable
+ */
+static void spill(cfg_t* cfg, interference_graph_t* graph, live_range_t range){
+
+}
+
+
+/**
+ * Perform graph coloring to allocate all registers in the interference graph
+ *
+ * Graph coloring is used as a way to model this problem. For us, no two interfering
+ * live ranges may have the same register. In graph coloring, no two adjacent nodes
+ * may have the same color. It is easy to see how these problems resemble eachother.
+ *
+ * Algorithm graphcolor:
+ * 	for all live ranges in interference graph:
+ * 		if live range has degree < N:
+ * 			remove it, put onto stack
+ * 
+ * 	while there are nodes with degree >= N:
+ * 	 pick a node to spill
+ * 	 spill it
+ *   remove that node
+ *   update all other degrees 
+ *   remove any nodes that now have degree <N, put on stack
+ *
+ * 	for each node in stack:
+ * 		pop the node off
+ * 		color it with a color different from its neighbors
+ */
+static void graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
+	//We'll need a stack
+	heap_stack_t* stack = heap_stack_alloc();
+
+	//Run through all the live ranges first. If we have a degree < N(15) in our case, remove it
+	//and put it onto the stack
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		//Grab it out
+		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
+
+		//Check what our degree is. If it's lower, add to the stack
+		if(live_range->degree < K_COLORS_GEN_USE){
+			//Remove from our array
+			dynamic_array_delete_at(live_ranges, i);
+			//Push onto the heap stack
+			push(stack, live_range);
+		}
+	}
+
+	//Destroy the stack when done
+	heap_stack_dealloc(stack);
 }
 
 
