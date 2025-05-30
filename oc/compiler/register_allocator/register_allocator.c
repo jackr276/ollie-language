@@ -191,7 +191,7 @@ static void print_blocks_with_live_ranges(basic_block_t* head_block){
 /**
  * Print instructions with registers
 */
-static void print_block_with_registers(basic_block_t* block){
+static void print_block_with_registers(basic_block_t* block, u_int8_t final_run){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
 		print_jump_table(&(block->jump_table));
@@ -200,7 +200,12 @@ static void print_block_with_registers(basic_block_t* block){
 	//If it's a function entry block, we need to print this out
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		printf("%s:\n", block->func_record->func_name);
-		print_stack_data_area(&(block->func_record->data_area));
+
+		//We'd only want to print the stack if this is not the final run
+		if(final_run == FALSE){
+			print_stack_data_area(&(block->func_record->data_area));
+		}
+
 	} else {
 		printf(".L%d:\n", block->block_id);
 	}
@@ -230,14 +235,14 @@ static void print_block_with_registers(basic_block_t* block){
  * Run through using the direct successor strategy and print all
  * ordered blocks with their registers after allocation
  */
-static void print_blocks_with_registers(basic_block_t* head_block){
+static void print_blocks_with_registers(basic_block_t* head_block, u_int8_t final_run){
 	//Run through the direct successors so long as the block is not null
 	basic_block_t* current = head_block;
 
 	//So long as this one isn't NULL
 	while(current != NULL){
 		//Print it
-		print_block_with_registers(current);
+		print_block_with_registers(current, final_run);
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
@@ -778,6 +783,9 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 	//And we absolutely *can not* spill it
 	stack_pointer_live_range->spill_cost = INT16_MAX;
 
+	//This is an address so always quad word
+	stack_pointer_live_range->size = QUAD_WORD;
+
 	//This never ends
 	stack_pointer_live_range->ending_line_num = INT16_MAX;
 
@@ -868,6 +876,10 @@ void allocate_all_registers(cfg_t* cfg){
 	print_all_live_ranges(live_ranges);
 
 	printf("================ After Allocation ========================\n");
-	print_blocks_with_registers(cfg->head_block);
+	print_blocks_with_registers(cfg->head_block, FALSE);
 	printf("================ After Allocation ========================\n");
+	
+	//Print a final, official run with nothing extra. This should just be
+	//the pure assembly that we've generated
+	print_blocks_with_registers(cfg->head_block, TRUE);
 }

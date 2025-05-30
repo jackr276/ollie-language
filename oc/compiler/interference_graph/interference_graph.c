@@ -49,13 +49,16 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 	u_int16_t offset_a_b = a->live_range_id * graph->live_range_count + b->live_range_id;
 	u_int16_t offset_b_a = b->live_range_id * graph->live_range_count + a->live_range_id;
 
-	//Now we'll go to the adjacency matrix and add this in
-	graph->nodes[offset_a_b] = TRUE;
-	graph->nodes[offset_b_a] = TRUE;
+	//Now we'll go to the adjacency matrix and add this in. We only want to add it in
+	//if they don't already interfere
+	if(graph->nodes[offset_a_b] == FALSE){
+		graph->nodes[offset_a_b] = TRUE;
+		graph->nodes[offset_b_a] = TRUE;
 
-	//Increment both of their degrees, since they have one more interference
-	(a->degree)++;
-	(b->degree)++;
+		//Increment both of their degrees, since they have one more interference
+		(a->degree)++;
+		(b->degree)++;
+	}
 
 	//And that's all
 }
