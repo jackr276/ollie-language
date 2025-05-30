@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 //For standardization
@@ -910,17 +911,6 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 		current = current->direct_successor;
 	}
 
-	//Once we're done doing all of this, we'll need to go through and add these all in a priority queue fashion
-	//to a different array
-	dynamic_array_t* temp = live_ranges;
-	//Create a new one
-	live_ranges = dynamic_array_alloc();
-
-	//So long as there are more in here
-	while(dynamic_array_is_empty(temp) == FALSE){
-		dynamic_array_priority_insert_live_range(live_ranges, dynamic_array_delete_from_back(temp));
-		print_live_range_array(live_ranges);
-	}
 
 	//Placehold
 	return live_ranges;
@@ -946,8 +936,17 @@ static void spill(cfg_t* cfg, interference_graph_t* graph, live_range_t* range){
  * can ever come here
  */
 static void allocate_register(interference_graph_t* graph, dynamic_array_t* live_ranges, live_range_t* live_range){
-	//Allocate an area that holds all the registers that we have available for use
+	//If this is the case, we're already done
+	if(live_range->reg != NO_REG){
+		return;
+	}
+
+	//Allocate an area that holds all the registers that we have available for use. This is offset by 1 from
+	//the actual value in the enum. For example, RAX is 1 in the enum, so it's 0 in here
 	register_holder_t registers[K_COLORS_GEN_USE];
+
+	//Wipe this entire thing out
+	memset(registers, 0, sizeof(register_holder_t) * K_COLORS_GEN_USE);
 
 	//Grab a pointer to the neighbors by offsetting the base address
 	u_int8_t* neighbors = graph->nodes + (live_range->live_range_id * graph->live_range_count);
@@ -961,8 +960,33 @@ static void allocate_register(interference_graph_t* graph, dynamic_array_t* live
 
 		//Otherwise if we get here we know it does interfere. We'll need to take
 		//this into account when selecting our registers
-		
+
+		//Grab this value out
+		live_range_t* interferee = dynamic_array_get_at(live_ranges, i);
+
+		//This is a possibility. If so just scrap it and move on
+		if(interferee->reg == NO_REG){
+			continue;
+		}
+
+		//Otherwise it's not, so we'll need to populate our taken registers away appropriately. We'll
+		//set it to true to signify that it's occupied
+		registers[interferee->reg - 1] = TRUE;
 	}
+
+	//Now that the registers array has been populated with interferences, we can scan it and
+	//pick the first available register
+	u_int16_t i;
+	for(i = 0; i < K_COLORS_GEN_USE; i++){
+		//If we've found an empty one, that means we're good
+		if(registers[i] == FALSE){
+			break;
+		}
+	}
+
+	//Now that we've gotten here, i should hold the value of a free register - 1. We'll
+	//add 1 back to it to get that free register's name
+	live_range->reg = i + 1;
 }
 
 
@@ -990,35 +1014,46 @@ static void allocate_register(interference_graph_t* graph, dynamic_array_t* live
  * 		color it with a color different from its neighbors
  */
 static void graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
+	//We first need to construct the priority version of the live range arrays
+	//Create a new one
+	dynamic_array_t* priority_live_ranges = dynamic_array_alloc();
+
+	//Run through and insert everything into the priority live range
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		dynamic_array_priority_insert_live_range(priority_live_ranges, dynamic_array_get_at(live_ranges, i));
+	}
+
 	//We'll need a stack
 	heap_stack_t* stack = heap_stack_alloc();
 
-	//Clone this dynamic array so that we don't mess with the original reference.
-	//We will *only* modify this clone
-	dynamic_array_t* live_ranges_copy = clone_dynamic_array(live_ranges);
-
 	//Run through all the live ranges first. If we have a degree < N(15) in our case, remove it
 	//and put it onto the stack
-	for(u_int16_t i = 0; i < live_ranges_copy->current_index; i++){
+	for(u_int16_t i = 0; i < priority_live_ranges->current_index; i++){
 		//Grab it out
-		live_range_t* live_range = dynamic_array_get_at(live_ranges_copy, i);
+		live_range_t* live_range = dynamic_array_get_at(priority_live_ranges, i);
 
 		//Check what our degree is. If it's lower, add to the stack
 		if(live_range->degree < K_COLORS_GEN_USE){
-			//Remove from our array
-			dynamic_array_delete_at(live_ranges_copy, i);
 			//Push onto the heap stack
 			push(stack, live_range);
 		}
 	}
 
+	printf("Still active: {");
+	for(u_int16_t i = 0; i < priority_live_ranges->current_index; i++){
+		live_range_t* range = dynamic_array_get_at(priority_live_ranges, i);
+		printf("LR%d(%d), ", range->live_range_id, range->degree);
+	}
+	
+	printf("}\n");
+
 	/**
 	 * Now, so long as we have nodes whose degree is >= N, we need to spill and
 	 * recompute the entire interference graph
 	 */
-	while(dynamic_array_is_empty(live_ranges_copy) == FALSE){
+	while(dynamic_array_is_empty(priority_live_ranges) == FALSE){
 		//Just delete it for now
-		dynamic_array_delete_from_back(live_ranges_copy);
+		dynamic_array_delete_from_back(priority_live_ranges);
 	}
 
 	//Now for each value inside of the stack, we will pop it off
@@ -1026,11 +1061,11 @@ static void graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, i
 	//of its neighbors
 	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
 		//Remove a value from the stack
-		live_range_t* value = pop(stack);
+		live_range_t* live_range = pop(stack);
 
 		//Now we'll allocate it's register
 		//NOTE: make sure to pass the *unmodified* live ranges array in here
-		allocate_register(graph, live_ranges, value);
+		allocate_register(graph, live_ranges, live_range);
 	}
 
 	//Destroy the stack when done

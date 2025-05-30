@@ -360,6 +360,10 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 	if(mode == PRINTING_LIVE_RANGES){
 		printf("LR%d", variable->associated_live_range->live_range_id);
 	} else if(mode == PRINTING_REGISTERS){
+		if(variable->associated_live_range->reg == NO_REG){
+			printf("LR%d", variable->associated_live_range->live_range_id);
+		} else
+
 		//Print this out based on the size
 		if(variable->associated_live_range->size == QUAD_WORD){
 			print_64_bit_register_name(variable->associated_live_range->reg);
