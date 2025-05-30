@@ -120,7 +120,7 @@ void* peek(heap_stack_t* stack){
 /**
  * Is the stack empty or not? Return 1 if empty
  */
-heap_stack_status_t is_empty(heap_stack_t* stack){
+heap_stack_status_t heap_stack_is_empty(heap_stack_t* stack){
 	if(stack->num_nodes == 0){
 		return HEAP_STACK_EMPTY;
 	} else {

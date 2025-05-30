@@ -292,7 +292,7 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_in
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
-	while(is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
 		dynamic_array_add(reverse_post_order_traversal, pop(stack));
 	}
 

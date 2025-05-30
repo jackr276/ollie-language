@@ -60,7 +60,7 @@ void* pop(heap_stack_t* stack);
 /**
  * Is the stack empty or not
  */
-heap_stack_status_t is_empty(heap_stack_t* stack);
+heap_stack_status_t heap_stack_is_empty(heap_stack_t* stack);
 
 /**
  * Return the top value of the stack, but do not

@@ -939,6 +939,34 @@ static void spill(cfg_t* cfg, interference_graph_t* graph, live_range_t* range){
 
 
 /**
+ * Allocate an individual register to a given live range
+ *
+ * NOTE: By the time we get here, it should be guaranteed that we're 
+ * able to color this because no register with more than N neighbors 
+ * can ever come here
+ */
+static void allocate_register(interference_graph_t* graph, dynamic_array_t* live_ranges, live_range_t* live_range){
+	//Allocate an area that holds all the registers that we have available for use
+	register_holder_t registers[K_COLORS_GEN_USE];
+
+	//Grab a pointer to the neighbors by offsetting the base address
+	u_int8_t* neighbors = graph->nodes + (live_range->live_range_id * graph->live_range_count);
+
+	//Run through every single neighbor
+	for(u_int16_t i = 0; i < graph->live_range_count; i++){
+		//If it doesn't interfere we don't care
+		if(neighbors[i] == FALSE){
+			continue;
+		}
+
+		//Otherwise if we get here we know it does interfere. We'll need to take
+		//this into account when selecting our registers
+		
+	}
+}
+
+
+/**
  * Perform graph coloring to allocate all registers in the interference graph
  *
  * Graph coloring is used as a way to model this problem. For us, no two interfering
@@ -965,19 +993,44 @@ static void graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, i
 	//We'll need a stack
 	heap_stack_t* stack = heap_stack_alloc();
 
+	//Clone this dynamic array so that we don't mess with the original reference.
+	//We will *only* modify this clone
+	dynamic_array_t* live_ranges_copy = clone_dynamic_array(live_ranges);
+
 	//Run through all the live ranges first. If we have a degree < N(15) in our case, remove it
 	//and put it onto the stack
-	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+	for(u_int16_t i = 0; i < live_ranges_copy->current_index; i++){
 		//Grab it out
-		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
+		live_range_t* live_range = dynamic_array_get_at(live_ranges_copy, i);
 
 		//Check what our degree is. If it's lower, add to the stack
 		if(live_range->degree < K_COLORS_GEN_USE){
 			//Remove from our array
-			dynamic_array_delete_at(live_ranges, i);
+			dynamic_array_delete_at(live_ranges_copy, i);
 			//Push onto the heap stack
 			push(stack, live_range);
 		}
+	}
+
+	/**
+	 * Now, so long as we have nodes whose degree is >= N, we need to spill and
+	 * recompute the entire interference graph
+	 */
+	while(dynamic_array_is_empty(live_ranges_copy) == FALSE){
+		//Just delete it for now
+		dynamic_array_delete_from_back(live_ranges_copy);
+	}
+
+	//Now for each value inside of the stack, we will pop it off
+	//and assign it a register that is different from all
+	//of its neighbors
+	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+		//Remove a value from the stack
+		live_range_t* value = pop(stack);
+
+		//Now we'll allocate it's register
+		//NOTE: make sure to pass the *unmodified* live ranges array in here
+		allocate_register(graph, live_ranges, value);
 	}
 
 	//Destroy the stack when done
