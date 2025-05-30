@@ -31,6 +31,73 @@
 //The atomically increasing live range id
 u_int16_t live_range_id = 0;
 
+
+/**
+ * Priority queue insert a live range in here
+ *
+ * Lowest spill cost = highest priority
+ * Higher priority items go to the back to make removal O(1)(using dynamic_array_delete_from_back())
+ */
+static void dynamic_array_priority_insert_live_range(dynamic_array_t* array, live_range_t* live_range){
+	//Now we'll see if we need to reallocate this
+	if(array->current_index == array->current_max_size){
+		//We'll double the current max size
+		array->current_max_size *= 2;
+
+		//And we'll reallocate the array
+		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
+	}
+
+	//We'll need this out of the scope
+	u_int16_t i = 0;
+
+	//Run through the array and figure out where to put this
+	for(; i < array->current_index; i++){
+		//Grab the current one out
+		live_range_t* current = dynamic_array_get_at(array, i);
+
+		//If this one is lower priority than the given one, we'll stop
+		if(current->spill_cost < live_range->spill_cost){
+			break;
+		}
+	}
+
+	//Shift to the right by 1
+	for(int16_t j = array->current_index; j >= i; j--){
+		array->internal_array[j+1] = array->internal_array[j];
+	}
+
+	//Now we can insert the array at i
+	array->internal_array[i] = live_range;
+
+	//Bump this up by 1
+	array->current_index++;
+
+	//And we're all set
+}
+
+
+/**
+ * Developer utility function to validate the priority queue implementation
+ */
+static void print_live_range_array(dynamic_array_t* live_ranges){
+	printf("{");
+
+	//Print everything out
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		live_range_t* range = dynamic_array_get_at(live_ranges, i);
+
+		printf("LR%d(%d)", range->live_range_id, range->spill_cost);
+
+		if(i != live_ranges->current_index - 1){
+			printf(", ");
+		}
+	}
+
+	printf("}\n");
+}
+
+
 /**
  * Increment and return the live range ID
  */
@@ -843,6 +910,18 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 		current = current->direct_successor;
 	}
 
+	//Once we're done doing all of this, we'll need to go through and add these all in a priority queue fashion
+	//to a different array
+	dynamic_array_t* temp = live_ranges;
+	//Create a new one
+	live_ranges = dynamic_array_alloc();
+
+	//So long as there are more in here
+	while(dynamic_array_is_empty(temp) == FALSE){
+		dynamic_array_priority_insert_live_range(live_ranges, dynamic_array_delete_from_back(temp));
+		print_live_range_array(live_ranges);
+	}
+
 	//Placehold
 	return live_ranges;
 }
@@ -850,8 +929,11 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 
 /**
  * Spill a live range to memory to make a graph N-colorable
+ *
+ * After a live range is spilled, all definitions go to memory, and all uses
+ * come from memory
  */
-static void spill(cfg_t* cfg, interference_graph_t* graph, live_range_t range){
+static void spill(cfg_t* cfg, interference_graph_t* graph, live_range_t* range){
 
 }
 
@@ -933,6 +1015,9 @@ void allocate_all_registers(cfg_t* cfg){
 	printf("================ After Allocation ========================\n");
 	print_blocks_with_registers(cfg->head_block, FALSE);
 	printf("================ After Allocation ========================\n");
+
+	//Use the graph colorer to allocate all registers
+	graph_color_and_allocate(cfg, live_ranges, &graph);
 	
 	//Print a final, official run with nothing extra. This should just be
 	//the pure assembly that we've generated
