@@ -599,15 +599,21 @@ static void calculate_liveness_sets(cfg_t* cfg){
  * Perform live range coalescing on a given instruction. This sees
  * us merge the source and destination operands's webs(live ranges)
  */
-static void perform_live_range_coalescence(dynamic_array_t* live_ranges, instruction_t** instruction){
+static void perform_live_range_coalescence(dynamic_array_t* live_ranges, instruction_t* instruction){
+	//What we'll first do is take the instruction's source live range
+	live_range_t* source_live_range = find_live_range_with_variable(live_ranges, instruction->source_register);
 
+	//Now that we have this source live range, we'll assign the destination live range to be in it
+	add_variable_to_live_range(source_live_range, instruction->block_contained_in, instruction->destination_register);
+
+	//And we're all done, now we've coalesced
 }
 
 
 /**
  * Run through every instruction in a block and construct the live ranges
  */
-static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
+static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ranges, basic_block_t* basic_block){
 	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
 	//we'll allocate them fresh
 	if(basic_block->assigned_variables == NULL){
@@ -672,8 +678,22 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 		if(current->destination_register != NULL){
 			//What if we have a direct copy instruction?
 			if(is_instruction_pure_copy(current) == TRUE){
-				print_instruction(current, PRINTING_VAR_INLINE);
-				printf("Is a pure copy\n");
+				//If we see this, we will perform the coalescence algorithm
+				//to combine these 2 live ranges
+				perform_live_range_coalescence(live_ranges, current);
+
+				//Hold as a temp
+				instruction_t* temp = current;
+				
+				//Advance current
+				current = current->next_statement;
+
+				//We don't need this copy statement at all anymore, the value is
+				//already in the register. As such, we can delete it
+				delete_statement(cfg, basic_block, temp);
+
+				//And go onto the next iteration
+				continue;
 			}
 
 			//Let's see if we can find this
@@ -913,7 +933,7 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 	//Run through every single block
 	while(current != NULL){
 		//Let the helper do this
-		construct_live_ranges_in_block(live_ranges, current);
+		construct_live_ranges_in_block(cfg, live_ranges, current);
 
 		//Advance to the next
 		current = current->direct_successor;
