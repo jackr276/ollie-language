@@ -45,6 +45,42 @@ void set_new_function(symtab_function_record_t* func){
 
 
 /**
+ * Does a given operation overwrite it's source? Think add, subtract, etc
+ */
+u_int8_t is_destination_also_operand(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		case ADDL:
+		case ADDW:
+		case ADDQ:
+		case SUBW:
+		case SUBL:
+		case SUBQ:
+		case MULL:
+		case MULQ:
+		case IMULL:
+		case IMULQ:
+		case SHRL:
+		case SHRQ:
+		case SARQ:
+		case SARL:
+		case SALL:
+		case SALQ:
+		case SHLQ:
+		case SHLL:
+		case XORL:
+		case XORQ:
+		case ANDL:
+		case ANDQ:
+		case ORL:
+		case ORQ:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Dynamically allocate and create a temp var
  *
  * Temp Vars do NOT have their lightstack initialized. If ever you are using the stack of a temp

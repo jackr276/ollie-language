@@ -736,6 +736,8 @@ static void pre_color(instruction_t* instruction){
 /**
  * Construct the interference graph using LIVENOW sets
  *
+ * NOTE: We must walk the block from bottom to top
+ *
  * Algorithm:
  * 	create an interference graph
  * 	for each block b:
@@ -765,11 +767,14 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 			continue;
 		}
 
+		//live now is initially live out
+		dynamic_array_t* live_now = current->live_out;
+
 		//Even though we use the LIVENOW set in name, in reality it is just LIVEOUT. We'll
 		//keep using LIVEOUT for LIVENOW with that in mind
 		
 		//Grab a pointer to the operations
-		instruction_t* operation = current->leader_statement;
+		instruction_t* operation = current->exit_statement;
 
 		//For every operation that we have
 		while(operation != NULL){
@@ -780,56 +785,52 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
-			if(operation->instruction_type == PHI_FUNCTION
-				|| ((operation->instruction_type == MOVW
-				|| operation->instruction_type == MOVL
-				|| operation->instruction_type == MOVQ)
-				&& operation->instruction_type == 0)
-				|| operation->destination_register == NULL
-				|| operation->destination_register->associated_live_range == NULL){
-
+			if(operation->instruction_type == PHI_FUNCTION || operation->destination_register == NULL){
 				//Skip it
-				operation = operation->next_statement;
+				operation = operation->previous_statement;
 				continue;
 			}
 
 			//Now that we know this operation is valid, we will add interference between this and every
 			//other value in live_out
-			for(u_int16_t i = 0; current->live_out != NULL && i < current->live_out->current_index; i++){
+			for(u_int16_t i = 0; i < live_now->current_index; i++){
 				//Graph the LR out
-				live_range_t* range = dynamic_array_get_at(current->live_out, i);
+				live_range_t* range = dynamic_array_get_at(live_now, i);
 
 				//Now we'll add this to the graph
 				add_interference(&graph, range, operation->destination_register->associated_live_range);
 			}
 
 			//Once we're done with this, we'll delete the destination's live range from the LIVE_NOW set
-			dynamic_array_delete(current->live_out, operation->destination_register->associated_live_range);
+			//HOWEVER: we must account for the fact that x86 instructions often use the second operand
+			//as a destination. If this is not the case, then we can't remove this because we aren't done
+			if(is_destination_also_operand(operation) == FALSE){
+				dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
+			}
 
-			//Now we'll add any other registers to LIVEOUT
-			//iterating like this
+			//Now we'll add all interferences like this
 			if(operation->source_register != NULL
-				&& dynamic_array_contains(current->live_out, operation->source_register->associated_live_range) == NOT_FOUND){
-				dynamic_array_add(current->live_out, operation->source_register->associated_live_range);
+				&& dynamic_array_contains(live_now, operation->source_register->associated_live_range) == NOT_FOUND){
+				dynamic_array_add(live_now, operation->source_register->associated_live_range);
 			}
 
 			if(operation->source_register2 != NULL
-				&& dynamic_array_contains(current->live_out, operation->source_register2->associated_live_range) == NOT_FOUND){
-				dynamic_array_add(current->live_out, operation->source_register2->associated_live_range);
+				&& dynamic_array_contains(live_now, operation->source_register2->associated_live_range) == NOT_FOUND){
+				dynamic_array_add(live_now, operation->source_register2->associated_live_range);
 			}
 
 			if(operation->address_calc_reg1 != NULL
-				&& dynamic_array_contains(current->live_out, operation->address_calc_reg1->associated_live_range) == NOT_FOUND){
-				dynamic_array_add(current->live_out, operation->address_calc_reg1->associated_live_range);
+				&& dynamic_array_contains(live_now, operation->address_calc_reg1->associated_live_range) == NOT_FOUND){
+				dynamic_array_add(live_now, operation->address_calc_reg1->associated_live_range);
 			}
 
 			if(operation->address_calc_reg2 != NULL
-				&& dynamic_array_contains(current->live_out, operation->address_calc_reg2->associated_live_range) == NOT_FOUND){
-				dynamic_array_add(current->live_out, operation->address_calc_reg2->associated_live_range);
+				&& dynamic_array_contains(live_now, operation->address_calc_reg2->associated_live_range) == NOT_FOUND){
+				dynamic_array_add(live_now, operation->address_calc_reg2->associated_live_range);
 			}
 
-			//Advance it
-			operation = operation->next_statement;
+			//Crawl back up by 1
+			operation = operation->previous_statement;
 		}
 
 		//Advance this up
@@ -1038,14 +1039,6 @@ static void graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			push(stack, live_range);
 		}
 	}
-
-	printf("Still active: {");
-	for(u_int16_t i = 0; i < priority_live_ranges->current_index; i++){
-		live_range_t* range = dynamic_array_get_at(priority_live_ranges, i);
-		printf("LR%d(%d), ", range->live_range_id, range->degree);
-	}
-	
-	printf("}\n");
 
 	/**
 	 * Now, so long as we have nodes whose degree is >= N, we need to spill and

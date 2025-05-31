@@ -420,6 +420,11 @@ struct instruction_t{
 void set_new_function(symtab_function_record_t* func);
 
 /**
+ * Does a given operation overwrite it's source? Think add, subtract, etc
+ */
+u_int8_t is_destination_also_operand(instruction_t* instruction);
+
+/**
  * Create and return a temporary variable
 */
 three_addr_var_t* emit_temp_var(generic_type_t* type);
