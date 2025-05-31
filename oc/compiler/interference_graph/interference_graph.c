@@ -39,12 +39,6 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 		return;
 	}
 
-	//If a ends before b starts OR b ends before a starts, we can skip it
-	if(a->ending_line_num < b->starting_line_num || b->ending_line_num < a->starting_line_num){
-		printf("Skipping adding for LR%d and LR%d\n", a->live_range_id, b->live_range_id);
-		return;
-	}
-
 	//To add the interference we'll first need to calculate the offsets for both
 	//b's and a's version
 	u_int16_t offset_a_b = a->live_range_id * graph->live_range_count + b->live_range_id;

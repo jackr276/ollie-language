@@ -20,7 +20,7 @@ fn main() -> i32{
 	}; 
 
 	//100% useless
-	if(abc) then {
+	if(abc == 3) then {
 		abc := 2;
 	} else {
 		abc := 3;

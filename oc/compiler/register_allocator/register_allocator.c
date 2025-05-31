@@ -110,7 +110,7 @@ static u_int16_t increment_and_get_live_range_id(){
 /**
  * Create a live range
  */
-static live_range_t* live_range_alloc(u_int16_t starting_line_number){
+static live_range_t* live_range_alloc(){
 	//Calloc it
 	live_range_t* live_range = calloc(1, sizeof(live_range_t));
 
@@ -119,9 +119,6 @@ static live_range_t* live_range_alloc(u_int16_t starting_line_number){
 
 	//And create it's dynamic array
 	live_range->variables = dynamic_array_alloc();
-
-	//Store the starting line number
-	live_range->starting_line_num = starting_line_number;
 
 	//Finally we'll return it
 	return live_range;
@@ -342,7 +339,7 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		}
 		
 		//And we'll close it out
-		printf("}\tSpill Cost: %d\tDegree: %d\tStarts at line: %d Ends at line %d\n", current->spill_cost, current->degree, current->starting_line_num, current->ending_line_num);
+		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
 	}
 	printf("============= All Live Ranges ==============\n");
 }
@@ -393,7 +390,7 @@ static void update_spill_cost(live_range_t* live_range, basic_block_t* block, th
 /**
  * Add a variable to a live range, if it isn't already in there
  */
-static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable, u_int16_t line_number){
+static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
 	//If it's the stack pointer just get out
 	if(variable->is_stack_pointer == TRUE){
 		return;
@@ -415,15 +412,6 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 	//Update the cost
 	update_spill_cost(live_range, block, variable);
 
-	//Update the ending line number
-	if(live_range->ending_line_num < line_number){
-		live_range->ending_line_num = line_number;
-	}
-
-	if(variable->variable_size > live_range->size){
-		live_range->size = variable->variable_size;
-	}
-
 	//Adding a variable to a live range means that this live range is assigned to in this block
 	if(dynamic_array_contains(block->assigned_variables, live_range) == NOT_FOUND){
 		dynamic_array_add(block->assigned_variables, live_range);
@@ -434,7 +422,7 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 /**
  * Figure out which live range a given variable was associated with
  */
-static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable, u_int32_t line_number){
+static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//Stack pointer is exempt
 	if(variable->is_stack_pointer == TRUE){
 		//We'll already have the live range
@@ -450,7 +438,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 		//This is a function parameter, we need to make it ourselves
 		if(variable->linked_var->is_function_paramater == TRUE){
 			//Create it. Since this is a function parameter, we start at line 0
-			live_range = live_range_alloc(0);
+			live_range = live_range_alloc();
 			//Add it in
 			dynamic_array_add(live_range->variables, variable);
 			//Update the variable too
@@ -471,11 +459,6 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 
 	//Update the spill cost
 	update_spill_cost(live_range, block, variable);
-
-	//Update the ending line number
-	if(live_range->ending_line_num < line_number){
-		live_range->ending_line_num = line_number;
-	}
 
 	//Assigning a live range to a variable means that this variable was *used* in the block
 	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
@@ -641,9 +624,6 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 	//Run through every instruction in the block
 	while(current != NULL){
-		//Store the line number
-		current->instruction_line_number = *current_line_num;
-
 		//If we actually have a destination register
 		if(current->destination_register != NULL){
 			//Let's see if we can find this
@@ -652,14 +632,14 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			//If it's null we need to make one
 			if(live_range == NULL){
 				//Create it
-				live_range = live_range_alloc(current->instruction_line_number);
+				live_range = live_range_alloc();
 
 				//Add it into the overall set
 				dynamic_array_add(live_ranges, live_range);
 			}
 
 			//Add this into the live range
-			add_variable_to_live_range(live_range, basic_block, current->destination_register, current->instruction_line_number);
+			add_variable_to_live_range(live_range, basic_block, current->destination_register);
 
 			//Link the variable into this as well
 			current->destination_register->associated_live_range = live_range;
@@ -672,32 +652,32 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			//If it's null we need to make one
 			if(live_range == NULL){
 				//Create it
-				live_range = live_range_alloc(current->instruction_line_number);
+				live_range = live_range_alloc();
 
 				//Add it into the overall set
 				dynamic_array_add(live_ranges, live_range);
 			}
 
 			//Add this into the live range
-			add_variable_to_live_range(live_range, basic_block, current->assignee, current->instruction_line_number);
+			add_variable_to_live_range(live_range, basic_block, current->assignee);
 		}
 
 		//Let's also assign all the live ranges that we need to the given variables since we're already 
 		//iterating like this
 		if(current->source_register != NULL){
-			assign_live_range_to_variable(live_ranges, basic_block, current->source_register, current->instruction_line_number);
+			assign_live_range_to_variable(live_ranges, basic_block, current->source_register);
 		}
 
 		if(current->source_register2 != NULL){
-			assign_live_range_to_variable(live_ranges, basic_block, current->source_register2, current->instruction_line_number);
+			assign_live_range_to_variable(live_ranges, basic_block, current->source_register2);
 		}
 
 		if(current->address_calc_reg1 != NULL){
-			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1, current->instruction_line_number);
+			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1);
 		}
 
 		if(current->address_calc_reg2 != NULL){
-			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2, current->instruction_line_number);
+			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
 		}
 
 		//Increment this
@@ -767,7 +747,8 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 			continue;
 		}
 
-		//live now is initially live out
+		//live now is initially live out. Just settigg this pointer
+		//for naming congruety
 		dynamic_array_t* live_now = current->live_out;
 
 		//Even though we use the LIVENOW set in name, in reality it is just LIVEOUT. We'll
@@ -798,7 +779,7 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 				live_range_t* range = dynamic_array_get_at(live_now, i);
 
 				//Now we'll add this to the graph
-				add_interference(&graph, range, operation->destination_register->associated_live_range);
+				add_interference(&graph, operation->destination_register->associated_live_range, range);
 			}
 
 			//Once we're done with this, we'll delete the destination's live range from the LIVE_NOW set
@@ -846,7 +827,7 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the stack pointer
-	live_range_t* stack_pointer_live_range = live_range_alloc(0);
+	live_range_t* stack_pointer_live_range = live_range_alloc();
 	//This is guaranteed to be RSP - so it's already been allocated
 	stack_pointer_live_range->reg = RSP;
 	//And we absolutely *can not* spill it
@@ -854,9 +835,6 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 
 	//This is an address so always quad word
 	stack_pointer_live_range->size = QUAD_WORD;
-
-	//This never ends
-	stack_pointer_live_range->ending_line_num = INT16_MAX;
 
 	//Add the stack pointer to the dynamic array
 	dynamic_array_add(stack_pointer_live_range->variables, stack_pointer);

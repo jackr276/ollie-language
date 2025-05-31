@@ -1551,11 +1551,6 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 	//This will be null often, but if we need it it'll be here
 	basic_block_t* jumping_to_block = instruction->jumping_to_block;
 
-	//If this is in register mode we don't need to print line numbers
-	if(mode != PRINTING_REGISTERS){
-		printf("%d ", instruction->instruction_line_number);
-	}
-
 	//Switch based on what type we have
 	switch (instruction->instruction_type) {
 		//These first ones are very simple - no real variations here
