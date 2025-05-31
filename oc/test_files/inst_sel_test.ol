@@ -26,7 +26,7 @@ fn main(arg:i32, argv:char**) -> i32 {
 	x := x / 9;
 	x := x && 21;
 	x := x || 32;
-	x := a - z;
+	x := a - z + x;
 
 	ret x + y + a;
 }

@@ -599,14 +599,29 @@ static void calculate_liveness_sets(cfg_t* cfg){
  * Perform live range coalescing on a given instruction. This sees
  * us merge the source and destination operands's webs(live ranges)
  */
-static void perform_live_range_coalescence(dynamic_array_t* live_ranges, instruction_t* instruction){
-	//What we'll first do is take the instruction's source live range
-	live_range_t* source_live_range = find_live_range_with_variable(live_ranges, instruction->source_register);
+static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
+	//Run through every single block in here
+	basic_block_t* current = cfg->head_block;
+	while(current != NULL){
+		//Now we'll run through every instruction in every block
+		instruction_t* instruction = current->leader_statement;
 
-	//Now that we have this source live range, we'll assign the destination live range to be in it
-	add_variable_to_live_range(source_live_range, instruction->block_contained_in, instruction->destination_register);
+		//Now run through all of these
+		while(instruction != NULL){
+			//If these two make it here, we know that they're good to go
+			if(is_instruction_pure_copy(instruction) == TRUE
+				&& do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
+				printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
 
-	//And we're all done, now we've coalesced
+			}
+
+			//Advance it
+			instruction = instruction->next_statement;
+		}
+
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
 }
 
 
@@ -676,26 +691,6 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
 
 		//If we actually have a destination register
 		if(current->destination_register != NULL){
-			//What if we have a direct copy instruction?
-			if(is_instruction_pure_copy(current) == TRUE){
-				//If we see this, we will perform the coalescence algorithm
-				//to combine these 2 live ranges
-				perform_live_range_coalescence(live_ranges, current);
-
-				//Hold as a temp
-				instruction_t* temp = current;
-				
-				//Advance current
-				current = current->next_statement;
-
-				//We don't need this copy statement at all anymore, the value is
-				//already in the register. As such, we can delete it
-				delete_statement(cfg, basic_block, temp);
-
-				//And go onto the next iteration
-				continue;
-			}
-
 			//Let's see if we can find this
 			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->destination_register);
 
@@ -1113,6 +1108,10 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//Now let's determine the interference graph
 	interference_graph_t graph = construct_interference_graph(cfg);
+
+	//Now let's perform our live range coalescence to reduce the overall size of our
+	//graph
+	perform_live_range_coalescence(cfg, live_ranges, &graph);
 
 	printf("================ Interference Graph =======================\n");
 	print_interference_graph(&graph);
