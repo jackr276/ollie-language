@@ -257,10 +257,14 @@ typedef enum{
  * the variables
  */
 struct live_range_t{
-	//and the variables that it has
+	//Hold all the variables that it has
 	dynamic_array_t* variables;
+	//And we'll hold an adjacency list for interference
+	dynamic_array_t* neighbors;
 	//The degree of this live range
 	u_int16_t degree;
+	//The interference graph index of it
+	u_int16_t interference_graph_index;
 	//Store the heuristic spill cost
 	int16_t spill_cost;
 	//Store the id of the live range

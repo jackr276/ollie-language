@@ -6,6 +6,7 @@
 */
 
 #include "../interference_graph/interference_graph.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -22,6 +23,9 @@ static live_range_t* live_range_alloc(u_int16_t live_range_id){
 
 	//And create it's dynamic array
 	live_range->variables = dynamic_array_alloc();
+
+	//Create it's adjacency list
+	live_range->neighbors = dynamic_array_alloc();
 
 	//Finally we'll return it
 	return live_range;
@@ -61,6 +65,24 @@ int main(int argc, char** argv){
 			add_interference(&graph, dynamic_array_get_at(live_ranges, i), dynamic_array_get_at(live_ranges, j));
 			printf("%d and %d interfere\n", i, j);
 		}
+	}
+
+	//Run through and print out all of their adjacency lists
+	for(u_int16_t i = 0; i < 20; i++){
+		live_range_t* range = dynamic_array_get_at(live_ranges, i);
+		printf("LR%d, adjacency list: {", range->live_range_id);
+
+		//Print out all the neighbors
+		for(u_int16_t j = 0; j < range->neighbors->current_index; j++){
+			live_range_t* neighbor = dynamic_array_get_at(range->neighbors, j);
+			printf("LR%d", neighbor->live_range_id);
+
+			if(j != range->neighbors->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		printf("}\n");
 	}
 
 	//Print the full one

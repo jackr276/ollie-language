@@ -120,6 +120,9 @@ static live_range_t* live_range_alloc(){
 	//And create it's dynamic array
 	live_range->variables = dynamic_array_alloc();
 
+	//Create the neighbors array as well
+	live_range->neighbors = dynamic_array_alloc();
+
 	//Finally we'll return it
 	return live_range;
 }
@@ -131,6 +134,9 @@ static live_range_t* live_range_alloc(){
 static void live_range_dealloc(live_range_t* live_range){
 	//First we'll destroy the array that it has
 	dynamic_array_dealloc(live_range->variables);
+
+	//Destroy the neighbors array as well
+	dynamic_array_dealloc(live_range->neighbors);
 
 	//Then we can destroy the live range itself
 	free(live_range);
