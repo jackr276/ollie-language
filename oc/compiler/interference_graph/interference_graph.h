@@ -28,15 +28,17 @@ struct interference_graph_t{
 };
 
 /**
- * Allocate an interference graph. The graph itself should be stack allocated,
- * this will only serve to allocate the internal nodes
-*/
-void interference_graph_alloc(interference_graph_t* graph, u_int16_t num_nodes);
-
-/**
  * Mark that live ranges a and b interfere
+ *
+ * NOTE: The graph is an optional parameter. If NULL is passed in, we'll assume that
+ * the graph has not yet been allocated and skip that part
  */
 void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b);
+
+/**
+ * Build the interference graph from the adjacency lists
+ */
+interference_graph_t* construct_interference_graph_from_adjacency_lists(dynamic_array_t* live_ranges);
 
 /**
  * Mark that live ranges a and b do not interfere

@@ -7,6 +7,7 @@
 
 #include "interference_graph.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
 //For standardization across all modules
@@ -18,7 +19,10 @@
  * Allocate an interference graph. The graph itself should be stack allocated,
  * this will only serve to allocate the internal nodes
 */
-void interference_graph_alloc(interference_graph_t* graph, u_int16_t live_range_count){
+static interference_graph_t* interference_graph_alloc(u_int16_t live_range_count){
+	//Allocate it
+	interference_graph_t* graph = calloc(1, sizeof(interference_graph_t));
+
 	//Mark this first
 	graph->live_range_count = live_range_count;
 
@@ -26,6 +30,7 @@ void interference_graph_alloc(interference_graph_t* graph, u_int16_t live_range_
 	graph->nodes = calloc(live_range_count * live_range_count, sizeof(u_int8_t));
 
 	//and we're all set
+	return graph;
 }
 
 
@@ -42,6 +47,21 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 	//These are now eachother's neighbors
 	dynamic_array_add(a->neighbors, b);
 	dynamic_array_add(b->neighbors, a);
+
+	//If the graph isn't null, we'll assume that the caller wants us to add this in
+	if(graph != NULL){
+		//Calculate the offsets
+		u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
+		u_int16_t offset_b_a = b->interference_graph_index * graph->live_range_count + a->interference_graph_index;
+
+		//Now we'll go to the adjacency matrix and add this in
+		graph->nodes[offset_a_b] = TRUE;
+		graph->nodes[offset_b_a] = TRUE;
+	}
+
+	//Increment their degress
+	(a->degree)++;
+	(b->degree)++;
 }
 
 
@@ -52,14 +72,57 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 void remove_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b){
 	//To add the interference we'll first need to calculate the offsets for both
 	//b's and a's version
-	u_int16_t offset_a_b = a->live_range_id * graph->live_range_count + b->live_range_id;
-	u_int16_t offset_b_a = b->live_range_id * graph->live_range_count + a->live_range_id;
+	u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
+	u_int16_t offset_b_a = b->interference_graph_index * graph->live_range_count + a->interference_graph_index;
 
 	//Now we'll go to the adjacency matrix and add this in
 	graph->nodes[offset_a_b] = FALSE;
 	graph->nodes[offset_b_a] = FALSE;
 
-	//And that's all
+	//And we'll remove them from eachother's adjacency lists
+	dynamic_array_delete(a->neighbors, b);
+	dynamic_array_delete(b->neighbors, a);
+
+	(a->degree)--;
+	(b->degree)--;
+}
+
+
+/**
+ * Build the interference graph from the adjacency lists
+ */
+interference_graph_t* construct_interference_graph_from_adjacency_lists(dynamic_array_t* live_ranges){
+	//Run through and give everything an index
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		live_range_t* range = dynamic_array_get_at(live_ranges, i);
+		range->interference_graph_index = i;
+	}
+	
+	//Now we'll create the actual graph itself
+	interference_graph_t* graph = interference_graph_alloc(live_ranges->current_index);
+
+	//Once we have that, we're ready to add all of our interferences
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		//Grab it out
+		live_range_t* range = dynamic_array_get_at(live_ranges, i);
+
+		//Now we iterate through it's adjacency list
+		for(u_int16_t j = 0; j < range->neighbors->current_index; j++){
+			//Grab it out
+			live_range_t* neighbor = dynamic_array_get_at(range->neighbors, j);
+
+			//Calculate the offsets
+			u_int16_t offset_a_b = range->interference_graph_index * graph->live_range_count + neighbor->interference_graph_index;
+			u_int16_t offset_b_a = neighbor->interference_graph_index * graph->live_range_count + range->interference_graph_index;
+
+			//Now we'll go to the adjacency matrix and add this in
+			graph->nodes[offset_a_b] = TRUE;
+			graph->nodes[offset_b_a] = TRUE;
+		}
+	}
+
+	//Give the graph back
+	return graph;
 }
 
 
@@ -150,8 +213,7 @@ void interference_graph_dealloc(interference_graph_t* graph){
 	//All that we need to do here is deallocate the internal list
 	free(graph->nodes);
 
-	//And set these to null/0 as a warning
-	graph->live_range_count = 0;
-	graph->nodes = NULL;
+	//And then deallocate this
+	free(graph);
 }
 

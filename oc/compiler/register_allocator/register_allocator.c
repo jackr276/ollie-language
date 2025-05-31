@@ -780,12 +780,9 @@ static void pre_color(instruction_t* instruction){
  * 			Add LA an LB to LIVENOW
  *
  */
-static interference_graph_t construct_interference_graph(cfg_t* cfg){
-	//Stack allocate the interference graph
-	interference_graph_t graph;
-
-	//Let's construct it. The live range id is the number of live ranges we have
-	interference_graph_alloc(&graph, live_range_id);
+static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
+	//It starts off as null
+	interference_graph_t* graph = NULL;
 
 	//We'll first need a pointer
 	basic_block_t* current = cfg->head_block;
@@ -830,7 +827,7 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 				live_range_t* range = dynamic_array_get_at(live_now, i);
 
 				//Now we'll add this to the graph
-				add_interference(&graph, operation->destination_register->associated_live_range, range);
+				add_interference(graph, operation->destination_register->associated_live_range, range);
 			}
 
 			//Once we're done with this, we'll delete the destination's live range from the LIVE_NOW set
@@ -875,6 +872,8 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 		current = current->direct_successor;
 	}
 
+	//Now at the very end, we'll construct the matrix
+	graph = construct_interference_graph_from_adjacency_lists(live_ranges);
 	return graph;
 }
 
@@ -1113,14 +1112,14 @@ void allocate_all_registers(cfg_t* cfg){
 	printf("============= After Live Range Determination ==============\n");
 
 	//Now let's determine the interference graph
-	interference_graph_t graph = construct_interference_graph(cfg);
+	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
 
 	//Now let's perform our live range coalescence to reduce the overall size of our
 	//graph
-	perform_live_range_coalescence(cfg, live_ranges, &graph);
+	perform_live_range_coalescence(cfg, live_ranges, graph);
 
 	printf("================ Interference Graph =======================\n");
-	print_interference_graph(&graph);
+	print_interference_graph(graph);
 	printf("================ Interference Graph =======================\n");
 	//Show our live ranges once again
 	print_all_live_ranges(live_ranges);
@@ -1130,7 +1129,7 @@ void allocate_all_registers(cfg_t* cfg){
 	printf("================ After Allocation ========================\n");
 
 	//Use the graph colorer to allocate all registers
-	graph_color_and_allocate(cfg, live_ranges, &graph);
+	graph_color_and_allocate(cfg, live_ranges, graph);
 	
 	//Print a final, official run with nothing extra. This should just be
 	//the pure assembly that we've generated
