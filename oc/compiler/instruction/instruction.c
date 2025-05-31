@@ -81,6 +81,33 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 
 
 /**
+ * Is this operation a pure copy? In other words, is it a move instruction
+ * that moves one register to another?
+ */
+u_int8_t is_instruction_pure_copy(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		//These are our three candidates
+		case MOVL:
+		case MOVW:
+		case MOVQ:
+			//If we have an immediate value OR we 
+			//have some indirection, we say false
+			if(instruction->source_register == NULL
+				|| instruction->indirection_level > 0){
+				return FALSE;
+			}
+
+			//Otherwise it is a pure copy
+			return TRUE;
+
+		//By default this isn't
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Dynamically allocate and create a temp var
  *
  * Temp Vars do NOT have their lightstack initialized. If ever you are using the stack of a temp

@@ -358,8 +358,10 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
 		live_range_t* current = dynamic_array_get_at(live_ranges, _);
 
 		//If the variables are equal(ignoring SSA and dereferencing) then we have a match
-		if(variables_equal_no_ssa(variable, dynamic_array_get_at(current->variables, 0), TRUE) == TRUE){
-			return current;
+		for(u_int16_t i = 0 ; i < current->variables->current_index; i++){
+			if(variables_equal_no_ssa(variable, dynamic_array_get_at(current->variables, i), TRUE) == TRUE){
+				return current;
+			}
 		}
 	}
 
@@ -427,6 +429,11 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 	if(variable->is_stack_pointer == TRUE){
 		//We'll already have the live range
 		dynamic_array_add(block->used_variables, variable->associated_live_range);
+		return;
+	}
+
+	//If this is the case it already has one
+	if(variable->associated_live_range != NULL){
 		return;
 	}
 
@@ -589,9 +596,18 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 
 /**
+ * Perform live range coalescing on a given instruction. This sees
+ * us merge the source and destination operands's webs(live ranges)
+ */
+static void perform_live_range_coalescence(dynamic_array_t* live_ranges, instruction_t** instruction){
+
+}
+
+
+/**
  * Run through every instruction in a block and construct the live ranges
  */
-static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block, u_int32_t* current_line_num){
+static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
 	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
 	//we'll allocate them fresh
 	if(basic_block->assigned_variables == NULL){
@@ -624,8 +640,42 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 	//Run through every instruction in the block
 	while(current != NULL){
+		//Special case - we only need to add the assignee here 
+		if(current->instruction_type == PHI_FUNCTION){
+			//Let's see if we can find this
+			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->assignee);
+
+			//If it's null we need to make one
+			if(live_range == NULL){
+				//Create it
+				live_range = live_range_alloc();
+
+				//Add it into the overall set
+				dynamic_array_add(live_ranges, live_range);
+			}
+
+			//Add this into the live range
+			add_variable_to_live_range(live_range, basic_block, current->assignee);
+
+			//And we're done - no need to go further
+			current = current->next_statement;
+			continue;
+		}
+
+		/**
+		 * If we make it here, we know that we have a normal instruction that exists on
+		 * the target architecture. Here we can construct our live ranges and exploit any opportunities
+		 * for live range coalescing
+		 */
+
 		//If we actually have a destination register
 		if(current->destination_register != NULL){
+			//What if we have a direct copy instruction?
+			if(is_instruction_pure_copy(current) == TRUE){
+				print_instruction(current, PRINTING_VAR_INLINE);
+				printf("Is a pure copy\n");
+			}
+
 			//Let's see if we can find this
 			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->destination_register);
 
@@ -643,23 +693,6 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 			//Link the variable into this as well
 			current->destination_register->associated_live_range = live_range;
-
-		//If we have a phi function, we need to add the assignee to a live range
-		} else if(current->instruction_type == PHI_FUNCTION){
-			//Let's see if we can find this
-			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->assignee);
-
-			//If it's null we need to make one
-			if(live_range == NULL){
-				//Create it
-				live_range = live_range_alloc();
-
-				//Add it into the overall set
-				dynamic_array_add(live_ranges, live_range);
-			}
-
-			//Add this into the live range
-			add_variable_to_live_range(live_range, basic_block, current->assignee);
 		}
 
 		//Let's also assign all the live ranges that we need to the given variables since we're already 
@@ -679,9 +712,6 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 		if(current->address_calc_reg2 != NULL){
 			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
 		}
-
-		//Increment this
-		(*current_line_num)++;
 
 		//Advance it down
 		current = current->next_statement;
@@ -785,7 +815,13 @@ static interference_graph_t construct_interference_graph(cfg_t* cfg){
 			//Once we're done with this, we'll delete the destination's live range from the LIVE_NOW set
 			//HOWEVER: we must account for the fact that x86 instructions often use the second operand
 			//as a destination. If this is not the case, then we can't remove this because we aren't done
-			if(is_destination_also_operand(operation) == FALSE){
+			if(is_destination_also_operand(operation) == TRUE){
+				//Even beyond this, since this is a source, we'll need to add it
+				if(dynamic_array_contains(live_now, operation->destination_register->associated_live_range) == NOT_FOUND){
+					dynamic_array_add(live_now, operation->destination_register->associated_live_range);
+				}
+			//Otherwise we can delete
+			} else {
 				dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
 			}
 
@@ -873,18 +909,11 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 	//Since the blocks are already ordered, this is very simple
 	basic_block_t* current = cfg->head_block;
 
-	//The current line number
-	u_int32_t current_line_num = 0;
 
 	//Run through every single block
 	while(current != NULL){
-		//If we hit the start of a new function, add this in
-		if(dynamic_array_contains(cfg->function_blocks, current) != NOT_FOUND){
-			current_line_num = 0;
-		}
-
 		//Let the helper do this
-		construct_live_ranges_in_block(live_ranges, current, &current_line_num);
+		construct_live_ranges_in_block(live_ranges, current);
 
 		//Advance to the next
 		current = current->direct_successor;

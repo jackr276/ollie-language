@@ -419,6 +419,12 @@ void set_new_function(symtab_function_record_t* func);
 u_int8_t is_destination_also_operand(instruction_t* instruction);
 
 /**
+ * Is this operation a pure copy? In other words, is it a move instruction
+ * that moves one register to another?
+ */
+u_int8_t is_instruction_pure_copy(instruction_t* instruction);
+
+/**
  * Create and return a temporary variable
 */
 three_addr_var_t* emit_temp_var(generic_type_t* type);
