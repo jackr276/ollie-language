@@ -111,16 +111,13 @@ void remove_interference(interference_graph_t* graph, live_range_t* a, live_rang
  * is the target
  */
 void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, live_range_t* coalescee){
-	if(target == coalescee){
-		return;
-	}
-
 	//All of these variables now belong to the target
 	for(u_int16_t i = 0; i < coalescee->variables->current_index; i++){
 		//Grab it out
 		three_addr_var_t* new_var = dynamic_array_get_at(coalescee->variables, i);
 
 		//Add it into the target's variables
+		//TODO THIS IS AN ISSUE
 		dynamic_array_add(target->variables, new_var);
 
 		//Update the associated live range to be the target
@@ -146,11 +143,15 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 		//Grab the index of the coalescee. We're guaranteed to find it in here
 		int16_t index = dynamic_array_contains(neighbor->neighbors, coalescee);
 
-		if(index != NOT_FOUND){
-			//Now let's update this to point to the target. There's no function 
-			//for this so we'll do it manually
-			neighbor->neighbors->internal_array[index] = target;
-		}
+		//Now let's update this to point to the target. There's no function 
+		//for this so we'll do it manually
+		neighbor->neighbors->internal_array[index] = target;
+	}
+
+	//If the coalescee has already been pre-colored, we should take that into account
+	//for the target
+	if(coalescee->reg != NO_REG){
+		target->reg = coalescee->reg;
 	}
 }
 

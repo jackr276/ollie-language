@@ -621,10 +621,25 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 
 				//We will coalesce the destination register's live range and the source register's live range
 				coalesce_live_ranges(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range);
-			}
 
-			//Advance it
-			instruction = instruction->next_statement;
+				//Delete this live range from our list as it no longer exists
+				dynamic_array_delete(live_ranges, instruction->destination_register->associated_live_range);
+
+				//Once we're done, this instruction is now useless, so we'll delete it
+				instruction_t* temp = instruction;
+				//Push this up
+				instruction = instruction->next_statement;
+
+				printf("Deleting:\n");
+				print_instruction(temp, PRINTING_LIVE_RANGES);
+
+				//Delete the old one from the graph
+				delete_statement(cfg, current, temp);
+
+			} else {
+				//Advance it
+				instruction = instruction->next_statement;
+			}
 		}
 
 		//Advance to the direct successor
@@ -1118,7 +1133,7 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//Now let's perform our live range coalescence to reduce the overall size of our
 	//graph
-	perform_live_range_coalescence(cfg, live_ranges, graph);
+	//perform_live_range_coalescence(cfg, live_ranges, graph);
 
 	printf("================ Interference Graph =======================\n");
 	print_interference_graph(graph);
