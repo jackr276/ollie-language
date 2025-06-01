@@ -389,20 +389,21 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
 	return NULL;
 }
 
+
 /**
  * Update the estimate on spilling this variable
  */
 static void update_spill_cost(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
-	//If we have a temporary variable, the spill cost is essentially
-	//infinite because the live range is so short
-	if(block->is_global_var_block == TRUE && live_range->spill_cost == 0){
-		//Negative spill cost, we want this spilled
-		live_range->spill_cost = -10;
-	} else if(variable->is_temporary == TRUE){
-		live_range->spill_cost = INT16_MAX;
+	if(variable->is_temporary == TRUE){
+		if(live_range->spill_cost == 0){
+			live_range->spill_cost = 1;
+		}
+
+		//Let's try just doubling for now
+		live_range->spill_cost *= 2;
+
 	} else {
-		//Otherwise it's not temporary, so we'll need to add the estimated execution frequency
-		//of this block times the number of instructions a load/store combo will take
+		//Add this 
 		live_range->spill_cost += LOAD_AND_STORE_COST * block->estimated_execution_frequency; 
 	}
 }
@@ -418,14 +419,12 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 		return;
 	}
 
-	//Run through the live range
-	for(u_int16_t _ = 0; _ < live_range->variables->current_index; _++){
-		//We already have it in here, no need to continue
-		if(variables_equal(variable, dynamic_array_get_at(live_range->variables, _), TRUE) == TRUE){
-			//Update the cost
-			update_spill_cost(live_range, block, variable);
-			return;
-		}
+	//If the literal memory address is already in here, then all we need to do is update
+	//the cost
+	if(dynamic_array_contains(live_range->variables, variable) != NOT_FOUND){
+		//Update the cost
+		update_spill_cost(live_range, block, variable);
+		return;
 	}
 
 	//Otherwise we'll add this in here
@@ -481,6 +480,9 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 		}
 	}
 
+	//We now add this variable back into the live range
+	add_variable_to_live_range(live_range, block, variable);
+
 	//Otherwise we just assign it
 	variable->associated_live_range = live_range;
 
@@ -491,7 +493,6 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
 		dynamic_array_add(block->used_variables, live_range);
 	}
-
 }
 
 
@@ -616,6 +617,15 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 
 /**
+ * Reassign all live ranges to be 
+ */
+static void reassign_all_live_ranges(){
+
+}
+
+
+
+/**
  * Perform live range coalescing on a given instruction. This sees
  * us merge the source and destination operands's webs(live ranges)
  *
@@ -637,6 +647,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 				if(do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
 					printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
 
+					printf("DELETING LR%d\n", instruction->destination_register->associated_live_range->live_range_id);
 					//Delete this live range from our list as it no longer exists
 					dynamic_array_delete(live_ranges, instruction->destination_register->associated_live_range);
 
@@ -677,7 +688,6 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 				instruction = instruction->next_statement;
 			}
 		}
-
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
@@ -1158,15 +1168,12 @@ void allocate_all_registers(cfg_t* cfg){
 	//graph
 	perform_live_range_coalescence(cfg, live_ranges, graph);
 
-	printf("================ Interference Graph =======================\n");
-	print_interference_graph(graph);
-	printf("================ Interference Graph =======================\n");
 	//Show our live ranges once again
 	print_all_live_ranges(live_ranges);
 
-	printf("================ After Allocation ========================\n");
-	print_blocks_with_registers(cfg->head_block, FALSE);
-	printf("================ After Allocation ========================\n");
+	printf("================= After Coalescing =======================\n");
+	print_blocks_with_live_ranges(cfg->head_block);
+	printf("================= After Coalescing =======================\n");
 
 	//Use the graph colorer to allocate all registers
 	graph_color_and_allocate(cfg, live_ranges, graph);

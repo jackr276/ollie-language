@@ -108,7 +108,8 @@ void remove_interference(interference_graph_t* graph, live_range_t* a, live_rang
 /**
  * Coalesce a live range with another one. This will have the effect of everything in
  * said live range becoming as one. The only live range that will survive following this 
- * is the target
+ * is the target. Once this is done, there should be *no* variables that point to the
+ * caolescee at all
  */
 void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, live_range_t* coalescee){
 	//All of these variables now belong to the target
@@ -140,6 +141,9 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 	if(coalescee->reg != NO_REG){
 		target->reg = coalescee->reg;
 	}
+
+	//We now add the spill cost of the one that was coalesced to the target
+	target->spill_cost += coalescee->spill_cost;
 }
 
 
