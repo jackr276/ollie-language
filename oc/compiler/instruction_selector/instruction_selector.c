@@ -478,6 +478,49 @@ static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is
 }
 
 
+/**
+ * Emit a divX or idivX instruction that is intended for modulus
+ *
+ * Division instructions have no destination that need be written out. They only have a source
+ */
+static instruction_t* emit_mod_instruction(three_addr_var_t* source, u_int8_t is_signed){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We set the size based on the destination 
+	variable_size_t size = select_variable_size(source);
+
+	//Now we'll decide this based on size and signedness
+	switch (size) {
+		case WORD:
+		case DOUBLE_WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = IDIVL_FOR_MOD;
+			} else {
+				instruction->instruction_type = DIVL_FOR_MOD;
+			}
+			break;
+
+		case QUAD_WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = IDIVQ_FOR_MOD;
+			} else {
+				instruction->instruction_type = DIVQ_FOR_MOD;
+			}
+			break;
+
+		//Should never reach this
+		default:
+			break;
+	}
+
+	//Finally we set the source
+	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
 
 /**
  * Initialize the instruction window by taking in the first 3 values in the head block
@@ -1425,8 +1468,6 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//We first need to perform a move of the dividence into rax
 	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
-	//This has to be %rax
-	move_to_rax->destination_register->variable_register = RAX;
 
 	//Let's now attach this where division was
 	if(division_instruction->previous_statement != block->leader_statement){
@@ -1526,8 +1567,6 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//We first need to perform a move of the dividence into rax
 	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
-	//This has to be %rax
-	move_to_rax->destination_register->variable_register = RAX;
 
 	//Let's now attach this where division was
 	if(modulus_instruction->previous_statement != block->leader_statement){
@@ -1570,8 +1609,6 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, division->destination_register);
-	//This is guaranteed to be RDX
-	result_movement->source_register->variable_register = RDX;
 
 	//Tie it in here
 	division->next_statement = result_movement;

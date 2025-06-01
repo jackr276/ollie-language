@@ -12,6 +12,7 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../interference_graph/interference_graph.h"
 #include "../cfg/cfg.h"
+#include <complex.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -818,6 +819,25 @@ static void pre_color(instruction_t* instruction){
 			if(instruction->source_register != NULL){
 				instruction->source_register->associated_live_range->reg = RAX;
 			}
+			break;
+		case MOVL:
+		case MOVQ:
+		case MOVW:
+			//If we're moving into something preparing for division, this needs
+			//to be in RAX
+			if(instruction->next_statement != NULL &&
+				(instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)){
+				//This needs to be in RAX
+				instruction->destination_register->associated_live_range->reg = RAX;
+			}
+			break;
+
+		case DIVL:
+		case DIVQ:
+		case IDIVL:
+		case IDIVQ:
+			//The destination must be in RAX here
+			instruction->destination_register->associated_live_range->reg = RAX;
 			break;
 
 		//Most of the time we will get here

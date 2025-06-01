@@ -81,6 +81,36 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 
 
 /**
+ * Is this a division instruction?
+ */
+u_int8_t is_division_instruction(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		case DIVQ:
+		case DIVL:
+		case IDIVQ:
+		case IDIVL:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+/**
+ * Is this a division instruction that's intended for modulus??
+ */
+u_int8_t is_modulus_instruction(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		case DIVL_FOR_MOD:
+		case DIVQ_FOR_MOD:
+		case IDIVL_FOR_MOD:
+		case IDIVQ_FOR_MOD:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+/**
  * Is this operation a pure copy? In other words, is it a move instruction
  * that moves one register to another?
  */

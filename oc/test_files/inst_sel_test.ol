@@ -27,6 +27,10 @@ fn main(arg:i32, argv:char**) -> i32 {
 	x := x && 21;
 	x := x || 32;
 	x := a - z + x;
+	x := x && 21;
+	x := x || 32;
+	x := x && 21;
+	x := x || 32;
 
 	ret x + y + a;
 }

@@ -73,6 +73,10 @@ typedef enum{
 	DIVQ,
 	IDIVL,
 	IDIVQ,
+	IDIVL_FOR_MOD,
+	IDIVQ_FOR_MOD,
+	DIVL_FOR_MOD,
+	DIVQ_FOR_MOD,
 	SUBW,
 	SUBL,
 	SUBQ,
@@ -427,6 +431,16 @@ u_int8_t is_destination_also_operand(instruction_t* instruction);
  * that moves one register to another?
  */
 u_int8_t is_instruction_pure_copy(instruction_t* instruction);
+
+/**
+ * Is this a division instruction?
+ */
+u_int8_t is_division_instruction(instruction_t* instruction);
+
+/**
+ * Is this a division instruction that is intended for modulus?
+ */
+u_int8_t is_modulus_instruction(instruction_t* instruction);
 
 /**
  * Create and return a temporary variable
