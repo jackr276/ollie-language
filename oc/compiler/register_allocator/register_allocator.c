@@ -33,6 +33,9 @@
 //The atomically increasing live range id
 u_int16_t live_range_id = 0;
 
+//The array that holds all of our parameter passing
+const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
+
 
 /**
  * Priority queue insert a live range in here
@@ -671,7 +674,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 					instruction = instruction->next_statement;
 
 					printf("Deleting:\n");
-					print_instruction(temp, PRINTING_LIVE_RANGES);
+					print_instruction(temp, PRINTING_VAR_INLINE);
 
 					//Delete the old one from the graph
 					delete_statement(cfg, current, temp);
@@ -842,7 +845,10 @@ static void pre_color(instruction_t* instruction){
 				|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
 				//This needs to be in RAX
 				instruction->destination_register->associated_live_range->reg = RAX;
+			} else if(instruction->destination_register->parameter_number > 0){
+				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
 			}
+
 			break;
 
 		case DIVL:

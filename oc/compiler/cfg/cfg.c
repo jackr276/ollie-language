@@ -3319,7 +3319,7 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	}
 
 	//The current param of the index
-	u_int8_t current_func_param_idx = 0;
+	u_int8_t current_func_param_idx = 1;
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
@@ -3332,12 +3332,18 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 
 		//Add this to the block
 		add_statement(basic_block, assignment);
+
+		//Mark this
+		assignment->assignee->parameter_number = current_func_param_idx;
 		
 		//Add the parameter in
 		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
+
+		//Increment this
+		current_func_param_idx++;
 	}
 
 	//Once we make it here, we should have all of the params stored in temp vars
