@@ -51,6 +51,11 @@ void remove_interference(interference_graph_t* graph, live_range_t* a, live_rang
 void print_interference_graph(interference_graph_t* graph);
 
 /**
+ * Print out the adjacency lists of every single live range
+ */
+void print_adjacency_lists(dynamic_array_t* live_ranges);
+
+/**
  * Get the number of neighbors for a certain node
  */
 u_int16_t get_live_range_degree(interference_graph_t* graph, live_range_t* a);

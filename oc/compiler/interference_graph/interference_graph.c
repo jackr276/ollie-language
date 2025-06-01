@@ -44,9 +44,15 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 		return;
 	}
 
-	//These are now eachother's neighbors
-	dynamic_array_add(a->neighbors, b);
-	dynamic_array_add(b->neighbors, a);
+	//Add b to a's neighbors if it's not already there
+	if(dynamic_array_contains(a->neighbors, b) == NOT_FOUND){
+		dynamic_array_add(a->neighbors, b);
+	}
+
+	//Add a to b's neighbors if it's not already there
+	if(dynamic_array_contains(b->neighbors, a) == NOT_FOUND){
+		dynamic_array_add(b->neighbors, a);
+	}
 
 	//If the graph isn't null, we'll assume that the caller wants us to add this in
 	if(graph != NULL){
@@ -178,31 +184,39 @@ void print_interference_graph(interference_graph_t* graph){
 
 
 /**
+ * Print out the adjacency lists of every single live range
+ */
+void print_adjacency_lists(dynamic_array_t* live_ranges){
+	//For each live range in the live ranges array
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		//Grab it out
+		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
+
+		//We'll print it
+		printf("LR%d: {", live_range->live_range_id);
+
+		//Now we'll run through all of its interferees
+		for(u_int16_t j = 0; j < live_range->neighbors->current_index; j++){
+			live_range_t* neighbor = dynamic_array_get_at(live_range->neighbors, j);
+			printf("LR%d", neighbor->live_range_id);
+
+			if(j != live_range->neighbors->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		printf("}\n");
+	}
+
+}
+
+
+/**
  * Get the "degree" for a certain live range. The degree is the number of
  * nodes that interfere with it. We also call these neighbors
  */
 u_int16_t get_live_range_degree(interference_graph_t* graph, live_range_t* a){
-	//Overall count
-	u_int16_t count = 0;
-
-	//Grab the ID number out
-	u_int16_t id = a->live_range_id;
-
-	//Grab that "row" in the graph
-	u_int16_t row_index = graph->live_range_count * id * sizeof(u_int8_t);
-
-	//Grab a pointer to this
-	u_int8_t* row = graph->nodes + row_index;
-
-	//Run through until we hit the end
-	for(u_int16_t i = 0; i < graph->live_range_count; i++){
-		if(row[i] == TRUE){
-			count++;
-		}
-	}	
-
-	//And give it back
-	return count;
+	return a->neighbors->current_index;
 }
 
 

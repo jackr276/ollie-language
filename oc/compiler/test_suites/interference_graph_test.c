@@ -59,23 +59,8 @@ int main(int argc, char** argv){
 		}
 	}
 
-	//Run through and print out all of their adjacency lists
-	for(u_int16_t i = 0; i < 20; i++){
-		live_range_t* range = dynamic_array_get_at(live_ranges, i);
-		printf("LR%d, adjacency list: {", range->live_range_id);
-
-		//Print out all the neighbors
-		for(u_int16_t j = 0; j < range->neighbors->current_index; j++){
-			live_range_t* neighbor = dynamic_array_get_at(range->neighbors, j);
-			printf("LR%d", neighbor->live_range_id);
-
-			if(j != range->neighbors->current_index - 1){
-				printf(", ");
-			}
-		}
-
-		printf("}\n");
-	}
+	//Print out all adjacency lists here
+	print_adjacency_lists(live_ranges);
 
 	//Now let's construct the full graph from this
 	graph = construct_interference_graph_from_adjacency_lists(live_ranges);
