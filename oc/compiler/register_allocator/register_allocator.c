@@ -1178,7 +1178,7 @@ void allocate_all_registers(cfg_t* cfg){
 	//Use the graph colorer to allocate all registers
 	graph_color_and_allocate(cfg, live_ranges, graph);
 	
-	//Print a final, official run with nothing extra. This should just be
-	//the pure assembly that we've generated
-	print_blocks_with_registers(cfg->head_block, TRUE);
+	printf("================= After Allocation =======================\n");
+	print_blocks_with_registers(cfg->head_block, FALSE);
+	printf("================= After Allocation =======================\n");
 }

@@ -122,12 +122,12 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 
 		//Update the associated live range to be the target
 		new_var->associated_live_range = target;
-	}	
+	}
 
-	//Let's run through the coalescee's neighbors and update them. 
-	for(u_int16_t i = 0; i < coalescee->neighbors->current_index; i++){
+	//So long as this isn't empty
+	while(dynamic_array_is_empty(coalescee->neighbors) == FALSE){
 		//Grab the neighbor out
-		live_range_t* neighbor = dynamic_array_get_at(coalescee->neighbors, i);
+		live_range_t* neighbor = dynamic_array_delete_from_back(coalescee->neighbors);
 
 		//This neighbor no longer interferes with the coalescee
 		remove_interference(graph, neighbor, coalescee);
