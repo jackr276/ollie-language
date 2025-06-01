@@ -66,11 +66,10 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 		graph->nodes[offset_b_a] = TRUE;
 	}
 
-	//Increment their degress
-	(a->degree)++;
-	(b->degree)++;
+	//Reset their degree values
+	a->degree = a->neighbors->current_index;
+	b->degree = b->neighbors->current_index;
 }
-
 
 /**
  * Redo the adjacency matrix after a change has been made(usually coalescing)
@@ -100,8 +99,9 @@ void remove_interference(interference_graph_t* graph, live_range_t* a, live_rang
 	dynamic_array_delete(a->neighbors, b);
 	dynamic_array_delete(b->neighbors, a);
 
-	(a->degree)--;
-	(b->degree)--;
+	//Reset their degree values
+	a->degree = a->neighbors->current_index;
+	b->degree = b->neighbors->current_index;
 }
 
 

@@ -343,6 +343,20 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 				printf(", ");
 			}
 		}
+
+		printf("} Neighbors: {");
+
+		//Now we'll print out all of it's neighbors
+		for(u_int16_t k = 0; k < current->neighbors->current_index; k++){
+			live_range_t* neighbor = dynamic_array_get_at(current->neighbors, k);
+			printf("LR%d", neighbor->live_range_id);
+ 
+			//Print a comma if appropriate
+			if(k != current->neighbors->current_index - 1){
+				printf(", ");
+			}
+
+		}
 		
 		//And we'll close it out
 		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
@@ -1015,32 +1029,19 @@ static void allocate_register(interference_graph_t* graph, dynamic_array_t* live
 	//Wipe this entire thing out
 	memset(registers, 0, sizeof(register_holder_t) * K_COLORS_GEN_USE);
 
-	//Grab a pointer to the neighbors by offsetting the base address
-	u_int8_t* neighbors = graph->nodes + (live_range->live_range_id * graph->live_range_count);
-
 	//Run through every single neighbor
-	for(u_int16_t i = 0; i < graph->live_range_count; i++){
-		//If it doesn't interfere we don't care
-		if(neighbors[i] == FALSE){
-			continue;
+	for(u_int16_t i = 0; i < live_range->neighbors->current_index; i++){
+		//Grab the neighbor out
+		live_range_t* neighbor = dynamic_array_get_at(live_range->neighbors, i);
+
+		//Get whatever register this neighbor has. If it's not the "no_reg" value, 
+		//we'll store it in the array
+		if(neighbor->reg != NO_REG){
+			//Flag it as used
+			registers[neighbor->reg - 1] = TRUE;
 		}
-
-		//Otherwise if we get here we know it does interfere. We'll need to take
-		//this into account when selecting our registers
-
-		//Grab this value out
-		live_range_t* interferee = dynamic_array_get_at(live_ranges, i);
-
-		//This is a possibility. If so just scrap it and move on
-		if(interferee->reg == NO_REG){
-			continue;
-		}
-
-		//Otherwise it's not, so we'll need to populate our taken registers away appropriately. We'll
-		//set it to true to signify that it's occupied
-		registers[interferee->reg - 1] = TRUE;
 	}
-
+	
 	//Now that the registers array has been populated with interferences, we can scan it and
 	//pick the first available register
 	u_int16_t i;
@@ -1168,7 +1169,7 @@ void allocate_all_registers(cfg_t* cfg){
 	printf("================ After Allocation ========================\n");
 
 	//Use the graph colorer to allocate all registers
-	//graph_color_and_allocate(cfg, live_ranges, graph);
+	graph_color_and_allocate(cfg, live_ranges, graph);
 	
 	//Print a final, official run with nothing extra. This should just be
 	//the pure assembly that we've generated
