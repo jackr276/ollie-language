@@ -619,6 +619,8 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 				&& do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
 				printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
 
+				//We will coalesce the destination register's live range and the source register's live range
+				coalesce_live_ranges(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range);
 			}
 
 			//Advance it
@@ -1129,7 +1131,7 @@ void allocate_all_registers(cfg_t* cfg){
 	printf("================ After Allocation ========================\n");
 
 	//Use the graph colorer to allocate all registers
-	graph_color_and_allocate(cfg, live_ranges, graph);
+	//graph_color_and_allocate(cfg, live_ranges, graph);
 	
 	//Print a final, official run with nothing extra. This should just be
 	//the pure assembly that we've generated

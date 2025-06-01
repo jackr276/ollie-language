@@ -41,9 +41,21 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 interference_graph_t* construct_interference_graph_from_adjacency_lists(dynamic_array_t* live_ranges);
 
 /**
+ * Redo the adjacency matrix after a change has been made(usually coalescing)
+ */
+interference_graph_t* update_interference_graph(interference_graph_t* graph, dynamic_array_t* live_ranges);
+
+/**
  * Mark that live ranges a and b do not interfere
  */
 void remove_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b);
+
+/**
+ * Coalesce a live range with another one. This will have the effect of everything in
+ * said live range becoming as one. The only live range that will survive following this 
+ * is the target
+ */
+void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, live_range_t* coalescee);
 
 /**
  * Print out a visual representation of the interference graph

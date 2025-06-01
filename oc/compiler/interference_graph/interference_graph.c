@@ -6,6 +6,7 @@
 */
 
 #include "interference_graph.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -72,6 +73,16 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 
 
 /**
+ * Redo the adjacency matrix after a change has been made(usually coalescing)
+ */
+interference_graph_t* update_interference_graph(interference_graph_t* graph, dynamic_array_t* live_ranges){
+	
+	//Give the pointer back
+	return graph;
+}
+
+
+/**
  * Mark that live ranges a and b do not interfere. This can be used if an interference
  * relation is removed
  */
@@ -91,6 +102,56 @@ void remove_interference(interference_graph_t* graph, live_range_t* a, live_rang
 
 	(a->degree)--;
 	(b->degree)--;
+}
+
+
+/**
+ * Coalesce a live range with another one. This will have the effect of everything in
+ * said live range becoming as one. The only live range that will survive following this 
+ * is the target
+ */
+void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, live_range_t* coalescee){
+	if(target == coalescee){
+		return;
+	}
+
+	//All of these variables now belong to the target
+	for(u_int16_t i = 0; i < coalescee->variables->current_index; i++){
+		//Grab it out
+		three_addr_var_t* new_var = dynamic_array_get_at(coalescee->variables, i);
+
+		//Add it into the target's variables
+		dynamic_array_add(target->variables, new_var);
+
+		//Update the associated live range to be the target
+		new_var->associated_live_range = target;
+	}	
+
+	//Let's run through the coalescee's neighbors and update them. 
+	for(u_int16_t i = 0; i < coalescee->neighbors->current_index; i++){
+		//Grab the neighbor out
+		live_range_t* neighbor = dynamic_array_get_at(coalescee->neighbors, i);
+
+		//Now this neighbor is a neighbor of the target. We'll add it in
+		//if it's not already in there
+		if(dynamic_array_contains(target->neighbors, neighbor) == NOT_FOUND){
+			//Add it
+			dynamic_array_add(target->neighbors, neighbor);
+			//This means the degree is increased
+			(target->degree)++;
+		}
+
+		//Now we'll also need to update the neighbor's neighbor list so that
+		//wherever it used to point to the coalescee, it will now point to the target
+		//Grab the index of the coalescee. We're guaranteed to find it in here
+		int16_t index = dynamic_array_contains(neighbor->neighbors, coalescee);
+
+		if(index != NOT_FOUND){
+			//Now let's update this to point to the target. There's no function 
+			//for this so we'll do it manually
+			neighbor->neighbors->internal_array[index] = target;
+		}
+	}
 }
 
 
