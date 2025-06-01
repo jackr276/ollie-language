@@ -128,6 +128,8 @@ struct symtab_variable_record_t{
 	u_int16_t hash;
 	//The lexical level of it
 	int16_t lexical_level;
+	//Current generation level(for SSA)
+	u_int16_t counter;
 	//Line number
 	u_int16_t line_number;
 	//The offset
@@ -138,6 +140,8 @@ struct symtab_variable_record_t{
 	u_int8_t assigned_to;
 	//Is it a function parameter?
 	u_int8_t is_function_paramater;
+	//What is the parameter order for this value?
+	u_int8_t function_parameter_order;
 	//Is this mutable?
 	u_int8_t is_mutable;
 	//Is this a construct member
@@ -168,8 +172,6 @@ struct symtab_variable_record_t{
 	symtab_variable_record_t* next;
 	//For SSA renaming
 	lightstack_t counter_stack;
-	//Current generation level(for SSA)
-	u_int16_t counter;
 };
 
 

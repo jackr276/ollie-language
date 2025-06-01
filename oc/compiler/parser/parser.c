@@ -4838,7 +4838,7 @@ static generic_type_t* type_specifier(FILE* fl){
  *
  * BNF Rule: <parameter-declaration> ::= {mut}? <identifier> : <type-specifier>
  */
-static generic_ast_node_t* parameter_declaration(FILE* fl){
+static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
 	//Is it mutable?
 	u_int8_t is_mut = 0;
 	//Lookahead token
@@ -4963,6 +4963,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	param_record->is_mutable = is_mut;
 	//Store the type as well, very important
 	param_record->type = type;
+	//Store the current parameter number of it
+	param_record->function_parameter_order = current_parameter_number;
 
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
@@ -5009,10 +5011,13 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 		push_back_token(lookahead);
 	}
 
+	//Keep track of the current function paremeter number
+	u_int8_t parameter_number = 1;
+
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl);
+		generic_ast_node_t* param_decl = parameter_declaration(fl, parameter_number);
 
 		//It's invalid, we'll just send it up the chain
 		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5038,6 +5043,9 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Increment this
+		parameter_number++;
 
 	//We keep going as long as we see commas
 	} while(lookahead.tok == COMMA);

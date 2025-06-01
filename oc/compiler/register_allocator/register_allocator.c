@@ -822,6 +822,34 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
  * bind them to the right register at this stage and avoid having to worry about it later
  */
 static void pre_color(instruction_t* instruction){
+	//One thing to check for - function parameter passing
+	if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
+		&& instruction->source_register->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->source_register->associated_live_range->reg = parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1];
+	}
+
+	//Check source 2 as well
+	if(instruction->source_register2 != NULL && instruction->source_register2->linked_var != NULL
+		&& instruction->source_register2->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->source_register2->associated_live_range->reg = parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1];
+	}
+
+	//Check address calc 1 as well
+	if(instruction->address_calc_reg1 != NULL && instruction->address_calc_reg1->linked_var != NULL
+		&& instruction->address_calc_reg1->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->address_calc_reg1->associated_live_range->reg = parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1];
+	}
+
+	//Check address calc 2 as well
+	if(instruction->address_calc_reg2 != NULL && instruction->address_calc_reg2->linked_var != NULL
+		&& instruction->address_calc_reg2->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->address_calc_reg2->associated_live_range->reg = parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1];
+	}
+
 	//Pre-color based on what kind of instruction it is
 	switch(instruction->instruction_type){
 		//If a return instruction has a
@@ -845,6 +873,8 @@ static void pre_color(instruction_t* instruction){
 				|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
 				//This needs to be in RAX
 				instruction->destination_register->associated_live_range->reg = RAX;
+
+			//We also need to check for all kinds of paremeter passing
 			} else if(instruction->destination_register->parameter_number > 0){
 				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
 			}
