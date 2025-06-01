@@ -84,6 +84,11 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
  * Is this a division instruction?
  */
 u_int8_t is_division_instruction(instruction_t* instruction){
+	//Just in case
+	if(instruction == NULL){
+		return FALSE;
+	}
+
 	switch(instruction->instruction_type){
 		case DIVQ:
 		case DIVL:
@@ -99,6 +104,11 @@ u_int8_t is_division_instruction(instruction_t* instruction){
  * Is this a division instruction that's intended for modulus??
  */
 u_int8_t is_modulus_instruction(instruction_t* instruction){
+	//Just in case
+	if(instruction == NULL){
+		return FALSE;
+	}
+
 	switch(instruction->instruction_type){
 		case DIVL_FOR_MOD:
 		case DIVQ_FOR_MOD:
@@ -1193,15 +1203,19 @@ static void print_division_instruction(instruction_t* instruction, variable_prin
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
 		case DIVL:
+		case DIVL_FOR_MOD:
 			printf("divl ");
 			break;
 		case DIVQ:
+		case DIVQ_FOR_MOD:
 			printf("divq ");
 			break;
 		case IDIVL:
+		case IDIVL_FOR_MOD:
 			printf("idivl ");
 			break;
 		case IDIVQ:
+		case IDIVQ_FOR_MOD:
 			printf("idivq ");
 			break;
 		//We'll never get here, just to stop the compiler from complaining
@@ -1212,7 +1226,7 @@ static void print_division_instruction(instruction_t* instruction, variable_prin
 	//We'll only have a source register here
 	print_variable(instruction->source_register, mode);
 
-	printf("-> ");
+	printf(" -> ");
 	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
@@ -1691,6 +1705,10 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 		case DIVQ:
 		case IDIVL:
 		case IDIVQ:
+		case DIVL_FOR_MOD:
+		case DIVQ_FOR_MOD:
+		case IDIVQ_FOR_MOD:
+		case IDIVL_FOR_MOD:
 			print_division_instruction(instruction, mode);
 			break;
 

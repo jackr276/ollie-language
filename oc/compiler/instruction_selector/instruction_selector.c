@@ -1599,7 +1599,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(window->instruction1->op2, is_signed);
+	instruction_t* division = emit_mod_instruction(window->instruction1->op2, is_signed);
 	//This is the assignee, we just don't see it
 	division->destination_register = emit_temp_var(modulus_instruction->assignee->type);
 

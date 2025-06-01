@@ -229,7 +229,7 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	while(cursor != NULL){
 		//We actually no longer need these
 		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(cursor, PRINTING_LIVE_RANGES);
+			print_instruction(cursor, PRINTING_REGISTERS);
 		}
 
 		//Move along to the next one
@@ -618,12 +618,20 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 
 /**
- * Reassign all live ranges to be 
+ * Do we have precoloring interference for these two registers? If we do, we'll
+ * return true and this will prevent the coalescing algorithm from combining them
  */
-static void reassign_all_live_ranges(){
-
+static u_int8_t does_precoloring_interference_exist(live_range_t* a, live_range_t* b){
+	/**
+	 * The logic here: if they *both* don't equal no reg *and* their registers
+	 * are not equal, then we have precoloring interference
+	 */
+	if(a->reg != NO_REG && b->reg != NO_REG && a->reg != b->reg){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
 }
-
 
 
 /**
@@ -645,7 +653,9 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 			//If we have a pure copy instruction(movX with no indirection), we can coalesce
 			if(is_instruction_pure_copy(instruction) == TRUE){
 				//If our live ranges interfere, we can perform the coalescing
-				if(do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
+				if(do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE
+					//Also check for precoloring interference
+					&& does_precoloring_interference_exist(instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
 					printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
 
 					printf("DELETING LR%d\n", instruction->destination_register->associated_live_range->live_range_id);
@@ -826,7 +836,10 @@ static void pre_color(instruction_t* instruction){
 			//If we're moving into something preparing for division, this needs
 			//to be in RAX
 			if(instruction->next_statement != NULL &&
-				(instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)){
+				(instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)
+				&& instruction->next_statement->next_statement != NULL
+				&& (is_division_instruction(instruction->next_statement->next_statement) == TRUE
+				|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
 				//This needs to be in RAX
 				instruction->destination_register->associated_live_range->reg = RAX;
 			}
@@ -838,6 +851,14 @@ static void pre_color(instruction_t* instruction){
 		case IDIVQ:
 			//The destination must be in RAX here
 			instruction->destination_register->associated_live_range->reg = RAX;
+			break;
+
+		case DIVL_FOR_MOD:
+		case DIVQ_FOR_MOD:
+		case IDIVL_FOR_MOD:
+		case IDIVQ_FOR_MOD:
+			//The destination for all division remainders is RDX
+			instruction->destination_register->associated_live_range->reg = RDX;
 			break;
 
 		//Most of the time we will get here
@@ -1047,7 +1068,7 @@ static void spill(cfg_t* cfg, interference_graph_t* graph, live_range_t* range){
  * can ever come here
  */
 static void allocate_register(interference_graph_t* graph, dynamic_array_t* live_ranges, live_range_t* live_range){
-	//If this is the case, we're already done
+	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg != NO_REG){
 		return;
 	}
@@ -1177,12 +1198,12 @@ void allocate_all_registers(cfg_t* cfg){
 	//We now need to compute all of the LIVE OUT values
 	calculate_liveness_sets(cfg);
 
+	//Now let's determine the interference graph
+	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
+
 	printf("============= After Live Range Determination ==============\n");
 	print_blocks_with_live_ranges(cfg->head_block);
 	printf("============= After Live Range Determination ==============\n");
-
-	//Now let's determine the interference graph
-	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
 
 	//Now let's perform our live range coalescence to reduce the overall size of our
 	//graph
