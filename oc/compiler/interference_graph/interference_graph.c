@@ -117,7 +117,6 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 		three_addr_var_t* new_var = dynamic_array_get_at(coalescee->variables, i);
 
 		//Add it into the target's variables
-		//TODO THIS IS AN ISSUE
 		dynamic_array_add(target->variables, new_var);
 
 		//Update the associated live range to be the target
@@ -129,23 +128,11 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 		//Grab the neighbor out
 		live_range_t* neighbor = dynamic_array_get_at(coalescee->neighbors, i);
 
-		//Now this neighbor is a neighbor of the target. We'll add it in
-		//if it's not already in there
-		if(dynamic_array_contains(target->neighbors, neighbor) == NOT_FOUND){
-			//Add it
-			dynamic_array_add(target->neighbors, neighbor);
-			//This means the degree is increased
-			(target->degree)++;
-		}
+		//This neighbor no longer interferes with the coalescee
+		remove_interference(graph, neighbor, coalescee);
 
-		//Now we'll also need to update the neighbor's neighbor list so that
-		//wherever it used to point to the coalescee, it will now point to the target
-		//Grab the index of the coalescee. We're guaranteed to find it in here
-		int16_t index = dynamic_array_contains(neighbor->neighbors, coalescee);
-
-		//Now let's update this to point to the target. There's no function 
-		//for this so we'll do it manually
-		neighbor->neighbors->internal_array[index] = target;
+		//But it does now interfere with the target
+		add_interference(graph, target, neighbor);
 	}
 
 	//If the coalescee has already been pre-colored, we should take that into account
@@ -200,6 +187,11 @@ interference_graph_t* construct_interference_graph_from_adjacency_lists(dynamic_
  * Returns true if yes, false if no
  */
 u_int8_t do_live_ranges_interfere(interference_graph_t* graph, live_range_t* a, live_range_t* b){
+	//By default, everything interferes with itself
+	if(a == b){
+		return TRUE;
+	}
+
 	//To determine this, we'll first need the offset
 	u_int16_t offset_a_b = a->live_range_id * graph->live_range_count + b->live_range_id;
 

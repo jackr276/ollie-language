@@ -604,6 +604,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 /**
  * Perform live range coalescing on a given instruction. This sees
  * us merge the source and destination operands's webs(live ranges)
+ *
+ * We coalesce source to destination. When we're done, the *source* should
+ * survive, the destination should NOT
  */
 static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
 	//Run through every single block in here
@@ -614,27 +617,46 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 
 		//Now run through all of these
 		while(instruction != NULL){
-			//If these two make it here, we know that they're good to go
-			if(is_instruction_pure_copy(instruction) == TRUE
-				&& do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
-				printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
+			//If we have a pure copy instruction(movX with no indirection), we can coalesce
+			if(is_instruction_pure_copy(instruction) == TRUE){
+				//If our live ranges interfere, we can perform the coalescing
+				if(do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
+					printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
 
-				//We will coalesce the destination register's live range and the source register's live range
-				coalesce_live_ranges(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range);
+					//Delete this live range from our list as it no longer exists
+					dynamic_array_delete(live_ranges, instruction->destination_register->associated_live_range);
 
-				//Delete this live range from our list as it no longer exists
-				dynamic_array_delete(live_ranges, instruction->destination_register->associated_live_range);
+					//We will coalesce the destination register's live range and the source register's live range
+					coalesce_live_ranges(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range);
 
-				//Once we're done, this instruction is now useless, so we'll delete it
-				instruction_t* temp = instruction;
-				//Push this up
-				instruction = instruction->next_statement;
+					//Once we're done, this instruction is now useless, so we'll delete it
+					instruction_t* temp = instruction;
+					//Push this up
+					instruction = instruction->next_statement;
 
-				printf("Deleting:\n");
-				print_instruction(temp, PRINTING_LIVE_RANGES);
+					printf("Deleting:\n");
+					print_instruction(temp, PRINTING_LIVE_RANGES);
 
-				//Delete the old one from the graph
-				delete_statement(cfg, current, temp);
+					//Delete the old one from the graph
+					delete_statement(cfg, current, temp);
+
+				//This is a theoretical possibility, wehere we could have already performed some coalescence that ends us up here. If this
+				//is the case, we'll just delete the instruction
+				} else if(instruction->source_register->associated_live_range == instruction->destination_register->associated_live_range){
+					instruction_t* temp = instruction;
+					//Push this up
+					instruction = instruction->next_statement;
+
+					printf("Deleting DUPLICATE:\n");
+					print_instruction(temp, PRINTING_LIVE_RANGES);
+
+					//Delete the old one from the block
+					delete_statement(cfg, current, temp);
+
+				//Just advance it
+				} else {
+					instruction = instruction->next_statement;
+				}
 
 			} else {
 				//Advance it
@@ -1133,7 +1155,7 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//Now let's perform our live range coalescence to reduce the overall size of our
 	//graph
-	//perform_live_range_coalescence(cfg, live_ranges, graph);
+	perform_live_range_coalescence(cfg, live_ranges, graph);
 
 	printf("================ Interference Graph =======================\n");
 	print_interference_graph(graph);

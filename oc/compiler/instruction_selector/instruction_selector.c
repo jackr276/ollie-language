@@ -1432,6 +1432,7 @@ static void handle_division_instruction(instruction_window_t* window){
 	if(division_instruction->previous_statement != block->leader_statement){
 		//This effectively deletes the old division instruction
 		division_instruction->previous_statement->next_statement = move_to_rax;
+		move_to_rax->previous_statement = division_instruction->previous_statement;
 	} else {
 		//Otherwise, this is the leader statement of its block
 		block->leader_statement = move_to_rax;
@@ -1532,6 +1533,8 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	if(modulus_instruction->previous_statement != block->leader_statement){
 		//This effectively deletes the old division instruction
 		modulus_instruction->previous_statement->next_statement = move_to_rax;
+		//Add to the end
+		move_to_rax->previous_statement = modulus_instruction->previous_statement;
 	} else {
 		//Otherwise, this is the leader statement of its block
 		block->leader_statement = move_to_rax;
