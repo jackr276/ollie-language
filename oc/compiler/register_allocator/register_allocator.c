@@ -434,6 +434,10 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
 
+	if(variable->variable_size > live_range->size){
+		live_range->size = variable->variable_size;
+	}
+
 	//Update the cost
 	update_spill_cost(live_range, block, variable);
 

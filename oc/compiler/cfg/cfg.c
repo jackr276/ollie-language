@@ -4245,6 +4245,9 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			emit_jump(if_compound_stmt_end, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			//If this is the case, the end block is a successor of the if_stmt end
 			add_successor(if_compound_stmt_end, exit_block);
+		} else {
+			//If this is the case, the end block is a successor of the if_stmt end
+			add_successor(if_compound_stmt_end, exit_block);
 		}
 	}
 
@@ -4326,6 +4329,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 				emit_jump(else_if_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
 				add_successor(else_if_compound_stmt_exit, exit_block);
+			}	else {
+				add_successor(else_if_compound_stmt_exit, exit_block);
 			}
 		}
 
@@ -4374,6 +4379,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 				//The successor to the if-stmt end path is the if statement end block
 				emit_jump(else_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
+				add_successor(else_compound_stmt_exit, exit_block);
+			} else {
 				add_successor(else_compound_stmt_exit, exit_block);
 			}
 		}
