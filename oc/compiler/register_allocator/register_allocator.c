@@ -869,6 +869,9 @@ static void pre_color_with_interference(cfg_t* cfg, instruction_t* instruction, 
 			continue;
 		}
 
+		//Now that we know interference exists, we'll need to remove this block and replace 
+		//this live range with a different value
+
 		printf("\n\n\nHERE\n\n\n");
 	}
 }

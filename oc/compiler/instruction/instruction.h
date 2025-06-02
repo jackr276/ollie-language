@@ -428,6 +428,11 @@ struct instruction_t{
 void set_new_function(symtab_function_record_t* func);
 
 /**
+ * Select the size of a given variable based on its type
+ */
+variable_size_t select_variable_size(three_addr_var_t* variable);
+
+/**
  * Does a given operation overwrite it's source? Think add, subtract, etc
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction);
@@ -484,6 +489,13 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab
  * Emit a long constant direct from value
  */
 three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* symtab);
+
+/**
+ * Emit a movX instruction
+ *
+ * This is used for when we need extra moves(after a division/modulus)
+ */
+instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_var_t* source);
 
 /**
  * Emit a statement that is in LEA form

@@ -45,6 +45,81 @@ void set_new_function(symtab_function_record_t* func){
 
 
 /**
+ * Select the size of a given variable based on its type
+ */
+variable_size_t select_variable_size(three_addr_var_t* variable){
+	//What the size will be
+	variable_size_t size;
+	
+	//Grab this type out of here
+	generic_type_t* type = variable->type;
+	
+	//Probably the most common option
+	if(type->type_class == TYPE_CLASS_BASIC){
+		//Extract for convenience
+		Token basic_type = type->basic_type->basic_type;
+
+		//Switch based on this
+		switch (basic_type) {
+			//We round up to 16 bit here
+			case U_INT8:
+			case S_INT8:
+			case U_INT16:
+			case S_INT16:
+			case CHAR:
+				size = WORD;
+				break;
+
+			//These are 32 bit(double word)
+			case S_INT32:
+			case U_INT32:
+				size = DOUBLE_WORD;
+				break;
+
+			//This is SP
+			case FLOAT32:
+				size = SINGLE_PRECISION;
+				break;
+
+			//This is double precision
+			case FLOAT64:
+				size = DOUBLE_PRECISION;
+				break;
+
+			//These are all quad word(64 bit)
+			case U_INT64:
+			case S_INT64:
+				size = QUAD_WORD;
+				break;
+		
+			//We shouldn't get here
+			default:
+				size = QUAD_WORD;
+				break;
+		}
+
+	//These will always be 64 bits
+	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
+				|| type->type_class == TYPE_CLASS_CONSTRUCT){
+		size = QUAD_WORD;
+
+	//This should never happen, but a sane default doesn't hurt
+	} else if(type->type_class == TYPE_CLASS_ALIAS){
+		size = QUAD_WORD;
+	//Catch all down here
+	} else {
+		size = DOUBLE_WORD;
+	}
+
+	//It wouldn't hurt to store this
+	variable->variable_size = size;
+
+	//Give it back
+	return size;
+}
+
+
+/**
  * Does a given operation overwrite it's source? Think add, subtract, etc
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction){
@@ -220,6 +295,42 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	emitted_var->ssa_generation = var->ssa_generation;
 
 	return emitted_var;
+}
+
+
+/**
+ * Emit a movX instruction
+ *
+ * This is used for when we need extra moves(after a division/modulus)
+ */
+instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We set the size based on the destination 
+	variable_size_t size = select_variable_size(destination);
+
+	switch (size) {
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+		//Should never reach this
+		default:
+			break;
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
 }
 
 
