@@ -473,6 +473,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 	if(live_range == NULL){
 		//This is a function parameter, we need to make it ourselves
 		if(variable->linked_var->is_function_paramater == TRUE){
+			print_variable(variable, PRINTING_VAR_INLINE);
 			//Create it. Since this is a function parameter, we start at line 0
 			live_range = live_range_alloc();
 			//Add it in
@@ -830,164 +831,17 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
 
 
 /**
- * Precolor a live range that may have interference. This is especially true for RAX return values
- * call parameter_pass2 -> LR52 
- * movl LR35,LR53 
- * movl LR36,LR54
- * movl LR38,LR55
- * movw $97,LR56
- * movw LR40,LR57
- * movw LR41,LR58
- * call parameter_pass -> LR59
- * addl LR59, LR52 <------------ Interference, they both can't be in RAX at the same sime
- * movl LR52,LR35
- * addl $1, LR35
- *
- * Solution:
- * Create a new movement instruction that allows us to move the value around. LR52 will be precolored as
- * %rax, so this new live range won't be coalesced by accident. We'll emit the move right before
- * we need it, and we'll replace 
- *
- * call parameter_pass2 -> LR52 <------- where this was defined
- * movl LR35,LR53 
- * movl LR36,LR54
- * movl LR38,LR55
- * movw $97,LR56
- * movw LR40,LR57
- * movw LR41,LR58
- * movl LR52,LR60 <- new live range to allow us to use %rax again
- * call parameter_pass -> LR59
- * addl LR59, LR60 <------------ Now we're fine 
- * movl LR60,LR35 <------------ Replaced references
- * addl $1, LR35
- *
- * We also know that these will be temporary variables, so we shouldn't need to worry about large overarching ranges
- */
-static void pre_color_with_interference(instruction_t* instruction, dynamic_array_t* live_ranges, live_range_t* coloree, register_holder_t target){
-	//Run through all of the neighbors of this instruction
-	for(u_int16_t i = 0; i < coloree->neighbors->current_index; i++){
-		//We'll want the block too
-		basic_block_t* block = instruction->block_contained_in;
-
-		//Grab the neighbor out
-		live_range_t* neighbor = dynamic_array_get_at(coloree->neighbors, i);
-
-		//Doesn't have the same target, so we don't care for it
-		if(neighbor->reg != target){
-			continue;
-		}
-
-		//Grab the old var out
-		three_addr_var_t* old_var = dynamic_array_get_at(neighbor->variables, 0);
-
-		//If we make it to here, then we know that interference exists. To resolve this,
-		//we'll need to emit a move instruction right above this instruction here
-		
-		//Emit a move here from the destination into this register
-		instruction_t* move = emit_movX_instruction(emit_temp_var(old_var->type), old_var);
-		
-		//This is now part of the block's assigned variables
-		dynamic_array_add(block->assigned_variables, move->destination_register);
-	
-		//Also create a new live range
-		live_range_t* range = live_range_alloc();
-
-		//Add a variable to it
-		dynamic_array_add(range->variables, move->source_register);
-
-		//And now this destination register's live range is this variable
-		move->destination_register->associated_live_range = range;
-
-		//Add this into our running list
-		dynamic_array_add(live_ranges, range);
-
-		//This will go directly before the instruction that we actually need to color
-		instruction_t* previous = instruction->previous_statement;
-
-		//Link this in
-		move->previous_statement = previous;
-		move->next_statement = instruction;
-
-		//Most common case
-		if(previous != NULL){
-			previous->next_statement = move;
-		//Otherwise this will need to be a new head
-		} else {
-			block->leader_statement = move;
-		}
-
-		//Move up by 1 to begin with
-		instruction = instruction->next_statement;
-
-		//We now need to replace all of the old live ranges with this live range
-		while(instruction != NULL){
-			//Now we'll add all interferences like this
-			if(instruction->destination_register != NULL && instruction->destination_register->associated_live_range == neighbor){
-				instruction->destination_register = move->destination_register;
-			}
-
-			if(instruction->source_register != NULL && instruction->source_register->associated_live_range == neighbor){
-				instruction->source_register = move->destination_register;
-				//Add it to the used set if it's not already there
-				if(dynamic_array_contains(block->used_variables, move->destination_register) == NOT_FOUND){
-					//This is now part of the block's assigned variables
-					dynamic_array_add(block->used_variables, move->destination_register);
-				}
-			}
-
-			if(instruction->source_register2 != NULL && instruction->source_register2->associated_live_range == neighbor){
-				instruction->source_register2 = move->destination_register;
-				//Add it to the used set if it's not already there
-				if(dynamic_array_contains(block->used_variables, move->destination_register) == NOT_FOUND){
-					//This is now part of the block's assigned variables
-					dynamic_array_add(block->used_variables, move->destination_register);
-				}
-			}
-
-			if(instruction->address_calc_reg1 != NULL && instruction->address_calc_reg1->associated_live_range == neighbor){
-				instruction->address_calc_reg1 = move->destination_register;
-				//Add it to the used set if it's not already there
-				if(dynamic_array_contains(block->used_variables, move->destination_register) == NOT_FOUND){
-					//This is now part of the block's assigned variables
-					dynamic_array_add(block->used_variables, move->destination_register);
-				}
-			}
-
-			if(instruction->address_calc_reg2 != NULL && instruction->address_calc_reg2->associated_live_range == neighbor){
-				instruction->address_calc_reg2 = move->destination_register;
-				//Add it to the used set if it's not already there
-				if(dynamic_array_contains(block->used_variables, move->destination_register) == NOT_FOUND){
-					//This is now part of the block's assigned variables
-					dynamic_array_add(block->used_variables, move->destination_register);
-				}
-			}
-
-			//Advance this
-			instruction = instruction->next_statement;
-		}
-	}
-}
-
-
-/**
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
  */
-static void pre_color(cfg_t* cfg, interference_graph_t** graph, dynamic_array_t* live_ranges){
+static void pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 	//Run through every single instruction, seeing if we can precolor
 	basic_block_t* current = cfg->head_block;
-
-	//Was a change made?
-	u_int8_t changed;
-
 	while(current != NULL){
 		//Now within current, run through every instruction
 		instruction_t* instruction = current->leader_statement;
 
 		while(instruction != NULL){
-			//By default assume nothing changed
-			changed = FALSE;
-
 			//One thing to check for - function parameter passing
 			if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
 				&& instruction->source_register->linked_var->function_parameter_order > 0){
@@ -1068,27 +922,13 @@ static void pre_color(cfg_t* cfg, interference_graph_t** graph, dynamic_array_t*
 				case CALL:
 					//We could have a void return, but usually we'll give something
 					if(instruction->destination_register != NULL){
-						//pre_color_with_interference(instruction, live_ranges, instruction->destination_register->associated_live_range, RAX);
 						instruction->destination_register->associated_live_range->reg = RAX;
-						changed = TRUE;
 					}
 					break;
 
 				//Most of the time we will get here
 				default:
 					break;
-			}
-
-			//If we made a change here, we're going to need to recompute everything
-			if(changed == TRUE){
-				//We now need to compute all of the LIVE OUT values
-				calculate_liveness_sets(cfg);
-
-				//Destroy the old one
-				interference_graph_dealloc(*graph);
-
-				//Now let's determine the interference graph
-		 		*graph = construct_interference_graph(cfg, live_ranges);
 			}
 
 			//Move this up
@@ -1441,7 +1281,7 @@ void allocate_all_registers(cfg_t* cfg){
 	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
 
 	//Now we can precolor everything
-	pre_color(cfg, &graph, live_ranges);
+	pre_color(cfg, live_ranges);
 
 	printf("============= After Live Range Determination ==============\n");
 	print_blocks_with_live_ranges(cfg->head_block);

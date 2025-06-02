@@ -3209,6 +3209,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction1 != NULL && window->instruction2 != NULL && window->instruction3 != NULL
 	 	&& window->instruction1->assignee != NULL && window->instruction3->assignee != NULL
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2->cannot_be_combined == FALSE
 		&& window->instruction2->assignee->is_temporary == TRUE
 		&& window->instruction2->op1->is_temporary == TRUE
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE

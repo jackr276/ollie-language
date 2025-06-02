@@ -14,7 +14,6 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 #include "../queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
@@ -3305,12 +3304,6 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 		assignee = emit_temp_var(func_record->return_type);
 	}
 
-	//If the function does not return void, we will be assigning it to a temporary variable
-	if(strcmp(func_record->return_type->type_name, "void") != 0){
-		//This means that we have a temp variable here
-		assignee = emit_temp_var(func_record->return_type);
-	}
-
 	//Once we get here we can create the function statement
 	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, assignee);
 
@@ -3358,6 +3351,21 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	//We can now add the function call statement in
 	add_statement(basic_block, func_call_stmt);
 
+	//Emit an assignment instruction. This will become very important way down the line in register
+	//allocation to avoid interference
+	if(assignee != NULL){
+		//Emit it
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+		//This cannot be coalesced
+		assignment->cannot_be_combined = TRUE;
+
+		//Add it in
+		add_statement(basic_block, assignment);
+		
+		//Reassign this value
+		assignee = assignment->assignee;
+	}
 
 	//Give back what we assigned to
 	return assignee;

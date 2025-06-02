@@ -17,6 +17,10 @@ fn parameter_pass2(x:i32, y:i32, z:i32, a:char, b:char, c:char) -> i32 {
 	ret k + c;
 }
 
+fn parameter_pass3(a:i32) -> i32 {
+	ret a;
+}
+
 fn pcount_r(mut x:u64) -> u64 {
 	if( x == 0) then {
 		ret (x & 1) + @pcount_r(x >> 1);

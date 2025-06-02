@@ -413,6 +413,8 @@ struct instruction_t{
 	u_int8_t inverse_jump;
 	//What is the indirection level?
 	u_int8_t indirection_level;
+	//Cannot be coalesced
+	u_int8_t cannot_be_combined;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
 	//Memory access type
