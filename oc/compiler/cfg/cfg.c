@@ -3358,6 +3358,7 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	//We can now add the function call statement in
 	add_statement(basic_block, func_call_stmt);
 
+
 	//Give back what we assigned to
 	return assignee;
 }

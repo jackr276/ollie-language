@@ -44,7 +44,5 @@ fn main() -> i32{
 	let c:char := 'c';
 
 	//Testing complexities
-	x := @parameter_pass2(x + 5, y * 3, z - 22, 'a', b + 'd', c) + @parameter_pass(x, y, z, 'a', b, c);
-
-	ret x + 1;
+	ret @parameter_pass2(x + 5, y * 3, z - 22, 'a', b + 'd', c) + @parameter_pass(x, y, z, 'a', b, c);
 }
