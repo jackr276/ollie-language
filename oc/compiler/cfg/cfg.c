@@ -3294,8 +3294,16 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	//Grab this out first
 	symtab_function_record_t* func_record = function_call_node->func_record;
 
+	//The function's assignee
+	three_addr_var_t* assignee;
+
 	//May be NULL or not based on what we have as the return type
-	three_addr_var_t* assignee = emit_temp_var(func_record->return_type);
+	if(func_record->return_type->type_class == TYPE_CLASS_BASIC && func_record->return_type->basic_type->basic_type == VOID){
+		assignee = NULL;
+	} else {
+		//Otherwise we have one like this
+		assignee = emit_temp_var(func_record->return_type);
+	}
 
 	//If the function does not return void, we will be assigning it to a temporary variable
 	if(strcmp(func_record->return_type->type_name, "void") != 0){

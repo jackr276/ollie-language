@@ -1677,8 +1677,8 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			if(instruction->destination_register != NULL){
 				printf(" -> ");
 				print_variable(instruction->destination_register, mode);
-				printf("\n");
 			}
+			printf("\n");
 			break;
 		case INCL:
 			printf("incl ");

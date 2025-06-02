@@ -36,7 +36,6 @@ u_int16_t live_range_id = 0;
 //The array that holds all of our parameter passing
 const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 
-
 /**
  * Priority queue insert a live range in here
  *
@@ -828,99 +827,151 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
 
 
 /**
+ * Precolor a live range that may have interference. This is especially true for RAX return values
+ * call parameter_pass2 -> LR52 
+ * movl LR35,LR53 
+ * movl LR36,LR54
+ * movl LR38,LR55
+ * movw $97,LR56
+ * movw LR40,LR57
+ * movw LR41,LR58
+ * call parameter_pass -> LR59
+ * addl LR59, LR52 <------------ Interference
+ * movl LR52,LR35
+ * addl $1, LR35
+ *
+ * Solution:
+ * Create a new movement instruction that allows us to move the value around. LR52 will be precolored as
+ * %rax, so this new live range won't be coalesced by accident
+ *
+ * call parameter_pass2 -> LR52 
+ * movl LR52,LR60 <- new live range
+ * movl LR35,LR53 
+ * movl LR36,LR54
+ * movl LR38,LR55
+ * movw $97,LR56
+ * movw LR40,LR57
+ * movw LR41,LR58
+ * call parameter_pass -> LR59
+ * addl LR59, LR60 <------------ Interference
+ * movl LR60,LR35 <------------ Replaced references
+ * addl $1, LR35
+ */
+static void pre_color_with_interference(instruction_t* instruction, live_range_t* interferee){
+
+}
+
+
+/**
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
  */
-static void pre_color(instruction_t* instruction){
-	//One thing to check for - function parameter passing
-	if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
-		&& instruction->source_register->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->source_register->associated_live_range->reg = parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1];
-	}
+static void pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
+	//Run through every single instruction, seeing if we can precolor
+	basic_block_t* current = cfg->head_block;
+	while(current != NULL){
+		//Now within current, run through every instruction
+		instruction_t* instruction = current->leader_statement;
 
-	//Check source 2 as well
-	if(instruction->source_register2 != NULL && instruction->source_register2->linked_var != NULL
-		&& instruction->source_register2->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->source_register2->associated_live_range->reg = parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1];
-	}
-
-	//Check address calc 1 as well
-	if(instruction->address_calc_reg1 != NULL && instruction->address_calc_reg1->linked_var != NULL
-		&& instruction->address_calc_reg1->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->address_calc_reg1->associated_live_range->reg = parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1];
-	}
-
-	//Check address calc 2 as well
-	if(instruction->address_calc_reg2 != NULL && instruction->address_calc_reg2->linked_var != NULL
-		&& instruction->address_calc_reg2->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->address_calc_reg2->associated_live_range->reg = parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1];
-	}
-
-	//Pre-color based on what kind of instruction it is
-	switch(instruction->instruction_type){
-		//If a return instruction has a
-		//value, it must be in %RAX so we can assign
-		//that entire live range to %RAX
-		case RET:
-			//If it has one, assign it
-			if(instruction->source_register != NULL){
-				instruction->source_register->associated_live_range->reg = RAX;
-			}
-			break;
-		case MOVL:
-		case MOVQ:
-		case MOVW:
-			//If we're moving into something preparing for division, this needs
-			//to be in RAX
-			if(instruction->next_statement != NULL &&
-				(instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)
-				&& instruction->next_statement->next_statement != NULL
-				&& (is_division_instruction(instruction->next_statement->next_statement) == TRUE
-				|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
-				//This needs to be in RAX
-				instruction->destination_register->associated_live_range->reg = RAX;
-
-			//We also need to check for all kinds of paremeter passing
-			} else if(instruction->destination_register->parameter_number > 0){
-				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
-				instruction->destination_register->associated_live_range->carries_function_param = TRUE;
+		while(instruction != NULL){
+			//One thing to check for - function parameter passing
+			if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
+				&& instruction->source_register->linked_var->function_parameter_order > 0){
+				//Allocate accordingly
+				instruction->source_register->associated_live_range->reg = parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1];
 			}
 
-			break;
-
-		case DIVL:
-		case DIVQ:
-		case IDIVL:
-		case IDIVQ:
-			//The destination must be in RAX here
-			instruction->destination_register->associated_live_range->reg = RAX;
-			break;
-
-		case DIVL_FOR_MOD:
-		case DIVQ_FOR_MOD:
-		case IDIVL_FOR_MOD:
-		case IDIVQ_FOR_MOD:
-			//The destination for all division remainders is RDX
-			instruction->destination_register->associated_live_range->reg = RDX;
-			break;
-
-		//Function calls always return through rax
-		case CALL:
-			//We could have a void return, but usually we'll give something
-			if(instruction->destination_register != NULL){
-				instruction->destination_register->associated_live_range->reg = RAX;
-				printf("HERE\n");
+			//Check source 2 as well
+			if(instruction->source_register2 != NULL && instruction->source_register2->linked_var != NULL
+				&& instruction->source_register2->linked_var->function_parameter_order > 0){
+				//Allocate accordingly
+				instruction->source_register2->associated_live_range->reg = parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1];
 			}
-			break;
 
-		//Most of the time we will get here
-		default:
-			break;
+			//Check address calc 1 as well
+			if(instruction->address_calc_reg1 != NULL && instruction->address_calc_reg1->linked_var != NULL
+				&& instruction->address_calc_reg1->linked_var->function_parameter_order > 0){
+				//Allocate accordingly
+				instruction->address_calc_reg1->associated_live_range->reg = parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1];
+			}
+
+			//Check address calc 2 as well
+			if(instruction->address_calc_reg2 != NULL && instruction->address_calc_reg2->linked_var != NULL
+				&& instruction->address_calc_reg2->linked_var->function_parameter_order > 0){
+				//Allocate accordingly
+				instruction->address_calc_reg2->associated_live_range->reg = parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1];
+			}
+
+			//Pre-color based on what kind of instruction it is
+			switch(instruction->instruction_type){
+				//If a return instruction has a
+				//value, it must be in %RAX so we can assign
+				//that entire live range to %RAX
+				case RET:
+					//If it has one, assign it
+					if(instruction->source_register != NULL){
+						instruction->source_register->associated_live_range->reg = RAX;
+					}
+					break;
+				case MOVL:
+				case MOVQ:
+				case MOVW:
+					//If we're moving into something preparing for division, this needs
+					//to be in RAX
+					if(instruction->next_statement != NULL &&
+						(instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)
+						&& instruction->next_statement->next_statement != NULL
+						&& (is_division_instruction(instruction->next_statement->next_statement) == TRUE
+						|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
+						//This needs to be in RAX
+						instruction->destination_register->associated_live_range->reg = RAX;
+
+					//We also need to check for all kinds of paremeter passing
+					} else if(instruction->destination_register->parameter_number > 0){
+						instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
+						instruction->destination_register->associated_live_range->carries_function_param = TRUE;
+					}
+
+					break;
+
+				case DIVL:
+				case DIVQ:
+				case IDIVL:
+				case IDIVQ:
+					//The destination must be in RAX here
+					instruction->destination_register->associated_live_range->reg = RAX;
+					break;
+
+				case DIVL_FOR_MOD:
+				case DIVQ_FOR_MOD:
+				case IDIVL_FOR_MOD:
+				case IDIVQ_FOR_MOD:
+					//The destination for all division remainders is RDX
+					instruction->destination_register->associated_live_range->reg = RDX;
+					break;
+
+				//Function calls always return through rax
+				case CALL:
+					//We could have a void return, but usually we'll give something
+					if(instruction->destination_register != NULL){
+						instruction->destination_register->associated_live_range->reg = RAX;
+					}
+					break;
+
+				//Most of the time we will get here
+				default:
+					break;
+			}
+
+			//Move this up
+			instruction = instruction->next_statement;
+		}
+
+		//Advance current
+		current = current->direct_successor;
 	}
+
+
 }
 
 
@@ -967,11 +1018,6 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 
 		//For every operation that we have
 		while(operation != NULL){
-			//While we're at it -- there are some live ranges that we can "pre-color" because we know that
-			//they must occupy certain registers. The perfect illustration of this is the return value register
-			//needing to be in rax
-			pre_color(operation);
-
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
 			if(operation->instruction_type == PHI_FUNCTION || operation->destination_register == NULL){
@@ -1109,9 +1155,9 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
  * Spill a live range to memory to make a graph N-colorable
  *
  * After a live range is spilled, all definitions go to memory, and all uses
- * come from memory
+ * come from memory(stack memory)
  */
-static void spill(cfg_t* cfg, interference_graph_t* graph, live_range_t* range){
+static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
 
 }
 
@@ -1119,14 +1165,12 @@ static void spill(cfg_t* cfg, interference_graph_t* graph, live_range_t* range){
 /**
  * Allocate an individual register to a given live range
  *
- * NOTE: By the time we get here, it should be guaranteed that we're 
- * able to color this because no register with more than N neighbors 
- * can ever come here
+ * We return TRUE if we were able to color, and we return false if we were not
  */
-static void allocate_register(interference_graph_t* graph, dynamic_array_t* live_ranges, live_range_t* live_range){
+static u_int8_t allocate_register(interference_graph_t* graph, dynamic_array_t* live_ranges, live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg != NO_REG){
-		return;
+		return TRUE;
 	}
 
 	//Allocate an area that holds all the registers that we have available for use. This is offset by 1 from
@@ -1161,7 +1205,13 @@ static void allocate_register(interference_graph_t* graph, dynamic_array_t* live
 
 	//Now that we've gotten here, i should hold the value of a free register - 1. We'll
 	//add 1 back to it to get that free register's name
-	live_range->reg = i + 1;
+	if(i <= K_COLORS_GEN_USE){
+		live_range->reg = i + 1;
+		return TRUE;
+	//This means that our neighbors allocated all of the registers available
+	} else {
+		return FALSE;
+	}
 }
 
 
@@ -1220,7 +1270,12 @@ static void graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, i
 	 */
 	while(dynamic_array_is_empty(priority_live_ranges) == FALSE){
 		//Just delete it for now
-		dynamic_array_delete_from_back(priority_live_ranges);
+		live_range_t* spill_range = dynamic_array_delete_from_back(priority_live_ranges);
+
+		//Spill this value
+		spill(cfg, live_ranges, spill_range);
+
+		//After we spill it, we need to now check all of the degrees after the fact
 	}
 
 	//Now for each value inside of the stack, we will pop it off
@@ -1256,6 +1311,9 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//Now let's determine the interference graph
 	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
+
+	//Now we can precolor everything
+	pre_color(cfg, live_ranges);
 
 	printf("============= After Live Range Determination ==============\n");
 	print_blocks_with_live_ranges(cfg->head_block);
