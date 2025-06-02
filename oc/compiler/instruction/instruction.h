@@ -125,7 +125,6 @@ typedef enum{
 	RDX,
 	RSI,
 	RDI,
-	RBP,
 	R8,
 	R9,
 	R10,
@@ -136,6 +135,7 @@ typedef enum{
 	R15, // ALL general purpose registers come first(items 1-15)
 	RSP, //Stack pointer
 	RIP, //Instruction pointer
+	RBP, //Base pointer
 } register_holder_t;
 
 
@@ -273,6 +273,8 @@ struct live_range_t{
 	int16_t spill_cost;
 	//Store the id of the live range
 	u_int16_t live_range_id;
+	//Does this carry a function parameter?
+	u_int8_t carries_function_param;
 	//What register is this live range in?
 	register_holder_t reg; 
 	//The size of the variable in the live range

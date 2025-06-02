@@ -232,7 +232,7 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	while(cursor != NULL){
 		//We actually no longer need these
 		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(cursor, PRINTING_REGISTERS);
+			print_instruction(cursor, PRINTING_LIVE_RANGES);
 		}
 
 		//Move along to the next one
@@ -623,13 +623,19 @@ static void calculate_liveness_sets(cfg_t* cfg){
 /**
  * Do we have precoloring interference for these two registers? If we do, we'll
  * return true and this will prevent the coalescing algorithm from combining them
+ *
+ * Precoloring is important to work around. On the surface for some move instructions,
+ * it may seem like the move is a pointless copy. However, this is not the case when precoloring
+ * is involved because moving into those exact registers is very important. Since we cannot guarantee
+ * that we're going to move into those exact registers long in advance, we need to keep the movements
+ * for precoloring around
  */
 static u_int8_t does_precoloring_interference_exist(live_range_t* a, live_range_t* b){
 	/**
 	 * The logic here: if they *both* don't equal no reg *and* their registers
 	 * are not equal, then we have precoloring interference
 	 */
-	if(a->reg != NO_REG && b->reg != NO_REG && a->reg != b->reg){
+	if(a->reg != NO_REG || b->reg != NO_REG){
 		return TRUE;
 	} else {
 		return FALSE;
@@ -877,6 +883,7 @@ static void pre_color(instruction_t* instruction){
 			//We also need to check for all kinds of paremeter passing
 			} else if(instruction->destination_register->parameter_number > 0){
 				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
+				instruction->destination_register->associated_live_range->carries_function_param = TRUE;
 			}
 
 			break;
@@ -895,6 +902,15 @@ static void pre_color(instruction_t* instruction){
 		case IDIVQ_FOR_MOD:
 			//The destination for all division remainders is RDX
 			instruction->destination_register->associated_live_range->reg = RDX;
+			break;
+
+		//Function calls always return through rax
+		case CALL:
+			//We could have a void return, but usually we'll give something
+			if(instruction->destination_register != NULL){
+				instruction->destination_register->associated_live_range->reg = RAX;
+				printf("HERE\n");
+			}
 			break;
 
 		//Most of the time we will get here
@@ -1111,10 +1127,10 @@ static void allocate_register(interference_graph_t* graph, dynamic_array_t* live
 
 	//Allocate an area that holds all the registers that we have available for use. This is offset by 1 from
 	//the actual value in the enum. For example, RAX is 1 in the enum, so it's 0 in here
-	register_holder_t registers[K_COLORS_GEN_USE];
+	u_int8_t registers[K_COLORS_GEN_USE];
 
 	//Wipe this entire thing out
-	memset(registers, 0, sizeof(register_holder_t) * K_COLORS_GEN_USE);
+	memset(registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
 	//Run through every single neighbor
 	for(u_int16_t i = 0; i < live_range->neighbors->current_index; i++){

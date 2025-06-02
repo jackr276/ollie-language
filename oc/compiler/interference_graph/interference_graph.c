@@ -136,12 +136,6 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 		add_interference(graph, target, neighbor);
 	}
 
-	//If the coalescee has already been pre-colored, we should take that into account
-	//for the target
-	if(coalescee->reg != NO_REG){
-		target->reg = coalescee->reg;
-	}
-
 	//We now add the spill cost of the one that was coalesced to the target
 	target->spill_cost += coalescee->spill_cost;
 }

@@ -1673,7 +1673,12 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			printf("%s", instruction->inlined_assembly);
 			break;
 		case CALL:
-			printf("call %s\n", instruction->func_record->func_name);
+			printf("call %s", instruction->func_record->func_name);
+			if(instruction->destination_register != NULL){
+				printf(" -> ");
+				print_variable(instruction->destination_register, mode);
+				printf("\n");
+			}
 			break;
 		case INCL:
 			printf("incl ");
