@@ -836,16 +836,17 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
  * movw LR40,LR57
  * movw LR41,LR58
  * call parameter_pass -> LR59
- * addl LR59, LR52 <------------ Interference
+ * addl LR59, LR52 <------------ Interference, they both can't be in RAX at the same sime
  * movl LR52,LR35
  * addl $1, LR35
  *
  * Solution:
  * Create a new movement instruction that allows us to move the value around. LR52 will be precolored as
- * %rax, so this new live range won't be coalesced by accident
+ * %rax, so this new live range won't be coalesced by accident. We'll emit the move right before
+ * we need it, and we'll replace 
  *
- * call parameter_pass2 -> LR52 
- * movl LR52,LR60 <- new live range
+ * call parameter_pass2 -> LR52 <------- where this was defined
+ * movl LR52,LR60 <- new live range to allow us to use %rax again
  * movl LR35,LR53 
  * movl LR36,LR54
  * movl LR38,LR55
@@ -853,12 +854,23 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
  * movw LR40,LR57
  * movw LR41,LR58
  * call parameter_pass -> LR59
- * addl LR59, LR60 <------------ Interference
+ * addl LR59, LR60 <------------ Now we're fine 
  * movl LR60,LR35 <------------ Replaced references
  * addl $1, LR35
  */
-static void pre_color_with_interference(instruction_t* instruction, live_range_t* interferee){
+static void pre_color_with_interference(cfg_t* cfg, instruction_t* instruction, live_range_t* coloree, register_holder_t target){
+	//Run through all of the neighbors of this instruction
+	for(u_int16_t i = 0; i < coloree->neighbors->current_index; i++){
+		//Grab the neighbor out
+		live_range_t* neighbor = dynamic_array_get_at(coloree->neighbors, i);
 
+		//Doesn't have the same target, so we don't care for it
+		if(neighbor->reg != target){
+			continue;
+		}
+
+		printf("\n\n\nHERE\n\n\n");
+	}
 }
 
 
@@ -954,6 +966,7 @@ static void pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 				case CALL:
 					//We could have a void return, but usually we'll give something
 					if(instruction->destination_register != NULL){
+						pre_color_with_interference(cfg, instruction, instruction->destination_register->associated_live_range, RAX);
 						instruction->destination_register->associated_live_range->reg = RAX;
 					}
 					break;
