@@ -1139,7 +1139,7 @@ static void allocate_register(interference_graph_t* graph, dynamic_array_t* live
 
 		//Get whatever register this neighbor has. If it's not the "no_reg" value, 
 		//we'll store it in the array
-		if(neighbor->reg != NO_REG){
+		if(neighbor->reg != NO_REG && neighbor->reg <= K_COLORS_GEN_USE){
 			//Flag it as used
 			registers[neighbor->reg - 1] = TRUE;
 		}

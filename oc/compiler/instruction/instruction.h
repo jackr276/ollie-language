@@ -132,10 +132,11 @@ typedef enum{
 	R12,
 	R13,
 	R14,
-	R15, // ALL general purpose registers come first(items 1-15)
+	R15, 
+	RBP, //base pointer
+	//ALL general purpose registers come first(items 1-15)
 	RSP, //Stack pointer
 	RIP, //Instruction pointer
-	RBP, //Base pointer
 } register_holder_t;
 
 
