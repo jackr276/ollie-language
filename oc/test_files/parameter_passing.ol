@@ -41,15 +41,19 @@ fn pcount_r(mut x:u64) -> u64 {
 fn main() -> i32{
 	let mut x:i32 := 3;
 	let mut y:i32 := x - 1;
+	let mut aa:i32 := x - y;
+	let mut bb:i32 := x - y;
+	let mut cc:i32 := x - y;
+	let mut dd:i32 := x - y;
 
 	let mut z:i32 := y + x;
 	let a:char := 'a';
 	let b:char := 'b';
 	let ch:char := 'c';
 
-	let mut k:i32 := y / z;
-	let mut c:i32 := y % k;
+	let mut k:i32 := y / z + aa;
+	let mut c:i32 := y % k + cc;
 
 	//Testing complexities
-	ret @parameter_pass2(k+ 5, c * 3, z - 22, 'a', b + 'd', ch) + @parameter_pass(x, y, z, 'a', b, ch);
+	ret @parameter_pass2(k+ 5, c * 3, z - 22, 'a', b + 'd', ch) + @parameter_pass(x, y, aa + bb, 'a', b, ch) + cc + dd;
 }

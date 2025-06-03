@@ -42,7 +42,9 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 /**
  * Priority queue insert a live range in here
  *
- * Lowest spill cost = highest priority
+ * Highest spill cost = highest priority. We want to guarantee that the values which get into registers first
+ * are high spill cost items. We don't want to end up having to spill these. If we need to spill a lower
+ * priority item, we won't feel it nearly as much
  * Higher priority items go to the back to make removal O(1)(using dynamic_array_delete_from_back())
  */
 static void dynamic_array_priority_insert_live_range(dynamic_array_t* array, live_range_t* live_range){
@@ -64,7 +66,7 @@ static void dynamic_array_priority_insert_live_range(dynamic_array_t* array, liv
 		live_range_t* current = dynamic_array_get_at(array, i);
 
 		//If this one is lower priority than the given one, we'll stop
-		if(current->spill_cost < live_range->spill_cost){
+		if(current->spill_cost > live_range->spill_cost){
 			break;
 		}
 	}
@@ -1122,6 +1124,7 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
  * come from memory(stack memory)
  */
 static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
+	//TODO
 
 }
 
@@ -1169,7 +1172,7 @@ static u_int8_t allocate_register(interference_graph_t* graph, dynamic_array_t* 
 
 	//Now that we've gotten here, i should hold the value of a free register - 1. We'll
 	//add 1 back to it to get that free register's name
-	if(i <= K_COLORS_GEN_USE){
+	if(i < K_COLORS_GEN_USE){
 		live_range->reg = i + 1;
 		return TRUE;
 	//This means that our neighbors allocated all of the registers available
@@ -1219,11 +1222,43 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 		//Now that we have it, we'll color it
 		if(range->degree < K_COLORS_GEN_USE){
 			allocate_register(graph, live_ranges, range);
-		}
+		//Otherwise, we may still be able to allocate here
+		} else {
+			//We must still attempt to allocate it
+			u_int8_t can_allocate = allocate_register(graph, live_ranges, range);
+			
+			//However if this is false, we need to perform a spill
+			if(can_allocate == FALSE){
+				printf("\n\n\nCould not allocate: LR%d\n", range->live_range_id);
 
+				/**
+				 * Now we need to spill this live range. It is important to note that
+				 * spilling has the effect of completely rewriting the entire program.
+				 * As such, once we spill, we need to redo everything, including the entire 
+				 * graph coloring process. This will require a reset. In practice, even
+				 * the most extreme programs only require that this be done once or twice
+				 */
+				spill(cfg, live_ranges, range);
+			}
+		}
 	}
 
+	//Destroy the dynamic array
+	dynamic_array_dealloc(priority_live_ranges);
+
+	//Give back true because if we made it here, our graph was N-colorable
+	//and we did not have a spill
 	return TRUE;
+}
+
+
+/**
+ * Repeate the process of register allocation until the sub-function
+ * returns TRUE. TRUE means that we were able to allocate all registers without a need for a spill
+ */
+static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges){
+	//TODO rewrite until everything happens through here for allocation/retry
+
 }
 
 
