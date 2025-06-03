@@ -276,6 +276,8 @@ struct live_range_t{
 	u_int16_t live_range_id;
 	//Does this carry a function parameter?
 	u_int8_t carries_function_param;
+	//Does this carry a pre-colored value
+	u_int8_t is_precolored;
 	//What register is this live range in?
 	register_holder_t reg; 
 	//The size of the variable in the live range

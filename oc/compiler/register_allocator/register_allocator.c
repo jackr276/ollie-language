@@ -840,6 +840,7 @@ static void pre_color(instruction_t* instruction){
 		&& instruction->source_register->linked_var->function_parameter_order > 0){
 		//Allocate accordingly
 		instruction->source_register->associated_live_range->reg = parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1];
+		instruction->source_register->associated_live_range->is_precolored = TRUE;
 	}
 
 	//Check source 2 as well
@@ -847,6 +848,7 @@ static void pre_color(instruction_t* instruction){
 		&& instruction->source_register2->linked_var->function_parameter_order > 0){
 		//Allocate accordingly
 		instruction->source_register2->associated_live_range->reg = parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1];
+		instruction->source_register2->associated_live_range->is_precolored = TRUE;
 	}
 
 	//Check address calc 1 as well
@@ -854,6 +856,7 @@ static void pre_color(instruction_t* instruction){
 		&& instruction->address_calc_reg1->linked_var->function_parameter_order > 0){
 		//Allocate accordingly
 		instruction->address_calc_reg1->associated_live_range->reg = parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1];
+		instruction->address_calc_reg1->associated_live_range->is_precolored = TRUE;
 	}
 
 	//Check address calc 2 as well
@@ -861,6 +864,7 @@ static void pre_color(instruction_t* instruction){
 		&& instruction->address_calc_reg2->linked_var->function_parameter_order > 0){
 		//Allocate accordingly
 		instruction->address_calc_reg2->associated_live_range->reg = parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1];
+		instruction->address_calc_reg2->associated_live_range->is_precolored = TRUE;
 	}
 
 	//Pre-color based on what kind of instruction it is
@@ -872,6 +876,7 @@ static void pre_color(instruction_t* instruction){
 			//If it has one, assign it
 			if(instruction->source_register != NULL){
 				instruction->source_register->associated_live_range->reg = RAX;
+				instruction->source_register->associated_live_range->is_precolored = TRUE;
 			}
 			break;
 		case MOVL:
@@ -886,11 +891,13 @@ static void pre_color(instruction_t* instruction){
 				|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
 				//This needs to be in RAX
 				instruction->destination_register->associated_live_range->reg = RAX;
+				instruction->destination_register->associated_live_range->is_precolored = TRUE;
 
 			//We also need to check for all kinds of paremeter passing
 			} else if(instruction->destination_register->parameter_number > 0){
 				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
 				instruction->destination_register->associated_live_range->carries_function_param = TRUE;
+				instruction->destination_register->associated_live_range->is_precolored = TRUE;
 			}
 
 			break;
@@ -901,6 +908,7 @@ static void pre_color(instruction_t* instruction){
 		case IDIVQ:
 			//The destination must be in RAX here
 			instruction->destination_register->associated_live_range->reg = RAX;
+			instruction->destination_register->associated_live_range->is_precolored = TRUE;
 			break;
 
 		case DIVL_FOR_MOD:
@@ -909,6 +917,7 @@ static void pre_color(instruction_t* instruction){
 		case IDIVQ_FOR_MOD:
 			//The destination for all division remainders is RDX
 			instruction->destination_register->associated_live_range->reg = RDX;
+			instruction->destination_register->associated_live_range->is_precolored = TRUE;
 			break;
 
 		//Function calls always return through rax
@@ -916,6 +925,7 @@ static void pre_color(instruction_t* instruction){
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
 				instruction->destination_register->associated_live_range->reg = RAX;
+				instruction->destination_register->associated_live_range->is_precolored = TRUE;
 			}
 			break;
 
@@ -1178,21 +1188,20 @@ static u_int8_t allocate_register(interference_graph_t* graph, dynamic_array_t* 
  *
  * Algorithm graphcolor:
  * 	for all live ranges in interference graph:
- * 		if live range has degree < N:
- * 			remove it, put onto stack
- * 
- * 	while there are nodes with degree >= N:
- * 	 pick a node to spill
- * 	 spill it
- *   remove that node
- *   update all other degrees 
- *   remove any nodes that now have degree <N, put on stack
+ * 		if live_range's degree is less than N:
+ * 			remove it
+ * 			color it
+ * 		else:
+ * 			if live_range can still be colored:
+ * 				remove it and color it
+ * 			else:
+ * 				spill and rewrite the whole program, and 
+ * 				redo all allocation
  *
- * 	for each node in stack:
- * 		pop the node off
- * 		color it with a color different from its neighbors
+ *
+ * Return TRUE if the graph was colorable, FALSE if not
  */
-static void graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
+static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
 	//We first need to construct the priority version of the live range arrays
 	//Create a new one
 	dynamic_array_t* priority_live_ranges = dynamic_array_alloc();
@@ -1202,50 +1211,19 @@ static void graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		dynamic_array_priority_insert_live_range(priority_live_ranges, dynamic_array_get_at(live_ranges, i));
 	}
 
-	//We'll need a stack
-	heap_stack_t* stack = heap_stack_alloc();
-
-	//Run through all the live ranges first. If we have a degree < N(15) in our case, remove it
-	//and put it onto the stack
-	for(u_int16_t i = 0; i < priority_live_ranges->current_index; i++){
-		//Grab it out
-		live_range_t* live_range = dynamic_array_get_at(priority_live_ranges, i);
-
-		//Check what our degree is. If it's lower, add to the stack
-		if(live_range->degree < K_COLORS_GEN_USE){
-			//Push onto the heap stack
-			push(stack, live_range);
-		}
-	}
-
-	/**
-	 * Now, so long as we have nodes whose degree is >= N, we need to spill and
-	 * recompute the entire interference graph
-	 */
+	//So long as this isn't empty
 	while(dynamic_array_is_empty(priority_live_ranges) == FALSE){
-		//Just delete it for now
-		live_range_t* spill_range = dynamic_array_delete_from_back(priority_live_ranges);
+		//Grab a live range out by deletion
+		live_range_t* range = dynamic_array_delete_from_back(priority_live_ranges);
 
-		//Spill this value
-		spill(cfg, live_ranges, spill_range);
+		//Now that we have it, we'll color it
+		if(range->degree < K_COLORS_GEN_USE){
+			allocate_register(graph, live_ranges, range);
+		}
 
-		//After we spill it, we need to now check all of the degrees after the fact
 	}
 
-	//Now for each value inside of the stack, we will pop it off
-	//and assign it a register that is different from all
-	//of its neighbors
-	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
-		//Remove a value from the stack
-		live_range_t* live_range = pop(stack);
-
-		//Now we'll allocate it's register
-		//NOTE: make sure to pass the *unmodified* live ranges array in here
-		allocate_register(graph, live_ranges, live_range);
-	}
-
-	//Destroy the stack when done
-	heap_stack_dealloc(stack);
+	return TRUE;
 }
 
 
