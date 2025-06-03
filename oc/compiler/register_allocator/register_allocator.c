@@ -834,112 +834,95 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
  */
-static void pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
-	//Run through every single instruction, seeing if we can precolor
-	basic_block_t* current = cfg->head_block;
-	while(current != NULL){
-		//Now within current, run through every instruction
-		instruction_t* instruction = current->leader_statement;
-
-		while(instruction != NULL){
-			//One thing to check for - function parameter passing
-			if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
-				&& instruction->source_register->linked_var->function_parameter_order > 0){
-				//Allocate accordingly
-				instruction->source_register->associated_live_range->reg = parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1];
-			}
-
-			//Check source 2 as well
-			if(instruction->source_register2 != NULL && instruction->source_register2->linked_var != NULL
-				&& instruction->source_register2->linked_var->function_parameter_order > 0){
-				//Allocate accordingly
-				instruction->source_register2->associated_live_range->reg = parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1];
-			}
-
-			//Check address calc 1 as well
-			if(instruction->address_calc_reg1 != NULL && instruction->address_calc_reg1->linked_var != NULL
-				&& instruction->address_calc_reg1->linked_var->function_parameter_order > 0){
-				//Allocate accordingly
-				instruction->address_calc_reg1->associated_live_range->reg = parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1];
-			}
-
-			//Check address calc 2 as well
-			if(instruction->address_calc_reg2 != NULL && instruction->address_calc_reg2->linked_var != NULL
-				&& instruction->address_calc_reg2->linked_var->function_parameter_order > 0){
-				//Allocate accordingly
-				instruction->address_calc_reg2->associated_live_range->reg = parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1];
-			}
-
-			//Pre-color based on what kind of instruction it is
-			switch(instruction->instruction_type){
-				//If a return instruction has a
-				//value, it must be in %RAX so we can assign
-				//that entire live range to %RAX
-				case RET:
-					//If it has one, assign it
-					if(instruction->source_register != NULL){
-						instruction->source_register->associated_live_range->reg = RAX;
-					}
-					break;
-				case MOVL:
-				case MOVQ:
-				case MOVW:
-					//If we're moving into something preparing for division, this needs
-					//to be in RAX
-					if(instruction->next_statement != NULL &&
-						(instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)
-						&& instruction->next_statement->next_statement != NULL
-						&& (is_division_instruction(instruction->next_statement->next_statement) == TRUE
-						|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
-						//This needs to be in RAX
-						instruction->destination_register->associated_live_range->reg = RAX;
-
-					//We also need to check for all kinds of paremeter passing
-					} else if(instruction->destination_register->parameter_number > 0){
-						instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
-						instruction->destination_register->associated_live_range->carries_function_param = TRUE;
-					}
-
-					break;
-
-				case DIVL:
-				case DIVQ:
-				case IDIVL:
-				case IDIVQ:
-					//The destination must be in RAX here
-					instruction->destination_register->associated_live_range->reg = RAX;
-					break;
-
-				case DIVL_FOR_MOD:
-				case DIVQ_FOR_MOD:
-				case IDIVL_FOR_MOD:
-				case IDIVQ_FOR_MOD:
-					//The destination for all division remainders is RDX
-					instruction->destination_register->associated_live_range->reg = RDX;
-					break;
-
-				//Function calls always return through rax
-				case CALL:
-					//We could have a void return, but usually we'll give something
-					if(instruction->destination_register != NULL){
-						instruction->destination_register->associated_live_range->reg = RAX;
-					}
-					break;
-
-				//Most of the time we will get here
-				default:
-					break;
-			}
-
-			//Move this up
-			instruction = instruction->next_statement;
-		}
-
-		//Advance current
-		current = current->direct_successor;
+static void pre_color(instruction_t* instruction){
+	//One thing to check for - function parameter passing
+	if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
+		&& instruction->source_register->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->source_register->associated_live_range->reg = parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1];
 	}
 
+	//Check source 2 as well
+	if(instruction->source_register2 != NULL && instruction->source_register2->linked_var != NULL
+		&& instruction->source_register2->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->source_register2->associated_live_range->reg = parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1];
+	}
 
+	//Check address calc 1 as well
+	if(instruction->address_calc_reg1 != NULL && instruction->address_calc_reg1->linked_var != NULL
+		&& instruction->address_calc_reg1->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->address_calc_reg1->associated_live_range->reg = parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1];
+	}
+
+	//Check address calc 2 as well
+	if(instruction->address_calc_reg2 != NULL && instruction->address_calc_reg2->linked_var != NULL
+		&& instruction->address_calc_reg2->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->address_calc_reg2->associated_live_range->reg = parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1];
+	}
+
+	//Pre-color based on what kind of instruction it is
+	switch(instruction->instruction_type){
+		//If a return instruction has a
+		//value, it must be in %RAX so we can assign
+		//that entire live range to %RAX
+		case RET:
+			//If it has one, assign it
+			if(instruction->source_register != NULL){
+				instruction->source_register->associated_live_range->reg = RAX;
+			}
+			break;
+		case MOVL:
+		case MOVQ:
+		case MOVW:
+			//If we're moving into something preparing for division, this needs
+			//to be in RAX
+			if(instruction->next_statement != NULL &&
+				(instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)
+				&& instruction->next_statement->next_statement != NULL
+				&& (is_division_instruction(instruction->next_statement->next_statement) == TRUE
+				|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
+				//This needs to be in RAX
+				instruction->destination_register->associated_live_range->reg = RAX;
+
+			//We also need to check for all kinds of paremeter passing
+			} else if(instruction->destination_register->parameter_number > 0){
+				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
+				instruction->destination_register->associated_live_range->carries_function_param = TRUE;
+			}
+
+			break;
+
+		case DIVL:
+		case DIVQ:
+		case IDIVL:
+		case IDIVQ:
+			//The destination must be in RAX here
+			instruction->destination_register->associated_live_range->reg = RAX;
+			break;
+
+		case DIVL_FOR_MOD:
+		case DIVQ_FOR_MOD:
+		case IDIVL_FOR_MOD:
+		case IDIVQ_FOR_MOD:
+			//The destination for all division remainders is RDX
+			instruction->destination_register->associated_live_range->reg = RDX;
+			break;
+
+		//Function calls always return through rax
+		case CALL:
+			//We could have a void return, but usually we'll give something
+			if(instruction->destination_register != NULL){
+				instruction->destination_register->associated_live_range->reg = RAX;
+			}
+			break;
+
+		//Most of the time we will get here
+		default:
+			break;
+	}
 }
 
 
@@ -986,6 +969,9 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 
 		//For every operation that we have
 		while(operation != NULL){
+			//Hitch a ride on this traversal to do pre-coloring
+			pre_color(operation);
+
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
 			if(operation->instruction_type == PHI_FUNCTION || operation->destination_register == NULL){
@@ -1279,9 +1265,6 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//Now let's determine the interference graph
 	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
-
-	//Now we can precolor everything
-	pre_color(cfg, live_ranges);
 
 	printf("============= After Live Range Determination ==============\n");
 	print_blocks_with_live_ranges(cfg->head_block);

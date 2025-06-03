@@ -45,8 +45,11 @@ fn main() -> i32{
 	let mut z:i32 := y + x;
 	let a:char := 'a';
 	let b:char := 'b';
-	let c:char := 'c';
+	let ch:char := 'c';
+
+	let mut k:i32 := y / z;
+	let mut c:i32 := y % k;
 
 	//Testing complexities
-	ret @parameter_pass2(x + 5, y * 3, z - 22, 'a', b + 'd', c) + @parameter_pass(x, y, z, 'a', b, c);
+	ret @parameter_pass2(k+ 5, c * 3, z - 22, 'a', b + 'd', ch) + @parameter_pass(x, y, z, 'a', b, ch);
 }
