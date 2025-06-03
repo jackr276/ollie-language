@@ -540,6 +540,11 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type);
 
 /**
+ * Emit a load statement directly. This should only be used during spilling
+ */
+instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset);
+
+/**
  * Emit a return statement. The return statement can optionally have a node that we're returning.
  * Returnee may or may not be null
  */

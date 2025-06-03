@@ -1091,6 +1091,9 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 	//This is an address so always quad word
 	stack_pointer_live_range->size = QUAD_WORD;
 
+	//This is precolor
+	stack_pointer_live_range->is_precolored = TRUE;
+
 	//Add the stack pointer to the dynamic array
 	dynamic_array_add(stack_pointer_live_range->variables, stack_pointer);
 	
@@ -1148,15 +1151,46 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
  * memory
  */
 static void handle_assignment_spill(cfg_t* cfg, live_range_t* spill_range, instruction_t* instruction){
+	//We'll need to store this variable in memory after the instruction
 
 }
 
 
 /**
  * Spill a use into memory and replace the live ranges appropriately
+ *
+ * We will be emitting a new live range here, so we should give it back as a pointer
  */
-static void handle_use_spill(cfg_t* cfg, live_range_t* spill_range, instruction_t* instruction){
+static live_range_t* handle_use_spill(cfg_t* cfg, three_addr_var_t* var, live_range_t* spill_range, instruction_t* instruction){
+	//We'll need to load this from memory before we use
+	three_addr_var_t* temp_var = emit_temp_var(var->type);
 
+	//Grab the block out too
+	basic_block_t* block = instruction->block_contained_in;
+
+	//Create a new live range just for this variable
+	temp_var->associated_live_range = live_range_alloc(block->function_defined_in);
+
+	//Now we'll want to load from memory
+	instruction_t* load = emit_load_instruction(temp_var, cfg->stack_pointer, cfg->type_symtab, temp_var->stack_offset);
+
+	//Grab the previous one out
+	instruction_t* previous = instruction->previous_statement;
+
+	//Link load and the prior instruction
+	load->previous_statement = previous;
+	if(previous != NULL){
+		previous->next_statement = load;
+	} else {
+		block->leader_statement = previous;
+	}
+
+	//And link the instruction to the load
+	load->next_statement = instruction;
+	instruction->previous_statement = load;
+
+	//Give back this live range now
+	return temp_var->associated_live_range;
 }
 
 
@@ -1173,14 +1207,13 @@ static void handle_use_spill(cfg_t* cfg, live_range_t* spill_range, instruction_
 static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
 	//Since we are spilling to the stack, we'll need to get the stack_data_area structure
 	//out from whichever function this is from
-	stack_data_area_t area = spill_range->function_defined_in->data_area;
 
 	//We'll need this for the stack offset
 	three_addr_var_t* var = dynamic_array_get_at(spill_range->variables, 0);
 
 	//Now that we have the data area, we'll need to add enough space for the new variable
 	//in the stack data area
-	add_variable_to_stack(&area, dynamic_array_get_at(spill_range->variables, 0));
+	add_variable_to_stack(&(spill_range->function_defined_in->data_area), var);
 
 	//Now we'll grab out this one's offset
 	u_int32_t stack_offset = var->stack_offset;
@@ -1211,6 +1244,17 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			//Let's check to see if this function assigns this live range
 			if(current->destination_register != NULL
 				&& current->destination_register->associated_live_range == spill_range){
+
+			}
+
+			if(is_destination_also_operand(current) == TRUE
+				&& current->destination_register->associated_live_range == spill_range){
+				handle_use_spill(cfg, current->destination_register, spill_range, current);
+			}
+
+			if(current->source_register != NULL
+				&& current->source_register->associated_live_range == spill_range){
+				handle_use_spill(cfg, current->source_register, spill_range, current);
 
 			}
 

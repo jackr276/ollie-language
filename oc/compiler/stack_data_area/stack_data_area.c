@@ -110,7 +110,6 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 
 	//Special case - inserting at the head
 	if(current == NULL){
-		printf("HERE\n");
 		//This one is the highest
 		area->highest = node;
 		//No offset - it's the lowest

@@ -2174,6 +2174,44 @@ instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_
 
 
 /**
+ * Emit a load statement directly. This should only be used during spilling
+ */
+instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset){
+	//Allocate the instruction
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Select the size
+	variable_size_t size = select_variable_size(assignee);
+
+	//Select the appropriate register
+	switch(size){
+		case WORD:
+			stmt->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			stmt->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			stmt->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		default:
+			break;
+	}
+
+	stmt->destination_register = assignee;
+	//Stack pointer is source 1
+	stmt->address_calc_reg1 = stack_pointer;
+	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//Emit an integer constant for this offset
+	stmt->offset = emit_int_constant_direct(offset, symtab);
+
+	//And we're done, we can return it
+	return stmt;
+}
+
+
+/**
  * Emit an assignment "three" address code statement
  */
 instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant){

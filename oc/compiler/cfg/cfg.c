@@ -5516,6 +5516,9 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
 
+	//Store this along with it
+	cfg->type_symtab = type_symtab;
+
 	//Create the dynamic arrays that we need
 	cfg->created_blocks = dynamic_array_alloc();
 	cfg->function_blocks = dynamic_array_alloc();
