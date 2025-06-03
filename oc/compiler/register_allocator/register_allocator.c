@@ -1144,16 +1144,86 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 
 
 /**
+ * Spill an assignment instruction by emitting a store statement to add this into
+ * memory
+ */
+static void handle_assignment_spill(cfg_t* cfg, live_range_t* spill_range, instruction_t* instruction){
+
+}
+
+
+/**
+ * Spill a use into memory and replace the live ranges appropriately
+ */
+static void handle_use_spill(cfg_t* cfg, live_range_t* spill_range, instruction_t* instruction){
+
+}
+
+
+/**
  * Spill a live range to memory to make a graph N-colorable
  *
  * After a live range is spilled, all definitions go to memory, and all uses
  * come from memory(stack memory)
+ *
+ * RULES:
+ * Every assignment must now be followed by a store 
+ * Every use must be preceeded by a load
  */
 static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
-	//Since we are spilling, we'll need a new 
-	//We'll need a var from this
+	//Since we are spilling to the stack, we'll need to get the stack_data_area structure
+	//out from whichever function this is from
+	stack_data_area_t area = spill_range->function_defined_in->data_area;
+
+	//We'll need this for the stack offset
 	three_addr_var_t* var = dynamic_array_get_at(spill_range->variables, 0);
 
+	//Now that we have the data area, we'll need to add enough space for the new variable
+	//in the stack data area
+	add_variable_to_stack(&area, dynamic_array_get_at(spill_range->variables, 0));
+
+	//Now we'll grab out this one's offset
+	u_int32_t stack_offset = var->stack_offset;
+
+	//Now that we've added this in, we'll need to go through and add 
+	//the loads and stores
+	
+	//Optimization - live-ranges are function level, so we'll just go through the function
+	//blocks until we find one that matches this function
+	basic_block_t* function_block;
+	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		//Grab the block out
+		function_block = dynamic_array_get_at(cfg->function_blocks, i);
+
+		//We've got our match
+		if(function_block->function_defined_in == spill_range->function_defined_in){
+			break;
+		}
+	}
+
+	//Now we have our function block, and we'll crawl it until we reach the end
+	while(function_block != NULL && function_block->function_defined_in == spill_range->function_defined_in){
+		//Now we'll crawl this block and find every place where this live range is used/defined
+		instruction_t* current = function_block->leader_statement;
+
+		//Crawl through every block
+		while(current != NULL){
+			//Let's check to see if this function assigns this live range
+			if(current->destination_register != NULL
+				&& current->destination_register->associated_live_range == spill_range){
+
+			}
+
+			//Advance the pointer
+			current = current->next_statement;
+		}
+
+
+		//Advance it up
+		function_block = function_block->direct_successor;
+	}
+	
+	//Once we're done spilling, this live range is now completely useless to us
 }
 
 
