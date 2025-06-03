@@ -266,6 +266,8 @@ struct live_range_t{
 	dynamic_array_t* variables;
 	//And we'll hold an adjacency list for interference
 	dynamic_array_t* neighbors;
+	//What function does this come from?
+	symtab_function_record_t* function_defined_in;
 	//The degree of this live range
 	u_int16_t degree;
 	//The interference graph index of it
