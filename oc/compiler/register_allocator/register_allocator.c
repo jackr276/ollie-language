@@ -12,7 +12,6 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../interference_graph/interference_graph.h"
 #include "../cfg/cfg.h"
-#include <complex.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

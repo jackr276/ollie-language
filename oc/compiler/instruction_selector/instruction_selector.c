@@ -1743,6 +1743,9 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
 
+	//Ensure that this one's size has been selected
+	logical_not->assignee->variable_size = select_variable_size(logical_not->assignee);
+
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
 	instruction_t* test_inst = emit_test_instruction(logical_not->assignee, logical_not->assignee); 
@@ -1750,8 +1753,11 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	test_inst->block_contained_in = logical_not->block_contained_in;
 	test_inst->is_branch_ending = logical_not->is_branch_ending;
 
+	//We'll need this type for our setne's
+	generic_type_t* unsigned_int16_type = lookup_type_name_only(cfg->type_symtab, "u16")->type;
+
 	//Now we'll set the AL register to 1 if we're equal here
-	instruction_t* sete_inst = emit_sete_instruction(emit_temp_var(logical_not->assignee->type));
+	instruction_t* sete_inst = emit_sete_instruction(emit_temp_var(unsigned_int16_type));
 	//Ensure that we set all these flags too
 	sete_inst->block_contained_in = logical_not->block_contained_in;
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
@@ -1834,8 +1840,11 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	//Let's first emit the or instructio
 	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
+	//We'll need this type for our setne's
+	generic_type_t* unsigned_int16_type = lookup_type_name_only(cfg->type_symtab, "u16")->type;
+
 	//Now we need the setne instruction
-	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(or_instruction->destination_register->type));
+	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int16_type));
 
 	//Let's link the two together
 	or_instruction->next_statement = setne_instruction;
@@ -1843,6 +1852,9 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 
 	//Following that we'll need the final movzbl instruction
 	instruction_t* movzbl_instruction = emit_movzbl_instruction(logical_or->assignee, setne_instruction->destination_register);
+
+	//Select this one's size 
+	logical_or->assignee->variable_size = select_variable_size(logical_or->assignee);
 
 	//Now we'll link this one too
 	setne_instruction->next_statement = movzbl_instruction;
@@ -1913,8 +1925,11 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	//Let's first emit our test instruction
 	instruction_t* first_test = emit_test_instruction(logical_and->op1, logical_and->op1);
 
+	//We'll need this type for our setne's
+	generic_type_t* unsigned_int16_type = lookup_type_name_only(cfg->type_symtab, "u16")->type;
+
 	//Now we'll need a setne instruction that will set a new temp
-	instruction_t* first_set = emit_setne_instruction(emit_temp_var(logical_and->assignee->type));
+	instruction_t* first_set = emit_setne_instruction(emit_temp_var(unsigned_int16_type));
 	
 	//Link these two
 	first_test->next_statement = first_set;
@@ -1928,7 +1943,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	second_test->previous_statement = first_set;
 
 	//Now the second setne
-	instruction_t* second_set = emit_setne_instruction(emit_temp_var(logical_and->assignee->type));
+	instruction_t* second_set = emit_setne_instruction(emit_temp_var(unsigned_int16_type));
 
 	//Link to the prior
 	second_test->next_statement = second_set;
@@ -1944,6 +1959,9 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	//The final thing that we need is a movzbl
 	instruction_t* final_move = emit_movzbl_instruction(logical_and->assignee, and_inst->destination_register);
 
+	//Select this one's size 
+	logical_and->assignee->variable_size = select_variable_size(logical_and->assignee);
+	
 	//Do this one's linkage
 	and_inst->next_statement = final_move;
 	final_move->previous_statement = and_inst;
