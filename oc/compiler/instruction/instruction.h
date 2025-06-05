@@ -161,6 +161,7 @@ typedef enum{
  * What kind of word length do we have -- used for instructions
  */
 typedef enum{
+	BYTE,
 	WORD,
 	DOUBLE_WORD,
 	QUAD_WORD,

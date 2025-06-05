@@ -428,6 +428,74 @@ instruction_t* emit_idle_instruction(){
 
 
 /**
+ * Print an 8-bit register out. The names used for these are still
+ * 64 bits because 8, 16, 32 and 64 bit uses can't occupy the same register at the 
+ * same time
+ */
+static void print_8_bit_register_name(register_holder_t reg){
+	//One large switch based on what it is
+	switch (reg) {
+		case NO_REG:
+			printf("NOREG8");
+			break;
+		case RAX:
+			printf("%%al");
+			break;
+		case RBX:
+			printf("%%bl");
+			break;
+		case RCX:
+			printf("%%cl");
+			break;
+		case RDX:
+			printf("%%dl");
+			break;
+		case RSI:
+			printf("%%sil");
+			break;
+		case RDI:
+			printf("%%dil");
+			break;
+		case RBP:
+			printf("%%bpl");
+			break;
+		case RSP:
+			printf("%%spl");
+			break;
+		//This one should never happen
+		case RIP:
+			printf("ERROR");
+			break;
+		case R8:
+			printf("%%r8b");
+			break;
+		case R9:
+			printf("%%r9b");
+			break;
+		case R10:
+			printf("%%r10b");
+			break;
+		case R11:
+			printf("%%r11b");
+			break;
+		case R12:
+			printf("%%r12b");
+			break;
+		case R13:
+			printf("%%r13b");
+			break;
+		case R14:
+			printf("%%r14b");
+			break;
+		case R15:
+			printf("%%r15b");
+			break;
+	}
+}
+
+
+
+/**
  * Print a 16-bit register out. The names used for these are still
  * 64 bits because 32 and 64 bit uses can't occupy the same register at the 
  * same time
@@ -652,6 +720,8 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 			print_32_bit_register_name(variable->associated_live_range->reg);
 		} else if(variable->associated_live_range->size == WORD){
 			print_16_bit_register_name(variable->associated_live_range->reg);
+		} else if (variable->associated_live_range->size == BYTE){
+			print_8_bit_register_name(variable->associated_live_range->reg);
 		}
 
 	//Otherwise if it's a temp
