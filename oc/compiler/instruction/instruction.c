@@ -428,6 +428,73 @@ instruction_t* emit_idle_instruction(){
 
 
 /**
+ * Print a 16-bit register out. The names used for these are still
+ * 64 bits because 32 and 64 bit uses can't occupy the same register at the 
+ * same time
+ */
+static void print_16_bit_register_name(register_holder_t reg){
+	//One large switch based on what it is
+	switch (reg) {
+		case NO_REG:
+			printf("NOREG16");
+			break;
+		case RAX:
+			printf("%%ax");
+			break;
+		case RBX:
+			printf("%%bx");
+			break;
+		case RCX:
+			printf("%%cx");
+			break;
+		case RDX:
+			printf("%%dx");
+			break;
+		case RSI:
+			printf("%%si");
+			break;
+		case RDI:
+			printf("%%di");
+			break;
+		case RBP:
+			printf("%%bp");
+			break;
+		case RSP:
+			printf("%%sp");
+			break;
+		//This one should never happen
+		case RIP:
+			printf("ERROR");
+			break;
+		case R8:
+			printf("%%r8w");
+			break;
+		case R9:
+			printf("%%r9w");
+			break;
+		case R10:
+			printf("%%r10w");
+			break;
+		case R11:
+			printf("%%r11w");
+			break;
+		case R12:
+			printf("%%r12w");
+			break;
+		case R13:
+			printf("%%r13w");
+			break;
+		case R14:
+			printf("%%r14w");
+			break;
+		case R15:
+			printf("%%r15w");
+			break;
+	}
+}
+
+
+/**
  * Print a 32-bit register out. The names used for these are still
  * 64 bits because 32 and 64 bit uses can't occupy the same register at the 
  * same time
@@ -476,7 +543,7 @@ static void print_32_bit_register_name(register_holder_t reg){
 			printf("%%r10d");
 			break;
 		case R11:
-			printf("%%r11");
+			printf("%%r11d");
 			break;
 		case R12:
 			printf("%%r12d");
@@ -581,8 +648,10 @@ void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode){
 		//Print this out based on the size
 		if(variable->associated_live_range->size == QUAD_WORD){
 			print_64_bit_register_name(variable->associated_live_range->reg);
-		} else {
+		} else if(variable->associated_live_range->size == DOUBLE_WORD){
 			print_32_bit_register_name(variable->associated_live_range->reg);
+		} else if(variable->associated_live_range->size == WORD){
+			print_16_bit_register_name(variable->associated_live_range->reg);
 		}
 
 	//Otherwise if it's a temp
