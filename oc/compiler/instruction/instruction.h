@@ -53,15 +53,19 @@ typedef enum{
 	CQTO, //convert quad-to-octa word
 	CLTD, //convert long-to-double-long(quad)
 	NOP,
-	JMP,
-	JNE,
-	JE,
-	JNZ,
-	JZ,
-	JGE,
-	JG,
-	JLE,
-	JL,
+	JMP, //Unconditional jump
+	JNE, //Jump not equal
+	JE, //Jump if equal
+	JNZ, //Jump if not zero
+	JZ, //Jump if zero
+	JGE, //Jump GE(SIGNED)
+	JG, //Jump GT(SIGNED)
+	JLE, //Jump LE(SIGNED)
+	JL, //JUMP LT(SIGNED)
+	JA, //JUMP GT(UNSIGNED)
+	JAE, //JUMP GE(UNSIGNED)
+	JB, //JUMP LT(UNSIGNED)
+	JBE, //JUMP LE(UNSIGNED)
 	ADDW,
 	ADDL,
 	ADDQ,
@@ -108,6 +112,8 @@ typedef enum{
 	TESTW,
 	TESTL,
 	TESTQ,
+	PUSH,
+	POP,
 	SETE, //Set if equal
 	SETNE,
 	MOVZBL, //move if zero or below long word
@@ -149,11 +155,15 @@ typedef enum{
 	JUMP_TYPE_JE,
 	JUMP_TYPE_JNZ,
 	JUMP_TYPE_JZ,
-	JUMP_TYPE_JL,
-	JUMP_TYPE_JG,
+	JUMP_TYPE_JL, //Jump LT(SIGNED)
+	JUMP_TYPE_JG, //Jump GT(SIGNED)
+	JUMP_TYPE_JGE, //Jump GE(SIGNED)
+	JUMP_TYPE_JLE, //Jump LE(SIGNED)
+	JUMP_TYPE_JA, //Jump GT(UNSIGNED)
+	JUMP_TYPE_JAE, //Jump GE(UNSIGNED)
+	JUMP_TYPE_JB, //Jump LT(UNSIGNED)
+	JUMP_TYPE_JBE, //Jump LE(UNSIGNED)
 	JUMP_TYPE_JMP,
-	JUMP_TYPE_JGE,
-	JUMP_TYPE_JLE,
 } jump_type_t;
 
 

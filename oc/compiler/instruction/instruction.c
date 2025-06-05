@@ -1967,6 +1967,18 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 		case JLE:
 			printf("jle .L%d\n", jumping_to_block->block_id);
 			break;
+		case JA:
+			printf("ja .L%d\n", jumping_to_block->block_id);
+			break;
+		case JB:
+			printf("jb .L%d\n", jumping_to_block->block_id);
+			break;
+		case JAE:
+			printf("jae .L%d\n", jumping_to_block->block_id);
+			break;
+		case JBE:
+			printf("jbe .L%d\n", jumping_to_block->block_id);
+			break;
 		case ASM_INLINE:
 			printf("%s", instruction->inlined_assembly);
 			break;

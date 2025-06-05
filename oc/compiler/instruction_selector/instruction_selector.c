@@ -520,6 +520,18 @@ static void select_jump_instruction(instruction_t* instruction){
 		case JUMP_TYPE_JLE:
 			instruction->instruction_type = JLE;
 			break;
+		case JUMP_TYPE_JA:
+			instruction->instruction_type = JA;
+			break;
+		case JUMP_TYPE_JAE:
+			instruction->instruction_type = JAE;
+			break;
+		case JUMP_TYPE_JB:
+			instruction->instruction_type = JB;
+			break;
+		case JUMP_TYPE_JBE:
+			instruction->instruction_type = JBE;
+			break;
 		case JUMP_TYPE_JZ:
 			instruction->instruction_type = JZ;
 			break;
