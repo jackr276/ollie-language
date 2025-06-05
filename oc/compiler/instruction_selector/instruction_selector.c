@@ -626,34 +626,6 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 
 
 /**
- * Select the size of a constant based on its type
- */
-variable_size_t select_constant_size(three_addr_const_t* constant){
-	variable_size_t size;
-
-	//This are all 32 bit
-	if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U
-		|| constant->const_type == HEX_CONST){
-		size = DOUBLE_WORD;
-
-	//Default for a float is double precision
-	} else if(constant->const_type == FLOAT_CONST){
-		size = DOUBLE_PRECISION;
-
-	//These are all 64 bit
-	} else if(constant->const_type == LONG_CONST || constant->const_type == LONG_CONST_FORCE_U){
-		size = QUAD_WORD;
-
-	//Sane default
-	} else {
-		size = QUAD_WORD;
-	}
-
-	return size;
-}
-
-
-/**
  * Handle a register/immediate to memory move type instruction selection with an address calculation
  *
  * DOES NOT DO DELETION/WINDOW REORDERING

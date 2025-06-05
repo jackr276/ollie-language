@@ -45,6 +45,37 @@ void set_new_function(symtab_function_record_t* func){
 
 
 /**
+ * Select the size of a constant based on its type
+ */
+variable_size_t select_constant_size(three_addr_const_t* constant){
+	variable_size_t size;
+
+	//This are all 32 bit
+	if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U
+		|| constant->const_type == HEX_CONST){
+		size = DOUBLE_WORD;
+
+	//Default for a float is double precision
+	} else if(constant->const_type == FLOAT_CONST){
+		size = DOUBLE_PRECISION;
+
+	//These are all 64 bit
+	} else if(constant->const_type == LONG_CONST || constant->const_type == LONG_CONST_FORCE_U){
+		size = QUAD_WORD;
+
+	} else if(constant->const_type == CHAR_CONST){
+		size = BYTE;
+
+	//Sane default
+	} else {
+		size = QUAD_WORD;
+	}
+
+	return size;
+}
+
+
+/**
  * Select the size of a given variable based on its type
  */
 variable_size_t select_variable_size(three_addr_var_t* variable){
@@ -61,9 +92,11 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 
 		//Switch based on this
 		switch (basic_type) {
-			//We round up to 16 bit here
 			case U_INT8:
 			case S_INT8:
+				size = BYTE;
+				break;
+
 			case U_INT16:
 			case S_INT16:
 			case CHAR:
@@ -243,6 +276,9 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	//Store the temp var number
 	var->temp_var_number = increment_and_get_temp_id();
 
+	//Select the size of this variable
+	var->variable_size = select_variable_size(var);
+
 	//Finally we'll bail out
 	return var;
 }
@@ -268,6 +304,9 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
 	emitted_var->type = var->type;
 	//And store the symtab record
 	emitted_var->linked_var = var;
+
+	//Select the size of this variable
+	emitted_var->variable_size = select_variable_size(emitted_var);
 
 	//And we're all done
 	return emitted_var;

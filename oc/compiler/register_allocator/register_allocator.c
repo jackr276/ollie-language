@@ -117,7 +117,7 @@ static u_int16_t increment_and_get_live_range_id(){
 /**
  * Create a live range
  */
-static live_range_t* live_range_alloc(symtab_function_record_t* function_defined_in){
+static live_range_t* live_range_alloc(symtab_function_record_t* function_defined_in, variable_size_t size){
 	//Calloc it
 	live_range_t* live_range = calloc(1, sizeof(live_range_t));
 
@@ -132,6 +132,9 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
 
 	//Create the neighbors array as well
 	live_range->neighbors = dynamic_array_alloc();
+
+	//Store the size as well
+	live_range->size = size;
 
 	//Finally we'll return it
 	return live_range;
@@ -479,7 +482,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 		if(variable->linked_var->is_function_paramater == TRUE){
 			print_variable(variable, PRINTING_VAR_INLINE);
 			//Create it. Since this is a function parameter, we start at line 0
-			live_range = live_range_alloc(block->function_defined_in);
+			live_range = live_range_alloc(block->function_defined_in, variable->variable_size);
 			//Add it in
 			dynamic_array_add(live_range->variables, variable);
 			//Update the variable too
@@ -769,7 +772,7 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
 			//If it's null we need to make one
 			if(live_range == NULL){
 				//Create it
-				live_range = live_range_alloc(basic_block->function_defined_in);
+				live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
 
 				//Add it into the overall set
 				dynamic_array_add(live_ranges, live_range);
@@ -797,7 +800,7 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
 			//If it's null we need to make one
 			if(live_range == NULL){
 				//Create it
-				live_range = live_range_alloc(basic_block->function_defined_in);
+				live_range = live_range_alloc(basic_block->function_defined_in, current->destination_register->variable_size);
 
 				//Add it into the overall set
 				dynamic_array_add(live_ranges, live_range);
@@ -1081,14 +1084,11 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the stack pointer. Special case here - stack pointer has no block
-	live_range_t* stack_pointer_live_range = live_range_alloc(NULL);
+	live_range_t* stack_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
 	//This is guaranteed to be RSP - so it's already been allocated
 	stack_pointer_live_range->reg = RSP;
 	//And we absolutely *can not* spill it
 	stack_pointer_live_range->spill_cost = INT16_MAX;
-
-	//This is an address so always quad word
-	stack_pointer_live_range->size = QUAD_WORD;
 
 	//This is precolor
 	stack_pointer_live_range->is_precolored = TRUE;
@@ -1168,7 +1168,7 @@ static live_range_t* handle_use_spill(cfg_t* cfg, three_addr_var_t* var, live_ra
 	basic_block_t* block = instruction->block_contained_in;
 
 	//Create a new live range just for this variable
-	temp_var->associated_live_range = live_range_alloc(block->function_defined_in);
+	temp_var->associated_live_range = live_range_alloc(block->function_defined_in, temp_var->variable_size);
 
 	//Now we'll want to load from memory
 	instruction_t* load = emit_load_instruction(temp_var, cfg->stack_pointer, cfg->type_symtab, temp_var->stack_offset);
