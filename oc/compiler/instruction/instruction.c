@@ -1125,7 +1125,10 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
 			break;
 
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
-			print_immediate_value_no_prefix(instruction->offset);
+			//Only print this if it's not 0
+			if(instruction->offset->is_value_0 == FALSE){
+				print_immediate_value_no_prefix(instruction->offset);
+			}
 			printf("(");
 			print_variable(instruction->address_calc_reg1, mode);
 			printf(")");
@@ -1140,7 +1143,10 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
-			print_immediate_value_no_prefix(instruction->offset);
+			//Only print this if it's not 0
+			if(instruction->offset->is_value_0 == FALSE){
+				print_immediate_value_no_prefix(instruction->offset);
+			}
 			printf("(");
 			print_variable(instruction->address_calc_reg1, mode);
 			printf(", ");
@@ -1149,7 +1155,10 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
-			print_immediate_value_no_prefix(instruction->offset);
+		//Only print this if it's not 0
+			if(instruction->offset->is_value_0 == FALSE){
+				print_immediate_value_no_prefix(instruction->offset);
+			}
 			printf("(");
 			print_variable(instruction->address_calc_reg1, mode);
 			printf(", ");
@@ -2028,38 +2037,54 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
  */
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	//First we'll dynamically allocate the constant
-	three_addr_const_t* const_var = calloc(1, sizeof(three_addr_const_t));
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Attach it for memory management
-	const_var->next_created = emitted_consts;
-	emitted_consts = const_var;
+	constant->next_created = emitted_consts;
+	emitted_consts = constant;
 
 	//Grab a reference to the const node for convenience
 	constant_ast_node_t* const_node_raw = (constant_ast_node_t*)(const_node->node);
 
 	//Now we'll assign the appropriate values
-	const_var->const_type = const_node_raw->constant_type; 
-	const_var->type = const_node->inferred_type;
+	constant->const_type = const_node_raw->constant_type; 
+	constant->type = const_node->inferred_type;
 
 	//Now based on what type we have we'll make assignments
-	switch(const_var->const_type){
+	switch(constant->const_type){
 		case CHAR_CONST:
-			const_var->char_const = const_node_raw->char_val;
+			constant->char_const = const_node_raw->char_val;
+			//Set the 0 flag if true
+			if(const_node_raw->char_val == 0){
+				constant->is_value_0 = TRUE;
+			}
 			break;
 		case INT_CONST:
-			const_var->int_const = const_node_raw->int_val;
+			constant->int_const = const_node_raw->int_val;
+			//Set the 0 flag if true
+			if(const_node_raw->char_val == 0){
+				constant->is_value_0 = TRUE;
+			}
 			break;
 		case FLOAT_CONST:
-			const_var->float_const = const_node_raw->float_val;
+			constant->float_const = const_node_raw->float_val;
 			break;
 		case STR_CONST:
-			strcpy(const_var->str_const, const_node_raw->string_val);
+			strcpy(constant->str_const, const_node_raw->string_val);
 			break;
 		case LONG_CONST:
-			const_var->long_const = const_node_raw->long_val;
+			constant->long_const = const_node_raw->long_val;
+			//Set the 0 flag if true
+			if(const_node_raw->char_val == 0){
+				constant->is_value_0 = TRUE;
+			}
 			break;
 		case HEX_CONST:
-			const_var->int_const = const_node_raw->int_val;
+			constant->int_const = const_node_raw->int_val;
+			//Set the 0 flag if true
+			if(const_node_raw->char_val == 0){
+				constant->is_value_0 = TRUE;
+			}
 			break;
 		//Some very weird error here
 		default:
@@ -2068,7 +2093,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	}
 	
 	//Once all that is done, we can leave
-	return const_var;
+	return constant;
 }
 
 
@@ -2303,6 +2328,11 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 	//Lookup what we have in here(i32)
 	constant->type = lookup_type_name_only(symtab, "i32")->type;
 
+	//Set this flag if we need to
+	if(int_const == 0){
+		constant->is_value_0 = TRUE;
+	}
+
 	//Return out
 	return constant;
 }
@@ -2327,6 +2357,11 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab
 	//Lookup what we have in here(u32)
 	constant->type = lookup_type_name_only(symtab, "u32")->type;
 
+	//Set this flag if we need to
+	if(int_const == 0){
+		constant->is_value_0 = TRUE;
+	}
+
 	//Return out
 	return constant;
 }
@@ -2349,6 +2384,11 @@ three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* sy
 
 	//Lookup what we have in here(i32)
 	constant->type = lookup_type_name_only(symtab, "i64")->type;
+
+	//Set this flag if we need to
+	if(long_const == 0){
+		constant->is_value_0 = TRUE;
+	}
 
 	//Return out
 	return constant;
