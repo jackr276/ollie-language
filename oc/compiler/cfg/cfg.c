@@ -177,32 +177,80 @@ static values_package_t pack_values(generic_ast_node_t* initial_node, basic_bloc
  * Select the appropriate jump type to use. We can either use
  * inverse jumps or direct jumps
  */
-jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type){
+jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, signedess_t signedness){
 	//Let's see what we have here
 	switch(op){
 		case G_THAN:
 			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JLE;
+				if(signedness == SIGNED){
+					//Signed version
+					return JUMP_TYPE_JLE;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JBE;
+				}
 			} else {
-				return JUMP_TYPE_JG;
+				if(signedness == SIGNED){
+					//Signed version
+					return JUMP_TYPE_JG;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JA;
+				}
 			}
 		case L_THAN:
 			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JGE;
+				if(signedness == SIGNED){
+					//Signed version
+					return JUMP_TYPE_JGE;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JAE;
+				}
 			} else {
-				return JUMP_TYPE_JL;
+				if(signedness == SIGNED){
+					//Signed version
+					return JUMP_TYPE_JL;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JB;
+				}
 			}
 		case L_THAN_OR_EQ:
 			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JG;
+				if(signedness == SIGNED){
+					//Signed version
+					return JUMP_TYPE_JG;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JA;
+				}
 			} else {
-				return JUMP_TYPE_JLE;
+				if(signedness == SIGNED){
+					//Signed version
+					return JUMP_TYPE_JLE;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JBE;
+				}
 			}
 		case G_THAN_OR_EQ:
 			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JL;
+				if(signedness == SIGNED){
+					//Signed version
+					return JUMP_TYPE_JL;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JB;
+				}
 			} else {
-				return JUMP_TYPE_JGE;
+				if(signedness == SIGNED){
+					//Signed version
+					return JUMP_TYPE_JGE;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JAE;
+				}
 			}
 		case DOUBLE_EQUALS:
 			if(jump_type == JUMP_CATEGORY_INVERSE){
@@ -3893,7 +3941,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	expr_ret_package_t condition_block_vals;
 	//By default, make this blank
 	condition_block_vals.operator = BLANK;
-	
+
 	//If the second one is not blank
 	if(ast_cursor->first_child != NULL){
 		//This is always the first part of the repeating block
@@ -3905,7 +3953,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	}
 
 	//We'll use our inverse jumping("jump out") strategy here. We'll need this jump for later
-	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE);
+	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE, SIGNED);
 
 	//Now move it along to the third condition
 	ast_cursor = ast_cursor->next_sibling;
@@ -4079,7 +4127,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	do_while_stmt_entry_block->direct_successor = do_while_stmt_exit_block;
 
 	//Discern the jump type here--This is a direct jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
 		
 	//We'll need a jump statement here to the entrance block
 	emit_jump(compound_stmt_end, do_while_stmt_entry_block, jump_type, TRUE, FALSE);
@@ -4156,7 +4204,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//We'll now determine what kind of jump statement that we have here. We want to jump to the exit if
 	//we're bad, so we'll do an inverse jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE);
+	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE, SIGNED);
 	//"Jump over" the body if it's bad
 	emit_jump(while_statement_entry_block, while_statement_end_block, jump_type, TRUE, TRUE);
 
@@ -4236,7 +4284,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//We'll just set this to jump out of here
 		//We will perform a normal jump to this one
-		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
 		emit_jump(entry_block, exit_block, jump_to_if, TRUE, FALSE);
 		add_successor(entry_block, exit_block);
 
@@ -4245,7 +4293,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//Add the if statement node in as a direct successor
 		add_successor(entry_block, if_compound_stmt_entry);
 		//We will perform a normal jump to this one
-		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
 		emit_jump(entry_block, if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
 
 		//Now we'll find the end of this statement
@@ -4320,7 +4368,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 			//We'll just set this to jump out of here
 			//We will perform a normal jump to this one
-			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
 			emit_jump(current_entry_block, exit_block, jump_to_else_if, TRUE, FALSE);
 			add_successor(current_entry_block, exit_block);
 
@@ -4329,7 +4377,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//Add the if statement node in as a direct successor
 			add_successor(current_entry_block, else_if_compound_stmt_entry);
 			//We will perform a normal jump to this one
-			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
 			emit_jump(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
@@ -4645,7 +4693,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//First step -> if we're below the minimum, we jump to default 
 	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL);
+	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, SIGNED);
 	//Now we'll emit our jump
 	emit_jump(starting_block, default_block, jump_lower_than, TRUE, FALSE);
 
@@ -4655,7 +4703,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Next step -> if we're above the maximum, jump to default
 	emit_binary_operation_with_constant(starting_block, package2.assignee, package2.assignee, G_THAN, upper_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL);
+	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, SIGNED);
 	//Now we'll emit our jump
 	emit_jump(starting_block, default_block, jump_greater_than, TRUE, FALSE);
 
@@ -4947,7 +4995,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Emit the expression code into the current statement
 				expr_ret_package_t package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
 				//Decide the appropriate jump statement -- direct path here
-				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL);
+				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
 
 				//We'll need a new block here - this will count as a branch
 				basic_block_t* new_block = basic_block_alloc(1);
@@ -5025,7 +5073,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
 
 				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL);
+				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
 
 				//Add a successor to the end
 				add_successor(current_block, values->loop_stmt_end);

@@ -484,7 +484,7 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	
 	//We need to select the appropriate jump type for our statement. We want an inverse jump, 
 	//because we're jumping if this condition fails
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE);
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE, SIGNED);
 	
 	//Jump to else here
 	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
@@ -515,7 +515,7 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 
 	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
 	//We'll do a direct jump here - if it's affirmative
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE);
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE, SIGNED);
 
 	//Now we'll jump to else
 	instruction_t* final_cond_jump = emit_jmp_instruction(else_target, jump);
@@ -570,7 +570,7 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 
 	//We need to select the appropriate jump type for our statement. We want a regular jump, 
 	//because we're jumping if this condition succeeds
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL);
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL, SIGNED);
 
 	//Once we get out here, we have the statement that assigns op1. Since this is an "or" target,
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
@@ -604,7 +604,7 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 
 	//Now if this fails, we know that we're going to the else case. As such, 
 	//we'll select the inverse jump here
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE);
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE, SIGNED);
 
 	//Now we'll emit the jump to else
 	instruction_t* final_cond_jump = emit_jmp_instruction(else_target, jump);
@@ -651,7 +651,7 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 	
 	//We need to select the appropriate jump type for our statement. We want an inverse jump, 
 	//because we're jumping if this condition fails
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE);
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE, SIGNED);
 	
 	//Jump to else here
 	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
@@ -682,7 +682,7 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 
 	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
 	//We'll do a direct jump here - if it's affirmative
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL);
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL, SIGNED);
 
 	//Now we'll emit the jump to if
 	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);
@@ -715,7 +715,7 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 
 	//We need to select the appropriate jump type for our statement. We want a regular jump, 
 	//because we're jumping if this condition succeeds
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL);
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL, SIGNED);
 
 	//Once we get out here, we have the statement that assigns op1. Since this is an "or" target,
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
@@ -749,7 +749,7 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 
 	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
 	//We'll do a direct jump here - if it's affirmative
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL);
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL, SIGNED);
 
 	//Now we'll emit the jump to if
 	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);

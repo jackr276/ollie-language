@@ -11,7 +11,6 @@
 #include "../lexer/lexer.h"
 #include <sys/types.h>
 
-//A random value that we can use to determine if we're out of bounds
 #define OUT_OF_BOUNDS 3
 
 //Type names may not exceed 200 characters in length
@@ -38,6 +37,15 @@ typedef struct constructed_type_t constructed_type_t;
 typedef struct constructed_type_field_t constructed_type_field_t;
 //An aliased type
 typedef struct aliased_type_t aliased_type_t;
+
+
+/**
+ * Is a type signed or unsigned
+ */
+typedef enum {
+	SIGNED,
+	UNSIGNED
+} signedess_t;
 
 
 /**
