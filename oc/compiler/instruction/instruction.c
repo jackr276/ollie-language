@@ -45,6 +45,22 @@ void set_new_function(symtab_function_record_t* func){
 
 
 /**
+ * Determine the signedness of a jump type
+ */
+signedness_t is_jump_type_signed(jump_type_t type){
+	switch(type){
+		case JUMP_TYPE_JG:
+		case JUMP_TYPE_JGE:
+		case JUMP_TYPE_JLE:
+		case JUMP_TYPE_JL:
+			return SIGNED;
+		default:
+			return UNSIGNED;
+	}
+}
+
+
+/**
  * Select the size of a constant based on its type
  */
 variable_size_t select_constant_size(three_addr_const_t* constant){

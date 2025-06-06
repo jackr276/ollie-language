@@ -472,10 +472,21 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	//for the one we're currently on
 	instruction_t* cursor = stmt->previous_statement;
 
+	//Our first op signedness - unsigned by default
+	signedness_t first_op_signedness = UNSIGNED;
+
+	//Our second op signedness - unsigned by default
+	signedness_t second_op_signedness = UNSIGNED;
+
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
+	}
+
+	//Determine the signedness from here
+	if(is_type_signed(cursor->assignee->type) == TRUE){
+		first_op_signedness = SIGNED;
 	}
 	
 	//Once we get out here, we have the statement that assigns op1. Since this is an "and" target,
@@ -484,7 +495,7 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	
 	//We need to select the appropriate jump type for our statement. We want an inverse jump, 
 	//because we're jumping if this condition fails
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE, SIGNED);
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE, first_op_signedness);
 	
 	//Jump to else here
 	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
@@ -513,9 +524,14 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	//We also no longer need the following jump statement
 	delete_statement(cfg, block, next);
 
+	//Determine the signedness from here
+	if(previous->assignee != NULL && is_type_signed(previous->assignee->type) == TRUE){
+		second_op_signedness = SIGNED;
+	}
+
 	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
 	//We'll do a direct jump here - if it's affirmative
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE, SIGNED);
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE, second_op_signedness);
 
 	//Now we'll jump to else
 	instruction_t* final_cond_jump = emit_jmp_instruction(else_target, jump);
@@ -562,15 +578,26 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	//for the one we're currently on
 	instruction_t* cursor = stmt->previous_statement;
 
+	//Our first op signedness - unsigned by default
+	signedness_t first_op_signedness = UNSIGNED;
+
+	//Our second op signedness - unsigned by default
+	signedness_t second_op_signedness = UNSIGNED;
+
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
 
+	//Determine the signedness from here
+	if(is_type_signed(cursor->assignee->type) == TRUE){
+		first_op_signedness = SIGNED;
+	}
+
 	//We need to select the appropriate jump type for our statement. We want a regular jump, 
 	//because we're jumping if this condition succeeds
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL, SIGNED);
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL, first_op_signedness);
 
 	//Once we get out here, we have the statement that assigns op1. Since this is an "or" target,
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
@@ -602,9 +629,14 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	//We also no longer need the following jump statement
 	delete_statement(cfg, block, next);
 
+	//Determine the signedness from here
+	if(previous->assignee != NULL && is_type_signed(previous->assignee->type) == TRUE){
+		second_op_signedness = SIGNED;
+	}
+
 	//Now if this fails, we know that we're going to the else case. As such, 
 	//we'll select the inverse jump here
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE, SIGNED);
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_INVERSE, second_op_signedness);
 
 	//Now we'll emit the jump to else
 	instruction_t* final_cond_jump = emit_jmp_instruction(else_target, jump);
@@ -639,19 +671,30 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 	//for the one we're currently on
 	instruction_t* cursor = stmt->previous_statement;
 
+	//Our first op signedness - unsigned by default
+	signedness_t first_op_signedness = UNSIGNED;
+
+	//Our second op signedness - unsigned by default
+	signedness_t second_op_signedness = UNSIGNED;
+
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
-	
+
+	//Determine the signedness from here
+	if(is_type_signed(cursor->assignee->type) == TRUE){
+		first_op_signedness = SIGNED;
+	}
+
 	//Once we get out here, we have the statement that assigns op1. Since this is an "and" target,
 	//we'll jump to ELSE if we have a bad result here(result being zero) because that would cause
 	//the rest of the and to be false
 	
 	//We need to select the appropriate jump type for our statement. We want an inverse jump, 
 	//because we're jumping if this condition fails
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE, SIGNED);
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE, first_op_signedness);
 	
 	//Jump to else here
 	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
@@ -680,9 +723,14 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 	//We also no longer need the following jump statement
 	delete_statement(cfg, block, next);
 
+	//Determine the signedness from here
+	if(previous->assignee != NULL && is_type_signed(previous->assignee->type) == TRUE){
+		second_op_signedness = SIGNED;
+	}
+
 	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
 	//We'll do a direct jump here - if it's affirmative
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL, SIGNED);
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL, second_op_signedness);
 
 	//Now we'll emit the jump to if
 	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);
@@ -707,15 +755,26 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 	//for the one we're currently on
 	instruction_t* cursor = stmt->previous_statement;
 
+	//Our first op signedness - unsigned by default
+	signedness_t first_op_signedness = UNSIGNED;
+
+	//Our second op signedness - unsigned by default
+	signedness_t second_op_signedness = UNSIGNED;
+
 	//Run backwards until we find where op1 is the assignee
 	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
 		cursor = cursor->previous_statement;
 	}
 
+	//Determine the signedness from here
+	if(is_type_signed(cursor->assignee->type) == TRUE){
+		first_op_signedness = SIGNED;
+	}
+
 	//We need to select the appropriate jump type for our statement. We want a regular jump, 
 	//because we're jumping if this condition succeeds
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL, SIGNED);
+	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_NORMAL, first_op_signedness);
 
 	//Once we get out here, we have the statement that assigns op1. Since this is an "or" target,
 	//we'll jump to IF we have a good result here(result being not zero) because that would cause
@@ -747,9 +806,14 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 	//We also no longer need the following jump statement
 	delete_statement(cfg, block, next);
 
+	//Determine the signedness from here
+	if(previous->assignee != NULL && is_type_signed(previous->assignee->type) == TRUE){
+		second_op_signedness = SIGNED;
+	}
+
 	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
 	//We'll do a direct jump here - if it's affirmative
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL, SIGNED);
+	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL, second_op_signedness);
 
 	//Now we'll emit the jump to if
 	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);

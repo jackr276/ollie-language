@@ -189,7 +189,7 @@ void add_successor(basic_block_t* target, basic_block_t* successor);
 /**
  * Select the appropriate jump type given the circumstances, including the operand and the signedness
  */
-jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, signedess_t signedness);
+jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, signedness_t signedness);
 
 /**
  * Add a predecessor to the block

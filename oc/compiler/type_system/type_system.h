@@ -45,7 +45,7 @@ typedef struct aliased_type_t aliased_type_t;
 typedef enum {
 	SIGNED,
 	UNSIGNED
-} signedess_t;
+} signedness_t;
 
 
 /**

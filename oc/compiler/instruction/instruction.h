@@ -457,6 +457,11 @@ variable_size_t select_constant_size(three_addr_const_t* constant);
 variable_size_t select_variable_size(three_addr_var_t* variable);
 
 /**
+ * Determine the signedness of a jump type
+ */
+signedness_t is_jump_type_signed(jump_type_t type);
+
+/**
  * Does a given operation overwrite it's source? Think add, subtract, etc
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction);

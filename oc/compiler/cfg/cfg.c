@@ -67,6 +67,7 @@ typedef struct {
 typedef struct{
 	three_addr_var_t* assignee;
 	Token operator;
+	signedness_t signedness;
 } expr_ret_package_t;
 
 
@@ -177,7 +178,7 @@ static values_package_t pack_values(generic_ast_node_t* initial_node, basic_bloc
  * Select the appropriate jump type to use. We can either use
  * inverse jumps or direct jumps
  */
-jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, signedess_t signedness){
+jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, signedness_t signedness){
 	//Let's see what we have here
 	switch(op){
 		case G_THAN:
@@ -264,8 +265,6 @@ jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, si
 			} else {
 				return JUMP_TYPE_JNE;
 			}
-
-
 		//If we get here, it was some kind of
 		//non relational operator. In this case,
 		//we default to 0 = false non zero = true
@@ -3123,6 +3122,8 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	expr_ret_package_t package;
 	//Operator is blank by default
 	package.operator = BLANK;
+	//Unsigned by default
+	package.signedness = UNSIGNED;
 
 	//Is the cursor a unary expression? If so just emit that. This is our base case 
 	//essentially
@@ -3165,6 +3166,11 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 		op1 = temp_assnment->assignee;
 	}
 
+	//If the left hand is signed, flag that
+	if(is_type_signed(left_hand_temp.assignee->type) == TRUE){
+		package.signedness = SIGNED;
+	}
+
 	//Advance up here
 	cursor = cursor->next_sibling;
 
@@ -3181,6 +3187,11 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 
 	//Emit the binary operator expression using our helper
 	stmt = emit_binary_operation_instruction(op1, op1, binary_operator, right_hand_temp.assignee);
+
+	//If the left hand is signed, flag that
+	if(is_type_signed(left_hand_temp.assignee->type) == TRUE){
+		package.signedness = SIGNED;
+	}
 
 	//Mark this with what we have
 	stmt->is_branch_ending = is_branch_ending;
@@ -3218,6 +3229,8 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	expr_ret_package_t ret_package;
 	//By default, last seen op is blank
 	ret_package.operator = BLANK;
+	//By default everything is unsigned
+	ret_package.signedness = UNSIGNED;
 
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
@@ -3235,6 +3248,8 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 			//We'll now emit the actual address calculation using the offset
 			emit_binary_operation_with_constant(basic_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, type_symtab), is_branch_ending);
+
+			//NO need to worry about signedness here, we're just declaring
 		}
 
 	//Convert our let statement into abstract machine code 
@@ -3259,6 +3274,8 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 		//Finally we'll add this into the overall block
 		add_statement(basic_block, assn_stmt);
+		
+		//Also no need to worry about signedness here either
 	
 	//An assignment statement
 	} else if(expr_node->CLASS == AST_NODE_CLASS_ASNMNT_EXPR) {
@@ -3317,10 +3334,12 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 			print_variable_name(expr_node->first_child->variable);
 			//If this is the case, then we need to just emit the temporary value and be done with it
 			ret_package.assignee =  emit_identifier(basic_block, expr_node->first_child, USE_TEMP_VAR, SIDE_TYPE_LEFT, TRUE);
+			//Signedness is irrelevant here because any jumps would just be "je/jne"
 			return ret_package;
 		} else {
 			//Let this rule handle it
 			ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, PRESERVE_ORIG_VAR, SIDE_TYPE_RIGHT, is_branch_ending);
+			//Again signedness is irrelevant here because any jumps would just be "je/jne"
 			return ret_package;
 		}
 
@@ -3953,7 +3972,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	}
 
 	//We'll use our inverse jumping("jump out") strategy here. We'll need this jump for later
-	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE, SIGNED);
+	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE, condition_block_vals.signedness);
 
 	//Now move it along to the third condition
 	ast_cursor = ast_cursor->next_sibling;
@@ -4127,7 +4146,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	do_while_stmt_entry_block->direct_successor = do_while_stmt_exit_block;
 
 	//Discern the jump type here--This is a direct jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
+	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, package.signedness);
 		
 	//We'll need a jump statement here to the entrance block
 	emit_jump(compound_stmt_end, do_while_stmt_entry_block, jump_type, TRUE, FALSE);
@@ -4204,7 +4223,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 
 	//We'll now determine what kind of jump statement that we have here. We want to jump to the exit if
 	//we're bad, so we'll do an inverse jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE, SIGNED);
+	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE, package.signedness);
 	//"Jump over" the body if it's bad
 	emit_jump(while_statement_entry_block, while_statement_end_block, jump_type, TRUE, TRUE);
 
@@ -4284,7 +4303,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 		//We'll just set this to jump out of here
 		//We will perform a normal jump to this one
-		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
+		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, package.signedness);
 		emit_jump(entry_block, exit_block, jump_to_if, TRUE, FALSE);
 		add_successor(entry_block, exit_block);
 
@@ -4293,7 +4312,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		//Add the if statement node in as a direct successor
 		add_successor(entry_block, if_compound_stmt_entry);
 		//We will perform a normal jump to this one
-		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
+		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, package.signedness);
 		emit_jump(entry_block, if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
 
 		//Now we'll find the end of this statement
@@ -4368,7 +4387,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 
 			//We'll just set this to jump out of here
 			//We will perform a normal jump to this one
-			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
+			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, package.signedness);
 			emit_jump(current_entry_block, exit_block, jump_to_else_if, TRUE, FALSE);
 			add_successor(current_entry_block, exit_block);
 
@@ -4377,7 +4396,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//Add the if statement node in as a direct successor
 			add_successor(current_entry_block, else_if_compound_stmt_entry);
 			//We will perform a normal jump to this one
-			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
+			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, package.signedness);
 			emit_jump(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
@@ -4690,10 +4709,18 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//There should be some kind of expression here
 	expr_ret_package_t package1 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
 
+	//Unsigned by default
+	signedness_t signedness = UNSIGNED;
+
+	//Let's check here
+	if(is_type_signed(package1.assignee->type) == TRUE){
+		signedness = SIGNED;
+	}
+
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
+	 emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, SIGNED);
+	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, signedness);
 	//Now we'll emit our jump
 	emit_jump(starting_block, default_block, jump_lower_than, TRUE, FALSE);
 
@@ -4703,7 +4730,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Next step -> if we're above the maximum, jump to default
 	emit_binary_operation_with_constant(starting_block, package2.assignee, package2.assignee, G_THAN, upper_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, SIGNED);
+	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, signedness);
 	//Now we'll emit our jump
 	emit_jump(starting_block, default_block, jump_greater_than, TRUE, FALSE);
 
@@ -4995,7 +5022,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				//Emit the expression code into the current statement
 				expr_ret_package_t package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
 				//Decide the appropriate jump statement -- direct path here
-				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
+				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, package.signedness);
 
 				//We'll need a new block here - this will count as a branch
 				basic_block_t* new_block = basic_block_alloc(1);
@@ -5073,7 +5100,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				expr_ret_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
 
 				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, SIGNED);
+				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, ret_package.signedness);
 
 				//Add a successor to the end
 				add_successor(current_block, values->loop_stmt_end);
