@@ -3189,7 +3189,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	stmt = emit_binary_operation_instruction(op1, op1, binary_operator, right_hand_temp.assignee);
 
 	//If the left hand is signed, flag that
-	if(is_type_signed(left_hand_temp.assignee->type) == TRUE){
+	if(is_type_signed(right_hand_temp.assignee->type) == TRUE){
 		package.signedness = SIGNED;
 	}
 

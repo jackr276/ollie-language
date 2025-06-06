@@ -1053,6 +1053,18 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 			case JUMP_TYPE_JLE:
 				printf("jle");
 				break;
+			case JUMP_TYPE_JAE:
+				printf("jae");
+				break;
+			case JUMP_TYPE_JBE:
+				printf("jbe");
+				break;
+			case JUMP_TYPE_JA:
+				printf("ja");
+				break;
+			case JUMP_TYPE_JB:
+				printf("jb");
+				break;
 			default:
 				printf("jmp");
 				break;
@@ -1221,6 +1233,18 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 				break;
 			case JUMP_TYPE_JLE:
 				printf("jle");
+				break;
+			case JUMP_TYPE_JAE:
+				printf("jae");
+				break;
+			case JUMP_TYPE_JBE:
+				printf("jbe");
+				break;
+			case JUMP_TYPE_JA:
+				printf("ja");
+				break;
+			case JUMP_TYPE_JB:
+				printf("jb");
 				break;
 			default:
 				printf("jmp");
