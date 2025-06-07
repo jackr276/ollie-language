@@ -1437,6 +1437,9 @@ static void print_register_to_register_move(instruction_t* instruction, variable
 static void print_register_to_memory_move(instruction_t* instruction, variable_printing_mode_t mode){
 	//First let's print out the appropriate instruction
 	switch(instruction->instruction_type){
+		case REG_TO_MEM_MOVB:
+			printf("movb ");
+			break;
 		case REG_TO_MEM_MOVW:
 			printf("movw ");
 			break;
@@ -1473,6 +1476,9 @@ static void print_register_to_memory_move(instruction_t* instruction, variable_p
 static void print_memory_to_register_move(instruction_t* instruction, variable_printing_mode_t mode){
 	//First thing we'll do is print the appropriate move statement
 	switch(instruction->instruction_type){
+		case MEM_TO_REG_MOVB:
+			printf("movb ");
+			break;
 		case MEM_TO_REG_MOVW:
 			printf("movw ");
 			break;
@@ -1490,6 +1496,58 @@ static void print_memory_to_register_move(instruction_t* instruction, variable_p
 	//The address mode expression comes firsj
 	print_addressing_mode_expression(instruction, mode);
 	printf(", ");
+	print_variable(instruction->destination_register, mode);
+	printf("\n");
+}
+
+
+/**
+ * Print out an inc instruction
+ */
+static void print_inc_instruction(instruction_t* instruction, variable_printing_mode_t mode){
+	switch(instruction->instruction_type){
+		case INCQ:
+			printf("incq ");
+			break;
+		case INCL:
+			printf("incl ");
+			break;
+		case INCW:
+			printf("incw ");
+			break;
+		case INCB:
+			printf("incb ");
+			break;
+		default:
+			break;
+	}
+
+	print_variable(instruction->destination_register, mode);
+	printf("\n");
+}
+
+
+/**
+ * Print out an dec instruction
+ */
+static void print_dec_instruction(instruction_t* instruction, variable_printing_mode_t mode){
+	switch(instruction->instruction_type){
+		case DECQ:
+			printf("decq ");
+			break;
+		case DECL:
+			printf("decl ");
+			break;
+		case DECW:
+			printf("decw ");
+			break;
+		case DECB:
+			printf("decb ");
+			break;
+		default:
+			break;
+	}
+
 	print_variable(instruction->destination_register, mode);
 	printf("\n");
 }
@@ -1540,6 +1598,14 @@ static void print_multiplication_instruction(instruction_t* instruction, variabl
 static void print_division_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
+		case DIVB:
+		case DIVB_FOR_MOD:
+			printf("divb ");
+			break;
+		case DIVW:
+		case DIVW_FOR_MOD:
+			printf("divw ");
+			break;
 		case DIVL:
 		case DIVL_FOR_MOD:
 			printf("divl ");
@@ -1547,6 +1613,14 @@ static void print_division_instruction(instruction_t* instruction, variable_prin
 		case DIVQ:
 		case DIVQ_FOR_MOD:
 			printf("divq ");
+			break;
+		case IDIVB:
+		case IDIVB_FOR_MOD:
+			printf("idivb ");
+			break;
+		case IDIVW:
+		case IDIVW_FOR_MOD:
+			printf("idivw ");
 			break;
 		case IDIVL:
 		case IDIVL_FOR_MOD:
@@ -1980,6 +2054,12 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 		case CLTD:
 			printf("cltd\n");
 			break;
+		case CWTL:
+			printf("cltw\n");
+			break;
+		case CBTW:
+			printf("cbtw\n");
+			break;
 		case JMP:
 			printf("jmp .L%d\n", jumping_to_block->block_id);
 			break;
@@ -2030,34 +2110,34 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			}
 			printf("\n");
 			break;
+
 		case INCL:
-			printf("incl ");
-			print_variable(instruction->destination_register, mode);
-			printf("\n");
-			break;
 		case INCQ:
-			printf("incq ");
-			print_variable(instruction->destination_register, mode);
-			printf("\n");
+		case INCW:
+		case INCB:
+			print_inc_instruction(instruction, mode);
 			break;
+
 		case DECL:
-			printf("decl ");
-			print_variable(instruction->destination_register, mode);
-			printf("\n");
-			break;
 		case DECQ:
-			printf("decq ");
-			print_variable(instruction->destination_register, mode);
-			printf("\n");
+		case DECW:
+		case DECB:
+			print_dec_instruction(instruction, mode);
 			break;
+
 		case MULL:
 		case MULQ:
 		case IMULQ:
 		case IMULL:
 			print_multiplication_instruction(instruction, mode);
 			break;
+
+		case DIVB:
+		case DIVW:
 		case DIVL:
 		case DIVQ:
+		case IDIVB:
+		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
 		case DIVL_FOR_MOD:
@@ -2068,16 +2148,20 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			break;
 
 		//Handle the special addressing modes that we could have here
+		case REG_TO_MEM_MOVB:
 		case REG_TO_MEM_MOVL:
 		case REG_TO_MEM_MOVW:
 		case REG_TO_MEM_MOVQ:
 			print_register_to_memory_move(instruction, mode);
 			break;
+
+		case MEM_TO_REG_MOVB:
 		case MEM_TO_REG_MOVL:
 		case MEM_TO_REG_MOVW:
 		case MEM_TO_REG_MOVQ:
 			print_memory_to_register_move(instruction, mode);
 			break;
+
 		//Handle addition instructions
 		case ADDW:
 		case ADDL:
