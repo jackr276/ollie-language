@@ -99,6 +99,7 @@ typedef enum{
 	DIVW_FOR_MOD,
 	DIVL_FOR_MOD,
 	DIVQ_FOR_MOD,
+	SUBB,
 	SUBW,
 	SUBL,
 	SUBQ,

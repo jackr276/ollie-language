@@ -1394,13 +1394,21 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
  * Handle a simple register to register or immediate to register move
  */
 static void print_register_to_register_move(instruction_t* instruction, variable_printing_mode_t mode){
-	//Print out the appropriate flavor of move
-	if(instruction->instruction_type == MOVL){
-		printf("movl ");
-	} else if(instruction->instruction_type == MOVW){
-		printf("movw ");
-	} else {
-		printf("movq ");
+	switch(instruction->instruction_type){
+		case MOVQ:
+			printf("movq ");
+			break;
+		case MOVL:
+			printf("movl ");
+			break;
+		case MOVW:
+			printf("movw ");
+			break;
+		case MOVB:
+			printf("movb ");
+			break;
+		default:
+			break;
 	}
 
 	//Print the appropriate variable here
@@ -1650,6 +1658,9 @@ static void print_division_instruction(instruction_t* instruction, variable_prin
 static void print_addition_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
+		case ADDB:
+			printf("addb ");
+			break;
 		case ADDW:
 			printf("addw ");
 			break;
@@ -1686,6 +1697,9 @@ static void print_addition_instruction(instruction_t* instruction, variable_prin
 static void print_subtraction_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of subtraction 
 	switch(instruction->instruction_type){
+		case SUBB:
+			printf("subw ");
+			break;
 		case SUBW:
 			printf("subw ");
 			break;
@@ -1744,11 +1758,21 @@ static void print_lea_instruction(instruction_t* instruction, variable_printing_
  * Print a neg instruction
  */
 static void print_neg_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//First we'll need to decide which version to print
-	if(instruction->instruction_type == NEGQ){
-		printf("negq ");
-	} else {
-		printf("negl ");
+	switch(instruction->instruction_type){
+		case NEGQ:
+			printf("negq ");
+			break;
+		case NEGL:
+			printf("negl ");
+			break;
+		case NEGW:
+			printf("negw ");
+			break;
+		case NEGB:
+			printf("negb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll print out the destination register
@@ -1763,11 +1787,21 @@ static void print_neg_instruction(instruction_t* instruction, variable_printing_
  * Print a not instruction
  */
 static void print_not_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//First we'll need to decide which version to print
-	if(instruction->instruction_type == NOTQ){
-		printf("notq ");
-	} else {
-		printf("notl ");
+	switch(instruction->instruction_type){
+		case NOTQ:
+			printf("notq ");
+			break;
+		case NOTL:
+			printf("notl ");
+			break;
+		case NOTW:
+			printf("notw ");
+			break;
+		case NOTB:
+			printf("notb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll print out the destination register
@@ -1783,11 +1817,21 @@ static void print_not_instruction(instruction_t* instruction, variable_printing_
  * one register and one immediate value
  */
 static void print_cmp_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//First we'll need to decide which version to print
-	if(instruction->instruction_type == CMPQ){
-		printf("cmpq ");
-	} else {
-		printf("cmpl ");
+	switch(instruction->instruction_type){
+		case CMPQ:
+			printf("cmpq ");
+			break;
+		case CMPL:
+			printf("cmpl ");
+			break;
+		case CMPW:
+			printf("cmpw ");
+			break;
+		case CMPB:
+			printf("cmpb ");
+			break;
+		default:
+			break;
 	}
 
 	//If we have an immediate value, print it
@@ -1811,13 +1855,21 @@ static void print_cmp_instruction(instruction_t* instruction, variable_printing_
  * Print out a standard test instruction
  */
 static void print_test_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//First we'll decide which version we need to print out
-	if(instruction->instruction_type == TESTL){
-		printf("testl ");
-	} else if(instruction->instruction_type == TESTW){
-		printf("testw ");
-	} else {
-		printf("testq ");
+	switch(instruction->instruction_type){
+		case TESTQ:
+			printf("testq ");
+			break;
+		case TESTL:
+			printf("testl ");
+			break;
+		case TESTW:
+			printf("testw ");
+			break;
+		case TESTB:
+			printf("testb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll print out the source and source2 registers. Test instruction
@@ -1856,11 +1908,21 @@ static void print_movzbl_instruction(instruction_t* instruction, variable_printi
  * Print out an arithmetic left shift instruction
  */
 static void print_sal_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//Print out the appropriate opcode based on size
-	if(instruction->instruction_type == SALL){
-		printf("sall ");
-	} else {
-		printf("salq ");
+	switch(instruction->instruction_type){
+		case SALQ:
+			printf("salq ");
+			break;
+		case SALL:
+			printf("sall ");
+			break;
+		case SALW:
+			printf("salw ");
+			break;
+		case SALB:
+			printf("salb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll need the source immediate/source
@@ -1881,11 +1943,21 @@ static void print_sal_instruction(instruction_t* instruction, variable_printing_
  * Print out a logical left shift instruction
  */
 static void print_shl_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//Print out the appropriate opcode based on size
-	if(instruction->instruction_type == SHLL){
-		printf("shll ");
-	} else {
-		printf("shlq ");
+	switch(instruction->instruction_type){
+		case SHLQ:
+			printf("shlq ");
+			break;
+		case SHLL:
+			printf("shll ");
+			break;
+		case SHLW:
+			printf("shlw ");
+			break;
+		case SHLB:
+			printf("shlb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll need the source immediate/source
@@ -1906,11 +1978,56 @@ static void print_shl_instruction(instruction_t* instruction, variable_printing_
  * Print out an arithmetic right shift instruction
  */
 static void print_sar_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//Print out the appropriate opcode based on size
-	if(instruction->instruction_type == SARL){
-		printf("sarl ");
+	switch(instruction->instruction_type){
+		case SARQ:
+			printf("sarq ");
+			break;
+		case SARL:
+			printf("sarl ");
+			break;
+		case SARW:
+			printf("sarw ");
+			break;
+		case SARB:
+			printf("sarb ");
+			break;
+		default:
+			break;
+	}
+
+	//Now we'll need the source immediate/source
+	if(instruction->source_register != NULL){
+		print_variable(instruction->source_register, mode);
 	} else {
-		printf("sarq ");
+		print_immediate_value(instruction->source_immediate);
+	}
+
+	//Now our comma and the destination
+	printf(",");
+	print_variable(instruction->destination_register, mode);
+	printf("\n");
+}
+
+
+/**
+ * Print out a logical right shift instruction
+ */
+static void print_shr_instruction(instruction_t* instruction, variable_printing_mode_t mode){
+	switch(instruction->instruction_type){
+		case SHRQ:
+			printf("shrq ");
+			break;
+		case SHRL:
+			printf("shrl ");
+			break;
+		case SHRW:
+			printf("shrw ");
+			break;
+		case SHRB:
+			printf("shrb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll need the source immediate/source
@@ -2001,30 +2118,6 @@ static void print_xor_instruction(instruction_t* instruction, variable_printing_
 	printf("\n");
 }
 
-
-/**
- * Print out a logical right shift instruction
- */
-static void print_shr_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//Print out the appropriate opcode based on size
-	if(instruction->instruction_type == SHRL){
-		printf("shrl ");
-	} else {
-		printf("shrq ");
-	}
-
-	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(instruction->source_register, mode);
-	} else {
-		print_immediate_value(instruction->source_immediate);
-	}
-
-	//Now our comma and the destination
-	printf(",");
-	print_variable(instruction->destination_register, mode);
-	printf("\n");
-}
 
 
 /**
@@ -2163,58 +2256,77 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			break;
 
 		//Handle addition instructions
+		case ADDB:
 		case ADDW:
 		case ADDL:
 		case ADDQ:
 			print_addition_instruction(instruction, mode);
 			break;
+
 		//Handle subtraction instruction
+		case SUBB:
 		case SUBW:
 		case SUBL:
 		case SUBQ:
 			print_subtraction_instruction(instruction, mode);
 			break;
+
 		//Handle basic move instructions(no complex addressing)
+		case MOVB:
 		case MOVW:
 		case MOVL:
 		case MOVQ:
 			//Invoke the helper
 			print_register_to_register_move(instruction, mode);
 			break;
+
 		//Handle lea printing
 		case LEAL:
 		case LEAQ:
 			//Invoke the helper
 			print_lea_instruction(instruction, mode);
 			break;
+
 		//Handle neg printing
+		case NEGB:
+		case NEGW:
 		case NEGL:
 		case NEGQ:
 			print_neg_instruction(instruction, mode);
 			break;
+
 		//Handle not(one's complement) printing
+		case NOTB:
+		case NOTW:
 		case NOTL:
 		case NOTQ:
 			print_not_instruction(instruction, mode);
 			break;
+
 		//Handle our CMP instructions
+		case CMPB:
+		case CMPW:
 		case CMPL:
 		case CMPQ:
 			print_cmp_instruction(instruction, mode);
 			break;
+
 		//Handle a simple sete instruction
 		case SETE:
 			printf("sete ");
 			print_variable(instruction->destination_register, mode);
 			printf("\n");
 			break;
+		
 		//Handle a simple setne instruction
 		case SETNE:
 			printf("setne ");
 			print_variable(instruction->destination_register, mode);
 			printf("\n");
 			break;
+
 		//Handle a test instruction
+		case TESTB:
 		case TESTL:
 		case TESTW:
 		case TESTQ:
@@ -2224,26 +2336,39 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 		case MOVZBL:
 			print_movzbl_instruction(instruction, mode);
 			break;
+
 		//Handle an arithmetic left shift instruction
+		case SALB:
+		case SALW:
 		case SALL:
 		case SALQ:
 			print_sal_instruction(instruction, mode);
 			break;
+
 		//Handle a logical left shift instruction
+		case SHLB:
+		case SHLW:
 		case SHLL:
 		case SHLQ:
 			print_shl_instruction(instruction, mode);
 			break;
+
 		//Handle a logical right shift instruction
+		case SHRB:
+		case SHRW:
 		case SHRL:
 		case SHRQ:
 			print_shr_instruction(instruction, mode);
 			break;
+
 		//Handle an arithmentic right shift instruction
+		case SARW:
+		case SARB:
 		case SARL:
 		case SARQ:
 			print_sar_instruction(instruction, mode);
 			break;
+
 		//Handle a bitwise and instruction
 		case ANDL:
 		case ANDQ:
