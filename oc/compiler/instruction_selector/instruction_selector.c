@@ -166,13 +166,22 @@ static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_va
 	//We'll need the size to select the appropriate instruction
 	variable_size_t size = select_variable_size(op1);
 
-	//Now based on the size we'll give the instruction
-	if(size == QUAD_WORD){
-		instruction->instruction_type = TESTQ;
-	} else if(size == DOUBLE_WORD){
-		instruction->instruction_type = TESTL;
-	} else {
-		instruction->instruction_type = TESTW;
+	//Select the size appropriately
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = TESTQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = TESTL;
+			break;
+		case WORD:
+			instruction->instruction_type = TESTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = TESTB;
+			break;
+		default:
+			break;
 	}
 
 	//Then we'll set op1 and op2 to be the source registers
@@ -185,26 +194,34 @@ static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_va
 
 
 /**
- * Emit a cqto or a cltd instruction
+ * Emit a conversion instruction for division preparation
  *
  * We use this during the process of emitting division instructions
  *
  * NOTE: This is only needed for signed division
  */
-static instruction_t* emit_cl_instruction(three_addr_var_t* converted){
+static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We'll need the size to select the appropriate instruction
 	variable_size_t size = select_variable_size(converted);
 
-	//Now based on the size we'll give the instruction
-	if(size == QUAD_WORD){
-		//Convert-quad-to-octal
-		instruction->instruction_type = CQTO;
-	} else {
-		//Convert-long-to-double-long(aka quad)
-		instruction->instruction_type = CLTD;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = CQTO;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = CLTD;
+			break;
+		case WORD:
+			instruction->instruction_type = CWTL;
+			break;
+		case BYTE:
+			instruction->instruction_type = CBTW;
+			break;
+		default:
+			break;
 	}
 
 	//And now we'll give it back
@@ -262,11 +279,21 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 	//We'll need the size of the variable
 	variable_size_t size = select_variable_size(destination);
 
-	//Set the instruction accordingly
-	if(size == QUAD_WORD){
-		instruction->instruction_type = ANDQ;
-	} else {
-		instruction->instruction_type = ANDL;
+	switch(size){
+		case QUAD_WORD:	
+			instruction->instruction_type = ANDQ;
+			break;
+		case DOUBLE_WORD:	
+			instruction->instruction_type = ANDL;
+			break;
+		case WORD:	
+			instruction->instruction_type = ANDW;
+			break;
+		case BYTE:	
+			instruction->instruction_type = ANDB;
+			break;
+		default:
+			break;
 	}
 
 	//Finally we set the destination
@@ -288,11 +315,21 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 	//We'll need the size of the variable
 	variable_size_t size = select_variable_size(destination);
 
-	//Set the instruction accordingly
-	if(size == QUAD_WORD){
-		instruction->instruction_type = ORQ;
-	} else {
-		instruction->instruction_type = ORL;
+	switch(size){
+		case QUAD_WORD:	
+			instruction->instruction_type = ORQ;
+			break;
+		case DOUBLE_WORD:	
+			instruction->instruction_type = ORL;
+			break;
+		case WORD:	
+			instruction->instruction_type = ORW;
+			break;
+		case BYTE:	
+			instruction->instruction_type = ORB;
+			break;
+		default:
+			break;
 	}
 
 	//Finally we set the destination
@@ -337,7 +374,20 @@ static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
+		case BYTE:
+			if(is_signed == TRUE){
+				instruction->instruction_type = IDIVB;
+			} else {
+				instruction->instruction_type = DIVB;
+			}
+			break;
 		case WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = IDIVW;
+			} else {
+				instruction->instruction_type = DIVW;
+			}
+			break;
 		case DOUBLE_WORD:
 			if(is_signed == TRUE){
 				instruction->instruction_type = IDIVL;
@@ -381,7 +431,20 @@ static instruction_t* emit_mod_instruction(three_addr_var_t* source, u_int8_t is
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
+		case BYTE:
+			if(is_signed == TRUE){
+				instruction->instruction_type = IDIVB_FOR_MOD;
+			} else {
+				instruction->instruction_type = DIVB_FOR_MOD;
+			}
+			break;
 		case WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = IDIVW_FOR_MOD;
+			} else {
+				instruction->instruction_type = DIVW_FOR_MOD;
+			}
+			break;
 		case DOUBLE_WORD:
 			if(is_signed == TRUE){
 				instruction->instruction_type = IDIVL_FOR_MOD;
@@ -551,6 +614,8 @@ static void select_jump_instruction(instruction_t* instruction){
 static instruction_type_t select_move_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
+		case BYTE:
+			return MOVB;
 		case WORD:
 			return MOVW;
 		case DOUBLE_WORD:
@@ -570,6 +635,8 @@ static instruction_type_t select_move_instruction(variable_size_t size){
 static instruction_type_t select_add_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
+		case BYTE:
+			return ADDB;
 		case WORD:
 			return ADDW;
 		case DOUBLE_WORD:
@@ -607,6 +674,8 @@ static instruction_type_t select_lea_instruction(variable_size_t size){
 static instruction_type_t select_sub_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
+		case BYTE:
+			return SUBB;
 		case WORD:
 			return SUBW;
 		case DOUBLE_WORD:
@@ -626,7 +695,10 @@ static instruction_type_t select_sub_instruction(variable_size_t size){
 static instruction_type_t select_cmp_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
+		case BYTE:
+			return CMPB;
 		case WORD:
+			return CMPW;
 		case DOUBLE_WORD:
 			return CMPL;
 		case QUAD_WORD:
@@ -655,6 +727,9 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
+		case BYTE:
+			memory_access->instruction_type = REG_TO_MEM_MOVB;
+			break;
 		case WORD:
 			memory_access->instruction_type = REG_TO_MEM_MOVW;
 			break;
@@ -732,6 +807,9 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
+		case BYTE:
+			memory_access->instruction_type = REG_TO_MEM_MOVB;
+			break;
 		case WORD:
 			memory_access->instruction_type = REG_TO_MEM_MOVW;
 			break;
@@ -782,6 +860,9 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
+		case BYTE:
+			memory_access->instruction_type = MEM_TO_REG_MOVB;
+			break;
 		case WORD:
 			memory_access->instruction_type = MEM_TO_REG_MOVW;
 			break;
@@ -849,6 +930,9 @@ static void handle_three_instruction_address_calc_from_memory_move(instruction_t
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
+		case BYTE:
+			memory_access->instruction_type = MEM_TO_REG_MOVB;
+			break;
 		case WORD:
 			memory_access->instruction_type = MEM_TO_REG_MOVW;
 			break;
@@ -898,6 +982,9 @@ static void handle_three_instruction_registers_and_offset_only_from_memory_move(
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
+		case BYTE:
+			memory_access->instruction_type = MEM_TO_REG_MOVB;
+			break;
 		case WORD:
 			memory_access->instruction_type = MEM_TO_REG_MOVW;
 			break;
@@ -952,6 +1039,9 @@ static void handle_three_instruction_registers_and_offset_only_to_memory_move(in
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
+		case BYTE:
+			memory_access->instruction_type = REG_TO_MEM_MOVB;
+			break;
 		case WORD:
 			memory_access->instruction_type = REG_TO_MEM_MOVW;
 			break;
@@ -1000,7 +1090,20 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	variable_size_t size = select_variable_size(instruction->assignee);
 
 	switch (size) {
+		case BYTE:
+			if(is_signed == TRUE){
+				instruction->instruction_type = SALB;
+			} else {
+				instruction->instruction_type = SHLB;
+			}
+			break;
 		case WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = SALW;
+			} else {
+				instruction->instruction_type = SHLW;
+			}
+			break;
 		case DOUBLE_WORD:
 			if(is_signed == TRUE){
 				instruction->instruction_type = SALL;
@@ -1361,7 +1464,7 @@ static void handle_division_instruction(instruction_window_t* window){
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
 	if(is_signed == TRUE){
 		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_cl_instruction(move_to_rax->destination_register);
+		instruction_t* cl_instruction = emit_conversion_instruction(move_to_rax->destination_register);
 
 		//Link it with our move statement
 		move_to_rax->next_statement = cl_instruction;
@@ -1461,7 +1564,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
 	if(is_signed == TRUE){
 		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_cl_instruction(move_to_rax->destination_register);
+		instruction_t* cl_instruction = emit_conversion_instruction(move_to_rax->destination_register);
 
 		//Link it with our move statement
 		move_to_rax->next_statement = cl_instruction;
@@ -1738,10 +1841,10 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	test_inst->is_branch_ending = logical_not->is_branch_ending;
 
 	//We'll need this type for our setne's
-	generic_type_t* unsigned_int16_type = lookup_type_name_only(cfg->type_symtab, "u16")->type;
+	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
 
 	//Now we'll set the AL register to 1 if we're equal here
-	instruction_t* sete_inst = emit_sete_instruction(emit_temp_var(unsigned_int16_type));
+	instruction_t* sete_inst = emit_sete_instruction(emit_temp_var(unsigned_int8_type));
 	//Ensure that we set all these flags too
 	sete_inst->block_contained_in = logical_not->block_contained_in;
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
@@ -1825,10 +1928,10 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
 	//We'll need this type for our setne's
-	generic_type_t* unsigned_int16_type = lookup_type_name_only(cfg->type_symtab, "u16")->type;
+	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
 
 	//Now we need the setne instruction
-	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int16_type));
+	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 
 	//Let's link the two together
 	or_instruction->next_statement = setne_instruction;
@@ -1910,10 +2013,10 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* first_test = emit_test_instruction(logical_and->op1, logical_and->op1);
 
 	//We'll need this type for our setne's
-	generic_type_t* unsigned_int16_type = lookup_type_name_only(cfg->type_symtab, "u16")->type;
+	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
 
 	//Now we'll need a setne instruction that will set a new temp
-	instruction_t* first_set = emit_setne_instruction(emit_temp_var(unsigned_int16_type));
+	instruction_t* first_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 	
 	//Link these two
 	first_test->next_statement = first_set;
@@ -1927,7 +2030,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	second_test->previous_statement = first_set;
 
 	//Now the second setne
-	instruction_t* second_set = emit_setne_instruction(emit_temp_var(unsigned_int16_type));
+	instruction_t* second_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 
 	//Link to the prior
 	second_test->next_statement = second_set;

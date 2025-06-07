@@ -110,12 +110,12 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 		switch (basic_type) {
 			case U_INT8:
 			case S_INT8:
+			case CHAR:
 				size = BYTE;
 				break;
 
 			case U_INT16:
 			case S_INT16:
-			case CHAR:
 				size = WORD;
 				break;
 
@@ -173,28 +173,48 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction){
 	switch(instruction->instruction_type){
+		case ADDB:
 		case ADDL:
 		case ADDW:
 		case ADDQ:
+		case SUBB:
 		case SUBW:
 		case SUBL:
 		case SUBQ:
+		case MULB:
+		case MULW:
 		case MULL:
 		case MULQ:
+		case IMULB:
+		case IMULW:
 		case IMULL:
 		case IMULQ:
+		case SHRW:
+		case SHRB:
 		case SHRL:
 		case SHRQ:
+		case SARB:
+		case SARW:
 		case SARQ:
 		case SARL:
+		case SALB:
+		case SALW:
 		case SALL:
 		case SALQ:
+		case SHLB:
+		case SHLW:
 		case SHLQ:
 		case SHLL:
+		case XORB:
+		case XORW:
 		case XORL:
 		case XORQ:
+		case ANDW:
+		case ANDB:
 		case ANDL:
 		case ANDQ:
+		case ORB:
+		case ORW:
 		case ORL:
 		case ORQ:
 			return TRUE;
