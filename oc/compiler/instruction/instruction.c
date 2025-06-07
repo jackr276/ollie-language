@@ -2048,11 +2048,21 @@ static void print_shr_instruction(instruction_t* instruction, variable_printing_
  * Print out a bitwise AND instruction
  */
 static void print_and_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//Print out the appropriate opcode based on size
-	if(instruction->instruction_type == ANDL){
-		printf("andl ");
-	} else {
-		printf("andq ");
+	switch(instruction->instruction_type){
+		case ANDQ:
+			printf("andq ");
+			break;
+		case ANDL:
+			printf("andl ");
+			break;
+		case ANDW:
+			printf("andw ");
+			break;
+		case ANDB:
+			printf("andb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll need the source immediate/source
@@ -2073,11 +2083,21 @@ static void print_and_instruction(instruction_t* instruction, variable_printing_
  * Print out a bitwise OR instruction
  */
 static void print_or_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//Print out the appropriate opcode based on size
-	if(instruction->instruction_type == ORL){
-		printf("orl ");
-	} else {
-		printf("orq ");
+	switch(instruction->instruction_type){
+		case ORQ:
+			printf("orq ");
+			break;
+		case ORL:
+			printf("orl ");
+			break;
+		case ORW:
+			printf("orw ");
+			break;
+		case ORB:
+			printf("orb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll need the source immediate/source
@@ -2098,11 +2118,21 @@ static void print_or_instruction(instruction_t* instruction, variable_printing_m
  * Print out a bitwise XOR instruction
  */
 static void print_xor_instruction(instruction_t* instruction, variable_printing_mode_t mode){
-	//Print out the appropriate opcode based on size
-	if(instruction->instruction_type == XORL){
-		printf("xorl ");
-	} else {
-		printf("xorq ");
+	switch(instruction->instruction_type){
+		case XORQ:
+			printf("xorq ");
+			break;
+		case XORL:
+			printf("xorl ");
+			break;
+		case XORW:
+			printf("xorw ");
+			break;
+		case XORB:
+			printf("xorb ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll need the source immediate/source
@@ -2372,18 +2402,27 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 		//Handle a bitwise and instruction
 		case ANDL:
 		case ANDQ:
+		case ANDB:
+		case ANDW:
 			print_and_instruction(instruction, mode);
 			break;
+
 		//Handle a bitwise inclusive or instruction
+		case ORB:
+		case ORW:
 		case ORL:
 		case ORQ:
 			print_or_instruction(instruction, mode);
 			break;
+
 		//Handle a bitwise exclusive or instruction
+		case XORB:
+		case XORW:
 		case XORL:
 		case XORQ:
 			print_xor_instruction(instruction, mode);
 			break;
+
 		//Handle the very rare case of an indirect jump. This will only appear
 		//in case statements
 		case INDIRECT_JMP:
