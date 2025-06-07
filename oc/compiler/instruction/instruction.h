@@ -50,6 +50,7 @@ typedef enum{
 	MEM_TO_REG_MOVW,
 	MEM_TO_REG_MOVL,
 	MEM_TO_REG_MOVQ,
+	LEAW,
 	LEAL,
 	LEAQ,
 	INDIRECT_JMP, //For our switch statements

@@ -1756,10 +1756,18 @@ static void print_subtraction_instruction(instruction_t* instruction, variable_p
  */
 static void print_lea_instruction(instruction_t* instruction, variable_printing_mode_t mode){
 	//We'll always print out the lea value and the destination first
-	if(instruction->instruction_type == LEAQ){
-		printf("leaq ");
-	} else {
-		printf("leal ");
+	switch(instruction->instruction_type){
+		case LEAQ:
+			printf("leaq ");
+			break;
+		case LEAL:
+			printf("leal ");
+			break;
+		case LEAW:
+			printf("leaw ");
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll print out one of the various complex addressing modes

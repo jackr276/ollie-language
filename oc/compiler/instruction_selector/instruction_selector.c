@@ -656,7 +656,9 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 static instruction_type_t select_lea_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
+		case BYTE:
 		case WORD:
+			return LEAW;
 		case DOUBLE_WORD:
 			return LEAL;
 		case QUAD_WORD:
@@ -1145,7 +1147,20 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 	variable_size_t size = select_variable_size(instruction->assignee);
 
 	switch (size) {
+		case BYTE:
+			if(is_signed == TRUE){
+				instruction->instruction_type = SARB;
+			} else {
+				instruction->instruction_type = SHRB;
+			}
+			break;
 		case WORD:
+			if(is_signed == TRUE){
+				instruction->instruction_type = SARW;
+			} else {
+				instruction->instruction_type = SHRW;
+			}
+			break;
 		case DOUBLE_WORD:
 			if(is_signed == TRUE){
 				instruction->instruction_type = SARL;
@@ -1182,13 +1197,23 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
 	variable_size_t size = select_variable_size(instruction->assignee);
 
-	//First we'll select the appropriate instruction
-	if(size == QUAD_WORD){
-		instruction->instruction_type = ORQ;
-	} else {
-		instruction->instruction_type = ORL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = ORQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = ORL;
+			break;
+		case WORD:
+			instruction->instruction_type = ORW;
+			break;
+		case BYTE:
+			instruction->instruction_type = ORB;
+			break;
+		default:
+			break;
 	}
-	
+
 	//Now that we've done that, we'll move over the operands
 	if(instruction->op1_const != NULL){
 		instruction->source_immediate = instruction->op1_const;
@@ -1209,13 +1234,23 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
 	variable_size_t size = select_variable_size(instruction->assignee);
 
-	//First we'll select the appropriate instruction
-	if(size == QUAD_WORD){
-		instruction->instruction_type = ANDQ;
-	} else {
-		instruction->instruction_type = ANDL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = ANDQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = ANDL;
+			break;
+		case WORD:
+			instruction->instruction_type = ANDW;
+			break;
+		case BYTE:
+			instruction->instruction_type = ANDB;
+			break;
+		default:
+			break;
 	}
-	
+
 	//Now that we've done that, we'll move over the operands
 	if(instruction->op1_const != NULL){
 		instruction->source_immediate = instruction->op1_const;
@@ -1236,11 +1271,21 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
 	variable_size_t size = select_variable_size(instruction->assignee);
 
-	//First we'll select the appropriate instruction
-	if(size == QUAD_WORD){
-		instruction->instruction_type = XORQ;
-	} else {
-		instruction->instruction_type = XORL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = XORQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = XORL;
+			break;
+		case WORD:
+			instruction->instruction_type = XORW;
+			break;
+		case BYTE:
+			instruction->instruction_type = XORB;
+			break;
+		default:
+			break;
 	}
 	
 	//Now that we've done that, we'll move over the operands
@@ -1788,12 +1833,19 @@ static void handle_lea_statement(instruction_t* instruction){
 	//Select the size of our variable
 	variable_size_t size = select_variable_size(instruction->assignee);
 
-	//This is a pretty common case
-	if(size == QUAD_WORD){
-		instruction->instruction_type = LEAQ;
-	//Everything else falls under here
-	} else {
-		instruction->instruction_type = LEAL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = LEAQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = LEAL;
+			break;
+		case BYTE:
+		case WORD:
+			instruction->instruction_type = LEAW;
+			break;
+		default:
+			break;
 	}
 
 	//We already know what mode we'll need to use here
@@ -2462,11 +2514,21 @@ static void handle_neg_instruction(instruction_t* instruction){
 	//Find out what size we have
 	variable_size_t size = select_variable_size(instruction->assignee);
 
-	//Only two options to select on based on this
-	if(size == QUAD_WORD){
-		instruction->instruction_type = NEGQ;
-	} else {
-		instruction->instruction_type = NEGL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = NEGQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = NEGL;
+			break;
+		case WORD:
+			instruction->instruction_type = NEGW;
+			break;
+		case BYTE:
+			instruction->instruction_type = NEGB;
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
@@ -2482,11 +2544,21 @@ static void handle_not_instruction(instruction_t* instruction){
 	//Find out what size we have
 	variable_size_t size = select_variable_size(instruction->assignee);
 
-	//Only two options to select on based on this
-	if(size == QUAD_WORD){
-		instruction->instruction_type = NOTQ;
-	} else {
-		instruction->instruction_type = NOTL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = NOTQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = NOTL;
+			break;
+		case WORD:
+			instruction->instruction_type = NOTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = NOTB;
+			break;
+		default:
+			break;
 	}
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
