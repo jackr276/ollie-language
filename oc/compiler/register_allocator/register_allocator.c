@@ -1147,7 +1147,8 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 
 /**
  * Spill an assignment instruction by emitting a store statement to add this into
- * memory
+ * memory. This is easier than a use spill because all we need to do
+ * is insert a store instruction right after the use
  */
 static void handle_assignment_spill(cfg_t* cfg, live_range_t* spill_range, instruction_t* instruction){
 	//We'll need to store this variable in memory after the instruction
@@ -1233,6 +1234,13 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 		}
 	}
 
+	/**
+	 * Keep track of what is currently spilled. If something is currently spilled
+	 * and we have not yet modified the value(written to destination), then we
+	 * don't need to keep loading at every use
+	 */
+	live_range_t* currently_spilled = NULL;
+
 	//Now we have our function block, and we'll crawl it until we reach the end
 	while(function_block != NULL && function_block->function_defined_in == spill_range->function_defined_in){
 		//Now we'll crawl this block and find every place where this live range is used/defined
@@ -1240,21 +1248,54 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 		//Crawl through every block
 		while(current != NULL){
-			//Let's check to see if this function assigns this live range
-			if(current->destination_register != NULL
-				&& current->destination_register->associated_live_range == spill_range){
-
-			}
-
+			//We'll also need a use spill here
 			if(is_destination_also_operand(current) == TRUE
 				&& current->destination_register->associated_live_range == spill_range){
+				//Let the helper deal with it
 				handle_use_spill(cfg, current->destination_register, spill_range, current);
 			}
 
+			//We'll need a use spill if this is the case
+			//Handle the case for the source register
 			if(current->source_register != NULL
 				&& current->source_register->associated_live_range == spill_range){
+				//Let the helper deal with it
 				handle_use_spill(cfg, current->source_register, spill_range, current);
 
+			}
+
+			//Check this register as well
+			if(current->source_register2 != NULL
+				&& current->source_register->associated_live_range == spill_range){
+				//Let the helper deal with it
+				handle_use_spill(cfg, current->source_register2, spill_range, current);
+			}
+
+			//Check this register as well
+			if(current->address_calc_reg1 != NULL
+				&& current->source_register->associated_live_range == spill_range){
+				//Let the helper deal with it
+				handle_use_spill(cfg, current->address_calc_reg1, spill_range, current);
+			}
+
+			//Check this register as well
+			if(current->address_calc_reg2 != NULL
+				&& current->source_register->associated_live_range == spill_range){
+				//Let the helper deal with it
+				handle_use_spill(cfg, current->address_calc_reg2, spill_range, current);
+			}
+
+			/**
+			 * We'll check for destination spills at the very end because this requires
+			 * us to reset the currently spilled var after we load to memory
+			 */
+			if(current->destination_register != NULL
+				&& current->destination_register->associated_live_range == spill_range){
+				//Let the helper deal with it
+				handle_assignment_spill(cfg, spill_range, current);
+
+				//Reset currenlty spilled
+				currently_spilled = NULL;
 			}
 
 			//Advance the pointer

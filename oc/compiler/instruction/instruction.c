@@ -2716,6 +2716,9 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 
 	//Select the appropriate register
 	switch(size){
+		case BYTE:
+			stmt->instruction_type = MEM_TO_REG_MOVB;
+			break;
 		case WORD:
 			stmt->instruction_type = MEM_TO_REG_MOVW;
 			break;
@@ -2731,6 +2734,49 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 
 	stmt->destination_register = assignee;
 	//Stack pointer is source 1
+	stmt->address_calc_reg1 = stack_pointer;
+	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//Emit an integer constant for this offset
+	stmt->offset = emit_int_constant_direct(offset, symtab);
+
+	//And we're done, we can return it
+	return stmt;
+}
+
+
+/**
+ * Emit a store statement directly. This should only be used during spilling in the register allocator
+ */
+instruction_t* emit_store_instruction(three_addr_var_t* stored_variable, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset){
+	//Allocate the instruction
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Select the size
+	variable_size_t size = select_variable_size(stored_variable);
+
+	//Select the appropriate register
+	switch(size){
+		case BYTE:
+			stmt->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case WORD:
+			stmt->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			stmt->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			stmt->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		default:
+			break;
+	}
+
+	//We'll have the stored variable as our source
+	stmt->source_register = stored_variable;
+	
+	//Stack pointer our base address
 	stmt->address_calc_reg1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
