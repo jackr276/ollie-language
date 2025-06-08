@@ -3182,6 +3182,47 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 
 
 /**
+ * Is the given register caller saved?
+ */
+u_int8_t is_register_caller_saved(register_holder_t reg){
+	switch(reg){
+		case RAX:
+		case RDI:
+		case RSI:
+		case RDX:
+		case RCX:
+		case R8:
+		case R9:
+		case R10:
+		case R11:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+
+}
+
+
+/**
+ * Is the given register callee saved?
+ */
+u_int8_t is_register_callee_saved(register_holder_t reg){
+	//This is all determined based on the register type
+	switch(reg){
+		case RBX:
+		case RBP:
+		case R12:
+		case R13:
+		case R14:
+		case R15:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Are two variables equal? A helper method for searching
  */
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level){

@@ -733,6 +733,16 @@ instruction_t* copy_instruction(instruction_t* copied);
 three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
 
 /**
+ * Is the given register caller saved?
+ */
+u_int8_t is_register_caller_saved(register_holder_t reg);
+
+/**
+ * Is the given register callee saved?
+ */
+u_int8_t is_register_callee_saved(register_holder_t reg);
+
+/**
  * Pretty print a three address code statement
 */
 void print_three_addr_code_stmt(instruction_t* stmt);
