@@ -1546,9 +1546,69 @@ static void insert_all_stack_logic(cfg_t* cfg){
 		//We'll also need it's stack data area
 		stack_data_area_t area = current_function_entry->function_defined_in->data_area;
 
+		//Align it
+		align_stack_data_area(&area);
+
 		//Grab the total size out
 		u_int32_t total_size = area.total_size;
 
+		//If this is the case then we don't care, we'll just skip it
+		if(total_size == 0){
+			continue;
+		}
+
+		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+		//This always goes as the very first thing in the function entry block, with the exception of callee saved
+		//register usages(TODO FIXME)
+		instruction_t* old_head = current_function_entry->leader_statement;
+
+		//Link this into the block
+		old_head->previous_statement = stack_allocation;
+		stack_allocation->next_statement = old_head;
+
+		//This is now the head
+		current_function_entry->leader_statement = stack_allocation;
+
+		//Now we need to go through this entire function and find any/all return statements. They would always
+		//be exit statements, so this is how we will hunt for them
+		basic_block_t* cursor = current_function_entry;
+
+		//Crawl through the whole thing until we hit the end of the function
+		while(cursor != NULL && cursor->function_defined_in == current_function_entry->function_defined_in){
+			//If we have an empty block for some reason or we don't have a return we're done, so move on
+			if(cursor->exit_statement == NULL || cursor->exit_statement->instruction_type != RET){
+				cursor = cursor->direct_successor;
+				continue;
+			}
+
+			//Now that we got here, we know that the exit statement is a ret statement
+			instruction_t* ret_stmt = cursor->exit_statement;
+			//Grab the previous statement too
+			instruction_t* previous = ret_stmt->previous_statement;
+
+			//Here is our deallocation statement
+			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+			//Tie these too together
+			ret_stmt->previous_statement = stack_deallocation;
+			stack_deallocation->next_statement = ret_stmt;
+
+			//Tie this one into previous
+			stack_deallocation->previous_statement = previous;
+
+			//Most common case
+			if(previous != NULL){
+				previous->next_statement = stack_deallocation;
+			} else {
+				//This is the leader statement(exceptionally rare)
+				cursor->leader_statement = stack_deallocation;
+			}
+
+			//Advance the cursor up
+			cursor = cursor->direct_successor;
+		}
 	}
 }
 
@@ -1589,6 +1649,7 @@ void allocate_all_registers(cfg_t* cfg){
 	allocate_registers(cfg, live_ranges, graph);
 
 	//Once registers are allocated, we need to crawl and insert all stack allocations/subtractions
+	insert_all_stack_logic(cfg);
 
 	printf("================= After Allocation =======================\n");
 	print_blocks_with_registers(cfg->head_block, FALSE);
