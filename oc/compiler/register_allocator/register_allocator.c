@@ -1189,7 +1189,7 @@ static void handle_assignment_spill(cfg_t* cfg, three_addr_var_t* var, live_rang
  *
  * We will be emitting a new live range here, so we should give it back as a pointer
  */
-static three_addr_var_t* handle_use_spill(cfg_t* cfg, three_addr_var_t* affected_var, live_range_t* spill_range, instruction_t* instruction, u_int64_t offset){
+static three_addr_var_t* handle_use_spill(cfg_t* cfg, dynamic_array_t* live_ranges, three_addr_var_t* affected_var, live_range_t* spill_range, instruction_t* instruction, u_int64_t offset){
 	//Copy the old variable
 	three_addr_var_t* new_var = emit_var_copy(affected_var);
 
@@ -1202,6 +1202,9 @@ static three_addr_var_t* handle_use_spill(cfg_t* cfg, three_addr_var_t* affected
 
 	//Create a new live range just for this variable
 	new_var->associated_live_range = live_range_alloc(block->function_defined_in, affected_var->variable_size);
+
+	//Add this in to our current list of live ranges
+	dynamic_array_add(live_ranges, new_var->associated_live_range);
 
 	//Now we'll want to load from memory
 	instruction_t* load = emit_load_instruction(new_var, cfg->stack_pointer, cfg->type_symtab, offset);
@@ -1288,7 +1291,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				&& current->destination_register->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//We'll need to handle it like this
-					current->destination_register = handle_use_spill(cfg, current->destination_register, spill_range, current, stack_offset);
+					current->destination_register = handle_use_spill(cfg, live_ranges, current->destination_register, spill_range, current, stack_offset);
 					currently_spilled = current->destination_register->associated_live_range;
 				}
 			}
@@ -1299,7 +1302,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				&& current->source_register->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//Let the helper deal with it
-					current->source_register = handle_use_spill(cfg, current->source_register, spill_range, current, stack_offset);
+					current->source_register = handle_use_spill(cfg, live_ranges, current->source_register, spill_range, current, stack_offset);
 					currently_spilled = current->source_register->associated_live_range;
 				}
 			}
@@ -1309,26 +1312,26 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				&& current->source_register2->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//Let the helper deal with it
-					current->source_register2 = handle_use_spill(cfg, current->source_register2, spill_range, current, stack_offset);
+					current->source_register2 = handle_use_spill(cfg, live_ranges, current->source_register2, spill_range, current, stack_offset);
 					currently_spilled = current->source_register2->associated_live_range;
 				}
 			}
 
 			//Check this register as well
 			if(current->address_calc_reg1 != NULL
-				&& current->source_register->associated_live_range == spill_range){
+				&& current->address_calc_reg1->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//Let the helper deal with it
-					handle_use_spill(cfg, current->address_calc_reg1, spill_range, current, stack_offset);
+					handle_use_spill(cfg, live_ranges, current->address_calc_reg1, spill_range, current, stack_offset);
 				}
 			}
 
 			//Check this register as well
 			if(current->address_calc_reg2 != NULL
-				&& current->source_register->associated_live_range == spill_range){
+				&& current->address_calc_reg2->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//Let the helper deal with it
-					handle_use_spill(cfg, current->address_calc_reg2, spill_range, current, stack_offset);
+					handle_use_spill(cfg, live_ranges, current->address_calc_reg2, spill_range, current, stack_offset);
 				}
 			}
 
@@ -1513,10 +1516,10 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 	u_int8_t colorable = graph_color_and_allocate(cfg, live_ranges, graph);
 
 	//So long as this wasn't colorable, we need to keep doing this
-	/*
+	
 	while(colorable == FALSE){
 		printf("============= Retrying with ====================\n");
-		print_block_with_live_ranges(cfg->head_block);
+		print_blocks_with_registers(cfg->head_block, FALSE);
 
 		//We now need to compute all of the LIVE OUT values
 		calculate_liveness_sets(cfg);
@@ -1527,7 +1530,6 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 		//Now we retry
 		colorable = graph_color_and_allocate(cfg, live_ranges, graph);
 	}
-	*/
 }
 
 

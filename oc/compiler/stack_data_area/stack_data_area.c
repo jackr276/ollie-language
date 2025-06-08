@@ -199,6 +199,9 @@ void add_spilled_variable_to_stack(stack_data_area_t* area, void* variable){
 		node->offset = 0;
 	}
 
+	//Store this in the variable too
+	var->stack_offset = node->offset;
+
 	//This is the highest area
 	node->next = area->highest;
 	
