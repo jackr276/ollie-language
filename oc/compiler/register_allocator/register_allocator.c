@@ -38,6 +38,7 @@ const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 //Avoid need to rearrange
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
 
+
 /**
  * Priority queue insert a live range in here
  *
@@ -47,8 +48,9 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
  * Higher priority items go to the back to make removal O(1)(using dynamic_array_delete_from_back())
  */
 static void dynamic_array_priority_insert_live_range(dynamic_array_t* array, live_range_t* live_range){
-	//Now we'll see if we need to reallocate this
-	if(array->current_index == array->current_max_size){
+	//Now we'll see if we need to reallocate this. We use current index + 1 because we could be inserting
+	//at the back
+	if(array->current_index + 1 == array->current_max_size){
 		//We'll double the current max size
 		array->current_max_size *= 2;
 
@@ -1157,9 +1159,6 @@ static void handle_assignment_spill(cfg_t* cfg, three_addr_var_t* var, live_rang
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
 
-	//This counts as a use
-	dynamic_array_add(block->used_variables, var);
-
 	//Link this in too
 	store->block_contained_in = block;
 
@@ -1196,12 +1195,11 @@ static three_addr_var_t* handle_use_spill(cfg_t* cfg, dynamic_array_t* live_rang
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
 
-	//This has been assigned, and it will be used as well
-	dynamic_array_add(block->assigned_variables, new_var);
-	dynamic_array_add(block->used_variables, new_var);
-
 	//Create a new live range just for this variable
 	new_var->associated_live_range = live_range_alloc(block->function_defined_in, affected_var->variable_size);
+
+	//Add this variable to this live range
+	add_variable_to_live_range(new_var->associated_live_range, block, new_var);
 
 	//Add this in to our current list of live ranges
 	dynamic_array_add(live_ranges, new_var->associated_live_range);
@@ -1519,8 +1517,10 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 	
 	while(colorable == FALSE){
 		printf("============= Retrying with ====================\n");
-		print_blocks_with_registers(cfg->head_block, FALSE);
 
+		//Show our live ranges once again
+		print_all_live_ranges(live_ranges);
+		print_blocks_with_live_ranges(cfg->head_block);
 		//We now need to compute all of the LIVE OUT values
 		calculate_liveness_sets(cfg);
 
