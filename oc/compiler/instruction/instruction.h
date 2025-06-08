@@ -615,7 +615,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 /**
  * Emit a store statement directly. This should only be used during spilling in the register allocator
  */
-instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset);
+instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset);
 
 /**
  * Emit a return statement. The return statement can optionally have a node that we're returning.

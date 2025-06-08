@@ -2748,12 +2748,12 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 /**
  * Emit a store statement directly. This should only be used during spilling in the register allocator
  */
-instruction_t* emit_store_instruction(three_addr_var_t* stored_variable, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset){
+instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset){
 	//Allocate the instruction
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Select the size
-	variable_size_t size = select_variable_size(stored_variable);
+	variable_size_t size = select_variable_size(source);
 
 	//Select the appropriate register
 	switch(size){
@@ -2774,7 +2774,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* stored_variable, three_a
 	}
 
 	//We'll have the stored variable as our source
-	stmt->source_register = stored_variable;
+	stmt->source_register = source;
 	
 	//Stack pointer our base address
 	stmt->address_calc_reg1 = stack_pointer;
