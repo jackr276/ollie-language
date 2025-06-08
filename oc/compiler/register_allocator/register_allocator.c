@@ -1157,6 +1157,9 @@ static void handle_assignment_spill(cfg_t* cfg, three_addr_var_t* var, live_rang
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
 
+	//This counts as a use
+	dynamic_array_add(block->used_variables, var);
+
 	//Link this in too
 	store->block_contained_in = block;
 
@@ -1192,6 +1195,10 @@ static three_addr_var_t* handle_use_spill(cfg_t* cfg, three_addr_var_t* affected
 
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
+
+	//This has been assigned, and it will be used as well
+	dynamic_array_add(block->assigned_variables, new_var);
+	dynamic_array_add(block->used_variables, new_var);
 
 	//Create a new live range just for this variable
 	new_var->associated_live_range = live_range_alloc(block->function_defined_in, affected_var->variable_size);
@@ -1241,7 +1248,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 	//Now that we have the data area, we'll need to add enough space for the new variable
 	//in the stack data area
-	add_variable_to_stack(&(spill_range->function_defined_in->data_area), var);
+	add_spilled_variable_to_stack(&(spill_range->function_defined_in->data_area), var);
 
 	//Now we'll grab out this one's offset
 	u_int32_t stack_offset = var->stack_offset;
@@ -1505,8 +1512,22 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 	//we need to redo everything after a spill
 	u_int8_t colorable = graph_color_and_allocate(cfg, live_ranges, graph);
 
-	
+	//So long as this wasn't colorable, we need to keep doing this
+	/*
+	while(colorable == FALSE){
+		printf("============= Retrying with ====================\n");
+		print_block_with_live_ranges(cfg->head_block);
 
+		//We now need to compute all of the LIVE OUT values
+		calculate_liveness_sets(cfg);
+
+		//Now let's determine the interference graph
+		graph = construct_interference_graph(cfg, live_ranges);
+
+		//Now we retry
+		colorable = graph_color_and_allocate(cfg, live_ranges, graph);
+	}
+	*/
 }
 
 

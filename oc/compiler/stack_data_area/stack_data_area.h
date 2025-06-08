@@ -57,6 +57,12 @@ struct stack_data_area_node_t{
 void add_variable_to_stack(stack_data_area_t* area, void* variable);
 
 /**
+ * Add a spilled variable to the stack. Spilled variables
+ * always go on top, no matter what
+ */
+void add_spilled_variable_to_stack(stack_data_area_t* area, void* variable);
+
+/**
  * Remove a node from the stack if it is deemed useless
  */
 void remove_variable_from_stack(stack_data_area_t* area, void* variable);

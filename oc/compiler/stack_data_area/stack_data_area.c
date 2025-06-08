@@ -171,6 +171,43 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 
 
 /**
+ * Add a spilled variable to the stack. Spilled variables
+ * always go on top, no matter what
+ */
+void add_spilled_variable_to_stack(stack_data_area_t* area, void* variable){
+	//We already know it's one of these
+	three_addr_var_t* var = variable;
+
+	//First, let's create what we'll use to store this 
+	stack_data_area_node_t* node = calloc(1, sizeof(stack_data_area_node_t));
+	//Tie this in
+	node->variable = variable;
+
+	//Let's make this a multiple of 4 by first adding three(set the 2 lsb's), and 
+	//then rounding up by anding with a value with the 2 lsb's as 0
+	node->variable_size = (var->type->type_size + 3) & ~0x3;
+
+	//We can now increment the total size here
+	area->total_size += node->variable_size;
+
+	//Calculate this node's offset
+	if(area->highest != NULL){
+		//Calculate the offset of this one
+		node->offset = area->highest->offset + area->highest->variable_size;
+	} else {
+		//Otherwise this is the highest, so it's 0
+		node->offset = 0;
+	}
+
+	//This is the highest area
+	node->next = area->highest;
+	
+	//This is now the highest on there
+	area->highest = node;
+}
+
+
+/**
  * Remove a node from the stack if it is deemed useless
  *
  * We'll need to traverse the linked list and ultimately delete this
