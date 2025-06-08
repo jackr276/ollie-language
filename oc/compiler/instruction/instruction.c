@@ -3053,6 +3053,48 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 
 /**
+ * Emit a stack allocation statement
+ */
+instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is always a subq statement
+	stmt->instruction_type = SUBQ;
+
+	//Store the destination as the stack pointer
+	stmt->destination_register = stack_pointer;
+
+	//Emit this directly
+	stmt->source_immediate = emit_int_constant_direct(offset, type_symtab);
+
+	//Just give this back
+	return stmt;
+}
+
+
+/**
+ * Emit a stack deallocation statement
+ */
+instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is always an addq statement
+	stmt->instruction_type = ADDQ;
+
+	//Destination is always the stack pointer
+	stmt->destination_register = stack_pointer;
+
+	//Emit this directly
+	stmt->source_immediate = emit_int_constant_direct(offset, type_symtab);
+
+	//Just give this back
+	return stmt;
+}
+
+
+/**
  * Emit a complete copy of whatever was in here previously
  */
 instruction_t* copy_instruction(instruction_t* copied){

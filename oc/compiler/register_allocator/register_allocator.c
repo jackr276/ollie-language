@@ -1534,6 +1534,26 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 
 
 /**
+ * Now that we are done spilling, we need to insert all of the stack logic,
+ * including additions and subtractions, into the functions
+ */
+static void insert_all_stack_logic(cfg_t* cfg){
+	//Run through every function entry point in the CFG
+	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		//Grab it out
+		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_blocks, i);
+
+		//We'll also need it's stack data area
+		stack_data_area_t area = current_function_entry->function_defined_in->data_area;
+
+		//Grab the total size out
+		u_int32_t total_size = area.total_size;
+
+	}
+}
+
+
+/**
  * Perform our register allocation algorithm on the entire cfg
  */
 void allocate_all_registers(cfg_t* cfg){
@@ -1567,6 +1587,8 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//Let the allocator method take care of everything
 	allocate_registers(cfg, live_ranges, graph);
+
+	//Once registers are allocated, we need to crawl and insert all stack allocations/subtractions
 
 	printf("================= After Allocation =======================\n");
 	print_blocks_with_registers(cfg->head_block, FALSE);
