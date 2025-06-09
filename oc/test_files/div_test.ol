@@ -5,5 +5,5 @@ fn main() -> i32{
 	let mut z:i32 := y / x;
 	let mut k:i32 := y * sizeof(x);
 
-	ret z + k * typesize(i32);
+	ret z + k * typesize(f64);
 }

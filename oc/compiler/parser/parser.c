@@ -233,9 +233,10 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//By default, int constants are of type s_int32
 			if(lookahead.tok == INT_CONST_FORCE_U){
+				//If we force it to be unsigned then it will be
 				constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
 			} else {
-				//Otherwise it's signed
+				//Otherwise it's signed by default
 				constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 			}
 			break;
