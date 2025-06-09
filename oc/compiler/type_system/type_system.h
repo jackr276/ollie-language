@@ -120,6 +120,8 @@ struct array_type_t{
 struct pointer_type_t{
 	//What do we point to?
 	generic_type_t* points_to;
+	//Is this a void*
+	u_int8_t is_void_pointer;
 };
 
 

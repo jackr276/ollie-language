@@ -53,6 +53,14 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
  *
  * CASES:
  * 1.) Construct Types: construct types must be the exact same in order to assign one from the other
+ * 2.) Enumerated Types: Internally, enums are just u8's. As such, if the destination is an enumerated type, we
+ * can assign other enums of the same type and integers
+ * 3.) Array Types: You can never assign to an array type, this is always false
+ * 4.) Pointer Types: Pointers can be assigned values of type U64.
+ * 					  Void pointers can be assigned to anything
+ * 					  Any other pointer can be assigned a void pointer
+ * 					  Beyond this, the "pointing_to" types have to match when dealiased
+ *					
  */
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type, Token operator){
 	//Before we go any further - make sure these types are fully raw
@@ -76,7 +84,72 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				return destination_type;
 			}
 
+		//Enumerated types are internally a u8
 		case TYPE_CLASS_ENUMERATED:
+			//If we have an enumerated type here as well
+			if(source_type->type_class == TYPE_CLASS_ENUMERATED){
+				//These need to be the exact same, otherwise this will not work
+				if(strcmp(source_type->type_name, destination_type->type_name) == 0){
+					return destination_type;
+				} else {
+					return NULL;
+				}
+
+			//Otherwise it needs to be a basic type
+			} else if(source_type->type_class == TYPE_CLASS_BASIC){
+				//Grab the type out of here
+				Token stripped_type = source_type->basic_type->basic_type;
+
+				//It needs to be 8 bits, otherwise we won't allow this
+				if(stripped_type == U_INT8 || stripped_type == S_INT8 || stripped_type == CHAR){
+					//This is assignable
+					return destination_type;
+				} else {
+					//It's not assignable
+					return NULL;
+				}
+
+			//This isn't going to work otherewise
+			} else {
+				return NULL;
+			}
+
+		//Arrays are not assignable at all - this one is easy
+		case TYPE_CLASS_ARRAY:
+			return NULL;
+
+		//Refer to the rules above for details
+		case TYPE_CLASS_POINTER:
+			//If we have a basic type
+			if(source_type->type_class == TYPE_CLASS_BASIC){
+				//This needs to be a u64, otherwise it's invalid
+				if(source_type->basic_type->basic_type == U_INT64){
+					//We will keep this as the pointer
+					return destination_type;
+				//Any other basic type will not work here
+				} else {
+					return NULL;
+				}
+
+			//If we have an array type, then the values that these two point
+			//to must be the exact same
+			} else if(source_type->type_class == TYPE_CLASS_ARRAY){
+				//If these are the exact same types, then we're set
+				if(types_equivalent(destination_type->pointer_type->points_to, source_type->array_type->member_type) == TRUE){
+					return destination_type;
+				//Otherwise this won't work at all
+				} else{
+					return NULL;
+				}
+
+			//This is the most interesting case that we have...pointers being assigned to eachother
+			} else if(source_type->type_class == TYPE_CLASS_POINTER){
+
+			//We've exhausted all options, this is a no
+			} else {
+				return NULL;
+			}
+			
 			
 			
 		default:
@@ -363,6 +436,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	//Where was it declared
 	type->line_number = line_number;
 
+
 	//Let's first copy the type name in
 	strcpy(type->type_name, points_to->type_name);
 
@@ -371,6 +445,15 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 
 	//Now we'll make the actual pointer type
 	type->pointer_type = calloc(1, sizeof(pointer_type_t));
+
+	//We need to determine if this is a generic(void) pointer
+	if(points_to->type_class == TYPE_CLASS_BASIC && points_to->basic_type->basic_type == VOID){
+		type->pointer_type->is_void_pointer = TRUE;
+
+	//If we're pointing to a void*, we'll also need to carry that up the chain
+	} else if(points_to->type_class == TYPE_CLASS_POINTER && points_to->pointer_type->is_void_pointer == TRUE){
+		type->pointer_type->is_void_pointer = TRUE;
+	}
 
 	//Store what it points to
 	type->pointer_type->points_to = points_to;
