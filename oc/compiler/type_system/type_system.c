@@ -21,6 +21,10 @@
  * Are two types equivalent(as in, the exact same)
  */
 static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
+	//Make sure that both of these types are raw
+	typeA = dealias_type(typeA);
+	typeB = dealias_type(typeB);
+
 	//If they are not in the same type class, then they are not equivalent
 	if(typeA->type_class != typeB->type_class){
 		return FALSE;
@@ -51,6 +55,9 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
  * type conversions will be applied to source if need be. We cannot apply widening type conversions
  * to destination
  *
+ * In general, the destination type always wins. This function is just a one-stop-shop for all validations
+ * regarding assignments from one type to another
+ *
  * CASES:
  * 1.) Construct Types: construct types must be the exact same in order to assign one from the other
  * 2.) Enumerated Types: Internally, enums are just u8's. As such, if the destination is an enumerated type, we
@@ -60,12 +67,16 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
  * 					  Void pointers can be assigned to anything
  * 					  Any other pointer can be assigned a void pointer
  * 					  Beyond this, the "pointing_to" types have to match when dealiased
- *					
+ * 5.) Basic Types: See the area below for these rules, there are many
  */
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type, Token operator){
 	//Before we go any further - make sure these types are fully raw
 	destination_type = dealias_type(destination_type);
 	source_type = dealias_type(source_type);
+
+	//Predeclare these for now
+	Token source_basic_type;
+	Token dest_basic_type;
 
 	switch(destination_type->type_class){
 		//This is a simpler case - constructs can only be assigned
@@ -144,21 +155,42 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			//This is the most interesting case that we have...pointers being assigned to eachother
 			} else if(source_type->type_class == TYPE_CLASS_POINTER){
-
+				//If this itself is a void pointer, then we're good
+				if(source_type->pointer_type->is_void_pointer == TRUE){
+					return destination_type;
+				//This is also fine, we just give the destination type back
+				} else if(destination_type->pointer_type->is_void_pointer == TRUE){
+					return destination_type;
+				//Let's see if what they point to is the exact same
+				} else {
+					//They need to be the exact same
+					if(types_equivalent(source_type->pointer_type->points_to, destination_type->pointer_type->points_to) == TRUE){
+						return destination_type;
+					} else {
+						return NULL;
+					}
+				}
+				
 			//We've exhausted all options, this is a no
 			} else {
 				return NULL;
 			}
+	
+		/**
+		 * The basic type class is the most interesting scenario. We have a great many rules to follow here
+		 *
+		 * 1.) VOID: nothing can be assigned to void. Additionally, nothing can be assigned as void
+		 * 2.) F64: can be assigned anything of type F64 or F32
+		 * 3.) F32: can be assigned anything of type F32
+		 */
+		case TYPE_CLASS_BASIC:
 			
-			
-			
+		
+		//We should never get here
 		default:
-			break;
+			return NULL;
 
 	}
-
-
-	return destination_type;
 }
 
 
