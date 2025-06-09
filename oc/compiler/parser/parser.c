@@ -704,6 +704,77 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//Finally we'll return this constant node
 		return const_node;
 
+	//If we see the typesize keyword, we are locked in to the typesize rule
+	//The typesize rule is a compiler only directive. Since we know the size of all
+	//valid types at compile-time, we will be able to return an INT-CONST node with the
+	//size here
+	} else if(lookahead.tok == TYPESIZE){
+		//We must then see left parenthesis
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail case here
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize call", parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise we'll push to the stack for checking
+		push_token(grouping_stack, lookahead);
+
+		//Now we need to see a valid type-specifier. It is important to note that the type
+		//specifier requires that a type has actually been defined. If it wasn't defined,
+		//then this will return an error node
+		generic_type_t* type_spec = type_specifier(fl);
+
+		//If it's an error
+		if(type_spec == NULL){
+			print_parse_message(PARSE_ERROR, "Unable to use typesize on undefined type",  parser_line_num);
+			num_errors++;
+			//It's already an error, so give it back that way
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Once we've done this, we can grab the actual size of the type-specifier
+		u_int32_t type_size = type_spec->type_size;
+
+		//And then we no longer need the type-spec node, we can just remove it
+
+		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail out here if we don't see it
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type specifer", parser_line_num);
+			num_errors++;
+			//Create and return the error
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We can also fail if we somehow see unmatched parenthesis
+		if(pop_token(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
+			num_errors++;
+			//Create and return the error
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Create a constant node
+		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+		//Add the line number
+		const_node->line_number = parser_line_num;
+		//Add the constant
+		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
+		//Store the actual value
+		((constant_ast_node_t*)(const_node->node))->int_val = type_size;
+		//Grab and store type info
+		//Constants are ALWAYS of type s_int32
+		const_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+
+		//Finally we'll return this constant node
+		return const_node;
+
 	//This is the case where we are putting the expression
 	//In parens
 	} else if (lookahead.tok == L_PAREN){
@@ -1508,89 +1579,9 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we see the typesize keyword, we are locked in to the typesize rule
-	//The typesize rule is a compiler only directive. Since we know the size of all
-	//valid types at compile-time, we will be able to return an INT-CONST node with the
-	//size here
-	if(lookahead.tok == TYPESIZE){
-		//Not assignable
-		is_assignable = NOT_ASSIGNABLE;
-
-		//We must then see left parenthesis
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Fail case here
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize call", parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Otherwise we'll push to the stack for checking
-		push_token(grouping_stack, lookahead);
-
-		//Now we need to see a valid type-specifier. It is important to note that the type
-		//specifier requires that a type has actually been defined. If it wasn't defined,
-		//then this will return an error node
-		generic_type_t* type_spec = type_specifier(fl);
-
-		//If it's an error
-		if(type_spec == NULL){
-			print_parse_message(PARSE_ERROR, "Unable to use typesize on undefined type",  parser_line_num);
-			num_errors++;
-			//It's already an error, so give it back that way
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Once we've done this, we can grab the actual size of the type-specifier
-		u_int32_t type_size = type_spec->type_size;
-
-		//And then we no longer need the type-spec node, we can just remove it
-
-		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Fail out here if we don't see it
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type specifer", parser_line_num);
-			num_errors++;
-			//Create and return the error
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//We can also fail if we somehow see unmatched parenthesis
-		if(pop_token(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
-			num_errors++;
-			//Create and return the error
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Create a constant node
-		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
-		//Add the line number
-		const_node->line_number = parser_line_num;
-		//Add the constant
-		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
-		//Store the actual value
-		((constant_ast_node_t*)(const_node->node))->int_val = type_size;
-		//Grab and store type info
-		//Constants are ALWAYS of type s_int32
-		const_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
-
-		//Create the unary expression node
-		generic_ast_node_t* unary_expr = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
-		//Add the constant as a child
-		add_child_node(unary_expr, const_node);
-
-		//Finally we'll return this constant node
-		return unary_expr;
-
-
 	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
 	//the exact same way
-	} else if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUS || lookahead.tok == MINUSMINUS
+	if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUS || lookahead.tok == MINUSMINUS
 		     || lookahead.tok == STAR || lookahead.tok == SINGLE_AND || lookahead.tok == B_NOT || lookahead.tok == L_NOT){
 
 		//We'll first create the unary operateor node for ourselves here
