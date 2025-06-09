@@ -176,14 +176,6 @@ struct aliased_type_t{
 	generic_type_t* aliased_type;
 };
 
-
-/**
- * Are two types the exact same?
- *
- * NOTE: WE NEED RAW TYPES FOR THIS RULE
- */
-u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB);
-
 /**
  * Are two types compatible with eachother?
  * 

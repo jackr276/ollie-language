@@ -20,7 +20,7 @@
 /**
  * Are two types equivalent(as in, the exact same)
  */
-u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
+static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 	//If they are not in the same type class, then they are not equivalent
 	if(typeA->type_class != typeB->type_class){
 		return FALSE;
@@ -41,6 +41,66 @@ u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 
 	//Otherwise they aren't the exact same, so
 	return FALSE;
+}
+
+
+
+/**
+ * Can two types be assigned to one another? This rule will perform implicit conversions
+ * if need be to make types assignable. We are always assigning source to destination. Widening
+ * type conversions will be applied to source if need be. We cannot apply widening type conversions
+ * to destination
+ *
+ * CASES:
+ * 1.) Construct Types: construct types must be the exact same in order to assign one from the other
+ */
+generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type, Token operator){
+	//Before we go any further - make sure these types are fully raw
+	destination_type = dealias_type(destination_type);
+	source_type = dealias_type(source_type);
+
+	switch(destination_type->type_class){
+		//This is a simpler case - constructs can only be assigned
+		//if they're the exact same
+		case TYPE_CLASS_CONSTRUCT:
+			//Not assignable at all
+			if(source_type->type_class != TYPE_CLASS_CONSTRUCT){
+				return NULL;
+			}
+
+			//Now let's check to see if they're the exact same type
+			if(strcmp(source_type->type_name, destination_type->type_name) != 0){
+				return NULL;
+			} else {
+				//We'll give back the destination type if they are the same
+				return destination_type;
+			}
+
+		case TYPE_CLASS_ENUMERATED:
+			
+			
+		default:
+			break;
+
+	}
+
+
+	return destination_type;
+}
+
+
+/**
+ * Are two types compatible with one another?
+ *
+ * CASES:
+ * 	1.) Construct Types: 
+ */
+generic_type_t* types_compatible2(generic_type_t* a, generic_type_t* b, Token operator){
+	//Before we go any further - make sure these types are fully raw
+	a = dealias_type(a);
+	b = dealias_type(b);
+
+	return a;
 }
 
 
