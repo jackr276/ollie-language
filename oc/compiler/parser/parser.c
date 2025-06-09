@@ -233,10 +233,10 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//By default, int constants are of type s_int32
 			if(lookahead.tok == INT_CONST_FORCE_U){
-				constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+				constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
 			} else {
 				//Otherwise it's signed
-				constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
+				constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 			}
 			break;
 
@@ -545,6 +545,8 @@ static generic_ast_node_t* function_call(FILE* fl){
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
  * 									| (<logical-or-expression>)
+ * 									| sizeof(<logical-or-expression>)
+ * 									| typesize(<type-name>)
  * 									| <function-call>
  */
 static generic_ast_node_t* primary_expression(FILE* fl){
@@ -629,6 +631,78 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 
 		//Give back the constant node
 		return constant_node;
+
+	/**
+	 * We can take the size of a logical or expression. We will not be evaluating this expression, but
+	 * will instead be returning a constant of it's return type
+	 */
+	} else if(lookahead.tok == SIZEOF){
+		//We must then see left parenthesis
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail case here
+		if(lookahead.tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Left parenthesis expected after sizeof call", parser_line_num);
+			num_errors++;
+			//Create and return an error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Otherwise we'll push to the stack for checking
+		push_token(grouping_stack, lookahead);
+
+		//We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
+		//actual expression result will be unused. It's important to note that we will not actually evaluate the expression here at
+		//all - sall we can about is the return type
+		generic_ast_node_t* expr_node = logical_or_expression(fl);
+		
+		//If it's an error
+		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Unable to use sizeof on invalid expression",  parser_line_num);
+			num_errors++;
+			//It's already an error, so give it back that way
+			return expr_node;
+		}
+
+		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail out here if we don't see it
+		if(lookahead.tok != R_PAREN){
+			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", parser_line_num);
+			num_errors++;
+			//Create and return the error
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//We can also fail if we somehow see unmatched parenthesis
+		if(pop_token(grouping_stack).tok != L_PAREN){
+			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
+			num_errors++;
+			//Create and return the error
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
+		//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
+		//type information for ourselves
+		generic_type_t* return_type = expr_node->inferred_type;
+
+		//Create a constant node
+		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+		//This will be an int const
+		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
+		//Store the actual value of the type size
+		((constant_ast_node_t*)(const_node->node))->int_val = return_type->type_size;
+		//Grab and store type info
+		//Constants are ALWAYS of type i32
+		const_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+		//We cannot assign to this
+		const_node->is_assignable = FALSE;
+		//Store this too
+		const_node->line_number = current_line;
+
+		//Finally we'll return this constant node
+		return const_node;
 
 	//This is the case where we are putting the expression
 	//In parens
@@ -1404,8 +1478,6 @@ static void bitwise_not_constant_value(generic_ast_node_t* constant_node){
  *
  * BNF Rule: <unary-expression> ::= <postfix-expression> 
  * 								  | <unary-operator> <cast-expression> 
- * 								  | typesize(<type-specifier>) * compiler directive *
- * 								  | sizeof(<logical-or-expression>) * compiler directive *
  *
  * Important notes for typesize: It is assumed that the type-specifier node will handle
  * any/all error checking that we need. Type specifier will throw an error if the type has 
@@ -1443,6 +1515,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	if(lookahead.tok == TYPESIZE){
 		//Not assignable
 		is_assignable = NOT_ASSIGNABLE;
+
 		//We must then see left parenthesis
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -1514,80 +1587,6 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Finally we'll return this constant node
 		return unary_expr;
 
-	} else if(lookahead.tok == SIZEOF){
-		//Not assignable
-		is_assignable = NOT_ASSIGNABLE;
-		//We must then see left parenthesis
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Fail case here
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after sizeof call", parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Otherwise we'll push to the stack for checking
-		push_token(grouping_stack, lookahead);
-
-		//We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
-		//actual expression result will be unused
-		generic_ast_node_t* expr_node = logical_or_expression(fl);
-		
-		//If it's an error
-		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Unable to use varsize on invalid expression",  parser_line_num);
-			num_errors++;
-			//It's already an error, so give it back that way
-			return expr_node;
-		}
-
-		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Fail out here if we don't see it
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type specifer", parser_line_num);
-			num_errors++;
-			//Create and return the error
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//We can also fail if we somehow see unmatched parenthesis
-		if(pop_token(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
-			num_errors++;
-			//Create and return the error
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
-		//type information for ourselves
-		generic_type_t* return_type = expr_node->inferred_type;
-
-		//One we get here, we have both nodes that we need
-		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
-		//Add the line number
-		unary_node->line_number = parser_line_num;
-
-		//Create a constant node
-		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
-		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
-		//Store the actual value of the type size
-		((constant_ast_node_t*)(const_node->node))->int_val = return_type->type_size;
-		//Grab and store type info
-		//Constants are ALWAYS of type s_int32
-		const_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
-
-		//The first child is always the constant type
-		add_child_node(unary_node, const_node); 
-		//The second child is always the expression that we need to do
-		add_child_node(unary_node, expr_node);
-
-		//TODO NEEDS TO BE FIXED
-		//Finally we'll return this constant node
-		return unary_node;
 
 	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
 	//the exact same way
