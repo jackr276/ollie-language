@@ -78,6 +78,9 @@ struct parameter_t{
  * numbers, parameter types, return types, etc.
  */
 struct symtab_function_record_t{
+	//Won't be important until the register allocator. Remember- the actual enum value
+	//of the register is one more than the index here
+	u_int8_t used_registers[15];
 	//The entrance CFG block to the function. There is always only one entrance
 	void* entrance_block;
 	//The name that we are storing. This is used to derive the hash

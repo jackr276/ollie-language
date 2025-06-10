@@ -3,10 +3,11 @@
 */
 
 //Global variables
+fn other_test() -> void{
 let mut glob_x:u32 := 3232;
 let glog_y:i32 := -232;
 
-fn other_test() -> void{
+
 	let mut l:i32 := 33;
 	let mut j:i32 := 3232;
 

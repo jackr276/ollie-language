@@ -129,9 +129,13 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
 	//And create it's dynamic array
 	live_range->variables = dynamic_array_alloc();
 
+
 	//Store what function this came from
 	live_range->function_defined_in = function_defined_in;
 
+	if(live_range->function_defined_in == NULL){
+		printf("ERROR: You are not passing in a function\n");
+	}
 	//Create the neighbors array as well
 	live_range->neighbors = dynamic_array_alloc();
 
@@ -557,6 +561,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		for(int16_t i = cfg->function_blocks->current_index - 1; i >= 0; i--){
 			//Grab the block out
 			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_blocks, i);
+
+			//Reset the registers in here while we're at it
+			memset(func_entry->function_defined_in->used_registers, 0, sizeof(u_int8_t) * 17);
 
 			//Now we can go through the entire RPO set
 			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order_reverse_cfg->current_index; _++){
@@ -1421,8 +1428,15 @@ static u_int8_t allocate_register(interference_graph_t* graph, dynamic_array_t* 
 	//Now that we've gotten here, i should hold the value of a free register - 1. We'll
 	//add 1 back to it to get that free register's name
 	if(i < K_COLORS_GEN_USE){
+		//Assign the register value to it
 		live_range->reg = i + 1;
+
+		//Flag this as used in the function
+		live_range->function_defined_in->used_registers[i] = TRUE;
+
+		//Return true here
 		return TRUE;
+
 	//This means that our neighbors allocated all of the registers available
 	} else {
 		return FALSE;
