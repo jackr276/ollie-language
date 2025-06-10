@@ -7,6 +7,7 @@
 #include "lightstack.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 //Our default stack size is 10 numbers
@@ -79,6 +80,21 @@ u_int32_t lightstack_pop(lightstack_t* stack){
 
 	//Give the value back
 	return value;
+}
+
+
+/**
+ * Reset the entire lightstack
+ */
+void reset_lightstack(lightstack_t* stack){
+	//Only reset here if it isn't NULL
+	if(stack->stack != NULL){
+		//Wipe the values
+		memset(stack->stack, 0, sizeof(stack->current_size));
+	}
+
+	//Reset the index
+	stack->top_index = 0;
 }
 
 

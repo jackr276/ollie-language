@@ -60,6 +60,11 @@ u_int8_t lightstack_is_empty(lightstack_t* stack);
 u_int8_t lightstack_is_empty(lightstack_t* stack);
 
 /**
+ * Reset the entire lightstack
+ */
+void reset_lightstack(lightstack_t* stack);
+
+/**
  * Grab the top of the stack without removing it
 */
 u_int16_t lightstack_peek(lightstack_t* stack);

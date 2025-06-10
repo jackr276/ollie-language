@@ -1549,13 +1549,49 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 
 /**
  * Now that we are done spilling, we need to insert all of the stack logic,
- * including additions and subtractions, into the functions
+ * including additions and subtractions, into the functions. We also need
+ * to insert pushing of any/all callee saved and caller saved registers to maintain
+ * our calling convention
  */
-static void insert_all_stack_logic(cfg_t* cfg){
+static void insert_all_stack_and_saving_logic(cfg_t* cfg){
+	//We need to run through all of the used registers and make a note of all callee-saved registers
+	//in here we'll use a lightstack to keep track of the pushing/popping logic in here as well
+	lightstack_t stack = lightstack_initialize();
+
 	//Run through every function entry point in the CFG
 	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		//Wipe the lightstack completely clean
+		reset_lightstack(&stack);
+
 		//Grab it out
 		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_blocks, i);
+
+		//Grab the function defined in as well
+		symtab_function_record_t* function = current_function_entry->function_defined_in;
+
+		//We need to see which registers that we use
+		for(u_int16_t i = 0; i < 15; i++){
+			//We don't use this register, so move on
+			if(function->used_registers[i] == FALSE){
+				continue;
+			}
+
+			//Otherwise if we get here, we know that we use it. Remember
+			//the register value is always offset by one
+			register_holder_t used_reg = i + 1;
+
+			//If this isn't callee saved, then we know to move on
+			if(is_register_callee_saved(used_reg) == FALSE){
+				continue;
+			}
+
+			//Otherwise if we make it all the way down here, we know that we'll need to push this value onto the stack
+			//to save it
+			lightstack_push(&stack, used_reg);
+
+			//Now we'll need to add the pushing logic
+
+		}
 
 		//We'll also need it's stack data area
 		stack_data_area_t area = current_function_entry->function_defined_in->data_area;
@@ -1624,6 +1660,9 @@ static void insert_all_stack_logic(cfg_t* cfg){
 			cursor = cursor->direct_successor;
 		}
 	}
+
+	//Deinitialize the lightstack
+	lightstack_dealloc(&stack);
 }
 
 
@@ -1663,7 +1702,7 @@ void allocate_all_registers(cfg_t* cfg){
 	allocate_registers(cfg, live_ranges, graph);
 
 	//Once registers are allocated, we need to crawl and insert all stack allocations/subtractions
-	insert_all_stack_logic(cfg);
+	insert_all_stack_and_saving_logic(cfg);
 
 	printf("================= After Allocation =======================\n");
 	print_blocks_with_registers(cfg->head_block, FALSE);

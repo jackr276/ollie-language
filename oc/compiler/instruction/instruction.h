@@ -565,6 +565,12 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab
 three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* symtab);
 
 /**
+ * Emit a push instruction. We only have one kind of pushing - quadwords - we don't
+ * deal with getting granular when pushing
+ */
+instruction_t* emit_push_instruction(three_addr_var_t* pushee);
+
+/**
  * Emit a movX instruction
  *
  * This is used for when we need extra moves(after a division/modulus)

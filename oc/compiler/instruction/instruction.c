@@ -374,6 +374,25 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 
 
 /**
+ * Emit a push instruction. We only have one kind of pushing - quadwords - we don't
+ * deal with getting granular when pushing
+ */
+instruction_t* emit_push_instruction(three_addr_var_t* pushee){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Now we set the type
+	instruction->instruction_type = PUSH;
+
+	//We only ever have a source
+	instruction->source_register = pushee;
+
+	//Finally give it back
+	return instruction;
+}
+
+
+/**
  * Emit a movX instruction
  *
  * This is used for when we need extra moves(after a division/modulus)
