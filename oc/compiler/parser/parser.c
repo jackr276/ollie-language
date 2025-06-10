@@ -2423,7 +2423,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 
 			//We need to now do any adjustment. Whenever we add to a pointer, we inherently need to add the additive TIMES the
 			//size of the underlying object
-			if(strcmp(temp_holder->inferred_type->pointer_type->points_to->type_name, "void") != 0){
+			if(temp_holder->inferred_type->pointer_type->is_void_pointer == FALSE){
 				//what is this size of what this thing points to?
 				u_int16_t points_to_size = temp_holder->inferred_type->pointer_type->points_to->type_size; 
 

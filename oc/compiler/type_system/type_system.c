@@ -109,10 +109,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			//Otherwise it needs to be a basic type
 			} else if(source_type->type_class == TYPE_CLASS_BASIC){
 				//Grab the type out of here
-				Token stripped_type = source_type->basic_type->basic_type;
+				source_basic_type = source_type->basic_type->basic_type;
 
 				//It needs to be 8 bits, otherwise we won't allow this
-				if(stripped_type == U_INT8 || stripped_type == S_INT8 || stripped_type == CHAR){
+				if(source_basic_type == U_INT8 || source_basic_type == S_INT8 || source_basic_type == CHAR){
 					//This is assignable
 					return destination_type;
 				} else {
@@ -182,7 +182,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		 * 1.) VOID: nothing can be assigned to void. Additionally, nothing can be assigned as void
 		 * 2.) F64: can be assigned anything of type F64 or F32
 		 * 3.) F32: can be assigned anything of type F32
-		 * 4.) Char: can be assigned anything of type char, enum, i8 or u8
+		 * 4.) Source type as enum: any integer/char can take in an enum type
+		 * 5.) Integers: so long as the size of the destination is >= the size of the source,
+		 *    integers can be assigned around. We will not stop the user from assigning signed to
+		 *    unsigned and vice versa
 		 */
 		case TYPE_CLASS_BASIC:
 			//Extract the destination's basic type
@@ -231,13 +234,30 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				if(source_type->type_class != TYPE_CLASS_BASIC){
 					return NULL;
 				}
-				
+
+				//Once we get here, we know that the source type is a basic type. We now
+				//need to check that it's not a float or void
+				source_basic_type = source_type->basic_type->basic_type;
+
+				//All of these cannot be assigned to an int
+				if(source_basic_type == FLOAT32 || source_basic_type == FLOAT64 || source_basic_type == VOID){
+					return NULL;
+				}
+
+				//Otherwise, once we make it here we know that the source type is a basic type and
+				//and integer/char type. We can now just compare the sizes and if the destination is more
+				//than or equal to the source, we're good
+				if(source_type->type_size <= destination_type->type_size){
+					return destination_type;
+				} else {
+					//These wouldn't fit
+					return NULL;
+				}
 			}
 
 		//We should never get here
 		default:
 			return NULL;
-
 	}
 }
 
