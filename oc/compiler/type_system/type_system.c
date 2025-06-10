@@ -69,7 +69,7 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
  * 					  Beyond this, the "pointing_to" types have to match when dealiased
  * 5.) Basic Types: See the area below for these rules, there are many
  */
-generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type, Token operator){
+generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type){
 	//Before we go any further - make sure these types are fully raw
 	destination_type = dealias_type(destination_type);
 	source_type = dealias_type(source_type);
@@ -182,10 +182,58 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		 * 1.) VOID: nothing can be assigned to void. Additionally, nothing can be assigned as void
 		 * 2.) F64: can be assigned anything of type F64 or F32
 		 * 3.) F32: can be assigned anything of type F32
+		 * 4.) Char: can be assigned anything of type char, enum, i8 or u8
 		 */
 		case TYPE_CLASS_BASIC:
+			//Extract the destination's basic type
+			dest_basic_type = destination_type->basic_type->basic_type;
+
+			//If this is the case, we're done. Nothing can be assigned to void
+			if(dest_basic_type == VOID){
+				return NULL;
+
+			//Float64's can only be assigned other float64's
+			} else if(dest_basic_type == FLOAT64){
+				//We must see another f64 or an f32(widening) here
+				if(source_type->type_class == TYPE_CLASS_BASIC
+					&& (source_type->basic_type->basic_type == FLOAT64
+					|| source_type->basic_type->basic_type == FLOAT32)){
+					return destination_type;
+
+				//Otherwise nothing here will work
+				} else {
+					return NULL;
+				}
 			
-		
+			//Let's see if we have an f32
+			} else if(dest_basic_type == FLOAT32){
+				//We must see another an f32 here
+				if(source_type->type_class == TYPE_CLASS_BASIC
+					&& source_type->basic_type->basic_type == FLOAT32){
+					return destination_type;
+
+				//Otherwise nothing here will work
+				} else {
+					return NULL;
+				}
+
+			//Once we get to this point, we know that we have something
+			//in this set for destination type: U64, I64, U32, I32, U16, I16, U8, I8, Char
+			//From here, we'll go based on the type size of the source type *if* the source
+			//type is also a basic type. 
+			} else {
+				//Special exception - the source type is an enum. These are good to be used with ints
+				if(source_type->type_class == TYPE_CLASS_ENUMERATED){
+					return destination_type;
+				}
+
+				//Now if the source type is not a basic type, we're done here
+				if(source_type->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+				
+			}
+
 		//We should never get here
 		default:
 			return NULL;

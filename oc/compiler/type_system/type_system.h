@@ -192,6 +192,12 @@ struct aliased_type_t{
 generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB);
 
 /**
+ * Are we able to assign something of "source_type" to something on "destination_type"? Returns
+ * NULL if we can't
+ */
+generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type);
+
+/**
  * Dynamically allocate and create a basic type
 */
 generic_type_t* create_basic_type(char* type_name, Token basic_type);
