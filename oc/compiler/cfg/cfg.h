@@ -101,8 +101,6 @@ struct cfg_t{
 struct basic_block_t{
 	//The reference to a jump table. This is often not used at all
 	jump_table_t jump_table;
-	//The function record -- we need to store this for printing
-	symtab_function_record_t* func_record;
 	//The function that we're defined in
 	symtab_function_record_t* function_defined_in;
 	//There are consecutive statements(declare, define, let, assign, alias)

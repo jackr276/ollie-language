@@ -133,9 +133,6 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
 	//Store what function this came from
 	live_range->function_defined_in = function_defined_in;
 
-	if(live_range->function_defined_in == NULL){
-		printf("ERROR: You are not passing in a function\n");
-	}
 	//Create the neighbors array as well
 	live_range->neighbors = dynamic_array_alloc();
 
@@ -173,8 +170,8 @@ static void print_block_with_live_ranges(basic_block_t* block){
 
 	//If it's a function entry block, we need to print this out
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		printf("%s:\n", block->func_record->func_name);
-		print_stack_data_area(&(block->func_record->data_area));
+		printf("%s:\n", block->function_defined_in->func_name);
+		print_stack_data_area(&(block->function_defined_in->data_area));
 	} else {
 		printf(".L%d:\n", block->block_id);
 	}
@@ -289,11 +286,11 @@ static void print_block_with_registers(basic_block_t* block, u_int8_t final_run)
 
 	//If it's a function entry block, we need to print this out
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		printf("%s:\n", block->func_record->func_name);
+		printf("%s:\n", block->function_defined_in->func_name);
 
 		//We'd only want to print the stack if this is not the final run
 		if(final_run == FALSE){
-			print_stack_data_area(&(block->func_record->data_area));
+			print_stack_data_area(&(block->function_defined_in->data_area));
 		}
 
 	} else {
