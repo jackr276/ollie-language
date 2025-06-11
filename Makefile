@@ -376,7 +376,7 @@ instruction_selector-CI.o: $(INSTRUCTION_SELECTOR_PATH)/instruction_selector.c
 instruction_scheduler-CI.o: $(INSTRUCTION_SCHEDULER_PATH)/instruction_scheduler.c
 	$(CC) $(CFLAGS) $(INSTRUCTION_SCHEDULER_PATH)/instruction_scheduler.c -o $(OUT_CI)/instruction_scheduler.o
 
-register_allocator.o-CI: $(REGISTER_ALLOCATOR_PATH)/register_allocator.c
+register_allocator-CI.o: $(REGISTER_ALLOCATOR_PATH)/register_allocator.c
 	$(CC) $(CFLAGS) $(REGISTER_ALLOCATOR_PATH)/register_allocator.c -o $(OUT_CI)/register_allocator.o
 
 assembler-CI.o: $(OLLIE_ASSEMBLER_PATH)/assembler.c
@@ -400,7 +400,7 @@ symtab_test-CI.o: $(TEST_SUITE_PATH)/symtab_test.c
 dynamic_array_test-CI.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_array_test.c -o $(OUT_CI)/dynamic_array_test.o
 
-dynamic_array_test-CI: dynamic_array_test.o dynamic_array.o
+dynamic_array_test-CI: dynamic_array_test-CI.o dynamic_array-CI.o
 	$(CC) -o $(OUT_CI)/dynamic_array_test $(OUT_CI)/dynamic_array_test.o $(OUT_CI)/dynamic_array.o
 
 parser_test-CI.o: $(TEST_SUITE_PATH)/parser_test.c
