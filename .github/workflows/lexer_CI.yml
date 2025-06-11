@@ -14,4 +14,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Lexer test
-      run: make ltest 
+      run: make ltest-CI
