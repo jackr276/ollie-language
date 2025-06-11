@@ -14,4 +14,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Front end test
-      run: make front_test 
+      run: make front_test-CI

@@ -14,4 +14,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Middle end test
-      run: make middle_test 
+      run: make middle_test-CI

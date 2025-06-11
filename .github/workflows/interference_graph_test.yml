@@ -14,4 +14,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Interference Graph Test
-      run: make interference_graph_test 
+      run: make interference_graph_test-CI
