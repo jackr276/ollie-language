@@ -482,6 +482,46 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 
 
 /**
+ * Is the given operation valid for the type that was specificed?
+ */
+u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op){
+	//Just to be safe, we'll always make sure here
+	type = dealias_type(type);
+
+	//Deconstructed basic type(since we'll be using it so much)
+	basic_type_t* basic_type = NULL;
+
+	//Switch based on what the operator is
+	switch(op){
+		/**
+		 * Shifting is valid only for integers and enumerated types
+		 */
+		case L_SHIFT:
+		case R_SHIFT:
+			//If it's not a basic type we're done
+			if(type->type_class != TYPE_CLASS_BASIC){
+				return FALSE;
+			}
+
+			//Deconstruct this
+			basic_type = type->basic_type;
+
+			//Let's now check and make sure it's not a float or void
+			if(basic_type->basic_type == VOID || basic_type->basic_type == FLOAT32 || basic_type->basic_type == FLOAT64){
+				return FALSE;
+			}
+
+			//Otherwise if we make it all the way down here, this is fine
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+
+}
+
+
+/**
  * Create a basic type dynamically
 */
 generic_type_t* create_basic_type(char* type_name, Token basic_type){

@@ -2766,24 +2766,13 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//Let's check the type of the temp holder. If it isn't a basic type, it's ruled out
-		if(temp_holder->inferred_type->type_class != TYPE_CLASS_BASIC){
-			sprintf(info, "Type %s cannot be bitwise shifted", temp_holder->inferred_type->type_name); 
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Even if it is a basic type, we need to ensure that it isn't a float or void.
-		//Extract for convenience
-		Token temp_holder_type = temp_holder->inferred_type->basic_type->basic_type;
-
-		//We can't have floats or voids
-		if(temp_holder_type == FLOAT32 || temp_holder_type == FLOAT64 || temp_holder_type == VOID){
-			sprintf(info, "Type %s cannot be bitwise shifted", temp_holder->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Let's see if this actually works
+		u_int8_t is_left_type_shiftable = is_operation_valid_for_type(temp_holder->inferred_type, lookahead.tok);
+		
+		//Fail out here
+		if(is_left_type_shiftable == FALSE){
+			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name); 
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//We now need to make an operator node
@@ -2804,26 +2793,15 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 			return right_child;
 		}
 
-		//Let's check the type of the right child. If it isn't a basic type, it's ruled out
-		if(right_child->inferred_type->type_class != TYPE_CLASS_BASIC){
-			sprintf(info, "Type %s cannot be used as a shift amount", right_child->inferred_type->type_name); 
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Even if it is a basic type, we need to ensure that it isn't a float or void.
-		//Extract for convenience
-		Token right_child_type = right_child->inferred_type->basic_type->basic_type;
-
-		//We can't have floats or voids
-		if(right_child_type == FLOAT32 || right_child_type == FLOAT64 || right_child_type == VOID){
-			sprintf(info, "Type %s cannot be used as a shift amount", right_child->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
+		//Let's see if this actually works
+		u_int8_t is_right_type_shiftable = is_operation_valid_for_type(right_child->inferred_type, lookahead.tok);
 		
+		//Fail out here
+		if(is_right_type_shiftable == FALSE){
+			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name); 
+			return print_and_return_error(info, parser_line_num);
+		}
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 		//The return type is always the left child's type

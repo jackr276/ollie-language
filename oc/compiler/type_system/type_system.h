@@ -223,6 +223,11 @@ generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number);
 generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
 
 /**
+ * Is the given operation valid for the type that was specificed?
+ */
+u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op);
+
+/**
  * Add a value into a construct's table
  */
 u_int8_t add_construct_member(generic_type_t* type, void* member_var);
