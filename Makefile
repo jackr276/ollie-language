@@ -310,7 +310,7 @@ interference_graph_test: interference_graph_tester
 
 ######################################################################## CI VERSIONS #############################################################################
 
-ltest-CI: lexer_test
+ltest-CI: lexer_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/lexer_test
 
 lexer_test-CI: lexer-CI.o lexer_test-CI.o lexstack-CI.o
@@ -406,10 +406,10 @@ dynamic_array_test-CI: dynamic_array_test.o dynamic_array.o
 parser_test-CI.o: $(TEST_SUITE_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/parser_test.c -o $(OUT_CI)/parser_test.o
 
-parser_test-CI: parser.o lexer.o parser_test.o symtab.o lexstack.o heapstack.o type_system.o ast.o call_graph.o heap_queue.o lightstack.o dynamic_array.o stack_data_area.o instruction.o
+parser_test-CI: parser-CI.o lexer-CI.o parser_test-CI.o symtab-CI.o lexstack-CI.o heapstack-CI.o type_system-CI.o ast-CI.o call_graph-CI.o heap_queue-CI.o lightstack-CI.o dynamic_array-CI.o stack_data_area-CI.o instruction-CI.o
 	$(CC) -o $(OUT_CI)/parser_test $(OUT_CI)/parser_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexstack.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/call_graph.o $(OUT_CI)/heap_queue.o $(OUT_CI)/lightstack.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o
 
-symtab_test-CI: symtab.o symtab_test.o lexer.o type_system.o lexstack.o lightstack.o stack_data_area.o instruction.o dynamic_array.o parser.o cfg.o ast.o call_graph.o heap_queue.o heapstack.o jump_table.o 
+symtab_test-CI: symtab-CI.o symtab_test-CI.o lexer-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o stack_data_area-CI.o instruction-CI.o dynamic_array-CI.o parser-CI.o cfg-CI.o ast-CI.o call_graph-CI.o heap_queue-CI.o heapstack-CI.o jump_table-CI.o 
 	$(CC) -o $(OUT_CI)/symtab_test $(OUT_CI)/lexer.o $(OUT_CI)/symtab_test.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/parser.o $(OUT_CI)/cfg.o $(OUT_CI)/ast.o $(OUT_CI)/call_graph.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o
 
 stack_data_area_test-CI: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o instruction.o stack_data_area.o dynamic_array.o ast.o call_graph.o cfg.o parser.o heap_queue.o heapstack.o jump_table.o
@@ -442,28 +442,28 @@ middle_end_test-CI: middle_end_test.o parser.o lexer.o symtab.o heapstack.o type
 oc-CI: compiler.o parser.o lexer.o symtab.o heapstack.o type_system.o ast.o cfg.o call_graph.o lexstack.o instruction.o heap_queue.o preproc.o dependency_tree.o priority_queue.o dynamic_array.o lightstack.o optimizer.o instruction_selector.o jump_table.o code_generator.o stack_data_area.o register_allocator.o instruction_scheduler.o interference_graph.o assembler.o
 	$(CC) -o $(OUT_CI)/oc $(OUT_CI)/compiler.o $(OUT_CI)/parser.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/lexstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/cfg.o $(OUT_CI)/call_graph.o $(OUT_CI)/instruction.o $(OUT_CI)/heap_queue.o $(OUT_CI)/preproc.o $(OUT_CI)/dependency_tree.o $(OUT_CI)/priority_queue.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/lightstack.o $(OUT_CI)/optimizer.o $(OUT_CI)/instruction_selector.o $(OUT_CI)/jump_table.o $(OUT_CI)/code_generator.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/register_allocator.o $(OUT_CI)/instruction_scheduler.o $(OUT_CI)/interference_graph.o $(OUT_CI)/assembler.o
 
-stest-CI: symtab_test
+stest-CI: symtab_test-CI
 	$(OUT_CI)/symtab_test
 
-test_data_area-CI: stack_data_area_test
+test_data_area-CI: stack_data_area_test-CI
 	$(OUT_CI)/stack_data_area_test ./oc/test_files/data_area_test_input.ol
 
-ptest-CI: parser_test
+ptest-CI: parser_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/parser_test
 
-front_test-CI: front_end_test
+front_test-CI: front_end_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test
 
-middle_test-CI: middle_end_test
+middle_test-CI: middle_end_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test
 
-compiler_test-CI: oc
+compiler_test-CI: oc-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc
 
-array_test-CI: dynamic_array_test
+array_test-CI: dynamic_array_test-CI
 	$(OUT_CI)/dynamic_array_test
 
-interference_graph_test-CI: interference_graph_tester
+interference_graph_test-CI: interference_graph_tester-CI
 	$(OUT_CI)/interference_graph_test
 
 ############################################################## CLEAN UTILITY(LOCAL ONLY) ###############################################
