@@ -469,8 +469,11 @@ static generic_ast_node_t* function_call(FILE* fl){
 		generic_type_t* param_type = current_function_param->type;
 		generic_type_t* expr_type = current_param->inferred_type;
 
-		//We now need to check the type equivalence here
-		generic_type_t* param_type_checked = types_compatible(param_type, expr_type);
+		/**
+		 * We will use the types_assignable function here because in a way we are trying to assign
+		 * this value into the parameter
+		 */
+		generic_type_t* param_type_checked = types_assignable(param_type, expr_type);
 
 		//If this is null, it means that our check failed
 		if(param_type_checked == NULL){
@@ -967,8 +970,11 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
 	generic_type_t* right_hand_type = expr->inferred_type;
 	
-	//Final type here
-	generic_type_t* final_type = types_compatible(left_hand_type, right_hand_type);
+	/**
+	 * We will make use of the types assignable module here, as the rules are slightly 
+	 * different than the types compatible rule
+	 */
+	generic_type_t* final_type = types_assignable(left_hand_type, right_hand_type);
 	
 	//If they're not, we fail here
 	if(final_type == NULL){
@@ -1947,8 +1953,12 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//Otherwise if we've made it down to here, we can just use the types_compatible function to see what we can do
-	generic_type_t* return_type = types_compatible(casting_to_type, being_casted_type);
+	/**
+	 * We will use the types_assignable function to check this
+	 *
+	 * TODO FIXME : use a types_castable function for this
+	 */
+	generic_type_t* return_type = types_assignable(casting_to_type, being_casted_type);
 
 	//This is our fail case
 	if(return_type == NULL){
