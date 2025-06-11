@@ -2021,33 +2021,13 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//Off the bat, if we have a construct or enum or array type here, we can't add to it
-		//Store this
-		TYPE_CLASS temp_holder_type_class = temp_holder->inferred_type->type_class;
+		//Let's see if this is a valid type or not
+		u_int8_t temp_holder_valid = is_operation_valid_for_type(temp_holder->inferred_type, lookahead.tok);
 
-		//Fail case right here
-		if(temp_holder_type_class != TYPE_CLASS_BASIC){
-			sprintf(info, "Type %s is invalid for operators *, / and %s", temp_holder->inferred_type->type_name, "%");
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//We also are not allowed to see a void type here
-		if(temp_holder->inferred_type->basic_type->basic_type == VOID){
-			print_parse_message(PARSE_ERROR, "Void types are invalid for operators *, / and %", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//If we saw a modulus operator and a float, that's also not allowed
-		if(lookahead.tok == MOD){
-			if(temp_holder->inferred_type->basic_type->basic_type == FLOAT32 || temp_holder->inferred_type->basic_type->basic_type == FLOAT64){
-				sprintf(info, "Type %s is invalid for modulus operator", temp_holder->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+		//Fail case here
+		if(temp_holder_valid == FALSE){
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, lookahead.lexeme);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//We now need to make an operator node
@@ -2068,32 +2048,13 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			return right_child;
 		}
 
-		//Let's now check to make sure that the right child also isn't some kind of disallowed
-		TYPE_CLASS right_child_type_class = right_child->inferred_type->type_class;
+		//Let's see if this is a valid type or not
+		u_int8_t right_child_valid = is_operation_valid_for_type(temp_holder->inferred_type, lookahead.tok);
 
-		//Fail case right here
-		if(right_child_type_class != TYPE_CLASS_BASIC){
-			sprintf(info, "Type %s is invalid for operators *, / and %s", temp_holder->inferred_type->type_name, "%");
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//We also are not allowed to see a void type here
-		if(right_child->inferred_type->basic_type->basic_type == VOID){
-			print_parse_message(PARSE_ERROR, "Void types cannot be added to or subtracted from", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//If we saw a modulus operator and a float, that's also not allowed
-		if(lookahead.tok == MOD){
-			if(right_child->inferred_type->basic_type->basic_type == FLOAT32 || right_child->inferred_type->basic_type->basic_type == FLOAT64){
-				sprintf(info, "Type %s is invalid for modulus operator", right_child->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+		//Fail case here
+		if(right_child_valid == FALSE){
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, lookahead.lexeme);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Once we get here, we know that the type class is a basic type class for both

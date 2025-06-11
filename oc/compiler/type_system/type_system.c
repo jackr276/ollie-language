@@ -494,10 +494,16 @@ u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op){
 	//Switch based on what the operator is
 	switch(op){
 		/**
-		 * Shifting is valid only for integers and enumerated types
+		 * Shifting and modulus operators are valid only for integers
 		 */
 		case L_SHIFT:
 		case R_SHIFT:
+		case MOD:
+			//Enumerated types are fine here, the one non-basic type that works
+			if(type->type_class == TYPE_CLASS_ENUMERATED){
+				return TRUE;
+			}
+
 			//If it's not a basic type we're done
 			if(type->type_class != TYPE_CLASS_BASIC){
 				return FALSE;
@@ -508,6 +514,32 @@ u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op){
 
 			//Let's now check and make sure it's not a float or void
 			if(basic_type->basic_type == VOID || basic_type->basic_type == FLOAT32 || basic_type->basic_type == FLOAT64){
+				return FALSE;
+			}
+
+			//Otherwise if we make it all the way down here, this is fine
+			return TRUE;
+
+		/**
+		 * The multiplication and division operators are valid for enums and all basic types with the exception of void
+		 */
+		case STAR:
+		case F_SLASH:
+			//Enumerated types are fine here, the one non-basic type that works
+			if(type->type_class == TYPE_CLASS_ENUMERATED){
+				return TRUE;
+			}
+
+			//If it's not a basic type we're done
+			if(type->type_class != TYPE_CLASS_BASIC){
+				return FALSE;
+			}
+
+			//Deconstruct this
+			basic_type = type->basic_type;
+
+			//Let's now just make sure that it is not a void type
+			if(basic_type->basic_type == VOID){
 				return FALSE;
 			}
 
