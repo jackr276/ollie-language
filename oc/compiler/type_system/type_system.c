@@ -546,6 +546,28 @@ u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op){
 			//Otherwise if we make it all the way down here, this is fine
 			return TRUE;
 
+		/**
+		 * Relational expressions are valid for floats, integers,
+		 * enumerated types and pointers. They are invalid for
+		 * void types
+		 */
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+			//This doesn't work on arrays or constructs
+			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
+				return FALSE;
+			}
+
+			//This also doesn't work for void types
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type->basic_type == VOID){
+				return FALSE;
+			}
+
+			//Otherwise, everything else that we have should work fine
+			return TRUE;
+
 		default:
 			return FALSE;
 	}
