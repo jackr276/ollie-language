@@ -3394,6 +3394,15 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
+		//Let's see if this type is valid
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_AND);
+
+		//This is our fail case
+		if(is_temp_holder_valid == FALSE){
+			sprintf(info, "Type %s is not valid for the && operator", temp_holder->inferred_type->type_name);
+			return print_and_return_error(info, parser_line_num);
+		}
+
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
 		add_child_node(sub_tree_root, temp_holder);
@@ -3407,53 +3416,28 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 			return right_child;
 		}
 
-		/**
-		 * We now must do type-legality checking. Logical and works on basically everything
-		 * except for constructs, arrays and enums
-		 */
-		generic_type_t* temp_holder_type = temp_holder->inferred_type;
-		generic_type_t* right_child_type = right_child->inferred_type;
-		
-		//We do not allow logical or to be done on arrays, enums or constructs
-		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
-		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
-		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
-			sprintf(info, "Attempt to logically-and incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
+		//Let's see if this type is valid
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, DOUBLE_AND);
 
-		//Additionally, we cannot use logical or with floats or voids
-		//Check the first node
-		if(temp_holder_type->type_class == TYPE_CLASS_BASIC){
-			if(temp_holder_type->basic_type->basic_type == FLOAT32
-			  || temp_holder_type->basic_type->basic_type == FLOAT64
-			  || temp_holder_type->basic_type->basic_type == VOID){
-				sprintf(info, "Attempt to logically-and incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
-		}
-
-		//Check the second node
-		if(right_child_type->type_class == TYPE_CLASS_BASIC){
-			if(right_child_type->basic_type->basic_type == FLOAT32
-			  || right_child_type->basic_type->basic_type == FLOAT64
-			  || right_child_type->basic_type->basic_type == VOID){
-				sprintf(info, "Attempt to logically-and types incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+		//This is our fail case
+		if(is_right_child_valid == FALSE){
+			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
+		generic_type_t* final_type = types_compatible(temp_holder->inferred_type, right_child->inferred_type);
+		if(final_type == NULL){
+			sprintf(info, "Attempt to logically-and types incompatible types %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name); 
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//We now know that the subtree root has a type of u_int8(boolean)
-		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
+		sub_tree_root->inferred_type = final_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -3515,6 +3499,15 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
+		//Let's see if this type is valid
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_OR);
+
+		//This is our fail case
+		if(is_temp_holder_valid == FALSE){
+			sprintf(info, "Type %s is not valid for the || operator", temp_holder->inferred_type->type_name);
+			return print_and_return_error(info, parser_line_num);
+		}
+
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
 		add_child_node(sub_tree_root, temp_holder);
@@ -3528,55 +3521,28 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 			return right_child;
 		}
 
-		/**
-		 * We now must do type-legality checking. Logical or works on basically everything
-		 * except for constructs, arrays and enums
-		 */
-		generic_type_t* temp_holder_type = temp_holder->inferred_type;
-		generic_type_t* right_child_type = right_child->inferred_type;
+		//Let's see if this type is valid
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, DOUBLE_AND);
+
+		//This is our fail case
+		if(is_right_child_valid == FALSE){
+			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name);
+			return print_and_return_error(info, parser_line_num);
+		}
 		
-		//We do not allow logical or to be done on arrays, enums or constructs
-		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
-		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT
-		  || right_child_type->type_class == TYPE_CLASS_ENUMERATED || temp_holder_type->type_class == TYPE_CLASS_ENUMERATED){
-			sprintf(info, "Attempt to logically-or(||) incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		generic_type_t* final_type = types_compatible(temp_holder->inferred_type, right_child->inferred_type);
+		if(final_type == NULL){
+			sprintf(info, "Attempt to logically-and types incompatible types %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name); 
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
-		//Additionally, we cannot use logical or with floats or voids
-		//Check the first node
-		if(temp_holder_type->type_class == TYPE_CLASS_BASIC){
-			if(temp_holder_type->basic_type->basic_type == FLOAT32
-			  || temp_holder_type->basic_type->basic_type == FLOAT64
-			  || temp_holder_type->basic_type->basic_type == VOID){
-				sprintf(info, "Attempt to logically-or types incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
-		}
-
-		//Check the second node
-		if(right_child_type->type_class == TYPE_CLASS_BASIC){
-			if(right_child_type->basic_type->basic_type == FLOAT32
-			  || right_child_type->basic_type->basic_type == FLOAT64
-			  || right_child_type->basic_type->basic_type == VOID){
-				sprintf(info, "Attempt to logically-or types incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
-		}
-
-		//If we make it all the way down here, we know that we have valid types for our logical or operation
-
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
-		
-		//Grab the inferred type
-		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
+		//We now know that the subtree root has a type of u_int8(boolean)
+		sub_tree_root->inferred_type = final_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking

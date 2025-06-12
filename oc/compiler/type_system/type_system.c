@@ -546,6 +546,40 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 			//Otherwise if we make it all the way down here, this is fine
 			return TRUE;
 
+
+		/**
+		 * Double or and double and are valid for pointers, enums, and
+		 * all basic types with the exception of void
+		 */
+		case DOUBLE_OR:
+		case DOUBLE_AND:
+			//Enumerated types are fine here
+			if(type->type_class == TYPE_CLASS_ENUMERATED){
+				return TRUE;
+			}
+
+			//Pointers are also no issue
+			if(type->type_class == TYPE_CLASS_POINTER){
+				return TRUE;
+			}
+
+			//Otherwise if it's not a basic type by the time we get
+			//here then we're done
+			if(type->type_class != TYPE_CLASS_BASIC){
+				return FALSE;
+			}
+
+			//Deconstruct this
+			basic_type = type->basic_type;
+
+			//Let's now just make sure that it is not a void type
+			if(basic_type->basic_type == VOID){
+				return FALSE;
+			}
+
+			//Otherwise if we make it all the way down here, this is fine
+			return TRUE;
+
 		/**
 		 * Relational expressions are valid for floats, integers,
 		 * enumerated types and pointers. They are invalid for
