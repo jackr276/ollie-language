@@ -484,7 +484,7 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 /**
  * Is the given operation valid for the type that was specificed?
  */
-u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op){
+u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op){
 	//Just to be safe, we'll always make sure here
 	type = dealias_type(type);
 
@@ -492,7 +492,7 @@ u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op){
 	basic_type_t* basic_type = NULL;
 
 	//Switch based on what the operator is
-	switch(op){
+	switch(binary_op){
 		/**
 		 * Shifting and modulus operators are valid only for integers
 		 */
@@ -555,6 +555,8 @@ u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op){
 		case L_THAN_OR_EQ:
 		case G_THAN:
 		case G_THAN_OR_EQ:
+		case NOT_EQUALS:
+		case DOUBLE_EQUALS:
 			//This doesn't work on arrays or constructs
 			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
 				return FALSE;

@@ -225,7 +225,7 @@ generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
 /**
  * Is the given operation valid for the type that was specificed?
  */
-u_int8_t is_operation_valid_for_type(generic_type_t* type, Token op);
+u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op);
 
 /**
  * Add a value into a construct's table

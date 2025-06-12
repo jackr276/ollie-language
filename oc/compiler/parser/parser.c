@@ -2017,7 +2017,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//Let's see if this is a valid type or not
-		u_int8_t temp_holder_valid = is_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
 
 		//Fail case here
 		if(temp_holder_valid == FALSE){
@@ -2044,7 +2044,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		}
 
 		//Let's see if this is a valid type or not
-		u_int8_t right_child_valid = is_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t right_child_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
 
 		//Fail case here
 		if(right_child_valid == FALSE){
@@ -2726,7 +2726,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//Let's see if this actually works
-		u_int8_t is_left_type_shiftable = is_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t is_left_type_shiftable = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
 		
 		//Fail out here
 		if(is_left_type_shiftable == FALSE){
@@ -2753,7 +2753,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		}
 
 		//Let's see if this actually works
-		u_int8_t is_right_type_shiftable = is_operation_valid_for_type(right_child->inferred_type, op.tok);
+		u_int8_t is_right_type_shiftable = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok);
 		
 		//Fail out here
 		if(is_right_type_shiftable == FALSE){
@@ -2832,7 +2832,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		//Let's check to see if this type is valid for our operation
-		u_int8_t is_temp_holder_valid = is_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -2854,7 +2854,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		}
 
 		//Let's check to see if this type is valid for our operation
-		u_int8_t is_right_child_valid = is_operation_valid_for_type(right_child->inferred_type, op.tok);
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -2898,9 +2898,6 @@ static generic_ast_node_t* relational_expression(FILE* fl){
  * An equality expression can be chained and descends into a relational expression. It will
  * always return a pointer to the subtree, whether that subtree is made here or elsewhere
  *
- * TYPE INFERENCE RULES: An equality expression is guaranteed to return a type of u_int8(boolean).
- * It can take in as input anything besides an array, construct, enum or void
- *
  * BNF Rule: <equality-expression> ::= <relational-expression>{ (==|!=) <relational-expression> }*
  */
 static generic_ast_node_t* equality_expression(FILE* fl){
@@ -2927,6 +2924,9 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 	
 	//As long as we have a relational operators(== or !=) 
 	while(lookahead.tok == NOT_EQUALS || lookahead.tok == DOUBLE_EQUALS){
+		//Store this locally
+		Lexer_item op = lookahead;
+
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
@@ -2934,6 +2934,15 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Let's check to see if this is valid
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+
+		//If this fails, there's no point in going forward
+		if(is_temp_holder_valid == FALSE){
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, op.lexeme);
+			return print_and_return_error(info, parser_line_num);
+		}
 
 		//We actually already know this guy's first child--it's the previous root currently
 		//being held in temp_holder. We'll add the temp holder in as the subtree root
@@ -2948,49 +2957,30 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 			return right_child;
 		}
 
-		/**
-		 * We now must do type-legality checking. Inclusive or works
-		 * except for constructs, arrays and enums
-		 */
-		generic_type_t* temp_holder_type = temp_holder->inferred_type;
-		generic_type_t* right_child_type = right_child->inferred_type;
-		
-		//We do not allow bitwise or to be done on arrays, enums or constructs
-		if(temp_holder_type->type_class == TYPE_CLASS_ARRAY || temp_holder_type->type_class == TYPE_CLASS_CONSTRUCT
-		  || right_child_type->type_class == TYPE_CLASS_ARRAY || right_child_type->type_class == TYPE_CLASS_CONSTRUCT){
-			print_parse_message(PARSE_ERROR, "Equality operators do not work with arrays or constructs", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
+		//Let's check to see if this is valid
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok);
 
-		//Additionally, we cannot use logical or with floats or voids
-		//Check the first node
-		if(temp_holder_type->type_class == TYPE_CLASS_BASIC){
-			//We do not allow the use of void types here
-			if(temp_holder_type->basic_type->basic_type == VOID){
-				sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
-		}
-
-		//Check the second node
-		if(right_child_type->type_class == TYPE_CLASS_BASIC){
-			//We do not allow the use of void types here
-			if(right_child_type->basic_type->basic_type == VOID){
-				sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder_type->type_name, right_child_type->type_name); 
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+		//If this fails, there's no point in going forward
+		if(is_right_child_valid == FALSE){
+			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, op.lexeme);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
+		//Figure out if they're compatible
+		generic_type_t* ending_type = types_compatible(temp_holder->inferred_type, right_child->inferred_type);
+
+		if(ending_type == NULL){
+			sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name); 
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		}
+
 		//Store what our return type is too
-		sub_tree_root->inferred_type = types_compatible(temp_holder_type, right_child_type);
+		sub_tree_root->inferred_type = ending_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
