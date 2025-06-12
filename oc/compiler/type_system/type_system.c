@@ -498,6 +498,9 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		 */
 		case L_SHIFT:
 		case R_SHIFT:
+		case SINGLE_AND: //Bitwise and(&)
+		case SINGLE_OR: //Bitwise or(|)
+		case CARROT: //Exclusive or(^)
 		case MOD:
 			//Enumerated types are fine here, the one non-basic type that works
 			if(type->type_class == TYPE_CLASS_ENUMERATED){
