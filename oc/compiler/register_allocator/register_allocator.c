@@ -848,6 +848,11 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
  * bind them to the right register at this stage and avoid having to worry about it later
  */
 static void pre_color(instruction_t* instruction){
+	/**
+	 * The first thing will check for here is after-call function parameters. These
+	 * need to be allocated appropriately
+	 */
+
 	//One thing to check for - function parameter passing
 	if(instruction->destination_register != NULL && instruction->destination_register->linked_var != NULL
 		&& instruction->destination_register->linked_var->function_parameter_order > 0){
@@ -948,6 +953,33 @@ static void pre_color(instruction_t* instruction){
 				instruction->destination_register->associated_live_range->reg = RAX;
 				instruction->destination_register->associated_live_range->is_precolored = TRUE;
 			}
+
+			/**
+			 * We also need to allocate the parameters for this function. Conviently,
+			 * they are already stored for us so we don't need to do anything like
+			 * what we had to do for pre-allocating function parameters
+			 */
+
+			//Grab the parameters out
+			dynamic_array_t* function_params = instruction->function_parameters;
+
+			//If we actually have function parameters
+			if(function_params != NULL){
+				for(u_int16_t i = 0; i < function_params->current_index; i++){
+					//Grab it out
+					three_addr_var_t* param = dynamic_array_get_at(function_params, i);
+
+					//Now that we have it, we'll grab it's live range
+ 					live_range_t* param_live_range = param->associated_live_range;
+
+					//This is precolored
+					param_live_range->is_precolored = TRUE;
+
+					//And we'll use the function param list to precolor appropriately
+					param_live_range->reg = parameter_registers[i];
+				}
+			}
+
 			break;
 
 		//Most of the time we will get here
@@ -1397,7 +1429,6 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 static u_int8_t allocate_register(interference_graph_t* graph, dynamic_array_t* live_ranges, live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg != NO_REG){
-		printf("Precolored\n");
 		return TRUE;
 	}
 
