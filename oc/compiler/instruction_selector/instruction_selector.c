@@ -1402,15 +1402,16 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 	//Now, we'll need to set the appropriate address calculation mode based
 	//on what we're given
 	//If we have op2, we'll have 2 registers
-	if(instruction->op2 != NULL){
+	if(instruction->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
 		//2 registers in this case
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 		instruction->address_calc_reg2 = instruction->op2;
 
-	//Otherise it's just an offset
+	//Otherise it's just an offset(bin_op_with_const)
 	} else {
 		//We'll just have an offset here
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//This is definitely not 0 if we're here
 		instruction->offset = instruction->op1_const;
 	}
 }
@@ -2376,9 +2377,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		changed = TRUE;
 
 	}
-
-
-
 
 	 /**
 	  * Handle to-memory movement with 2 operands

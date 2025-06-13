@@ -3354,18 +3354,20 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	symtab_function_record_t* func_record = function_call_node->func_record;
 
 	//The function's assignee
-	three_addr_var_t* assignee;
+	three_addr_var_t* assignee = NULL;
+
+	instruction_t* func_call_stmt;
 
 	//May be NULL or not based on what we have as the return type
 	if(func_record->return_type->type_class == TYPE_CLASS_BASIC && func_record->return_type->basic_type->basic_type == VOID){
-		assignee = NULL;
+		//We'll have a dummy one here
+		three_addr_var_t* temp_var = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
+		func_call_stmt = emit_function_call_instruction(func_record, temp_var);
 	} else {
 		//Otherwise we have one like this
 		assignee = emit_temp_var(func_record->return_type);
+		func_call_stmt = emit_function_call_instruction(func_record, assignee);
 	}
-
-	//Once we get here we can create the function statement
-	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, assignee);
 
 	//Mark this with whatever we have
 	func_call_stmt->is_branch_ending = is_branch_ending;
@@ -3411,21 +3413,25 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	//We can now add the function call statement in
 	add_statement(basic_block, func_call_stmt);
 
+	//We'll always have an assignment instruction
+	instruction_t* assignment;
+
 	//Emit an assignment instruction. This will become very important way down the line in register
 	//allocation to avoid interference
 	if(assignee != NULL){
 		//Emit it
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+		assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+				
+		//Reassign this value
+		assignee = assignment->assignee;
 
 		//This cannot be coalesced
 		assignment->cannot_be_combined = TRUE;
 
 		//Add it in
 		add_statement(basic_block, assignment);
-		
-		//Reassign this value
-		assignee = assignment->assignee;
-	}
+	//Otherwise, we'll still have a symbolic return value here
+	} 
 
 	//Give back what we assigned to
 	return assignee;

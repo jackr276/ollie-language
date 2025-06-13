@@ -2641,7 +2641,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		case INT_CONST:
 			constant->int_const = const_node_raw->int_val;
 			//Set the 0 flag if true
-			if(const_node_raw->char_val == 0){
+			if(const_node_raw->int_val == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
@@ -2653,15 +2653,15 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 			break;
 		case LONG_CONST:
 			constant->long_const = const_node_raw->long_val;
-			//Set the 0 flag if true
-			if(const_node_raw->char_val == 0){
+			//Set the 0 flag if 
+			if(const_node_raw->long_val == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case HEX_CONST:
 			constant->int_const = const_node_raw->int_val;
 			//Set the 0 flag if true
-			if(const_node_raw->char_val == 0){
+			if(const_node_raw->int_val == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
