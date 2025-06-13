@@ -57,5 +57,9 @@ fn main() -> i32{
 	let mut c:i32 := y % k + cc + ee + ff;
 
 	//Testing complexities
-	ret @parameter_pass2(k+ 5, c * 3, z - 22, 'a', b + 'd', ch) + @parameter_pass(x, y, aa + bb, 'a', b, ch) + cc + dd + ff + ee;
+	if(k == 0) then {
+		ret @parameter_pass2(k+ 5, c * 3, z - 22, 'a', b + 'd', ch) + @parameter_pass(x, y, aa + bb, 'a', b, ch) + cc + dd + ff + ee;
+	} else {
+		ret x + y - aa * bb;
+	}
 }

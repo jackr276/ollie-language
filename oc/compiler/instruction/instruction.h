@@ -576,6 +576,12 @@ three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* sy
 instruction_t* emit_push_instruction(three_addr_var_t* pushee);
 
 /**
+ * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
+ * deal with getting granular when popping 
+ */
+instruction_t* emit_pop_instruction(three_addr_var_t* popee);
+
+/**
  * Emit a movX instruction
  *
  * This is used for when we need extra moves(after a division/modulus)

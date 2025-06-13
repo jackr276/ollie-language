@@ -419,6 +419,25 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
 
 
 /**
+ * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
+ * deal with getting granular when popping 
+ */
+instruction_t* emit_pop_instruction(three_addr_var_t* popee){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Now we set the type
+	instruction->instruction_type = POP;
+
+	//We only ever have a source
+	instruction->source_register = popee;
+
+	//Finally give it back
+	return instruction;
+}
+
+
+/**
  * Emit a movX instruction
  *
  * This is used for when we need extra moves(after a division/modulus)
@@ -2307,7 +2326,12 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			printf("\n");
 			break;
 		case PUSH:
-			printf("push ");
+			printf("pushq ");
+			print_variable(instruction->source_register, mode);
+			printf("\n");
+			break;
+		case POP:
+			printf("popq ");
 			print_variable(instruction->source_register, mode);
 			printf("\n");
 			break;

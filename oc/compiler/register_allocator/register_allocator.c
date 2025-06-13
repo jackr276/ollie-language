@@ -1555,9 +1555,11 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 	//in here we'll use a lightstack to keep track of the pushing/popping logic in here as well
 	heap_stack_t* heap_stack = heap_stack_alloc();
 
-
 	//Run through every function entry point in the CFG
 	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		//Reset the heap stack every time
+		reset_heap_stack(heap_stack);
+
 		//Important to maintain this, it's initially null
 		instruction_t* last_push_instruction = NULL;
 
@@ -1596,41 +1598,41 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 			push(heap_stack, var);
 
 			//Now we'll need to add an instruction to push this at the entry point of our function
-			instruction_t* instruction = emit_push_instruction(var);
+			instruction_t* push = emit_push_instruction(var);
 
 			//Now we'll add this right after the last push instruction. This is important because we need
 			//to maintain the stack structure for popping
 			if(last_push_instruction == NULL){
 				//Forward link to the head
-				instruction->next_statement = current_function_entry->leader_statement;
+				push->next_statement = current_function_entry->leader_statement;
 
 				//Link this backwards too
 				if(current_function_entry->leader_statement != NULL){
-					current_function_entry->leader_statement->previous_statement = instruction;
+					current_function_entry->leader_statement->previous_statement = push;
 				}
 
 				//This now is the head
-				current_function_entry->leader_statement = instruction;
+				current_function_entry->leader_statement = push;
 
 				//This now is the last push instruction
-				last_push_instruction = instruction;
+				last_push_instruction = push;
 
 			//Otherwise it wasn't null, so we'll need to add it after the last push instruction
 			} else {
 				//This one's next now points to the last one's next
-				instruction->next_statement = last_push_instruction->next_statement;
+				push->next_statement = last_push_instruction->next_statement;
 
 				//Backwards link it too
-				if(instruction->next_statement != NULL){
-					instruction->next_statement->previous_statement = instruction;
+				if(push->next_statement != NULL){
+					push->next_statement->previous_statement = push;
 				}
 
 				//Link these in as well
-				last_push_instruction->next_statement = instruction;
-				instruction->previous_statement = last_push_instruction;
+				last_push_instruction->next_statement = push;
+				push->previous_statement = last_push_instruction;
 
 				//Save for the next go around
-				last_push_instruction = instruction;
+				last_push_instruction = push;
 			}
 		}
 
@@ -1685,6 +1687,39 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 			instruction_t* ret_stmt = cursor->exit_statement;
 			//Grab the previous statement too
 			instruction_t* previous = ret_stmt->previous_statement;
+
+			//We need to add all of the popping of our callee-saved registers here. We will crawl
+			//through the stack without damaging it, because there may be more than one return statement
+			//that is in need of this popping logic
+			stack_node_t* current = heap_stack->top;
+
+			//Run through and add them all in
+			while(current != NULL){
+				//Emit the pop instruction
+				instruction_t* pop = emit_pop_instruction(current->data);
+
+				//We'll now tie this in here
+				pop->previous_statement = previous;
+
+				//Most common case
+				if(previous != NULL){
+					previous->next_statement = pop;
+				} else {
+					//This is the leader statement(exceptionally rare)
+					cursor->leader_statement = pop;
+				}
+
+				//Add this one in too
+				pop->next_statement = ret_stmt;
+				ret_stmt->previous_statement = pop;
+
+				//IMPORTANT - update "previous" so that the next iteration
+				//knows what to do
+				previous = pop;
+
+				//Advance the stack node
+				current = current->next;
+			}
 
 			//Here is our deallocation statement
 			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
