@@ -1545,6 +1545,63 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 
 
 /**
+ * Determine the interference with register usage between two functions - caller
+ * and callee
+ */
+static void determine_register_interference(symtab_function_record_t* caller, symtab_function_record_t* callee, u_int8_t* register_array){
+
+}
+
+
+/**
+ * Run through the current function and insert all needed save/restore logic
+ * for caller-saved registers
+ */
+static void insert_caller_saved_register_logic(basic_block_t* current_function, heap_stack_t* stack){
+	//We'll grab out everything we need from this function
+	//Extract this for convenience
+	symtab_function_record_t* function = current_function->function_defined_in;
+
+	//Define a cursor for crawling
+	basic_block_t* cursor = current_function;
+
+	//So long as we're in this current function, keep going
+	while(cursor != NULL && cursor->function_defined_in == function){
+		//Now we'll grab a hook to the first statement
+		instruction_t* instruction = cursor->leader_statement;
+
+		//Now we'll run through every single instruction in here
+		while(instruction != NULL){
+			//If this is not a function call, we don't really care, so
+			//just advance(most likely case)
+			if(instruction->instruction_type != CALL){
+				instruction = instruction->next_statement;
+				continue;
+			}
+
+			//We'll need an interference array to use
+			u_int8_t interference_array[K_COLORS_GEN_USE];
+			memset(interference_array, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+
+			//If we get here we know that we have a call instruction. Let's
+			//grab whatever it's calling out
+			symtab_function_record_t* callee = instruction->called_function;
+
+			//We now need to figure out what the interference is - as in, what
+			//registers would potentially need to be saved
+			determine_register_interference(function, callee, interference_array);
+
+			//Onto the next instruction
+			instruction = instruction->next_statement;
+		}
+
+		//Advance down to the direct successor
+		cursor = cursor->direct_successor;
+	}
+}
+
+
+/**
  * Now that we are done spilling, we need to insert all of the stack logic,
  * including additions and subtractions, into the functions. We also need
  * to insert pushing of any/all callee saved and caller saved registers to maintain
@@ -1742,6 +1799,12 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 			//Advance the cursor up
 			cursor = cursor->direct_successor;
 		}
+		
+		//Reset the heapstack once more
+		reset_heap_stack(heap_stack);
+
+		//And now we'll let the helper insert all of the caller-saved register logic
+		insert_caller_saved_register_logic(current_function_entry, heap_stack);
 	}
 
 	//Destroy the heapstack

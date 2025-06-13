@@ -444,7 +444,7 @@ struct instruction_t{
 	//The LEA addition
 	u_int64_t lea_multiplicator;
 	//The function called
-	symtab_function_record_t* func_record;
+	symtab_function_record_t* called_function;
 	//The variable record
 	symtab_variable_record_t* var_record;
 	//What function are we currently in?

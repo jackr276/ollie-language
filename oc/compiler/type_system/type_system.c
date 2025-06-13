@@ -265,7 +265,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
  * Are two types compatible with one another?
  *
  * CASES:
- * 	1.) Construct Types: 
+ * 	1.) Construct Types: Construct types are compatible if they are both the exact same type
  */
 generic_type_t* types_compatible2(generic_type_t* a, generic_type_t* b, Token operator){
 	//Before we go any further - make sure these types are fully raw

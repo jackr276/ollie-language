@@ -1168,7 +1168,7 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 
 		//No matter what, we'll need to see the "call" keyword, followed
 		//by the function name
-		printf("call %s(", stmt->func_record->func_name);
+		printf("call %s(", stmt->called_function->func_name);
 
 		//Grab this out
 		dynamic_array_t* func_params = stmt->function_parameters;
@@ -2318,7 +2318,7 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			printf("%s", instruction->inlined_assembly);
 			break;
 		case CALL:
-			printf("call %s", instruction->func_record->func_name);
+			printf("call %s", instruction->called_function->func_name);
 			if(instruction->destination_register != NULL){
 				printf(" -> ");
 				print_variable(instruction->destination_register, mode);
@@ -2925,7 +2925,7 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_FUNC_CALL;
-	stmt->func_record = func_record;
+	stmt->called_function = func_record;
 	stmt->assignee = assigned_to;
 	//What function are we in
 	stmt->function = current_function;
