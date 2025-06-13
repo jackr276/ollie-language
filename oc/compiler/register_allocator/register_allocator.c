@@ -849,6 +849,14 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
  */
 static void pre_color(instruction_t* instruction){
 	//One thing to check for - function parameter passing
+	if(instruction->destination_register != NULL && instruction->destination_register->linked_var != NULL
+		&& instruction->destination_register->linked_var->function_parameter_order > 0){
+		//Allocate accordingly
+		instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->linked_var->function_parameter_order - 1];
+		instruction->destination_register->associated_live_range->is_precolored = TRUE;
+	}
+
+	//One thing to check for - function parameter passing
 	if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
 		&& instruction->source_register->linked_var->function_parameter_order > 0){
 		//Allocate accordingly
@@ -1389,6 +1397,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 static u_int8_t allocate_register(interference_graph_t* graph, dynamic_array_t* live_ranges, live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg != NO_REG){
+		printf("Precolored\n");
 		return TRUE;
 	}
 
@@ -1702,38 +1711,36 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		//Grab the total size out
 		u_int32_t total_size = area.total_size;
 
-		//If this is the case then we don't care, we'll just skip it
-		if(total_size == 0){
-			continue;
+		if(total_size != 0){
+			//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+			instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+			//Stack allocation always goes after the last push instruction, or it becomes the head
+			if(last_push_instruction == NULL){
+				current_function_entry->leader_statement->previous_statement = stack_allocation;
+				stack_allocation->next_statement = current_function_entry->leader_statement;
+
+				//This is now the head
+				current_function_entry->leader_statement = stack_allocation;
+
+			//If we get here, we know that we need to go after the last push instruction
+			} else {
+				//Link this one's next in here
+				stack_allocation->next_statement = last_push_instruction->next_statement;
+				last_push_instruction->next_statement->previous_statement = stack_allocation;
+
+				last_push_instruction->next_statement = stack_allocation;
+				stack_allocation->previous_statement = last_push_instruction;
+			}
 		}
-
-		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
-		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-		//Stack allocation always goes after the last push instruction, or it becomes the head
-		if(last_push_instruction == NULL){
-			current_function_entry->leader_statement->previous_statement = stack_allocation;
-			stack_allocation->next_statement = current_function_entry->leader_statement;
-
-			//This is now the head
-			current_function_entry->leader_statement = stack_allocation;
-
-		//If we get here, we know that we need to go after the last push instruction
-		} else {
-			//Link this one's next in here
-			stack_allocation->next_statement = last_push_instruction->next_statement;
-			last_push_instruction->next_statement->previous_statement = stack_allocation;
-
-			last_push_instruction->next_statement = stack_allocation;
-			stack_allocation->previous_statement = last_push_instruction;
-		}
-
+		
 		//Now we need to go through this entire function and find any/all return statements. They would always
 		//be exit statements, so this is how we will hunt for them
 		basic_block_t* cursor = current_function_entry;
 
 		//Crawl through the whole thing until we hit the end of the function
-		while(cursor != NULL && cursor->function_defined_in == current_function_entry->function_defined_in){
+		while((total_size != 0 || heap_stack_is_empty(heap_stack) == HEAP_STACK_NOT_EMPTY)
+				&& cursor != NULL && cursor->function_defined_in == current_function_entry->function_defined_in){
 			//If we have an empty block for some reason or we don't have a return we're done, so move on
 			if(cursor->exit_statement == NULL || cursor->exit_statement->instruction_type != RET){
 				cursor = cursor->direct_successor;
@@ -1779,21 +1786,23 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 			}
 
 			//Here is our deallocation statement
-			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+			if(total_size != 0){
+				instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
 
-			//Tie these too together
-			ret_stmt->previous_statement = stack_deallocation;
-			stack_deallocation->next_statement = ret_stmt;
+				//Tie these too together
+				ret_stmt->previous_statement = stack_deallocation;
+				stack_deallocation->next_statement = ret_stmt;
 
-			//Tie this one into previous
-			stack_deallocation->previous_statement = previous;
+				//Tie this one into previous
+				stack_deallocation->previous_statement = previous;
 
-			//Most common case
-			if(previous != NULL){
-				previous->next_statement = stack_deallocation;
-			} else {
-				//This is the leader statement(exceptionally rare)
-				cursor->leader_statement = stack_deallocation;
+				//Most common case
+				if(previous != NULL){
+					previous->next_statement = stack_deallocation;
+				} else {
+					//This is the leader statement(exceptionally rare)
+					cursor->leader_statement = stack_deallocation;
+				}
 			}
 
 			//Advance the cursor up

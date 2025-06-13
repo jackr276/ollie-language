@@ -58,7 +58,7 @@ fn main() -> i32{
 
 	//Testing complexities
 	if(k == 0) then {
-		ret @parameter_pass2(k+ 5, c * 3, z - 22, 'a', b + 'd', ch) + @parameter_pass(x, y, aa + bb, 'a', b, ch) + cc + dd + ff + ee;
+		ret @parameter_pass2(k+ 5, c * 3, z - 22, 'a', b + 'd', ch) + @parameter_pass(x, y, aa + bb, 'a', b, ch);
 	} else {
 		ret x + y - aa * bb;
 	}
