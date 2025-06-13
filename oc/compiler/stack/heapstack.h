@@ -58,6 +58,11 @@ void push(heap_stack_t* stack, void* data);
 void* pop(heap_stack_t* stack);
 
 /**
+ * Completely wipe the heap stack out
+ */
+void reset_heap_stack(heap_stack_t* stack);
+
+/**
  * Is the stack empty or not
  */
 heap_stack_status_t heap_stack_is_empty(heap_stack_t* stack);

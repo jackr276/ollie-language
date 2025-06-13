@@ -1553,12 +1553,13 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 	//We need to run through all of the used registers and make a note of all callee-saved registers
 	//in here we'll use a lightstack to keep track of the pushing/popping logic in here as well
-	lightstack_t stack = lightstack_initialize();
+	heap_stack_t* heap_stack = heap_stack_alloc();
+
 
 	//Run through every function entry point in the CFG
 	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
-		//Wipe the lightstack completely clean
-		reset_lightstack(&stack);
+		//Important to maintain this, it's initially null
+		instruction_t* last_push_instruction = NULL;
 
 		//Grab it out
 		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_blocks, i);
@@ -1582,12 +1583,55 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 				continue;
 			}
 
-			//Otherwise if we make it all the way down here, we know that we'll need to push this value onto the stack
-			//to save it
-			lightstack_push(&stack, used_reg);
+			//Create the current live range here
+			live_range_t* range = live_range_alloc(function, QUAD_WORD);
+			
+			//Give it the appropriate register
+			range->reg = used_reg;
 
-			//Now we'll need to add the pushing logic
+			//Now we'll need a variable to carry this live range in it
+			three_addr_var_t* var = emit_temp_var_from_live_range(range);
 
+			//Add this onto the stack
+			push(heap_stack, var);
+
+			//Now we'll need to add an instruction to push this at the entry point of our function
+			instruction_t* instruction = emit_push_instruction(var);
+
+			//Now we'll add this right after the last push instruction. This is important because we need
+			//to maintain the stack structure for popping
+			if(last_push_instruction == NULL){
+				//Forward link to the head
+				instruction->next_statement = current_function_entry->leader_statement;
+
+				//Link this backwards too
+				if(current_function_entry->leader_statement != NULL){
+					current_function_entry->leader_statement->previous_statement = instruction;
+				}
+
+				//This now is the head
+				current_function_entry->leader_statement = instruction;
+
+				//This now is the last push instruction
+				last_push_instruction = instruction;
+
+			//Otherwise it wasn't null, so we'll need to add it after the last push instruction
+			} else {
+				//This one's next now points to the last one's next
+				instruction->next_statement = last_push_instruction->next_statement;
+
+				//Backwards link it too
+				if(instruction->next_statement != NULL){
+					instruction->next_statement->previous_statement = instruction;
+				}
+
+				//Link these in as well
+				last_push_instruction->next_statement = instruction;
+				instruction->previous_statement = last_push_instruction;
+
+				//Save for the next go around
+				last_push_instruction = instruction;
+			}
 		}
 
 		//We'll also need it's stack data area
@@ -1607,16 +1651,23 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
 		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
 
-		//This always goes as the very first thing in the function entry block, with the exception of callee saved
-		//register usages(TODO FIXME)
-		instruction_t* old_head = current_function_entry->leader_statement;
+		//Stack allocation always goes after the last push instruction, or it becomes the head
+		if(last_push_instruction == NULL){
+			current_function_entry->leader_statement->previous_statement = stack_allocation;
+			stack_allocation->next_statement = current_function_entry->leader_statement;
 
-		//Link this into the block
-		old_head->previous_statement = stack_allocation;
-		stack_allocation->next_statement = old_head;
+			//This is now the head
+			current_function_entry->leader_statement = stack_allocation;
 
-		//This is now the head
-		current_function_entry->leader_statement = stack_allocation;
+		//If we get here, we know that we need to go after the last push instruction
+		} else {
+			//Link this one's next in here
+			stack_allocation->next_statement = last_push_instruction->next_statement;
+			last_push_instruction->next_statement->previous_statement = stack_allocation;
+
+			last_push_instruction->next_statement = stack_allocation;
+			stack_allocation->previous_statement = last_push_instruction;
+		}
 
 		//Now we need to go through this entire function and find any/all return statements. They would always
 		//be exit statements, so this is how we will hunt for them
@@ -1658,8 +1709,8 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		}
 	}
 
-	//Deinitialize the lightstack
-	lightstack_dealloc(&stack);
+	//Destroy the heapstack
+	heap_stack_dealloc(heap_stack);
 }
 
 

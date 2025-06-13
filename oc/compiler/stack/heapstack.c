@@ -130,6 +130,32 @@ heap_stack_status_t heap_stack_is_empty(heap_stack_t* stack){
 
 
 /**
+ * Completely wipe the heap stack out
+ */
+void reset_heap_stack(heap_stack_t* stack){
+	//Define a cursor and a temp
+	void* temp;
+	stack_node_t* cursor = stack->top;
+
+	//Free every node
+	while(cursor != NULL){
+		//Save the cursor
+		temp = cursor; 
+
+		//Advance the cursor
+		cursor = cursor->next;
+
+		//Free the node
+		free(temp);
+	}
+
+	//Completely reset these
+	stack->num_nodes = 0;
+	stack->top = NULL;
+}
+
+
+/**
  * Completely free all memory in the stack
  *
  * NOTE: This does nothing to touch whatever void* actually is

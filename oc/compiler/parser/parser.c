@@ -1954,8 +1954,6 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 
 	/**
 	 * We will use the types_assignable function to check this
-	 *
-	 * TODO FIXME : use a types_castable function for this
 	 */
 	generic_type_t* return_type = types_assignable(casting_to_type, being_casted_type);
 

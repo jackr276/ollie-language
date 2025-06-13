@@ -350,6 +350,32 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
 
 
 /**
+ * Create and return a temporary variable from a live range
+*/
+three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Attach it for memory management
+	emitted_var->next_created = emitted_vars;
+	emitted_vars = emitted_var;
+
+	//This is temporary
+	emitted_var->is_temporary = TRUE;
+
+	//Link this in with our live range
+	emitted_var->associated_live_range = range;
+	dynamic_array_add(range->variables, emitted_var);
+
+	//These are always quad words
+	emitted_var->variable_size = QUAD_WORD;
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
  * Emit a copy of this variable
  */
 three_addr_var_t* emit_var_copy(three_addr_var_t* var){
@@ -781,7 +807,7 @@ static void print_64_bit_register_name(register_holder_t reg){
 			printf("%%r14");
 			break;
 		case R15:
-			printf("%%R15");
+			printf("%%r15");
 			break;
 	}
 }
@@ -2280,7 +2306,11 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			}
 			printf("\n");
 			break;
-
+		case PUSH:
+			printf("push ");
+			print_variable(instruction->source_register, mode);
+			printf("\n");
+			break;
 		case INCL:
 		case INCQ:
 		case INCW:

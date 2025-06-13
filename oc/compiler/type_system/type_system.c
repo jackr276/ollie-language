@@ -48,7 +48,6 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 }
 
 
-
 /**
  * Can two types be assigned to one another? This rule will perform implicit conversions
  * if need be to make types assignable. We are always assigning source to destination. Widening

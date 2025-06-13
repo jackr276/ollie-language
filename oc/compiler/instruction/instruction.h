@@ -171,7 +171,6 @@ typedef enum{
 typedef enum{
 	NO_REG = 0, //Default is that there's no register used
 	RAX,
-	RBX,
 	RCX,
 	RDX,
 	RSI,
@@ -184,6 +183,7 @@ typedef enum{
 	R13,
 	R14,
 	R15, 
+	RBX,
 	RBP, //base pointer
 	//ALL general purpose registers come first(items 1-15)
 	RSP, //Stack pointer
@@ -531,6 +531,11 @@ u_int8_t is_modulus_instruction(instruction_t* instruction);
  * Create and return a temporary variable
 */
 three_addr_var_t* emit_temp_var(generic_type_t* type);
+
+/**
+ * Create and return a temporary variable from a live range
+*/
+three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 
 /**
  * Create and return a three address var from an existing variable. If 
