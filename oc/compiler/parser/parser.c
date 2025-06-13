@@ -2017,7 +2017,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//Let's see if this is a valid type or not
-		u_int8_t temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 
 		//Fail case here
 		if(temp_holder_valid == FALSE){
@@ -2044,7 +2044,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		}
 
 		//Let's see if this is a valid type or not
-		u_int8_t right_child_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t right_child_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_RIGHT);
 
 		//Fail case here
 		if(right_child_valid == FALSE){
@@ -2309,26 +2309,18 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 	
 	//As long as we have a relational operators(+ or -) 
 	while(lookahead.tok == PLUS || lookahead.tok == MINUS){
+		//Save the lookahead
+		Lexer_item op = lookahead;
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//Off the bat, if we have a construct or enum or array type here, we can't add to it
-		//Store this
-		TYPE_CLASS temp_holder_type_class = temp_holder->inferred_type->type_class;
-
-		//Fail case right here
-		if(temp_holder_type_class == TYPE_CLASS_CONSTRUCT){
-			sprintf(info, "Type %s cannot be added or subtracted from", temp_holder->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//We also are not allowed to see a void type here
-		if(temp_holder_type_class == TYPE_CLASS_BASIC && temp_holder->inferred_type->basic_type->basic_type == VOID){
-			print_parse_message(PARSE_ERROR, "Void types cannot be added to or subtracted from", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Let's see if this actually works
+		u_int8_t left_type_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
+		
+		//Fail out here
+		if(left_type_valid == FALSE){
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, op.lexeme);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//We now need to make an operator node
@@ -2349,24 +2341,20 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			return right_child;
 		}
 
-		//Let's now check to make sure that the right child also isn't some kind of disallowed
+		//Let's see if this actually works
+		u_int8_t right_type_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_RIGHT);
+		
+		//Fail out here
+		if(left_type_valid == FALSE){
+			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", temp_holder->inferred_type->type_name, op.lexeme);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Store these
+		TYPE_CLASS temp_holder_type_class = temp_holder->inferred_type->type_class;
 		TYPE_CLASS right_child_type_class = right_child->inferred_type->type_class;
 
-		//Fail case right here
-		if(right_child_type_class == TYPE_CLASS_CONSTRUCT){
-			sprintf(info, "Type %s cannot be added or subtracted from", right_child->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//We also are not allowed to see a void type here
-		if(right_child_type_class == TYPE_CLASS_BASIC && right_child->inferred_type->basic_type->basic_type == VOID){
-			print_parse_message(PARSE_ERROR, "Void types cannot be added to or subtracted from", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
+	
 		//If the temp holder is a pointer, the other one may not be a float of any kind
 		if(temp_holder_type_class == TYPE_CLASS_POINTER){
 			//One other basic check here. If the right child is also a pointer but they're different pointer types, we
@@ -2726,7 +2714,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//Let's see if this actually works
-		u_int8_t is_left_type_shiftable = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t is_left_type_shiftable = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 		
 		//Fail out here
 		if(is_left_type_shiftable == FALSE){
@@ -2753,7 +2741,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		}
 
 		//Let's see if this actually works
-		u_int8_t is_right_type_shiftable = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok);
+		u_int8_t is_right_type_shiftable = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
 		
 		//Fail out here
 		if(is_right_type_shiftable == FALSE){
@@ -2832,7 +2820,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		//Let's check to see if this type is valid for our operation
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -2854,7 +2842,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		}
 
 		//Let's check to see if this type is valid for our operation
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok);
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -2936,7 +2924,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		//Let's check to see if this is valid
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok);
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 
 		//If this fails, there's no point in going forward
 		if(is_temp_holder_valid == FALSE){
@@ -2958,7 +2946,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		}
 
 		//Let's check to see if this is valid
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok);
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
 
 		//If this fails, there's no point in going forward
 		if(is_right_child_valid == FALSE){
@@ -3038,7 +3026,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		//Let's see if this type is valid
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, SINGLE_AND);
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, SINGLE_AND, SIDE_TYPE_LEFT);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -3060,7 +3048,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		}
 
 		//Let's see if this type is valid
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, SINGLE_AND);
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, SINGLE_AND, SIDE_TYPE_RIGHT);
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
@@ -3138,7 +3126,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		//Let's see if this type is valid
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, CARROT);
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, CARROT, SIDE_TYPE_LEFT);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -3160,7 +3148,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 		}
 
 		//Let's see if this type is valid
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, CARROT);
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, CARROT, SIDE_TYPE_RIGHT);
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
@@ -3237,7 +3225,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		//Let's see if this type is valid
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, SINGLE_OR);
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, SINGLE_OR, SIDE_TYPE_LEFT);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -3259,7 +3247,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		}
 
 		//Let's see if this type is valid
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, SINGLE_OR);
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, SINGLE_OR, SIDE_TYPE_RIGHT);
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
@@ -3339,7 +3327,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		//Let's see if this type is valid
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_AND);
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_AND, SIDE_TYPE_LEFT);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -3361,7 +3349,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		}
 
 		//Let's see if this type is valid
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, DOUBLE_AND);
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, DOUBLE_AND, SIDE_TYPE_RIGHT);
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
@@ -3444,7 +3432,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		//Let's see if this type is valid
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_OR);
+		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_OR, SIDE_TYPE_LEFT);
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
@@ -3466,7 +3454,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		}
 
 		//Let's see if this type is valid
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, DOUBLE_AND);
+		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, DOUBLE_AND, SIDE_TYPE_RIGHT);
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){

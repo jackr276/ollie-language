@@ -484,7 +484,7 @@ generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
 /**
  * Is the given operation valid for the type that was specificed?
  */
-u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op){
+u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op, side_type_t side){
 	//Just to be safe, we'll always make sure here
 	type = dealias_type(type);
 
@@ -587,6 +587,9 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		 * Relational expressions are valid for floats, integers,
 		 * enumerated types and pointers. They are invalid for
 		 * void types
+		 *
+		 * Addition is also valid for floats, integers, enumerated
+		 * types and pointers
 		 */
 		case L_THAN:
 		case L_THAN_OR_EQ:
@@ -594,6 +597,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		case G_THAN_OR_EQ:
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
+		case PLUS:
 			//This doesn't work on arrays or constructs
 			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
 				return FALSE;
@@ -601,6 +605,32 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 
 			//This also doesn't work for void types
 			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type->basic_type == VOID){
+				return FALSE;
+			}
+
+			//Otherwise, everything else that we have should work fine
+			return TRUE;
+
+		/**
+		 * Subtraction is valid for floats, integers and enumerated types
+		 *
+		 * It is valid for pointers *only* if the pointer is on the left side
+		 * i.e. int* - int is good
+		 * 		int - int* is not good
+		 */
+		case MINUS:
+			//This doesn't work on arrays or constructs
+			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
+				return FALSE;
+			}
+
+			//This also doesn't work for void types
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type->basic_type == VOID){
+				return FALSE;
+			}
+
+			//If it's a pointer and it's not on the left side, it's bad
+			if(type->type_class == TYPE_CLASS_POINTER && side != SIDE_TYPE_LEFT){
 				return FALSE;
 			}
 

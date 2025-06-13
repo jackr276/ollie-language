@@ -78,13 +78,6 @@ typedef enum{
 } emit_dominance_frontier_selection_t;
 
 
-//A type for which side we're on
-typedef enum{
-	SIDE_TYPE_LEFT,
-	SIDE_TYPE_RIGHT,
-} side_type_t;
-
-
 //An enum for temp variable selection
 typedef enum{
 	USE_TEMP_VAR,

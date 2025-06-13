@@ -38,6 +38,11 @@ typedef struct constructed_type_field_t constructed_type_field_t;
 //An aliased type
 typedef struct aliased_type_t aliased_type_t;
 
+//A type for which side we're on
+typedef enum{
+	SIDE_TYPE_LEFT,
+	SIDE_TYPE_RIGHT,
+} side_type_t;
 
 /**
  * Is a type signed or unsigned
@@ -225,7 +230,7 @@ generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
 /**
  * Is the given operation valid for the type that was specificed?
  */
-u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op);
+u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op, side_type_t side);
 
 /**
  * Add a value into a construct's table
