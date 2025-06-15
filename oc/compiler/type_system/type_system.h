@@ -184,6 +184,11 @@ struct aliased_type_t{
 };
 
 /**
+ * Is the type valid to be used in a conditional?
+ */
+u_int8_t is_type_valid_for_conditional(generic_type_t* type);
+
+/**
  * Determine the compatibility of two types and coerce appropraitely. The double pointer
  * reference exists so that this method may transform types as appropriate
  */

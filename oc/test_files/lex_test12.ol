@@ -14,7 +14,7 @@ define enum type_enum{
 } as my_enum_type;
 
 fn my_func(argv:char**) -> void{
-	let a:char* := argv;
+	let a:char** := argv;
 }
 
 fn:static main(argv:char**, argc:i8) -> i32{

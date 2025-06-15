@@ -4969,17 +4969,10 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		return expression_node;
 	}
 
-	/**
-	 * The expression of this type must be compatible at the very list with a u_int64
-	 */
-	symtab_type_record_t* int_type = lookup_type_name_only(type_symtab, "u64");
-
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
-	if(expression_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, expression_node->inferred_type) == NULL){
-		sprintf(info, "If statements require an int or pointer type to be in their condition, but was given type \"%s\"", expression_node->inferred_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
+		sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Following the expression we need to see a closing paren
@@ -5062,17 +5055,10 @@ static generic_ast_node_t* if_statement(FILE* fl){
 			return else_if_expression_node;
 		}
 
-		/**
-		 * The expression of this type must be compatible at the very list with a u_int64
-		 */
-		symtab_type_record_t* int_type = lookup_type_name_only(type_symtab, "u64");
-
 		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
-		if(else_if_expression_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, else_if_expression_node->inferred_type) == NULL){
-			sprintf(info, "If statements require an int or pointer type to be in their condition, but was given type \"%s\"", else_if_expression_node->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
+			sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Following the expression we need to see a closing paren
@@ -5486,7 +5472,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	}
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
-	if(types_compatible(current_function->return_type, expr_node->inferred_type) == NULL){
+	if(types_assignable(current_function->return_type, expr_node->inferred_type) == NULL){
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name, current_function->return_type->type_name,
 		  		expr_node->inferred_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
@@ -5836,17 +5822,10 @@ static generic_ast_node_t* while_statement(FILE* fl){
 		return conditional_expr;
 	}
 
-	/**
-	 * The expression of this type must be compatible at the very list with a u_int64
-	 */
-	symtab_type_record_t* int_type = lookup_type_name_only(type_symtab, "u64");
-
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
-	if(conditional_expr->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, conditional_expr->inferred_type) == NULL){
-		sprintf(info, "While statements require an int or pointer type to be in their condition, but was given type \"%s\"", conditional_expr->inferred_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	if(is_type_valid_for_conditional(conditional_expr->inferred_type) == FALSE){
+		sprintf(info, "Type %s is not valid for a conditional", conditional_expr->inferred_type->type_name);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Otherwise we know it's good so we can add it in as a child
@@ -5971,18 +5950,12 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 		return expr_node;
 	}
 
-	/**
-	 * The expression of this type must be compatible at the very list with a u_int64
-	 */
-	symtab_type_record_t* int_type = lookup_type_name_only(type_symtab, "u64");
-
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
-	if(expr_node->inferred_type->type_class != TYPE_CLASS_POINTER && types_compatible(int_type->type, expr_node->inferred_type) == NULL){
-		sprintf(info, "Do-while statements require an int or pointer type to be in their condition, but was given type \"%s\"", expr_node->inferred_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	if(is_type_valid_for_conditional(expr_node->inferred_type) == FALSE){
+		sprintf(info, "Type %s is invalid for a conditional", expr_node->inferred_type->type_name);
+		return print_and_return_error(info, parser_line_num);
 	}
+
 	//Otherwise we know it's good so we can add it in as a child
 	add_child_node(do_while_stmt_node, expr_node);
 
@@ -6947,7 +6920,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 		//Otherwise we know that it is good, but is it the right type
 		//Are the types here compatible?
-		case_stmt->inferred_type = types_compatible(switch_stmt_node->inferred_type, enum_ident_node->inferred_type);
+		case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, enum_ident_node->inferred_type);
 
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
@@ -7020,7 +6993,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 		//Otherwise we know that it is good, but is it the right type
 		//Are the types here compatible?
-		case_stmt->inferred_type = types_compatible(switch_stmt_node->inferred_type, const_node->inferred_type);
+		case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, const_node->inferred_type);
 
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
@@ -7481,7 +7454,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	generic_type_t* left_hand_type = type_spec;
 	generic_type_t* right_hand_type = expr_node->inferred_type;
 
-	generic_type_t* return_type = types_compatible(left_hand_type, right_hand_type);
+	generic_type_t* return_type = types_assignable(left_hand_type, right_hand_type);
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(expr_node->inferred_type->type_class == TYPE_CLASS_POINTER){

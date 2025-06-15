@@ -49,6 +49,38 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 
 
 /**
+ * Is the type valid to be used in a conditional?
+ */
+u_int8_t is_type_valid_for_conditional(generic_type_t* type){
+	//Ensure it's not aliased
+	type = dealias_type(type);
+
+	//Switch based on the type to determine this
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+			return FALSE;
+		case TYPE_CLASS_CONSTRUCT:
+			return FALSE;
+		case TYPE_CLASS_POINTER:
+			return TRUE;
+		case TYPE_CLASS_ENUMERATED:
+			return TRUE;
+		case TYPE_CLASS_BASIC:
+			//If it's void, then we can't have it. Otherwise
+			//it's fine
+			if(type->basic_type->basic_type != VOID){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+		default:
+			return FALSE;
+	}
+
+}
+
+
+/**
  * Can two types be assigned to one another? This rule will perform implicit conversions
  * if need be to make types assignable. We are always assigning source to destination. Widening
  * type conversions will be applied to source if need be. We cannot apply widening type conversions
