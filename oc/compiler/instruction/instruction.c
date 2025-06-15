@@ -3259,7 +3259,6 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
  */
 u_int8_t is_register_caller_saved(register_holder_t reg){
 	switch(reg){
-		case RAX:
 		case RDI:
 		case RSI:
 		case RDX:
@@ -3272,7 +3271,6 @@ u_int8_t is_register_caller_saved(register_holder_t reg){
 		default:
 			return FALSE;
 	}
-
 }
 
 

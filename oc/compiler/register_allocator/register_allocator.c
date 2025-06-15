@@ -1587,9 +1587,34 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 /**
  * Determine the interference with register usage between two functions - caller
  * and callee
+ *
+ * Every single function that is called has a destination, even if it is not
+ * at all used. This will ensure that we can determine interference. If we
+ * can determine interference, then we know what needs to be saved or not
+ *
+ * To do this - we'll first find out if the called function makes use of any caller-saved registers by crawling
+ * its used register array. Once we know for sure, we can then see which of those registers are interfering
+ * with this function call statement
  */
 static void determine_register_interference(symtab_function_record_t* caller, symtab_function_record_t* callee, u_int8_t* register_array){
+	//Wipe it out
+	memset(register_array, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
+	//Does the callee use any caller-saved registers? Let's find out
+	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
+		//Grab the register out(remember the 1 offset)
+		register_holder_t callee_register = callee->used_registers[i] - 1;
+
+		//If the callee uses it *and* it's caller-saved
+		if(is_register_caller_saved(callee_register) == TRUE){
+			//Flag this in the register array
+			register_array[callee_register - 1] = TRUE;
+		}
+	}
+
+	//Once we get down here, we'll have populated the register array with all of
+	//the caller-saved registers that the callee uses. We'll use this as a cross-reference,
+	//not as a definitive guide, for what to push/pop
 }
 
 
@@ -1621,7 +1646,6 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 
 			//We'll need an interference array to use
 			u_int8_t interference_array[K_COLORS_GEN_USE];
-			memset(interference_array, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
 			//If we get here we know that we have a call instruction. Let's
 			//grab whatever it's calling out
@@ -1630,6 +1654,18 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 			//We now need to figure out what the interference is - as in, what
 			//registers would potentially need to be saved
 			determine_register_interference(function, callee, interference_array);
+
+			//Every function is guaranteed to have a return value/result
+			live_range_t* result_lr = instruction->destination_register->associated_live_range; 
+
+			//We can crawl this Live Range's neighbors to see what is interefering with it. Once
+			//we know what is interfering, we can see which registers they use and compare that 
+			//with the register array
+			for(u_int16_t i = 0; result_lr->neighbors != NULL && i < result_lr->neighbors->current_index; i++){
+				//Grab the neighbor out
+				live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
+
+			}
 
 			//Onto the next instruction
 			instruction = instruction->next_statement;
