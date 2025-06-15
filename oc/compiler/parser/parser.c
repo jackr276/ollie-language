@@ -1179,7 +1179,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u32")->type;
 
 	//Let's make sure that this is an int
-	if(types_compatible(reference_type, expr->inferred_type) == NULL){
+	if(types_assignable(reference_type, expr->inferred_type) == NULL){
 		sprintf(info, "Array accessing requires types compatible with \"u32\", but instead got \"%s\"", expr->inferred_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
@@ -2144,7 +2144,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
-	//As long as we have a relational operators(+ or -) 
+	//As long as we have a additive operators(+ or -) 
 	while(lookahead.tok == PLUS || lookahead.tok == MINUS){
 		//Save the lookahead
 		Lexer_item op = lookahead;
@@ -2588,6 +2588,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
+
 		//The return type is always the left child's type
 		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
@@ -2703,23 +2704,29 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Grab the end type
-		generic_type_t* end_type = types_compatible(temp_holder->inferred_type, right_child->inferred_type); 
+		//The return type is always the left child's type
+		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-		//Fail if bad
-		if(end_type == NULL){
-			sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name); 
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//If this fails, that means that we have an invalid operation
+		if(sub_tree_root->inferred_type == NULL){
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+			return print_and_return_error(info, parser_line_num);
 		}
 
-		
-		//Store what the type of this operation is
-		sub_tree_root->inferred_type = end_type;
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			temp_holder->variable->type = temp_holder->inferred_type;
+		} 
 
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			right_child->variable->type = right_child->inferred_type;
+		}
+		
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
+
+	//Otherwise we're done
 	} else {
 		//Otherwise just push the token back
 		push_back_token(lookahead);
@@ -2810,18 +2817,24 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
-		//Figure out if they're compatible
-		generic_type_t* ending_type = types_compatible(temp_holder->inferred_type, right_child->inferred_type);
+		//The return type is always the left child's type
+		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-		if(ending_type == NULL){
-			sprintf(info, "Attempt to compare incompatible types %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name); 
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//If this fails, that means that we have an invalid operation
+		if(sub_tree_root->inferred_type == NULL){
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store what our return type is too
-		sub_tree_root->inferred_type = ending_type;
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			temp_holder->variable->type = temp_holder->inferred_type;
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			right_child->variable->type = right_child->inferred_type;
+		}
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking

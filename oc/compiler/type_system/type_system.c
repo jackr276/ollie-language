@@ -449,11 +449,97 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			//We'll give back *a once we're finished
 			return *a;
 
+		/**
+		 * Relational operators will apply normal conversion rules. If we have
+		 * a pointer, we will coerce the other integer to a u64
+		 */
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+			//If a is a pointer type
+			if((*a)->type_class == TYPE_CLASS_POINTER){
+				//If b is a another pointer, then that's fine
+				if((*b)->type_class == TYPE_CLASS_POINTER){
+					//We'll return a final comparison type of u64
+					return lookup_type_name_only(symtab, "u64")->type;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*b)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*b)->basic_type->basic_type == FLOAT32 || (*b)->basic_type->basic_type == FLOAT64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*b = lookup_type_name_only(symtab, "u64")->type;
+
+				//Give back the u64 type as the result
+				return *b;
+			}
+			
+			//If b is a pointer type. This is teh exact same scenario as a
+			if((*b)->type_class == TYPE_CLASS_POINTER){
+				//If b is a another pointer, then that's fine
+				if((*a)->type_class == TYPE_CLASS_POINTER){
+					//We'll return a final comparison type of u64
+					return lookup_type_name_only(symtab, "u64")->type;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*a)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*a)->basic_type->basic_type == FLOAT32 || (*a)->basic_type->basic_type == FLOAT64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*a = lookup_type_name_only(symtab, "u64")->type;
+
+				//Give back the u64 type as the result
+				return *a;
+			}
+
+			//At this point if these are not basic types, we're done
+			if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
+				return NULL;
+			}
+
+			//If a is a floating point, we apply the float conversion to b
+			if((*a)->basic_type->basic_type == FLOAT32 || (*a)->basic_type->basic_type == FLOAT64){
+				integer_to_floating_point(symtab, b);
+
+			//If b is a floating point, we apply the float conversion to b
+			} else if((*b)->basic_type->basic_type == FLOAT32 || (*b)->basic_type->basic_type == FLOAT64){
+				integer_to_floating_point(symtab, a);
+			}
+		
+			//Perform any signedness correction that is needed
+			basic_type_signedness_coercion(symtab, a, b);
+
+			//We already know that we only have basic types here. We can apply
+			//the standard widening conversion
+			basic_type_widening_type_coercion(symtab, a, b);
+
+			//We'll give back *a once we're finished
+			return *a;
+
 		default:
 			return NULL;
 	}
-
-	return NULL;
 }
 
 
