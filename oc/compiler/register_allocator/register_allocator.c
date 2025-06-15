@@ -1647,6 +1647,10 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 			//We'll need an interference array to use
 			u_int8_t interference_array[K_COLORS_GEN_USE];
 
+			//Define a dynamic array for saving the live ranges that will
+			//need to be saved
+			dynamic_array_t* saving_array = dynamic_array_alloc();
+
 			//If we get here we know that we have a call instruction. Let's
 			//grab whatever it's calling out
 			symtab_function_record_t* callee = instruction->called_function;
@@ -1664,8 +1668,61 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 			for(u_int16_t i = 0; result_lr->neighbors != NULL && i < result_lr->neighbors->current_index; i++){
 				//Grab the neighbor out
 				live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
+				//And grab it's register out
+				register_holder_t reg = lr->reg;
 
+				//If the interference array is true *and* it's a neighbor's
+				//register, we'll save it
+				if(interference_array[reg - 1] == TRUE){
+					//Flag this LR in here
+					dynamic_array_add(saving_array, lr);
+				}
 			}
+
+			//If we don't have at least one, just skip on to the next one
+			if(saving_array->current_index == 0){
+				//Destroy the saving array
+				dynamic_array_dealloc(saving_array);
+
+				//Go onto the next one
+				instruction = instruction->next_statement;
+				continue;
+			}
+			
+			//We'll need a heap stack to do this
+			heap_stack_t* stack = heap_stack_alloc();
+
+			//These variables will be convenient for dealing with the addition of instructions
+			instruction_t* call_inst = instruction;
+			instruction_t* after_call = call_inst->next_statement;
+			instruction_t* before_call = call_inst->previous_statement;
+
+			//Once we make it all the way down here, we know exactly which registers that we need to save before this function call.
+			//We can now run through the saving array to do this
+			for(u_int16_t i = 0; i < saving_array->current_index; i++){
+				//Grab the live-range out
+				live_range_t* lr = dynamic_array_get_at(saving_array, i);
+				
+				//Save this LR onto the stack for later
+				push(stack, lr);
+
+				//Emit a push instruction with the live range as the source
+				instruction_t* push_inst = emit_push_instruction(dynamic_array_get_at(lr->variables, 0));
+
+				//We always put this push instruction above the function call, in between it and whatever else was last there
+				before_call->next_statement = push_inst;
+				push_inst->previous_statement = before_call;
+
+				//Link it in with the call instruction
+				push_inst->next_statement = call_inst;
+				call_inst->previous_statement = push_inst;
+			}
+
+			
+			//Destroy the heapstack
+			heap_stack_dealloc(stack);
+			//Destroy the dynamic array
+			dynamic_array_dealloc(saving_array);
 
 			//Onto the next instruction
 			instruction = instruction->next_statement;
