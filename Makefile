@@ -380,7 +380,7 @@ register_allocator-CI.o: $(REGISTER_ALLOCATOR_PATH)/register_allocator.c
 	$(CC) $(CFLAGS) $(REGISTER_ALLOCATOR_PATH)/register_allocator.c -o $(OUT_CI)/register_allocator.o
 
 file_builder-CI.o: $(FILE_BUILDER_PATH)/file_builder.c
-	$(CC) $(CFLAGS) $(FILE_BUILDER_PATH)/file_builder.c -o $(OUT_CI)/file_builder.o
+	$(CC) $(CFLAGS) $(FILE_BUILDER_PATH)/file_builder.c -o $(OUT_CI)/file_builder-CI.o
 
 interference_graph-CI.o: $(INTERFERENCE_GRAPH_PATH)/interference_graph.c
 	$(CC) $(CFLAGS) $(INTERFERENCE_GRAPH_PATH)/interference_graph.c -o $(OUT_CI)/interference_graph.o
