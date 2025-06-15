@@ -326,11 +326,42 @@ static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t
 static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generic_type_t** a, generic_type_t** b){
 	//Whomever has the largest size wins
 	if((*a)->type_size > (*b)->type_size){
-
+		//Set b to equal a
+		*b = *a;
 	} else if((*a)->type_size < (*b)->type_size){
-
+		//Set a to equal b
+		*a = *b;
 	}
-	//No else case - we don't want to 
+	//No else case - we don't want to deal with any other type size coercions
+}
+
+
+/**
+ * We'll always go from integers to floating points, if there is at least one float in the
+ * operation
+ *
+ * Go from an integer to a floating point number
+ */
+static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a){
+	//Go based on what we have as our basic type
+	switch((*a)->basic_type->basic_type){
+		//These all decome f32's
+		case U_INT8:
+		case S_INT8:
+		case CHAR:
+		case U_INT16:
+		case S_INT16:
+		case U_INT32:
+		case S_INT32:
+			*a = lookup_type_name_only(symtab, "f32")->type;
+
+		//These become f64's
+		case U_INT64:
+		case S_INT64:
+			*a = lookup_type_name_only(symtab, "f64")->type;
+		default:
+			return;
+	}
 }
 
 
@@ -347,12 +378,22 @@ static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generi
  * 	1.) Construct Types: Construct types are compatible if they are both the exact same type
  */
 generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, Token op){
+	//For convenience
+	symtab = (type_symtab_t*)symtab;
+
 	//Before we go any further - make sure these types are fully raw(They should be anyways, but insurance never hurts)
 	*a = dealias_type(*a);
 	*b = dealias_type(*b);
 
-	//For convenience
-	symtab = (type_symtab_t*)symtab;
+	//All enumerated types are in reality u8's
+	if((*a)->type_class == TYPE_CLASS_ENUMERATED){
+		*a = lookup_type_name_only(symtab, "u8")->type;
+	}
+
+	//All enumerated types are in reality u8's
+	if((*b)->type_class == TYPE_CLASS_ENUMERATED){
+	*b = lookup_type_name_only(symtab, "u8")->type;
+	}
 	
 	/**
 	 * We'll go through based on the operator and see what we can get out
@@ -376,19 +417,37 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			//Give this back once down
 			return *a;
 
+		/**
+		 * Division and multiplication are valid for integers and floating point numbers
+		 *
+		 * We will first aply the floating point conversion here if we need to. Following that, 
+		 * we will apply any needed signedness coercion and any needed widening coercion
+		 */
 		case F_SLASH:
 		case STAR:
-			//
+			//If a is a floating point, we apply the float conversion to b
+			if((*a)->basic_type->basic_type == FLOAT32 || (*a)->basic_type->basic_type == FLOAT64){
+				integer_to_floating_point(symtab, b);
+
+			//If b is a floating point, we apply the float conversion to b
+			} else if((*b)->basic_type->basic_type == FLOAT32 || (*b)->basic_type->basic_type == FLOAT64){
+				integer_to_floating_point(symtab, a);
+			}
+
+			//Perform any signedness correction that is needed
+			basic_type_signedness_coercion(symtab, a, b);
+
+			//We already know that we only have basic types here. We can apply
+			//the standard widening conversion
 
 			//We'll give back *a once we're finished
 			return *a;
-
 
 		default:
 			return NULL;
 	}
 
-	return *a;
+	return NULL;
 }
 
 
