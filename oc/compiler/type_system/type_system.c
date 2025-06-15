@@ -268,48 +268,69 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
  * We'll need this because we always coerce to unsigned, *not* to signed,
  * if one operand in a certain equation is unsigned
  */
-static Token convert_to_unsigned_version(basic_type_t* type){
+static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, basic_type_t* type){
 	//Switch based on what we have
 	switch(type->basic_type){
 			//Char is already unsigned
 		case CHAR:
-			return CHAR;
+			return lookup_type_name_only(symtab, "char")->type;
 		case U_INT8:
 		case S_INT8:
-			return U_INT8;
+			return lookup_type_name_only(symtab, "u8")->type;
 		case U_INT16:
 		case S_INT16:
-			return U_INT16;
+			return lookup_type_name_only(symtab, "u16")->type;
 		case U_INT32:
 		case S_INT32:
-			return U_INT32;
+			return lookup_type_name_only(symtab, "u32")->type;
 		case U_INT64:
 		case S_INT64:
-			return U_INT64;
+			return lookup_type_name_only(symtab, "u64")->type;
 		//We should never get here
 		default:
-			return U_INT32;
+			return lookup_type_name_only(symtab, "u32")->type;
 	}
 }
 
 
 /**
- * We may need to coerce types to fit appropriately and ensure
- * compatibility
+ * Apply signedness coercion for basic types a and b
  *
- * RULES:
- * 1.) If a is unsigned, and b is signed, a will be made unsigned
+ * Signedness coercion *always* comes first before widening conversions
  */
-static void coerce_types(generic_type_t** a, generic_type_t** b){
-	/**
-	 * Switch based on a's type class
-	 */
-	switch((*a)->type_class){
-
-		default:
-			return;
+static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
+	//Floats are never not signed, so this is useless for them
+	if((*a)->basic_type->basic_type == FLOAT32 || (*a)->basic_type->basic_type == FLOAT64){
+		return;
 	}
 
+	//If a is unsigned, b must automatically go to unsigned
+	if(is_type_signed(*a) == FALSE){
+		//Convert b
+		*b = convert_to_unsigned_version(symtab, (*b)->basic_type);
+		return;
+	}
+
+	//Likewise, if b is unsigned, then a must automatically go to unsigned
+	if(is_type_signed(*b) == FALSE){
+		//Convert a
+		*a = convert_to_unsigned_version(symtab, (*a)->basic_type);
+		return;
+	}
+}
+
+
+/**
+ * Apply standard coercion rules for basic types
+ */
+static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generic_type_t** a, generic_type_t** b){
+	//Whomever has the largest size wins
+	if((*a)->type_size > (*b)->type_size){
+
+	} else if((*a)->type_size < (*b)->type_size){
+
+	}
+	//No else case - we don't want to 
 }
 
 
@@ -318,18 +339,50 @@ static void coerce_types(generic_type_t** a, generic_type_t** b){
  * we get here, we guarantee that the types themselves on their own are valid for this operator.
  * The question then becomes are they valid together
  *
+ * If the types are not compatible, we'll return a NULL. If they are compatible, we will coerce the
+ * types appropriately for size/signedness constraints and return the type that they were both
+ * coerced into
+ *
  * CASES:
  * 	1.) Construct Types: Construct types are compatible if they are both the exact same type
  */
-generic_type_t* types_compatible2(generic_type_t** a, generic_type_t** b, Token operator){
-	//Before we go any further - make sure these types are fully raw
+generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, Token op){
+	//Before we go any further - make sure these types are fully raw(They should be anyways, but insurance never hurts)
 	*a = dealias_type(*a);
 	*b = dealias_type(*b);
+
+	//For convenience
+	symtab = (type_symtab_t*)symtab;
 	
 	/**
 	 * We'll go through based on the operator and see what we can get out
 	 */
-	switch(operator){
+	switch(op){
+		/**
+		 * Modulus types only have integers to worry about. As always, we will
+		 * apply the standard widening/signed type coersion here
+		 *
+		 * NOTE: We know for a fact that modulus only works on basic types that are integers *and*
+		 * enumerations
+		 */
+		case MOD:
+			//We always apply the signedness coercion first
+			basic_type_signedness_coercion(symtab, a, b);
+
+			//We already know that these are basic types only here. We can
+			//apply the standard widening type coercion
+			basic_type_widening_type_coercion(symtab, a, b);
+		
+			//Give this back once down
+			return *a;
+
+		case F_SLASH:
+		case STAR:
+			//
+
+			//We'll give back *a once we're finished
+			return *a;
+
 
 		default:
 			return NULL;

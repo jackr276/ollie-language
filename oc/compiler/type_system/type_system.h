@@ -184,6 +184,12 @@ struct aliased_type_t{
 };
 
 /**
+ * Determine the compatibility of two types and coerce appropraitely. The double pointer
+ * reference exists so that this method may transform types as appropriate
+ */
+generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_type_t** a, generic_type_t** b, Token op);
+
+/**
  * Are two types compatible with eachother?
  * 
  * This function returns a reference to the type that you will get IF you try to operate
