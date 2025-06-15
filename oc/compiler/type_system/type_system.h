@@ -195,19 +195,6 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_type_t** a, generic_type_t** b, Token op);
 
 /**
- * Are two types compatible with eachother?
- * 
- * This function returns a reference to the type that you will get IF you try to operate
- * on these types
- *
- * NOTE: WE NEED RAW TYPES FOR THIS RULE
- * 
- * ASSUMPTION: We assume that typeA is the type whom is being assigned to. So we're really asking
- * "can I put something of typeB into a space that expects typeA?"
- */
-generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB);
-
-/**
  * Are we able to assign something of "source_type" to something on "destination_type"? Returns
  * NULL if we can't
  */

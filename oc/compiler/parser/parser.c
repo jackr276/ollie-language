@@ -2256,7 +2256,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		//We'll just see what the other thing here says
 		if(right_child_type_class == TYPE_CLASS_ENUMERATED || temp_holder_type_class == TYPE_CLASS_ENUMERATED){
 			//Are they compatible?
-			generic_type_t* result = types_compatible(temp_holder->inferred_type, right_child->inferred_type);
+			generic_type_t* result = temp_holder->inferred_type;
 
 			//If no, this will be null
 			if(result == NULL){
@@ -3259,16 +3259,27 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
-		generic_type_t* final_type = types_compatible(temp_holder->inferred_type, right_child->inferred_type);
-		if(final_type == NULL){
-			sprintf(info, "Attempt to logically-and incompatible types %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name); 
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Use the type compatibility function to determine compatibility and apply necessary coercions
+		generic_type_t* return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_AND);
+
+		//If this fails, that means that we have an invalid operation
+		if(return_type == NULL){
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&&");
+			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We now know that the subtree root has a type of u_int8(boolean)
-		sub_tree_root->inferred_type = final_type;
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			temp_holder->variable->type = temp_holder->inferred_type;
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			right_child->variable->type = right_child->inferred_type;
+		}
+
+		//Give this to the root
+		sub_tree_root->inferred_type = return_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -3364,16 +3375,27 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
-		generic_type_t* final_type = types_compatible(temp_holder->inferred_type, right_child->inferred_type);
-		if(final_type == NULL){
-			sprintf(info, "Attempt to logically-and types incompatible types %s and %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name); 
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Use the type compatibility function to determine compatibility and apply necessary coercions
+		generic_type_t* return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_OR);
+
+		//If this fails, that means that we have an invalid operation
+		if(return_type == NULL){
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "||");
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			temp_holder->variable->type = temp_holder->inferred_type;
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			right_child->variable->type = right_child->inferred_type;
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
-		sub_tree_root->inferred_type = final_type;
+		sub_tree_root->inferred_type = return_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking

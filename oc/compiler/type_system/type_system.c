@@ -424,13 +424,85 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 	//All enumerated types are in reality u8's
 	if((*b)->type_class == TYPE_CLASS_ENUMERATED){
-	*b = lookup_type_name_only(symtab, "u8")->type;
+		*b = lookup_type_name_only(symtab, "u8")->type;
 	}
 	
 	/**
 	 * We'll go through based on the operator and see what we can get out
 	 */
 	switch(op){
+		//These two rules are valid for integers and pointers
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+			//If a is a pointer type
+			if((*a)->type_class == TYPE_CLASS_POINTER){
+				//If b is a another pointer, then that's fine
+				if((*b)->type_class == TYPE_CLASS_POINTER){
+					//We'll return a final comparison type of u64
+					return lookup_type_name_only(symtab, "u64")->type;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*b)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*b)->basic_type->basic_type == FLOAT32 || (*b)->basic_type->basic_type == FLOAT64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*b = lookup_type_name_only(symtab, "u64")->type;
+
+				//Give back the u64 type as the result
+				return *b;
+			}
+			
+			//If b is a pointer type. This is teh exact same scenario as a
+			if((*b)->type_class == TYPE_CLASS_POINTER){
+				//If b is a another pointer, then that's fine
+				if((*a)->type_class == TYPE_CLASS_POINTER){
+					//We'll return a final comparison type of u64
+					return lookup_type_name_only(symtab, "u64")->type;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*a)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*a)->basic_type->basic_type == FLOAT32 || (*a)->basic_type->basic_type == FLOAT64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*a = lookup_type_name_only(symtab, "u64")->type;
+
+				//Give back the u64 type as the result
+				return *a;
+			}
+
+			//At this point if these are not basic types, we're done
+			if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
+				return NULL;
+			}
+
+			//Perform any signedness correction that is needed
+			basic_type_signedness_coercion(symtab, a, b);
+
+			//We already know that these are basic types only here. We can
+			//apply the standard widening type coercion
+			basic_type_widening_type_coercion(symtab, a, b);
+
+			//Give back a
+			return *a;
+
 		/**
 		 * Modulus types only have integers to worry about. As always, we will
 		 * apply the standard widening/signed type coersion here
@@ -572,210 +644,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		default:
 			return NULL;
 	}
-}
-
-
-/**
- * Are two types compatible with eachother
- *
- * TYPE COMPATIBILITY RULES:
- * 	1.) Two constructs are compatible iff they are the exact same construct
- * 	2.) Two enums are compatible iff they are the exact same enum
- * 	3.) Pointers are compatible
- * 	4.) If we're trying to put a small int into a large one that's fine
- * 	5.) If we're trying to put a small float into a large one that's fine
- * 	6.) Arrays are compatible if they point to the same type
-*/
-generic_type_t* types_compatible(generic_type_t* typeA, generic_type_t* typeB){
-	//Handle construct types: very strict compatibility rules here
-	if(typeA->type_class == TYPE_CLASS_CONSTRUCT){
-		//If type B isn't a construct it's over
-		if(typeB->type_class != TYPE_CLASS_CONSTRUCT){
-			return NULL;
-		}
-
-		//Now if they don't have the exact same name, it's also over
-		if(strcmp(typeA->type_name, typeB->type_name) != 0){
-			return NULL;
-		}
-
-		//Otherwise they are compatible, so we'll return typeA
-		return typeA;
-	}
-
-	//Handle enum types: also very strict compatibility rules here
-	if(typeA->type_class == TYPE_CLASS_ENUMERATED){
-		//If it's an int it works
-		if(typeB->type_class == TYPE_CLASS_BASIC){
-			if(typeB->basic_type->basic_type == U_INT8 ||
-	  		   typeB->basic_type->basic_type == U_INT16 ||
-	  		   typeB->basic_type->basic_type == U_INT32 ||
-	  		   typeB->basic_type->basic_type == U_INT64){
-
-				//Non fancy type wings
-				return typeB;
-			}
-		}
-
-		//If type B isn't an enum, we're out
-		if(typeB->type_class != TYPE_CLASS_ENUMERATED){
-			return NULL;
-		}
-
-		//Otherwise we need to ensure that their names are the exact same
-		if(strcmp(typeA->type_name, typeB->type_name) != 0){
-			return NULL;
-		}
-
-		//Otherwise return type A
-		return typeA;
-	}
-
-	//Handle array types. Array types are equivalent if they point to the same stuff:w
-	if(typeA->type_class == TYPE_CLASS_ARRAY){
-		//Store what type A points to
-		generic_type_t* type_a_points_to = typeA->array_type->member_type;
-		
-		//If type B is an array, it needs to point to what A points to
-		if(typeB->type_class == TYPE_CLASS_ARRAY){
-			if(types_equivalent(type_a_points_to, typeB->array_type->member_type) == 0){
-				return NULL;
-			}
-
-			//Otherwise return type A
-			return typeA;
-		}
-
-		//Otherwise this is null
-		return NULL;
-	}
-
-	//If type A is a pointer, we can assign it to another pointer or an array
-	if(typeA->type_class == TYPE_CLASS_POINTER){
-		//Store what type A points to
-		generic_type_t* type_a_points_to = typeA->pointer_type->points_to;
-		
-		//If it's a pointer it's fine, no matter what it points to
-		if(typeB->type_class == TYPE_CLASS_POINTER){
-			//Otherwise it worked so
-			return typeA;
-		}
-
-		//If it's an array it's also fine, arrays are pointers
-		if(typeB->type_class == TYPE_CLASS_ARRAY){
-			if(types_compatible(type_a_points_to, typeB->array_type->member_type) == NULL){
-				return NULL;
-			}
-
-			//Otherwise it worked so
-			return typeA;
-		}
-
-		//Otherwise this failed
-		return NULL;
-	}
-
-	//If we make it down here, we know that type A is a basic type. If type B isn't,
-	//then we're done here
-	if(typeB->type_class != TYPE_CLASS_BASIC){
-		//One exception -- if type A is an int
-		if(typeA->basic_type->basic_type == U_INT8 ||
-		   typeA->basic_type->basic_type == U_INT16 ||
-		   typeA->basic_type->basic_type == U_INT32 ||
-		   typeA->basic_type->basic_type == U_INT64){
-			return typeA;
-		}
-
-		//Otherwise it's bad
-		return NULL;
-	}
-
-	//Otherwise we know that we have a basic type here
-	Token typeA_basic_type = typeA->basic_type->basic_type;
-	Token typeB_basic_type = typeB->basic_type->basic_type;
-
-	//If one of these is void, they must both be void
-	if(typeA_basic_type == VOID){
-		//Type B also needs to be void
-		if(typeB_basic_type != VOID){
-			return NULL;
-		}
-
-		//Otherwise it worked
-		return typeA;
-	}
-
-	//If type A is a float64, we need to see a float64 or a float32
-	if(typeA_basic_type == FLOAT64){
-		//Fail case here
-		if(typeB_basic_type != FLOAT32 && typeB_basic_type != FLOAT64){
-			return NULL;
-		}
-
-		//Otherwise it worked
-		return typeA;
-	}
-	
-	//If type A is a float32, we need to see a float32
-	if(typeA_basic_type == FLOAT32){
-		//Fail case here
-		if(typeB_basic_type != FLOAT32){
-			return NULL;
-		}
-
-		//Otherwise it worked
-		return typeA;
-	}
-
-	//Now for ints, if we see an INT that is smaller, we're good
-	if(typeA_basic_type == S_INT64 || typeA_basic_type == U_INT64){
-		//It's only bad if we see floats or void
-		if(typeB_basic_type == VOID || typeB_basic_type == FLOAT32 || typeB_basic_type == FLOAT64){
-			return NULL;
-		}
-
-		//Otherwise it's fine so
-		return typeA;
-	}
-
-	//Now for ints, if we see an INT that is smaller, we're good
-	if(typeA_basic_type == U_INT32 || typeA_basic_type == S_INT32){
-		//It's only bad if we see floats or void
-		if(typeB_basic_type == VOID || typeB_basic_type == FLOAT32 || typeB_basic_type == FLOAT64
-		   || typeB_basic_type == S_INT64 || typeB_basic_type == U_INT64){
-			return NULL;
-		}
-
-		//Otherwise it's fine so
-		return typeA;
-	}
-
-	//Now for ints, if we see an INT that is smaller, we're good
-	if(typeA_basic_type == U_INT16 || typeA_basic_type == S_INT16){
-		//If we don't see a smaller or same size one, we fail
-		if(typeB_basic_type != U_INT16 && typeB_basic_type != S_INT16 && typeB_basic_type != S_INT8 
-		  && typeB_basic_type != U_INT8 && typeB_basic_type != CHAR){
-			return NULL;
-		}
-
-		//Otherwise it's fine so
-		return typeA;
-	}
-	
-	//Now for ints, if we see an INT that is smaller, we're good
-	if(typeA_basic_type == U_INT8 || typeA_basic_type == S_INT8 || typeA_basic_type == CHAR){
-		//If we don't see a smaller or same size one, we fail
-		if(typeB_basic_type != S_INT8 && typeB_basic_type != U_INT8 && typeB_basic_type != CHAR){
-			return NULL;
-		}
-
-		//Otherwise it's fine so
-		return typeA;
-	}
-	
-	
-	//Generic fail case if we forgot something
-	return NULL;
 }
 
 
