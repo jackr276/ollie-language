@@ -262,17 +262,80 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 
 /**
- * Are two types compatible with one another?
+ * Convert a given basic type to the unsigned version of itself. We will *not*
+ * perform any size manipulation here
+ *
+ * We'll need this because we always coerce to unsigned, *not* to signed,
+ * if one operand in a certain equation is unsigned
+ */
+static Token convert_to_unsigned_version(basic_type_t* type){
+	//Switch based on what we have
+	switch(type->basic_type){
+			//Char is already unsigned
+		case CHAR:
+			return CHAR;
+		case U_INT8:
+		case S_INT8:
+			return U_INT8;
+		case U_INT16:
+		case S_INT16:
+			return U_INT16;
+		case U_INT32:
+		case S_INT32:
+			return U_INT32;
+		case U_INT64:
+		case S_INT64:
+			return U_INT64;
+		//We should never get here
+		default:
+			return U_INT32;
+	}
+}
+
+
+/**
+ * We may need to coerce types to fit appropriately and ensure
+ * compatibility
+ *
+ * RULES:
+ * 1.) If a is unsigned, and b is signed, a will be made unsigned
+ */
+static void coerce_types(generic_type_t** a, generic_type_t** b){
+	/**
+	 * Switch based on a's type class
+	 */
+	switch((*a)->type_class){
+
+		default:
+			return;
+	}
+
+}
+
+
+/**
+ * Are two types compatible with one another for a given operator? Note that by the time 
+ * we get here, we guarantee that the types themselves on their own are valid for this operator.
+ * The question then becomes are they valid together
  *
  * CASES:
  * 	1.) Construct Types: Construct types are compatible if they are both the exact same type
  */
-generic_type_t* types_compatible2(generic_type_t* a, generic_type_t* b, Token operator){
+generic_type_t* types_compatible2(generic_type_t** a, generic_type_t** b, Token operator){
 	//Before we go any further - make sure these types are fully raw
-	a = dealias_type(a);
-	b = dealias_type(b);
+	*a = dealias_type(*a);
+	*b = dealias_type(*b);
+	
+	/**
+	 * We'll go through based on the operator and see what we can get out
+	 */
+	switch(operator){
 
-	return a;
+		default:
+			return NULL;
+	}
+
+	return *a;
 }
 
 
