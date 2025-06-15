@@ -6,8 +6,8 @@
 */
 
 //Include guards
-#ifndef OLLIE_ASSEMBLER_H
-#define OLLIE_ASSEMBLER_H
+#ifndef FILE_BUILDER_H 
+#define FILE_BUILDER_H
 #include <sys/types.h>
 #include "../cfg/cfg.h"
 

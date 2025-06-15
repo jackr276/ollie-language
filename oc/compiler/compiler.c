@@ -14,7 +14,7 @@
 #include "code_generator/code_generator.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
-#include "assembler/assembler.h"
+#include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
 
 //The number of errors and warnings

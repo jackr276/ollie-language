@@ -8,7 +8,7 @@
 #define TRUE 1
 #define FALSE 0
 
-#include "assembler.h"
+#include "file_builder.h"
 
 /**
  * Assemble the program by first writing it to a .s file, and then
