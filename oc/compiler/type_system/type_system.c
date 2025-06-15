@@ -407,6 +407,11 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		 * enumerations
 		 */
 		case MOD:
+		case L_SHIFT:
+		case R_SHIFT:
+		case SINGLE_AND:
+		case SINGLE_OR:
+		case CARROT:
 			//We always apply the signedness coercion first
 			basic_type_signedness_coercion(symtab, a, b);
 

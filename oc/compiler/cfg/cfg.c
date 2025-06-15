@@ -2490,7 +2490,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	//We will do an on-the-fly conversion to a number
 	} else if(ident_node->inferred_type->type_class == TYPE_CLASS_ENUMERATED) {
 		//Look up the type
-		symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, "u32");
+		symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, "u8");
 		generic_type_t* type = type_record->type;
 		//Just create a constant here with the enum
 		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), type, is_branch_ending);
