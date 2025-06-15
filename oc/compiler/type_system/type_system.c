@@ -439,6 +439,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
+			basic_type_widening_type_coercion(symtab, a, b);
 
 			//We'll give back *a once we're finished
 			return *a;

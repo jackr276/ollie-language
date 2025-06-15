@@ -122,6 +122,10 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 
 
 /**
+ * Assign a given value to a constant 
+ */
+
+/**
  * Print out an error message. This avoids code duplicatoin becuase of how much we do this
  */
 static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t parser_line_num){
@@ -2050,203 +2054,27 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Once we get here, we know that the type class is a basic type class for both
-		Token temp_holder_type = temp_holder->inferred_type->basic_type->basic_type;
-		Token right_child_type = right_child->inferred_type->basic_type->basic_type;
+		//Use the type compatibility function to determine compatibility and apply necessary coercions
+		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-		//If the temp holder is a float64, the dominates so the return type will be too
-		if(temp_holder_type == FLOAT64 || right_child_type == FLOAT64){
-			return_type = temp_holder->inferred_type;
-
-			//Jump out when done
-			goto multiplicative_loop_end;
-		}
-
-		//Let's now check for type compatibility
-		if(temp_holder_type == FLOAT32){
-			//If we make it here then the final return type will be a float64
-			if(right_child_type == U_INT64 || right_child_type == S_INT64){
-				return_type = lookup_type_name_only(type_symtab, "f64")->type;
-			//Otherwise the float dominates
-			} else {
-				return_type = temp_holder->inferred_type;
-			}
-
-			//Hop out of here now
-			goto multiplicative_loop_end;
-		}
-
-		//Otherwise if the roles are reversed...
-		//Let's now check for type compatibility
-		if(right_child_type == FLOAT32){
-			if(right_child_type == U_INT64 || right_child_type == S_INT64){
-				return_type = lookup_type_name_only(type_symtab, "f64")->type;
-			//Otherwise the float dominates
-			} else {
-				return_type = right_child->inferred_type;
-			}
-		
-			//Hop out of here now
-			goto multiplicative_loop_end;
-		}
-
-		//If we make it here we know that we have ints for types, so we'll check according to our int rules
-		if(right_child_type == U_INT64 || temp_holder_type == U_INT64){
-			//Return type is by default u_int64
-			return_type = right_child->inferred_type;
-
-			goto multiplicative_loop_end;
-		}
-
-		//If the temp holder is large and signed
-		if(temp_holder_type == S_INT64){
-			//If anything below this is unsigned, the whole thing becomes u_int64
-			if(right_child_type == U_INT32 || right_child_type == U_INT16 || right_child_type == U_INT8){
-				//Implicit case to unsigned
-				return_type = lookup_type_name_only(type_symtab, "u64")->type;
-			//Otherwise it's signed so the top level one will be signed
-			} else {
-				//Otherwise it's what temp holder had
-				return_type = temp_holder->inferred_type;
-			}
-
-			goto multiplicative_loop_end;
-		}
-
-		//Now if the roles are reversed..
-		if(right_child_type == S_INT64){
-			//If anything below this is unsigned, the whole thing becomes u_int64
-			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
-				//Implicit case to signed
-				return_type = lookup_type_name_only(type_symtab, "u64")->type;
-			//Otherwise it's signed so the top level one will be signed
-			} else {
-				//Otherwise it's what the right child had
-				return_type = right_child->inferred_type;
-			}
-
-			goto multiplicative_loop_end;
-		}
-
-		//Now check for S-int32
-		if(temp_holder_type == S_INT32){
-			//If anything below this is unsigned, the whole thing becomes u_int64
-			if(right_child_type == U_INT32 || right_child_type == U_INT16 || right_child_type == U_INT8){
-				//Implicit case to signed
-				return_type = lookup_type_name_only(type_symtab, "u32")->type;
-			//Otherwise it's signed so the top level one will be signed
-			} else {
-				//Otherwise it's what the right child had
-				return_type = right_child->inferred_type;
-			}
-
-			goto multiplicative_loop_end;
-		}
-
-		//Now check for S-int32
-		if(right_child_type == S_INT32){
-			//If anything below this is unsigned, the whole thing becomes u_int64
-			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
-				//Implicit case to signed
-				return_type = lookup_type_name_only(type_symtab, "u32")->type;
-			//Otherwise it's signed so the top level one will be signed
-			} else {
-				//Otherwise it's what the right child had
-				return_type = right_child->inferred_type;
-			}
-
-			goto multiplicative_loop_end;
-		}
-
-		//Now check for S-int16
-		if(right_child_type == S_INT16){
-			//If anything below this is unsigned, the whole thing becomes u_int64
-			if(temp_holder_type == U_INT32){
-				//Casted to unsigned
-				return_type = temp_holder->inferred_type;
-			} else if(temp_holder_type == U_INT16 || temp_holder_type == U_INT8){
-				//Cast to unsigned
-				return_type = lookup_type_name_only(type_symtab, "u16")->type;
-			//Otherwise it's signed so the top level one will be signed
-			} else {
-				//Otherwise it's what the right child had
-				return_type = right_child->inferred_type;
-			}
-
-			goto multiplicative_loop_end;
-		}
-
-		//Now check for S-int16
-		if(temp_holder_type == S_INT16){
-			//If anything below this is unsigned, the whole thing becomes u_int64
-			if(right_child_type == U_INT32){
-				//Casted to unsigned
-				return_type = right_child->inferred_type;
-			} else if(right_child_type == U_INT16 || right_child_type == U_INT8){
-				//Cast to unsigned
-				return_type = lookup_type_name_only(type_symtab, "u16")->type;
-			//Otherwise it's signed so the top level one will be signed
-			} else {
-				//Otherwise it's what the right child had
-				return_type = temp_holder->inferred_type;
-			}
-
-			goto multiplicative_loop_end;
-		}
-
-		//Now check for S-int8 and char(same thing)
-		if(temp_holder_type == S_INT8 || temp_holder_type == CHAR){
-			//If anything below this is unsigned, the whole thing becomes u_int64
-			if(right_child_type == U_INT32 || right_child_type == U_INT16){
-				//Casted to unsigned
-				return_type = right_child->inferred_type;
-			} else if(right_child_type == U_INT8){
-				//Cast to unsigned
-				return_type = lookup_type_name_only(type_symtab, "u8")->type;
-			//Otherwise it's signed so the top level one will be signed
-			} else {
-				//Otherwise it's what the right child had
-				return_type = temp_holder->inferred_type;
-			}
-
-			goto multiplicative_loop_end;
-		}
-
-		//Now check for S-int8 and char(same thing)
-		if(right_child_type == S_INT8 || right_child_type == CHAR){
-			//If anything below this is unsigned, the whole thing becomes u_int64
-			if(temp_holder_type == U_INT32 || temp_holder_type == U_INT16){
-				//Casted to unsigned
-				return_type = temp_holder->inferred_type;
-			} else if(right_child_type == U_INT8){
-				//Cast to unsigned
-				return_type = lookup_type_name_only(type_symtab, "u8")->type;
-			//Otherwise it's signed so the top level one will be signed
-			} else {
-				//Otherwise it's what the right child had
-				return_type = temp_holder->inferred_type;
-			}
-
-			goto multiplicative_loop_end;
-		}
-		
-		//If we make it down here, and one of them is u_int32, then the ret type is u_int32
-		if(right_child_type == U_INT32){
-			return_type = right_child->inferred_type;
-		} else if(temp_holder_type == U_INT32){
-			return_type = temp_holder->inferred_type;
-		} else if(right_child_type == U_INT16){
-			return_type = right_child->inferred_type;
-		} else if(temp_holder_type == U_INT16){
-			return_type = temp_holder->inferred_type;
-		} else if(right_child_type == U_INT8){
-			return_type = right_child->inferred_type;
+		//If this is not null
+		if(temp_holder->variable != NULL){
+			temp_holder->variable->type = temp_holder->inferred_type;
 		} else {
-			return_type = temp_holder->inferred_type;
+			printf("HERE\n");
 		}
 
-	//We end up here after all type checking
-	multiplicative_loop_end:
+		if(right_child->variable != NULL){
+			right_child->variable->type = right_child->inferred_type;
+			printf("HERE\n");
+		}
+
+		//If this fails, that means that we have an invalid operation
+		if(return_type == NULL){
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+			return print_and_return_error(info, parser_line_num);
+		}
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
