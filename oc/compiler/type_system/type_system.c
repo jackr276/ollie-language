@@ -431,6 +431,91 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 	 * We'll go through based on the operator and see what we can get out
 	 */
 	switch(op){
+		/**
+		 * Addition/subtraction is valid for integers and pointers. For 
+		 * addition/subtraction with pointers, special detail is required and
+		 * we will actually not coerce in here specifically
+		 */
+		case PLUS:
+		case MINUS:
+			//If a is a pointer type
+			if((*a)->type_class == TYPE_CLASS_POINTER){
+				//It is invalid to add two pointers
+				if((*b)->type_class == TYPE_CLASS_POINTER){
+					//This is invalid
+					return NULL;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*b)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*b)->basic_type->basic_type == FLOAT32 || (*b)->basic_type->basic_type == FLOAT64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*b = lookup_type_name_only(symtab, "u64")->type;
+
+				//Give back the u64 type as the result
+				return *b;
+			}
+			
+			//If b is a pointer type. This is teh exact same scenario as a
+			if((*b)->type_class == TYPE_CLASS_POINTER){
+				//It is invalid to add two pointers
+				if((*a)->type_class == TYPE_CLASS_POINTER){
+					//This is invalid
+					return NULL;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*a)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*a)->basic_type->basic_type == FLOAT32 || (*a)->basic_type->basic_type == FLOAT64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*a = lookup_type_name_only(symtab, "u64")->type;
+
+				//Give back the u64 type as the result
+				return *a;
+			}
+
+			//At this point if these are not basic types, we're done
+			if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
+				return NULL;
+			}
+
+			//If a is a floating point, we apply the float conversion to b
+			if((*a)->basic_type->basic_type == FLOAT32 || (*a)->basic_type->basic_type == FLOAT64){
+				integer_to_floating_point(symtab, b);
+
+			//If b is a floating point, we apply the float conversion to b
+			} else if((*b)->basic_type->basic_type == FLOAT32 || (*b)->basic_type->basic_type == FLOAT64){
+				integer_to_floating_point(symtab, a);
+			}
+
+			//Perform any signedness correction that is needed
+			basic_type_signedness_coercion(symtab, a, b);
+
+			//We already know that these are basic types only here. We can
+			//apply the standard widening type coercion
+			basic_type_widening_type_coercion(symtab, a, b);
+
+			//Give back a
+			return *a;
+
 		//These two rules are valid for integers and pointers
 		case DOUBLE_AND:
 		case DOUBLE_OR:
