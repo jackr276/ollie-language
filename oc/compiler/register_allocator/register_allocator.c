@@ -1603,11 +1603,11 @@ static void determine_register_interference(symtab_function_record_t* caller, sy
 	//Does the callee use any caller-saved registers? Let's find out
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//Grab the register out(remember the 1 offset)
-		register_holder_t callee_register = callee->used_registers[i] - 1;
+		register_holder_t callee_register = callee->used_registers[i] + 1;
 
 		//If the callee uses it *and* it's caller-saved
 		if(is_register_caller_saved(callee_register) == TRUE){
-			//Flag this in the register array
+			//Flag this in the register array(remember the one offset)
 			register_array[callee_register - 1] = TRUE;
 		}
 	}
@@ -1718,6 +1718,35 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 				call_inst->previous_statement = push_inst;
 			}
 
+			//And now, we'll need to go through the stack and add these all back in reverse-order. We'll
+			//always be adding after what we most recently added
+			
+			//The last instruction is always the call instruction first
+			instruction_t* last_instruction = call_inst;
+
+			//So long as the stack isn't empty
+			while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+				//Grab the live range off of it
+				live_range_t* current = pop(stack);
+
+				//Emit the pop instruction for this
+				instruction_t* pop_inst = emit_pop_instruction(dynamic_array_get_at(current->variables, 0));
+
+				//Tie this in to what comes after it
+				pop_inst->next_statement = last_instruction->next_statement;
+
+				//Tie it in with the previous as well
+				if(pop_inst->next_statement != NULL){
+					pop_inst->next_statement->previous_statement = pop_inst;
+				}
+
+				//And now we'll tie in the last instruction
+				last_instruction->next_statement = pop_inst;
+				pop_inst->previous_statement = last_instruction;
+
+				//The pop inst now is the last instruction we've seen
+				last_instruction = pop_inst;
+			}
 			
 			//Destroy the heapstack
 			heap_stack_dealloc(stack);

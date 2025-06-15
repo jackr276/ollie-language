@@ -2326,12 +2326,12 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			printf("\n");
 			break;
 		case PUSH:
-			printf("pushq ");
+			printf("push ");
 			print_variable(instruction->source_register, mode);
 			printf("\n");
 			break;
 		case POP:
-			printf("popq ");
+			printf("pop ");
 			print_variable(instruction->source_register, mode);
 			printf("\n");
 			break;

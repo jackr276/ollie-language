@@ -3381,7 +3381,7 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 		func_call_stmt->function_parameters = dynamic_array_alloc();
 	}
 
-	//The current param of the index
+	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
 	u_int8_t current_func_param_idx = 1;
 
 	//So long as this isn't NULL

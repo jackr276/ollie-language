@@ -18,8 +18,9 @@ fn parameter_pass() -> i32 {
 	let mut z:i32 := 3;
 
 	let mut k:i32 := x + y + z + @parameter_pass2(x, y, z, 'a', 'b', 'c');
+	@parameter_pass();
 
-	ret x + y + z;
+	ret x + y + z + k;
 }
 
 fn parameter_pass3(a:i32) -> i32 {
