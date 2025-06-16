@@ -792,6 +792,39 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 			//Otherwise we get true
 			return TRUE;
 
+		//We can negate pointers, enums and basic types that are not void
+		case L_NOT:
+			//These are bad, we fail out here
+			if(type->type_class == TYPE_CLASS_CONSTRUCT || type->type_class == TYPE_CLASS_ARRAY){
+				return FALSE;
+			}
+
+			//Our other invalid case
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type->basic_type == VOID){
+				return FALSE;
+			}
+
+			//Otherwise if we make it here, we know it's fine
+			return TRUE;
+
+		//Bitwise not expressions are only valid for integers
+		case B_NOT:
+			//If it's not basic, we're out of here
+			if(type->type_class != TYPE_CLASS_BASIC){
+				return FALSE;
+			}
+
+			//Now that we know what it is, we'll see if it's a float or void
+			Token type_tok = type->basic_type->basic_type;
+			
+			//If it's float or void, we're done
+			if(type_tok == FLOAT32 || type_tok == FLOAT64 || type_tok == VOID){
+				return FALSE;
+			}
+
+			//Otherwise we are in the clear
+			return TRUE;
+
 		//We really shouldn't get here
 		default:
 			return FALSE;

@@ -1755,7 +1755,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Pointer derferencing
 		case STAR:
 			//Check to see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
+			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
@@ -1794,7 +1794,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			}
 
 			//Check to see if it's valid
-			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
+			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
@@ -1825,20 +1825,13 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//Logical not case
 		case L_NOT:
-			//Let's check that we aren't trying to not a complex type
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_ENUMERATED || cast_expr->inferred_type->type_class == TYPE_CLASS_CONSTRUCT){
-				sprintf(info, "Type %s is an invalid operand for logical not(!)", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+			//Check to see if it's valid
+			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
-			//Make sure that this isn't a void type either
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_BASIC && cast_expr->inferred_type->basic_type->basic_type == VOID){
-				sprintf(info, "Type %s is an invalid operand for logical not(!)", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//If it it's invalid, we fail here
+			if(is_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				return print_and_return_error(info, parser_line_num);
 			}
 
 			//The return type is what this normally is
@@ -1851,21 +1844,13 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	
 		//Bitwise not case
 		case B_NOT:
-			//If it's not a basic type, we fail immediately
-			if(cast_expr->inferred_type->type_class != TYPE_CLASS_BASIC){
-				sprintf(info, "Type %s is an invalid operand for bitwise not(~)", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+			//Check to see if it's valid
+			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
-			//Otherwise if we make it down here, it still may not be good. We can not use bitwise not on floats or void
-			if(cast_expr->inferred_type->basic_type->basic_type == FLOAT32 || cast_expr->inferred_type->basic_type->basic_type == FLOAT64
-			   || cast_expr->inferred_type->basic_type->basic_type == VOID){
-				sprintf(info, "Type %s is an invalid operand for bitwise not(~)", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//If it it's invalid, we fail here
+			if(is_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				return print_and_return_error(info, parser_line_num);
 			}
 
 			//Otherwise if we make it down here, the return type will be whatever type we put in
@@ -1879,7 +1864,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Arithmetic negation case
 		case MINUS:
 			//Let's see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
+			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
@@ -1898,7 +1883,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Pre-inc/dec case
 		case PLUSPLUS:
 		case MINUSMINUS:
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
+			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
