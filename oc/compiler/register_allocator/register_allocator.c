@@ -1585,40 +1585,6 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 
 
 /**
- * Determine the interference with register usage between two functions - caller
- * and callee
- *
- * Every single function that is called has a destination, even if it is not
- * at all used. This will ensure that we can determine interference. If we
- * can determine interference, then we know what needs to be saved or not
- *
- * To do this - we'll first find out if the called function makes use of any caller-saved registers by crawling
- * its used register array. Once we know for sure, we can then see which of those registers are interfering
- * with this function call statement
- */
-static void determine_register_interference(symtab_function_record_t* caller, symtab_function_record_t* callee, u_int8_t* register_array){
-	//Wipe it out
-	memset(register_array, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
-
-	//Does the callee use any caller-saved registers? Let's find out
-	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
-		//Grab the register out(remember the 1 offset)
-		register_holder_t callee_register = callee->used_registers[i] + 1;
-
-		//If the callee uses it *and* it's caller-saved
-		if(is_register_caller_saved(callee_register) == TRUE){
-			//Flag this in the register array(remember the one offset)
-			register_array[callee_register - 1] = TRUE;
-		}
-	}
-
-	//Once we get down here, we'll have populated the register array with all of
-	//the caller-saved registers that the callee uses. We'll use this as a cross-reference,
-	//not as a definitive guide, for what to push/pop
-}
-
-
-/**
  * Run through the current function and insert all needed save/restore logic
  * for caller-saved registers
  */
@@ -1644,9 +1610,6 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 				continue;
 			}
 
-			//We'll need an interference array to use
-			u_int8_t interference_array[K_COLORS_GEN_USE];
-
 			//Define a dynamic array for saving the live ranges that will
 			//need to be saved
 			dynamic_array_t* saving_array = dynamic_array_alloc();
@@ -1654,10 +1617,6 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 			//If we get here we know that we have a call instruction. Let's
 			//grab whatever it's calling out
 			symtab_function_record_t* callee = instruction->called_function;
-
-			//We now need to figure out what the interference is - as in, what
-			//registers would potentially need to be saved
-			determine_register_interference(function, callee, interference_array);
 
 			//Every function is guaranteed to have a return value/result
 			live_range_t* result_lr = instruction->destination_register->associated_live_range; 
@@ -1668,12 +1627,18 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 			for(u_int16_t i = 0; result_lr->neighbors != NULL && i < result_lr->neighbors->current_index; i++){
 				//Grab the neighbor out
 				live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
+
 				//And grab it's register out
 				register_holder_t reg = lr->reg;
 
+				//If it isn't caller saved, we don't care
+				if(is_register_caller_saved(reg) == FALSE){
+					continue;
+				}
+
 				//If the interference array is true *and* it's a neighbor's
 				//register, we'll save it
-				if(interference_array[reg - 1] == TRUE){
+				if(callee->used_registers[reg - 1] == TRUE){
 					//Flag this LR in here
 					dynamic_array_add(saving_array, lr);
 				}
@@ -1693,9 +1658,8 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 			heap_stack_t* stack = heap_stack_alloc();
 
 			//These variables will be convenient for dealing with the addition of instructions
-			instruction_t* call_inst = instruction;
-			instruction_t* after_call = call_inst->next_statement;
-			instruction_t* before_call = call_inst->previous_statement;
+			instruction_t* call_instruction = instruction;
+			instruction_t* before_push = call_instruction->previous_statement;
 
 			//Once we make it all the way down here, we know exactly which registers that we need to save before this function call.
 			//We can now run through the saving array to do this
@@ -1710,19 +1674,22 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function, 
 				instruction_t* push_inst = emit_push_instruction(dynamic_array_get_at(lr->variables, 0));
 
 				//We always put this push instruction above the function call, in between it and whatever else was last there
-				before_call->next_statement = push_inst;
-				push_inst->previous_statement = before_call;
+				before_push->next_statement = push_inst;
+				push_inst->previous_statement = before_push;
 
 				//Link it in with the call instruction
-				push_inst->next_statement = call_inst;
-				call_inst->previous_statement = push_inst;
+				push_inst->next_statement = call_instruction;
+				call_instruction->previous_statement = push_inst;
+
+				//Update what this is
+				before_push = push_inst;
 			}
 
 			//And now, we'll need to go through the stack and add these all back in reverse-order. We'll
 			//always be adding after what we most recently added
 			
 			//The last instruction is always the call instruction first
-			instruction_t* last_instruction = call_inst;
+			instruction_t* last_instruction = instruction;
 
 			//So long as the stack isn't empty
 			while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
