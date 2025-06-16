@@ -528,7 +528,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 		}
 	
 		//Let's grab these to check for compatibility
-		generic_type_t* param_type = current_function_param->type;
+		generic_type_t* param_type = current_function_param->type_defined_as;
 		generic_type_t* expr_type = current_param->inferred_type;
 
 		/**
@@ -671,7 +671,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		}
 
 		//Store the inferred type
-		ident->inferred_type = found->type;
+		ident->inferred_type = found->type_defined_as;
 		//Store the variable that's associated
 		ident->variable = found;
 		//Idents are assignable
@@ -1398,7 +1398,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 			}
 
 			//Update the current type to be whatever came out of here
-			current_type = constr_acc->variable->type;
+			current_type = constr_acc->variable->type_defined_as;
 
 			//Otherwise we know it's good, so we'll add it in as a child
 			add_child_node(postfix_expr_node, constr_acc);
@@ -2163,16 +2163,6 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
-		}
-	
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2427,16 +2417,6 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
-		}
-
 	} else {
 		//Otherwise just push the token back
 		push_back_token(lookahead);
@@ -2542,16 +2522,6 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
-		}
-		
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2655,16 +2625,6 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
-		}
-
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -2761,16 +2721,6 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		if(final_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&");
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
@@ -2874,16 +2824,6 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
-		}
-
 		//We now know that the subtree root has a type of u_int8(boolean)
 		sub_tree_root->inferred_type = final_type;
 
@@ -2982,16 +2922,6 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		if(final_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "^");
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
@@ -3095,16 +3025,6 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		if(return_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&&");
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
 		}
 
 		//Give this to the root
@@ -3211,16 +3131,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		if(return_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "||");
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			temp_holder->variable->type = temp_holder->inferred_type;
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			right_child->variable->type = right_child->inferred_type;
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
@@ -3350,7 +3260,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
 	//Mark that this is a construct member
 	member_record->is_construct_member = TRUE;
 	//Store what the type is
-	member_record->type = type_spec;
+	member_record->type_defined_as = type_spec;
 	//Is it mutable or not
 	member_record->is_mutable = is_mutable;
 
@@ -3907,10 +3817,10 @@ static u_int8_t enum_definer(FILE* fl){
 		symtab_variable_record_t* variable_rec = cursor->variable;
 
 		//Associate the type here as well
-		variable_rec->type = enum_type;
+		variable_rec->type_defined_as = enum_type;
 
 		//Increment the size here
-		enum_type->type_size += variable_rec->type->type_size;
+		enum_type->type_size += variable_rec->type_defined_as->type_size;
 
 		//We will store this in the enum types records
 		enum_type->enumerated_type->tokens[enum_type->enumerated_type->token_num] = variable_rec;
@@ -4531,7 +4441,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//If it is mutable
 	param_record->is_mutable = is_mut;
 	//Store the type as well, very important
-	param_record->type = type;
+	param_record->type_defined_as = type;
 	//Store the current parameter number of it
 	param_record->function_parameter_order = current_parameter_number;
 
@@ -4755,7 +4665,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Now that we know we didn't find it, we'll create it
 	found = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
 	//Store the type
-	found->type = label_type->type;
+	found->type_defined_as = label_type->type;
 	//Store the fact that it is a label
 	found->is_label = 1;
 	//Store the line number
@@ -5277,7 +5187,8 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//If we see a semicolon, we can just leave
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
-		if(strcmp(current_function->return_type->type_name, "void") != 0){
+		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
+			&& current_function->return_type->basic_type->basic_type != VOID){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name, current_function->return_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -5292,7 +5203,8 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	} else {
 		//If we get here, but we do expect a void return, then this is an issue
-		if(strcmp(current_function->return_type->type_name, "void") == 0){
+		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
+			&& current_function->return_type->basic_type->basic_type == VOID){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -7089,7 +7001,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Store its constant status
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
-	declared_var->type = dealias_type(type_spec);
+	declared_var->type_defined_as = dealias_type(type_spec);
 	//It was not initialized
 	declared_var->initialized = FALSE;
 	//It was declared
@@ -7256,7 +7168,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 	
 	//One thing here, we aren't allowed to see void
-	if(strcmp(type_spec->type_name, "void") == 0){
+	if(type_spec->type_class == TYPE_CLASS_BASIC && type_spec->basic_type->basic_type == VOID){
 		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -7334,7 +7246,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Store it's mutability status
 	declared_var->is_mutable = is_mutable;
 	//Store the type
-	declared_var->type = type_spec;
+	declared_var->type_defined_as = type_spec;
 	//Is it mutable
 	declared_var->is_mutable = is_mutable;
 	//It was initialized
@@ -7916,8 +7828,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			symtab_variable_record_t* param_rec = param_list_cursor->variable;
 
 			//Let's now compare the types here
-			if(strcmp(param_rec->type->type_name, func_param->type->type_name) != 0){
-				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type->type_name);
+			if(types_assignable(func_param->type_defined_as, param_rec->type_defined_as) == NULL){
+				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				print_function_name(function_record);
 				num_errors++;
@@ -7953,7 +7865,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			(function_record->number_of_params)++;
 
 			//Set the associated function record
-			param_rec->parent_function = function_record;
+			param_rec->function_declared_in = function_record;
 
 			//Push the cursor up by 1
 			param_list_cursor = param_list_cursor->next_sibling;

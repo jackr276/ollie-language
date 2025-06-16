@@ -540,7 +540,7 @@ void add_all_basic_types(type_symtab_t* symtab){
 symtab_variable_record_t* initialize_stack_pointer(variable_symtab_t* symtab, type_symtab_t* types){
 	symtab_variable_record_t* stack_pointer = create_variable_record("stack_pointer", STORAGE_CLASS_NORMAL);
 	//Set this type as a label(address)
-	stack_pointer->type = lookup_type_name_only(types, "label")->type;
+	stack_pointer->type_defined_as = lookup_type_name_only(types, "label")->type;
 
 	//Give it back
 	return stack_pointer;
@@ -866,7 +866,7 @@ void print_function_name(symtab_function_record_t* record){
 			printf("mut ");
 		}
 
-		printf("%s : %s", record->func_params[i].associate_var->var_name, record->func_params[i].associate_var->type->type_name);
+		printf("%s : %s", record->func_params[i].associate_var->var_name, record->func_params[i].associate_var->type_defined_as->type_name);
 		//Comma if needed
 		if(i < record->number_of_params-1){
 			printf(", ");
@@ -891,14 +891,14 @@ void print_function_name(symtab_function_record_t* record){
 void print_variable_name(symtab_variable_record_t* record){
 	//If it's part of a function we'll just print that
 	if(record->is_function_paramater == 1){
-		print_function_name(record->parent_function);
+		print_function_name(record->function_declared_in);
 		return;
 	} else if (record->is_label == 1){
 		printf("\n---> %d | %s:\n", record->line_number, record->var_name);
 		return;
 	} else if(record->is_enumeration_member == TRUE || record->is_construct_member == TRUE){
 		//The var name
-		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name, record->type->type_name);
+		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name, record->type_defined_as->type_name);
 	} else {
 		//Line num
 		printf("\n---> %d | ", record->line_number);
@@ -915,7 +915,7 @@ void print_variable_name(symtab_variable_record_t* record){
 		printf("%s : ", record->var_name);
 
 		//The type name
-		printf("%s ", record->type->type_name);
+		printf("%s ", record->type_defined_as->type_name);
 		
 		//We'll print out some abbreviated stuff with the let record
 		if(record->declare_or_let == 1){

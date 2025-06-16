@@ -1188,13 +1188,13 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 		entry.offset = 0;
 
 		//Also by defualt, this is currently the largest variable that we've seen
-		construct->largest_member_size = var->type->type_size;
+		construct->largest_member_size = var->type_defined_as->type_size;
 
 		//Just grab this as a reference to avoid the need to cast
 		symtab_variable_record_t* member = member_var;
 
 		//Increment the size by the amount of the type
-		construct->size += member->type->type_size;
+		construct->size += member->type_defined_as->type_size;
 
 		//Add this into the construct table
 		construct->construct_table[construct->next_index] = entry;
@@ -1210,9 +1210,9 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 	//attention to alignment as there is more than one field
 	constructed_type_field_t entry;
 	//We'll update the largest member, if applicable
-	if(var->type->type_size > construct->largest_member_size){
+	if(var->type_defined_as->type_size > construct->largest_member_size){
 		//Update the largest member if this happens
-		construct->largest_member_size = var->type->type_size;
+		construct->largest_member_size = var->type_defined_as->type_size;
 	}
 
 	//For right now let's just have this added in
@@ -1230,11 +1230,11 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 	u_int32_t offset = construct->construct_table[construct->next_index - 1].offset;
 	
 	//The current ending address is the offset of the last variable plus its size
-	u_int32_t current_end = offset + prior_variable->type->type_size;
+	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
 
 	//Now for alignment, we need the offset of this new variable to be a multiple of the new variable's
 	//size
-	u_int32_t new_entry_size = var->type->type_size;
+	u_int32_t new_entry_size = var->type_defined_as->type_size;
 
 	//We will satisfy this by adding the remainder of the division of the new variable with the current
 	//end in as padding to the previous entry
@@ -1263,7 +1263,7 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 	entry.offset = current_end;
 
 	//Increment the size by the amount of the type and the padding we're adding in
-	construct->size += var->type->type_size + needed_padding;
+	construct->size += var->type_defined_as->type_size + needed_padding;
 
 	//Finally, we can add this new entry in
 	construct->construct_table[construct->next_index] = entry;

@@ -337,7 +337,7 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
 	//This is not temporary
 	emitted_var->is_temporary = FALSE;
 	//Store the type info
-	emitted_var->type = var->type;
+	emitted_var->type = var->type_defined_as;
 	//And store the symtab record
 	emitted_var->linked_var = var;
 

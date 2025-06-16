@@ -125,6 +125,16 @@ struct symtab_variable_record_t{
 	char var_name[MAX_IDENT_LENGTH];
 	//The module it was defined in
 	char module_defined_in[MAX_IDENT_LENGTH];
+	//For SSA renaming
+	lightstack_t counter_stack;
+	//What function was it declared in?
+	symtab_function_record_t* function_declared_in;
+	//What type is it?
+	generic_type_t* type_defined_as;
+	//The next hashtable record
+	symtab_variable_record_t* next;
+	//The offset
+	u_int64_t offset;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it
@@ -135,8 +145,8 @@ struct symtab_variable_record_t{
 	u_int16_t counter;
 	//Line number
 	u_int16_t line_number;
-	//The offset
-	u_int64_t offset;
+	//What is the enum member value
+	u_int16_t enum_member_value;
 	//Was it initialized?
 	u_int8_t initialized;
 	//Was it assigned to?
@@ -151,30 +161,16 @@ struct symtab_variable_record_t{
 	u_int8_t is_construct_member;
 	//Is it an enumeration member?
 	u_int8_t is_enumeration_member;
-	//What is the enum member value
-	u_int16_t enum_member_value;
 	//Is this a label?
 	u_int8_t is_label;
 	//Is this a global variable?
 	u_int8_t is_global;
 	//Is this variable ever required, or considered live, by a basic block?
 	u_int8_t has_ever_been_live;
-	//If it is, we'll store the function as a reference
-	symtab_function_record_t* parent_function;
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
-	//What type is it?
-	generic_type_t* type;
-	//What struct was it defined in? For structs only
-	generic_type_t* struct_defined_in;
-	//What function was it declared in?
-	symtab_function_record_t* function_declared_in;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
-	//The next hashtable record
-	symtab_variable_record_t* next;
-	//For SSA renaming
-	lightstack_t counter_stack;
 };
 
 

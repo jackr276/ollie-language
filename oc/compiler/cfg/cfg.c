@@ -2915,7 +2915,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			three_addr_const_t* offset = emit_int_constant_direct(field->offset, type_symtab);
 
 			//This is now the member's type
-			current_type = member->type;
+			current_type = member->type_defined_as;
 
 			//Let's hold onto the address
 			three_addr_var_t* address;
@@ -3228,7 +3228,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	//If we have a declare statement,
 	if(expr_node->CLASS == AST_NODE_CLASS_DECL_STMT){
 		//Extract the type info out of here
-		generic_type_t* type = expr_node->variable->type;
+		generic_type_t* type = expr_node->variable->type_defined_as;
 
 		//If we have an array, we'll need to decrement the stack
 		if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
