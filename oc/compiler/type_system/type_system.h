@@ -236,6 +236,11 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op);
 
 /**
+ * Is the given unary operation valid for the type that was specificed?
+ */
+u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op);
+
+/**
  * Add a value into a construct's table
  */
 u_int8_t add_construct_member(generic_type_t* type, void* member_var);

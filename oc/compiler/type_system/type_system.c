@@ -733,6 +733,39 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 
 /**
+ * Is the given unary operation valid for the type that was specificed?
+ */
+u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op){
+	//Just to be safe, we'll dealias is
+	type = dealias_type(type);
+
+	//Go based on what token we're given
+	switch (unary_op) {
+		//This will pull double duty for pre/post increment operators
+		case PLUSPLUS:
+		case MINUSMINUS:
+			//This is invalid for construct types
+			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
+				return FALSE;
+			}
+
+			//It's also invalid for void types
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type->basic_type == VOID){
+				return FALSE;
+			}
+
+			//Otherwise, it's completely fine
+			return TRUE;
+
+
+		//We really shouldn't get here
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the given operation valid for the type that was specificed?
  */
 u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op, side_type_t side){

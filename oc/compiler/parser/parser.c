@@ -1424,20 +1424,13 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		return postfix_expr_node;
 	}
 
-	//If it's a complex type we fail immediately
-	if(return_type->type_class == TYPE_CLASS_ENUMERATED || return_type->type_class == TYPE_CLASS_CONSTRUCT){
-		sprintf(info, "Type %s is an invalid operand for ++ or -- operand", return_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
+	//Let's see if it's valid
+	u_int8_t is_valid = is_unary_operation_valid_for_type(return_type, lookahead.tok);
 
-	//One other potential issue -- if we see  void here
-	if(return_type->type_class == TYPE_CLASS_BASIC && return_type->basic_type->basic_type == VOID){
-		sprintf(info, "Type %s is an invalid operand for ++ or -- operand", return_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	//If it it's invalid, we fail here
+	if(is_valid == FALSE){
+		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name, lookahead.lexeme);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//You cannot assign to a basic variable that is
@@ -1465,15 +1458,14 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		Token op = lookahead.tok == PLUSPLUS ? PLUS : MINUS;
 
 		//Use the helper to generate the pointer arithmetic
-		//generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(postfix_expr_node, op, constant_multiplicand);
+		generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(postfix_expr_node, op, constant_multiplicand);
 
-		//Add this as a child to the overall postfix expression area
-		//add_child_node(postfix_expr_node, pointer_arithmetic);
+		//Save these values in the top level node
+		pointer_arithmetic->inferred_type = postfix_expr_node->inferred_type;
+		pointer_arithmetic->variable = postfix_expr_node->variable;
 
-		//pointer_arithmetic->inferred_type = postfix_expr_node->inferred_type;
-		//pointer_arithmetic->variable = postfix_expr_node->variable;
-
-		//return pointer_arithmetic;
+		//And give back the pointer arithmetic node
+		return pointer_arithmetic;
 
 	} else {
 		//Otherwise if we get here we know that we either have post inc or dec
@@ -1844,25 +1836,17 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//preincrement and predecrement work on everything besides complex types
 		} else if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUSMINUS){
-			//If it's a complex type we fail immediately
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_ENUMERATED || cast_expr->inferred_type->type_class == TYPE_CLASS_CONSTRUCT){
-				sprintf(info, "Type %s is an invalid operand for ++ or -- operand", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+			//Let's see if it's valid
+			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
 
-			//One other potential issue -- if we see  void here
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_BASIC && cast_expr->inferred_type->basic_type->basic_type == VOID){
-				sprintf(info, "Type %s is an invalid operand for ++ or -- operand", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//If it it's invalid, we fail here
+			if(is_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				return print_and_return_error(info, parser_line_num);
 			}
 
 			//Otherwise it worked just fine here. The return type is the same type that we had initially
 			return_type = cast_expr->inferred_type;
-
 
 			//This counts as mutation -- unless it's a constant
 			if(cast_expr->variable != NULL){
@@ -2257,11 +2241,11 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		}
 
 		//Let's see if this actually works
-		u_int8_t right_type_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_RIGHT);
+		u_int8_t right_type_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
 		
 		//Fail out here
 		if(right_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", temp_holder->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name, op.lexeme);
 			return print_and_return_error(info, parser_line_num);
 		}
 
