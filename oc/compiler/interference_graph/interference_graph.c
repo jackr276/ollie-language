@@ -287,4 +287,3 @@ void interference_graph_dealloc(interference_graph_t* graph){
 	//And then deallocate this
 	free(graph);
 }
-

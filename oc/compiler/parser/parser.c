@@ -122,23 +122,6 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 
 
 /**
- * Assign a given value to a constant 
- */
-static void assign_type_to_constant(generic_ast_node_t* start, generic_type_t* type){
-
-	//TODO
-}
-
-
-/**
- * Reassign all variable types in a subtree
- */
-static void reassign_variables_in_expression_subtree(generic_ast_node_t* start, generic_type_t* type){
-	//TODO
-}
-
-
-/**
  * Print out an error message. This avoids code duplicatoin becuase of how much we do this
  */
 static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t parser_line_num){
@@ -148,6 +131,65 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t
 	num_errors++;
 	//Allocate and return an error node
 	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+}
+
+
+/**
+ * Emit a binary operation for the purpose of address manipulation
+ *
+ * Example:
+ * int* + 1 -> int* + 4(an int is 4 bytes), and so on...
+ */
+static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, Token op, generic_ast_node_t* operand){
+	//Grab the pointer type out
+	pointer_type_t* pointer_type = pointer->inferred_type->pointer_type;
+
+	//If this is a void pointer, we're done
+	if(pointer_type->is_void_pointer == TRUE){
+		return print_and_return_error("Void pointers cannot be added or subtracted to", parser_line_num);
+	}
+
+	//Write out our constant multplicand
+	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+	//Grab the constant out
+	constant_ast_node_t* const_node = constant_multiplicand->node;
+	//Mark the type too
+	const_node->constant_type = LONG_CONST;
+	//Store the size in here
+	const_node->long_val = pointer_type->points_to->type_size;
+	//Ensure that we give this a type
+	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
+
+	//Allocate an adjustment node
+	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+
+	//This is a multiplication node
+	adjustment->binary_operator = STAR;
+
+	//The first child is the actual operand
+	add_child_node(adjustment, operand);
+
+	//The second child is the constant_multiplicand
+	add_child_node(adjustment, constant_multiplicand);
+
+	//Generate a binary expression that we'll eventually return
+	generic_ast_node_t* return_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+
+	//Save the operator
+	return_node->binary_operator = op;
+
+	//Add the pointer type as the first child
+	add_child_node(return_node, pointer);
+
+	//Add this to the return node
+	add_child_node(return_node, adjustment);
+
+	//These will all have the exact same types
+	return_node->variable = pointer->variable;
+	return_node->inferred_type = pointer->inferred_type;
+
+	//Give back the final node
+	return return_node;
 }
 
 
@@ -214,6 +256,10 @@ static generic_ast_node_t* label_identifier(FILE* fl){
 	return label_ident_node;
 }
 
+
+/**
+ * Emit a constant node directly
+ */
 
 /**
  * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
@@ -1400,21 +1446,53 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
 	}
 
-	//Otherwise if we get here we know that we either have post inc or dec
-	//Create the unary operator node
-	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
+	/**
+	 * If we have a pointer type, we need to do some special logic
+	 */
+	if(return_type->type_class == TYPE_CLASS_POINTER){
+		//Write out our constant multplicand
+		generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+		//Grab the constant out
+		constant_ast_node_t* const_node = constant_multiplicand->node;
+		//Mark the type too
+		const_node->constant_type = LONG_CONST;
+		//Store the increment - only one - in here
+		const_node->long_val = 1;
+		//Ensure that we give this a type
+		constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
-	//Store the token
-	unary_post_op->unary_operator = lookahead.tok;
+		//Determine the operator here
+		Token op = lookahead.tok == PLUSPLUS ? PLUS : MINUS;
 
-	//This will always be the last child of whatever we've built so far
-	add_child_node(postfix_expr_node, unary_post_op);
-	
-	//Add the inferred type in
-	postfix_expr_node->inferred_type = return_type;
+		//Use the helper to generate the pointer arithmetic
+		//generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(postfix_expr_node, op, constant_multiplicand);
 
-	//Carry through
-	postfix_expr_node->variable = result->variable;
+		//Add this as a child to the overall postfix expression area
+		//add_child_node(postfix_expr_node, pointer_arithmetic);
+
+		//pointer_arithmetic->inferred_type = postfix_expr_node->inferred_type;
+		//pointer_arithmetic->variable = postfix_expr_node->variable;
+
+		//return pointer_arithmetic;
+
+	} else {
+		//Otherwise if we get here we know that we either have post inc or dec
+		//Create the unary operator node
+		generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
+
+		//Store the token
+		unary_post_op->unary_operator = lookahead.tok;
+
+		//This will always be the last child of whatever we've built so far
+		add_child_node(postfix_expr_node, unary_post_op);
+		
+		//Add the inferred type in
+		postfix_expr_node->inferred_type = return_type;
+
+		//Carry through
+		postfix_expr_node->variable = result->variable;
+	}
+
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;
@@ -2187,45 +2265,19 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-
-		//If the temp holder is a pointer, the other one may not be a float of any kind
+		//We have a pointer here in the temp holder, and we're trying to add/subtract something to it
 		if(temp_holder->inferred_type->type_class == TYPE_CLASS_POINTER){
-			//We need to now do any adjustment. Whenever we add to a pointer, we inherently need to add the additive TIMES the
-			//size of the underlying object
-			if(temp_holder->inferred_type->pointer_type->is_void_pointer == FALSE){
-				//what is this size of what this thing points to?
-				u_int16_t points_to_size = temp_holder->inferred_type->pointer_type->points_to->type_size; 
+			//Let's first determine if they're compatible
+			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-				//We'll multiply the right hand side by this, so we'll need a new binary expression node
-				generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
-
-				//Multiplication here
-				adjustment->binary_operator = STAR;
-
-				//Add the right child as the first adjustment
-				add_child_node(adjustment, right_child);
-
-				//Write out our constant multplicand
-				generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
-				//Grab the constant out
-				constant_ast_node_t* const_node = constant_multiplicand->node;
-				//Add this size in
-				const_node->int_val = points_to_size;
-				//Mark the type too
-				const_node->constant_type = INT_CONST;
-				//Save the variable that temp holder has
-				adjustment->variable = temp_holder->variable;
-
-				//Now we'll need to add the constant node as the other child
-				add_child_node(adjustment, constant_multiplicand);
-
-				//We'll just make this our right child
-				right_child = adjustment;
+			//If this fails, that means that we have an invalid operation
+			if(return_type == NULL){
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+				return print_and_return_error(info, parser_line_num);
 			}
 
-			//If we make it all the way down here, we know that we have a pointer + int or pointer + pointer. Either way, 
-			//the pointer will dominate
-			return_type = temp_holder->inferred_type;
+			printf("FOUND POINTER\n");
+
 
 		} else {
 			//Use the type compatibility function to determine compatibility and apply necessary coercions

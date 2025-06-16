@@ -80,9 +80,6 @@ static void compile(char* fname, front_end_results_package_t* results){
  *  in the #dependencies block
 */
 int main(int argc, char** argv){
-	
-
-
 	//How much time we've spent
 	double time_spent;
 	//By default, we assume that we've errored
