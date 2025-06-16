@@ -757,6 +757,40 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 			//Otherwise, it's completely fine
 			return TRUE;
 
+		//We can only dereference arrays and pointers
+		case STAR:
+			//These are our valid cases
+			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_POINTER){
+				return TRUE;
+			}
+
+			//Anything else is invalid
+			return FALSE;
+
+		//We can take the address of anything besides a void type
+		case SINGLE_AND:
+			//This is our only invalid case
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type->basic_type == VOID){
+				return FALSE;
+			}
+
+			//Otherwise it's fine
+			return TRUE;
+
+		//We can only negate basic types that are not void
+		case MINUS:
+			//This is an instant failure
+			if(type->type_class != TYPE_CLASS_BASIC){
+				return FALSE;
+			}
+
+			//This is the only other way we'd fail
+			if(type->basic_type->basic_type == VOID){
+				return FALSE;
+			}
+
+			//Otherwise we get true
+			return TRUE;
 
 		//We really shouldn't get here
 		default:

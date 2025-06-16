@@ -1674,6 +1674,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
 	//the exact same way
+	//TODO THIS SHOULD BE A SWITCH
 	if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUS || lookahead.tok == MINUSMINUS
 		     || lookahead.tok == STAR || lookahead.tok == SINGLE_AND || lookahead.tok == B_NOT || lookahead.tok == L_NOT){
 
@@ -1699,17 +1700,18 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//Let's check the * case
 		if(lookahead.tok == STAR){
-			//If this is the case, then the cast expression had to have been a pointer or an array
-			if(cast_expr->inferred_type->type_class != TYPE_CLASS_POINTER && cast_expr->inferred_type->type_class != TYPE_CLASS_ARRAY){
-				sprintf(info, "Attempt to deference non-pointer type %s", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+			//Check to see if it's valid
+			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
 
+			//If it it's invalid, we fail here
+			if(is_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				return print_and_return_error(info, parser_line_num);
+			}
+		
 			//Otherwise if we made it here, we only have one final tripping point
 			//Ensure that we aren't trying to deref a null pointer
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && strcmp(cast_expr->inferred_type->type_name, "void*") == 0){
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->pointer_type->is_void_pointer == TRUE){
 				print_parse_message(PARSE_ERROR, "Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 				num_errors++;
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -1735,11 +1737,13 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 			}
 
-			//Let's double check that we aren't taking the address of nothing
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_BASIC && cast_expr->inferred_type->basic_type->basic_type == VOID){
-				print_parse_message(PARSE_ERROR, "Type \"void\" cannot have it's address taken", parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//Check to see if it's valid
+			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
+
+			//If it it's invalid, we fail here
+			if(is_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				return print_and_return_error(info, parser_line_num);
 			}
 
 			//Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was
@@ -1812,20 +1816,13 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 		//Positive and negative sign works on integers and floats, but nothing else
 		} else if(lookahead.tok == MINUS){
-			//If it's not a basic type, we fail immediately
-			if(cast_expr->inferred_type->type_class != TYPE_CLASS_BASIC){
-				sprintf(info, "Type %s is an invalid operand for minus operand", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+			//Let's see if it's valid
+			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
 
-			//Otherwise if we make it down here, it still may not be good. We can not use bitwise not on floats or void
-			if(cast_expr->inferred_type->basic_type->basic_type == VOID){
-				sprintf(info, "Type %s is an invalid operand for minus operand", cast_expr->inferred_type->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//If it it's invalid, we fail here
+			if(is_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				return print_and_return_error(info, parser_line_num);
 			}
 
 			//If we get all the way down here, the return type is what we had to begin with
