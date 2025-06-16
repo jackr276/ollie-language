@@ -1636,6 +1636,27 @@ static void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 
 
 /**
+ * Is a given token a unary operator
+ */
+static u_int8_t is_unary_operator(Token tok){
+	//Switch on tok
+	switch (tok) {
+		case SINGLE_AND:
+		case STAR:
+		case MINUS:
+		case MINUSMINUS:
+		case PLUSPLUS:
+		case L_NOT:
+		case B_NOT:
+			return TRUE;
+		//By default no
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * A unary expression decays into a postfix expression. With a unary expression, we are able to
  * apply unary operators and take the size of given types. Like all rules, a unary expression
  * will always return a pointer to the root node of the tree that it creates
@@ -1671,37 +1692,70 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Save this for searching
+	unary_op_tok = lookahead.tok;
 
-	//Otherwise there is a potential for us to have any other unary operator. If we see any of these, we'll handle them
-	//the exact same way
-	//TODO THIS SHOULD BE A SWITCH
-	if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUS || lookahead.tok == MINUSMINUS
-		     || lookahead.tok == STAR || lookahead.tok == SINGLE_AND || lookahead.tok == B_NOT || lookahead.tok == L_NOT){
+	//If this is not a unary operator, we don't need to go any more
+	if(is_unary_operator(unary_op_tok) == FALSE){
+		//Push it back
+		push_back_token(lookahead);
+		//We'll still make a top level tree here to avoid ambiguity
+		generic_ast_node_t* unary_expr_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
 
-		//We'll first create the unary operateor node for ourselves here
-		generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
-		//Assign the typesize operator to this
-		unary_op->unary_operator = lookahead.tok;
-		//Save this for later too
-		unary_op_tok = lookahead.tok;
-		
-		//Following this, we are required to see a valid cast expression
-		generic_ast_node_t* cast_expr = cast_expression(fl);
+		//Let this handle the heavy lifting
+		generic_ast_node_t* postfix_expr_node = postfix_expression(fl);
 
-		//Let's check for errors
-		if(cast_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid cast expression given after unary operator", parser_line_num);
-			//If it is bad, we'll just propogate it up the chain
-			return cast_expr;
+		//If this is NULL, just send it up the chain
+		if(postfix_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return postfix_expr_node;
 		}
 
-		//Holder for our return type
-		generic_type_t* return_type;
+		//Otherwise he is the unary expression node here
+		add_child_node(unary_expr_node, postfix_expr_node);
 
-		//Let's check the * case
-		if(lookahead.tok == STAR){
+		//Carry the var through
+		unary_expr_node->variable = postfix_expr_node->variable;
+
+		//This type info is also sent up
+		unary_expr_node->inferred_type = postfix_expr_node->inferred_type;
+		//Store the line number
+		unary_expr_node->line_number = parser_line_num;
+		//Duplicate the assignability
+		unary_expr_node->is_assignable = postfix_expr_node->is_assignable;
+
+		//Postfix already has type inference built in
+		return unary_expr_node;
+	}
+
+	//Otherwise, if we get down here we know that we have a unary operator
+	
+	//We'll first create the unary operator node for ourselves here
+	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
+	//Assign the operator to this
+	unary_op->unary_operator = lookahead.tok;
+
+	//Following this, we are required to see a valid cast expression
+	generic_ast_node_t* cast_expr = cast_expression(fl);
+
+	//Let's check for errors
+	if(cast_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid cast expression given after unary operator", parser_line_num);
+		//If it is bad, we'll just propogate it up the chain
+		return cast_expr;
+	}
+
+	//Holder for our return type
+	generic_type_t* return_type;
+
+	//An is-valid holder for our validations
+	u_int8_t is_valid = FALSE;
+
+	//Now we'll switch based on the operator
+	switch(unary_op_tok){
+		//Pointer derferencing
+		case STAR:
 			//Check to see if it's valid
-			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
+			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
@@ -1728,8 +1782,10 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			//This is assignable
 			is_assignable = ASSIGNABLE;
 
-		//Let's now check the & case
-		} else if (lookahead.tok == SINGLE_AND){
+			break;
+
+		//Address operator case
+		case SINGLE_AND:
 			//Is there an attempt to take the address of a constant
 			if(cast_expr->CLASS == AST_NODE_CLASS_CONSTANT){
 				print_parse_message(PARSE_ERROR, "The address of a constant cannot be taken", parser_line_num);
@@ -1765,8 +1821,10 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			//This is not assignable
 			is_assignable = NOT_ASSIGNABLE;
 
-		//Logical not(!) works on all basic types(minus void) and pointers
-		} else if(lookahead.tok == L_NOT){
+			break;
+
+		//Logical not case
+		case L_NOT:
 			//Let's check that we aren't trying to not a complex type
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_ENUMERATED || cast_expr->inferred_type->type_class == TYPE_CLASS_CONSTRUCT){
 				sprintf(info, "Type %s is an invalid operand for logical not(!)", cast_expr->inferred_type->type_name);
@@ -1788,9 +1846,11 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			
 			//This is not assignable
 			is_assignable = NOT_ASSIGNABLE;
-		
-		//Bitwise not works on integers only
-		} else if(lookahead.tok == B_NOT){
+			
+			break;
+	
+		//Bitwise not case
+		case B_NOT:
 			//If it's not a basic type, we fail immediately
 			if(cast_expr->inferred_type->type_class != TYPE_CLASS_BASIC){
 				sprintf(info, "Type %s is an invalid operand for bitwise not(~)", cast_expr->inferred_type->type_name);
@@ -1813,11 +1873,13 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//This is not assignable
 			is_assignable = NOT_ASSIGNABLE;
-
-		//Positive and negative sign works on integers and floats, but nothing else
-		} else if(lookahead.tok == MINUS){
+			
+			break;
+	
+		//Arithmetic negation case
+		case MINUS:
 			//Let's see if it's valid
-			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
+			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
@@ -1831,10 +1893,12 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			//This is not assignable
 			is_assignable = NOT_ASSIGNABLE;
 
-		//preincrement and predecrement work on everything besides complex types
-		} else if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUSMINUS){
-			//Let's see if it's valid
-			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
+			break;
+
+		//Pre-inc/dec case
+		case PLUSPLUS:
+		case MINUSMINUS:
+			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, lookahead.tok);
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
@@ -1857,80 +1921,59 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 				//Otherwise it is assignable
 				is_assignable = ASSIGNABLE;
 			}
-		}
 
-		//If we have a special "fold" case here, i.e. we have something
-		//like -2, we can actually do that right now
-		if(cast_expr->first_child->CLASS == AST_NODE_CLASS_CONSTANT){
-			//We'll now try to perform some folding
-			if(unary_op_tok == MINUS){
-				negate_constant_value(cast_expr->first_child);
-			} else if(unary_op_tok == MINUSMINUS){
-				decrement_constant_value(cast_expr->first_child);
-			} else if(unary_op_tok == PLUSPLUS){
-				increment_constant_value(cast_expr->first_child);
-			} else if(unary_op_tok == L_NOT){
-				logical_not_constant_value(cast_expr->first_child);
-			} else if(unary_op_tok == B_NOT){
-				bitwise_not_constant_value(cast_expr->first_child);
-			}
+			break;
 
-			//Give back this node and we're done
-			return cast_expr;
-		}
-
-		//One we get here, we have both nodes that we need
-		generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
-		
-		//The unary operator always comes first
-		add_child_node(unary_node, unary_op);
-
-		//The cast expression will be linked in last
-		add_child_node(unary_node, cast_expr);
-
-		//Store the type that we have here
-		unary_node->inferred_type = return_type;
-		//Store the line number
-		unary_node->line_number = parser_line_num;
-		//Store the variable
-		unary_node->variable = cast_expr->variable;
-		//Is it assignable
-		unary_node->is_assignable = is_assignable;
-
-		//Finally we're all done, so we can just give this back
-		return unary_node;
-	
-	//If we get here we will just put the token back and pass the responsibility on to the
-	//postifix expression rule
-	} else {
-		push_back_token(lookahead);
-		//We'll still make a top level tree here to avoid ambiguity
-		generic_ast_node_t* unary_expr_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
-
-		//Let this handle the heavy lifting
-		generic_ast_node_t* postfix_expr_node = postfix_expression(fl);
-
-		//If this is NULL, just send it up the chain
-		if(postfix_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return postfix_expr_node;
-		}
-
-		//Otherwise he is the unary expression node here
-		add_child_node(unary_expr_node, postfix_expr_node);
-
-		//Carry the var through
-		unary_expr_node->variable = postfix_expr_node->variable;
-
-		//This type info is also sent up
-		unary_expr_node->inferred_type = postfix_expr_node->inferred_type;
-		//Store the line number
-		unary_expr_node->line_number = parser_line_num;
-		//Duplicate the assignability
-		unary_expr_node->is_assignable = postfix_expr_node->is_assignable;
-
-		//Postfix already has type inference built in
-		return unary_expr_node;
+		//In reality, we should never reach here
+		default:
+			return print_and_return_error("Fatal internal compiler error: invalid unary operation", parser_line_num);
 	}
+
+	//If we have a constant here, we have a chance to do some optimizations
+	if(cast_expr->first_child->CLASS == AST_NODE_CLASS_CONSTANT){
+		//Go based on this
+		switch (unary_op_tok) {
+			case MINUS:
+				negate_constant_value(cast_expr->first_child);
+				return cast_expr;
+			case MINUSMINUS:
+				decrement_constant_value(cast_expr->first_child);
+				return cast_expr;
+			case PLUSPLUS:
+				increment_constant_value(cast_expr->first_child);
+				return cast_expr;
+			case L_NOT:
+				logical_not_constant_value(cast_expr->first_child);
+				return cast_expr;
+			case B_NOT:
+				bitwise_not_constant_value(cast_expr->first_child);
+				return cast_expr;
+			//Just do nothing
+			default:
+				break;
+		}
+	}
+
+	//One we get here, we have both nodes that we need
+	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+	
+	//The unary operator always comes first
+	add_child_node(unary_node, unary_op);
+
+	//The cast expression will be linked in last
+	add_child_node(unary_node, cast_expr);
+
+	//Store the type that we have here
+	unary_node->inferred_type = return_type;
+	//Store the line number
+	unary_node->line_number = parser_line_num;
+	//Store the variable
+	unary_node->variable = cast_expr->variable;
+	//Is it assignable
+	unary_node->is_assignable = is_assignable;
+
+	//Finally we're all done, so we can just give this back
+	return unary_node;
 }
 
 
