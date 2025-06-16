@@ -2276,8 +2276,13 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			printf("FOUND POINTER\n");
+			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
+			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child);
 
+			//Once we're done here, the right child is the pointer arithmetic
+			right_child = pointer_arithmetic;
+
+			printf("FOUND POINTER\n");
 
 		} else {
 			//Use the type compatibility function to determine compatibility and apply necessary coercions

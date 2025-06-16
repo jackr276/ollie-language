@@ -3023,6 +3023,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction2 != NULL
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == STAR
 		&& window->instruction1->assignee->is_temporary == TRUE
 		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
 
@@ -3182,10 +3183,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			&& window->instruction3->op != DOUBLE_OR
 			&& window->instruction3->op != F_SLASH //These are also excluded due to the way x86 division works
 			&& window->instruction3->op != MOD
+			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
 			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
 			instruction_t* const_assignment = window->instruction1;
+			printf("HERE\n");
 
 			//Let's mark that this is now a binary op with const statement
 			window->instruction3->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -3696,7 +3699,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					changed = TRUE;
 				}
 			//What if we have a power of 2 here? For any kind of multiplication or division, this can
-			//be optimized into a  left or right shift if we have a compatible type(not a float)
+			//be optimized into a left or right shift if we have a compatible type(not a float)
 			} else if(const_is_power_of_2 && current_instruction->assignee->type->type_class == TYPE_CLASS_BASIC 
 				&& current_instruction->assignee->type->basic_type->basic_type != FLOAT32 
 				&& current_instruction->assignee->type->basic_type->basic_type != FLOAT64){
