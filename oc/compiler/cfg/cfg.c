@@ -2984,6 +2984,42 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 
 
 /**
+ * Emit a pointer arithmetic statement that can arise from either a ++ or -- on a pointer
+ */
+static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
+	//Emit the constant size
+	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->pointer_type->points_to->type_size, type_symtab);
+
+	//We need this temp assignment for bookkeeping reasons
+	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+	temp_assignment->is_branch_ending = is_branch_ending;
+
+	//Add this to the block
+	add_statement(basic_block, temp_assignment);
+
+	//Decide what the op is
+	Token op = operator == PLUSPLUS ? PLUS : MINUS;
+
+	//We need to emit a temp assignment for the assignee
+	instruction_t* operation = emit_binary_operation_with_const_instruction(emit_temp_var(assignee->type), temp_assignment->assignee, op, constant);
+	operation->is_branch_ending = is_branch_ending;
+
+	//Add this to the block
+	add_statement(basic_block, operation);
+
+	//We need one final assignment
+	instruction_t* final_assignment = emit_assignment_instruction(emit_var_copy(assignee), operation->assignee);
+	final_assignment->is_branch_ending = is_branch_ending;
+
+	//And add this one in
+	add_statement(basic_block, final_assignment);
+
+	//Give back the assignee
+	return assignee;
+}
+
+
+/**
  * Emit the abstract machine code for a unary expression
  * Unary expressions come in the following forms:
  * 	
@@ -3019,10 +3055,8 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		if(unary_operator->unary_operator == PLUSPLUS){
 			//What if the assignee is a complex type(pointer, array, etc)
 			if(assignee->type->type_class == TYPE_CLASS_POINTER){
-				//Emit the constant size
-				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->pointer_type->points_to->type_size, type_symtab);
-				//Now we'll make the statement
-				return emit_binary_operation_with_constant(basic_block, assignee, assignee, PLUS, constant, is_branch_ending);
+				//Let the helper deal with this
+				return handle_pointer_arithmetic(basic_block, unary_operator->unary_operator, assignee, is_branch_ending);
 			} else {
 				//We really just have an "inc" instruction here
 				return emit_inc_code(basic_block, assignee, is_branch_ending);
@@ -3030,10 +3064,8 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		} else if(unary_operator->unary_operator == MINUSMINUS){
 			//What if the assignee is a complex type(pointer, array, etc)
 			if(assignee->type->type_class == TYPE_CLASS_POINTER){
-				//Emit the constant size
-				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->pointer_type->points_to->type_size, type_symtab);
-				//Now we'll make the statement
-				return emit_binary_operation_with_constant(basic_block, assignee, assignee, MINUS, constant, is_branch_ending);
+				//Let the helper deal with this
+				return handle_pointer_arithmetic(basic_block, unary_operator->unary_operator, assignee, is_branch_ending);
 			} else {
 				//We really just have an "inc" instruction here
 				return emit_dec_code(basic_block, assignee, is_branch_ending);
@@ -3089,6 +3121,20 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 
 			//We will emit the negation code here
 			return emit_neg_stmt_code(basic_block, assnment->assignee, use_temp, is_branch_ending);
+
+		/**
+		 * Address operator
+		 *
+		 * TODO: only assignment for now
+		 */
+		} else if (unary_operator->unary_operator == SINGLE_AND){
+			//We'll need to assign to a temp here, these are
+			//only ever on the RHS
+			instruction_t* assnment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+			add_statement(basic_block, assnment);
+
+			return assnment->assignee;
 		}
 
 		//FOR NOW ONLY
