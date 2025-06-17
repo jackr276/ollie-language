@@ -66,7 +66,7 @@ int main(int argc, char** argv){
 			//We could have chaining here, so run through just in case
 			while(record != NULL){
 					//Emit the variable
-					three_addr_var_t* var = emit_var(record, FALSE);
+					three_addr_var_t* var = emit_var(record, record->type_defined_as, FALSE);
 				
 					//Store for later
 					dynamic_array_add(array_of_vars, var);
