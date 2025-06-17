@@ -8,8 +8,9 @@ fn main(argc:i32, argv:char**) -> i32 {
 	let mut y:i32* := &x;
 
 	x := x - 3;
+	y++;
 
-	y := --y;
+	y := y -2;
 
 	ret *y;
 }

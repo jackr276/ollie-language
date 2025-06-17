@@ -2156,6 +2156,42 @@ static void rename_all_variables(cfg_t* cfg){
 
 
 /**
+ * Emit a pointer arithmetic statement that can arise from either a ++ or -- on a pointer
+ */
+static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
+	//Emit the constant size
+	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->pointer_type->points_to->type_size, type_symtab);
+
+	//We need this temp assignment for bookkeeping reasons
+	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+	temp_assignment->is_branch_ending = is_branch_ending;
+
+	//Add this to the block
+	add_statement(basic_block, temp_assignment);
+
+	//Decide what the op is
+	Token op = operator == PLUSPLUS ? PLUS : MINUS;
+
+	//We need to emit a temp assignment for the assignee
+	instruction_t* operation = emit_binary_operation_with_const_instruction(emit_temp_var(assignee->type), temp_assignment->assignee, op, constant);
+	operation->is_branch_ending = is_branch_ending;
+
+	//Add this to the block
+	add_statement(basic_block, operation);
+
+	//We need one final assignment
+	instruction_t* final_assignment = emit_assignment_instruction(emit_var_copy(assignee), operation->assignee);
+	final_assignment->is_branch_ending = is_branch_ending;
+
+	//And add this one in
+	add_statement(basic_block, final_assignment);
+
+	//Give back the assignee
+	return assignee;
+}
+
+
+/**
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
@@ -2754,13 +2790,23 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
 
 	//We'll now perform the actual operation
 	if(unary_operator == PLUSPLUS){
-		//Use the helper for this
-		emit_inc_code(basic_block, current_var, is_branch_ending);
+		//If we have a pointer, use the helper
+		if(current_var->type->type_class == TYPE_CLASS_POINTER){
+			handle_pointer_arithmetic(basic_block, PLUS, current_var, is_branch_ending);
+		} else {
+			//Use the helper for this
+			emit_inc_code(basic_block, current_var, is_branch_ending);
+		}
 
 	//Otherwise we know that it has to be minusminus
 	} else {
-		//Use the helper here as well
-		emit_dec_code(basic_block, current_var, is_branch_ending);
+		//If we have a pointer, use the helper
+		if(current_var->type->type_class == TYPE_CLASS_POINTER){
+			handle_pointer_arithmetic(basic_block, MINUS, current_var, is_branch_ending);
+		} else {
+			//Use the helper here as well
+			emit_dec_code(basic_block, current_var, is_branch_ending);
+		}
 	}
 
 	//This is the variable that we'll use if we make use of this after
@@ -2980,42 +3026,6 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 	} else {
 		return current_var;
 	}
-}
-
-
-/**
- * Emit a pointer arithmetic statement that can arise from either a ++ or -- on a pointer
- */
-static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
-	//Emit the constant size
-	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->pointer_type->points_to->type_size, type_symtab);
-
-	//We need this temp assignment for bookkeeping reasons
-	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-	temp_assignment->is_branch_ending = is_branch_ending;
-
-	//Add this to the block
-	add_statement(basic_block, temp_assignment);
-
-	//Decide what the op is
-	Token op = operator == PLUSPLUS ? PLUS : MINUS;
-
-	//We need to emit a temp assignment for the assignee
-	instruction_t* operation = emit_binary_operation_with_const_instruction(emit_temp_var(assignee->type), temp_assignment->assignee, op, constant);
-	operation->is_branch_ending = is_branch_ending;
-
-	//Add this to the block
-	add_statement(basic_block, operation);
-
-	//We need one final assignment
-	instruction_t* final_assignment = emit_assignment_instruction(emit_var_copy(assignee), operation->assignee);
-	final_assignment->is_branch_ending = is_branch_ending;
-
-	//And add this one in
-	add_statement(basic_block, final_assignment);
-
-	//Give back the assignee
-	return assignee;
 }
 
 
