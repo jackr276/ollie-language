@@ -14,7 +14,7 @@
  * Assemble the program by first writing it to a .s file, and then
  * assembling that file into an object file
 */
-u_int8_t assemble(cfg_t* cfg){
+u_int8_t assemble(cfg_t* cfg, char* file_name, FILE* output_file){
 
 	return FALSE;
 }

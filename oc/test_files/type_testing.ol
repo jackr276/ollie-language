@@ -1,8 +1,9 @@
-fn main(mut argc:u32) -> i32{
-	let mut a:void* := &argc;
-	let mut i:u64 := typesize(void*) + sizeof(a);
+fn main(mut argc:u32) -> i32 {
+	let mut x:u32 := 2;
+	let mut y:i32 := 3;
+	let mut k:char := 'a';
 
-	// a := a + 1 TODO BROKEN
+	let mut a:i32 := x * k ;
 
-	ret argc;
+	ret a;
 }

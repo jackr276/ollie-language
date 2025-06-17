@@ -3018,9 +3018,9 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		//Handle plus plus case
 		if(unary_operator->unary_operator == PLUSPLUS){
 			//What if the assignee is a complex type(pointer, array, etc)
-			if(assignee->type->type_class != TYPE_CLASS_BASIC){
+			if(assignee->type->type_class == TYPE_CLASS_POINTER){
 				//Emit the constant size
-				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size, type_symtab);
+				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->pointer_type->points_to->type_size, type_symtab);
 				//Now we'll make the statement
 				return emit_binary_operation_with_constant(basic_block, assignee, assignee, PLUS, constant, is_branch_ending);
 			} else {
@@ -3029,9 +3029,9 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 			}
 		} else if(unary_operator->unary_operator == MINUSMINUS){
 			//What if the assignee is a complex type(pointer, array, etc)
-			if(assignee->type->type_class != TYPE_CLASS_BASIC){
+			if(assignee->type->type_class == TYPE_CLASS_POINTER){
 				//Emit the constant size
-				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->type_size, type_symtab);
+				three_addr_const_t* constant = emit_int_constant_direct(assignee->type->pointer_type->points_to->type_size, type_symtab);
 				//Now we'll make the statement
 				return emit_binary_operation_with_constant(basic_block, assignee, assignee, MINUS, constant, is_branch_ending);
 			} else {
@@ -3067,8 +3067,6 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		 * 	sete rdx
 		 * 	movzbl %al, %rdx
 		 * for implementation
-		 *
-		 * TODO NOT DONE
 		 */
 		} else if(unary_operator->unary_operator == L_NOT){
 			return emit_logical_neg_stmt_code(basic_block, assignee, is_branch_ending);

@@ -381,6 +381,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is
 				instruction->instruction_type = DIVB;
 			}
 			break;
+
 		case WORD:
 			if(is_signed == TRUE){
 				instruction->instruction_type = IDIVW;
@@ -388,6 +389,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is
 				instruction->instruction_type = DIVW;
 			}
 			break;
+
 		case DOUBLE_WORD:
 			if(is_signed == TRUE){
 				instruction->instruction_type = IDIVL;

@@ -1491,52 +1491,21 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 		postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
 	}
 
-	/**
-	 * If we have a pointer type, we need to do some special logic
-	 */
-	if(return_type->type_class == TYPE_CLASS_POINTER){
-		//Write out our constant multplicand
-		generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
-		//Grab the constant out
-		constant_ast_node_t* const_node = constant_multiplicand->node;
-		//Mark the type too
-		const_node->constant_type = LONG_CONST;
-		//Store the increment - only one - in here
-		const_node->long_val = 1;
-		//Ensure that we give this a type
-		constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
+	//Otherwise if we get here we know that we either have post inc or dec
+	//Create the unary operator node
+	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
 
-		//Determine the operator here
-		Token op = lookahead.tok == PLUSPLUS ? PLUS : MINUS;
+	//Store the token
+	unary_post_op->unary_operator = lookahead.tok;
 
-		//Use the helper to generate the pointer arithmetic
-		generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(postfix_expr_node, op, constant_multiplicand);
+	//This will always be the last child of whatever we've built so far
+	add_child_node(postfix_expr_node, unary_post_op);
+	
+	//Add the inferred type in
+	postfix_expr_node->inferred_type = return_type;
 
-		//Save these values in the top level node
-		pointer_arithmetic->inferred_type = postfix_expr_node->inferred_type;
-		pointer_arithmetic->variable = postfix_expr_node->variable;
-
-		//And give back the pointer arithmetic node
-		return pointer_arithmetic;
-
-	} else {
-		//Otherwise if we get here we know that we either have post inc or dec
-		//Create the unary operator node
-		generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
-
-		//Store the token
-		unary_post_op->unary_operator = lookahead.tok;
-
-		//This will always be the last child of whatever we've built so far
-		add_child_node(postfix_expr_node, unary_post_op);
-		
-		//Add the inferred type in
-		postfix_expr_node->inferred_type = return_type;
-
-		//Carry through
-		postfix_expr_node->variable = result->variable;
-	}
-
+	//Carry through
+	postfix_expr_node->variable = result->variable;
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;
