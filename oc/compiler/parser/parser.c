@@ -2206,6 +2206,16 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
+		}
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2308,25 +2318,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		}
 
 		//We have a pointer here in the temp holder, and we're trying to add/subtract something to it
-		if(temp_holder->inferred_type->type_class == TYPE_CLASS_POINTER){
-			//Let's first determine if they're compatible
-			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
-
-			//If this fails, that means that we have an invalid operation
-			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
-			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child);
-
-			//Once we're done here, the right child is the pointer arithmetic
-			right_child = pointer_arithmetic;
-
-			printf("FOUND POINTER\n");
-
-		} else {
+		if(temp_holder->inferred_type->type_class != TYPE_CLASS_POINTER){
 			//Use the type compatibility function to determine compatibility and apply necessary coercions
 			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
@@ -2345,6 +2337,24 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			if(right_child->variable != NULL){
 				update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 			}
+
+		} else {
+			//Let's first determine if they're compatible
+			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+
+			//If this fails, that means that we have an invalid operation
+			if(return_type == NULL){
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
+			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child);
+
+			//Once we're done here, the right child is the pointer arithmetic
+			right_child = pointer_arithmetic;
+
+			printf("FOUND POINTER\n");
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
@@ -2453,6 +2463,16 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 
 		//The return type is always the left child's type
 		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
+		}
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
@@ -2565,6 +2585,16 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
+		}
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2668,6 +2698,16 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
+		}
+
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -2764,6 +2804,16 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		if(final_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&");
 			return print_and_return_error(info, parser_line_num);
+		}
+
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
@@ -2867,6 +2917,16 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
+		}
+
 		//We now know that the subtree root has a type of u_int8(boolean)
 		sub_tree_root->inferred_type = final_type;
 
@@ -2965,6 +3025,16 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		if(final_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "^");
 			return print_and_return_error(info, parser_line_num);
+		}
+
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
@@ -3068,6 +3138,16 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		if(return_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&&");
 			return print_and_return_error(info, parser_line_num);
+		}
+
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
 		//Give this to the root
@@ -3174,6 +3254,16 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		if(return_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "||");
 			return print_and_return_error(info, parser_line_num);
+		}
+
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
