@@ -1215,6 +1215,9 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	//Store the variable in here
 	const_access_node->variable = var_record;
 
+	//Store the type
+	const_access_node->inferred_type = var_record->type_defined_as;
+
 	//Update the current variable as well, as this is a new variable
 	current_var = var_record;
 
@@ -1298,7 +1301,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	generic_ast_node_t* array_acc_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_ACCESSOR);
 	//Add the line number
 	array_acc_node->line_number = current_line;
-	//TODO encode type info later
+
 	//The conditional expression is a child of this node
 	add_child_node(array_acc_node, expr);
 
@@ -1413,6 +1416,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 				//Otherwise we know that it must be a pointer
 				current_type = dealias_type(current_type->pointer_type->points_to);
 			}
+			
+			//The current type of any array access will be whatever the derferenced value is
+			array_acc->inferred_type = current_type;
 
 		//Otherwise we have a construct accessor
 		} else {
@@ -1442,6 +1448,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 
 			//Update the current type to be whatever came out of here
 			current_type = constr_acc->variable->type_defined_as;
+
+			//Store the type information here
+			constr_acc->inferred_type = current_type;
 
 			//Otherwise we know it's good, so we'll add it in as a child
 			add_child_node(postfix_expr_node, constr_acc);
@@ -4811,6 +4820,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 	//We'll also associate this variable with the node
 	label_stmt->variable = found;
+	label_stmt->inferred_type = label_type->type;
 
 	//Now we can get out
 	return label_stmt;
@@ -7152,6 +7162,8 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 	//Also store this record with the root node
 	decl_node->variable = declared_var;
+	//Store the type as well
+	decl_node->inferred_type = declared_var->type_defined_as;
 	//Store the line number
 	decl_node->line_number = current_line;
 

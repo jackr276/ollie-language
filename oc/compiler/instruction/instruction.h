@@ -542,7 +542,7 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
  * we are assigning to a variable, that will create a new generation of variable.
  * As such, we will pass 1 in as a flag here
 */
-three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label);
+three_addr_var_t* emit_var(symtab_variable_record_t* var, generic_type_t* type, u_int8_t is_label);
 
 /**
  * Emit a variable copied from another variable
@@ -709,7 +709,7 @@ instruction_t* emit_asm_inline_instruction(asm_inline_stmt_ast_node_t* asm_inlin
 /**
  * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
  */
-instruction_t* emit_phi_function(symtab_variable_record_t* variable);
+instruction_t* emit_phi_function(symtab_variable_record_t* variable, generic_type_t* type);
 
 /**
  * Emit an idle statement
