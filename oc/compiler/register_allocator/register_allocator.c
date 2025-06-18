@@ -1064,6 +1064,21 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 			//Hitch a ride on this traversal to do pre-coloring
 			pre_color(operation);
 
+			//Let's check to see if any pre-spilling has affected us here
+			if(operation->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
+				printf("\n\n\n\n\n\n\nMust be spilled\n");
+
+				//We'll just need to use op1's stack offset here
+				operation->offset->long_const = operation->op1->stack_offset;
+
+				printf("stack offset is %d\n", operation->op1->stack_offset);
+
+				//Make sure that we unset this flag
+				if(operation->offset->long_const != 0){
+					operation->offset->is_value_0 = FALSE;
+				}
+			}
+
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
 			if(operation->instruction_type == PHI_FUNCTION || operation->destination_register == NULL){
@@ -1427,50 +1442,6 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 
 /**
- * After we do a necessary pre-spill on a live range whose address we want, we'll
- * need to go back and fill the placeholders for where the lea statements are
- */
-static void update_address_information(cfg_t* cfg){
-	//Start at the head
-	basic_block_t* current = cfg->head_block;
-	
-	//So long as current isn't null
-	while(current != NULL){
-		//Now that we're down here, we know that current has the needed function. All we need
-		//to do now is find the memory address assignment instruction that we need to update here
-		instruction_t* current_instruction = current->leader_statement;
-
-		//So long as this isn't null
-		while(current_instruction != NULL){
-			//Keep going until we find this
-			if(current_instruction->CLASS != THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
-				current_instruction = current_instruction->next_statement;
-				continue;
-			}
-
-			printf("\n\n\n\n\n\n\nMust be spilled\n");
-
-			//We'll just need to use op1's stack offset here
-			current_instruction->offset->long_const = current_instruction->op1->stack_offset;
-
-			printf("stack offset is %d\n", current_instruction->op1->stack_offset);
-
-			//Make sure that we unset this flag
-			if(current_instruction->offset->long_const != 0){
-				current_instruction->offset->is_value_0 = FALSE;
-			}
-
-			//Now move this up
-			current_instruction = current_instruction->next_statement;
-		}
-
-		//Advance it
-		current = current->direct_successor; 
-	}
-}
-
-
-/**
  * Pre-spill any live ranges that must be spilled
  */
 static void pre_spill(cfg_t* cfg, dynamic_array_t* live_ranges) {
@@ -1487,9 +1458,6 @@ static void pre_spill(cfg_t* cfg, dynamic_array_t* live_ranges) {
 
 			//Set it to false now so we don't respill it
 			range->must_be_spilled = FALSE;
-
-			//Update the address info
-			update_address_information(cfg);
 		}
 	}
 }
