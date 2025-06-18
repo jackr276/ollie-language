@@ -8111,21 +8111,28 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Let's drill down to the very end
 		generic_ast_node_t* cursor = compound_stmt_node->first_child;
 
-		//So long as we don't see ret statements here, we keep going
-		while(cursor->next_sibling != NULL && cursor->CLASS != AST_NODE_CLASS_RET_STMT){
-			//Advance
-			cursor = cursor->next_sibling;
-		}
+		//We could have an entirely null function body
+		if(cursor != NULL){
+			//So long as we don't see ret statements here, we keep going
+			while(cursor->next_sibling != NULL && cursor->CLASS != AST_NODE_CLASS_RET_STMT){
+				//Advance
+				cursor = cursor->next_sibling;
+			}
 
-		//If we get here we know that it worked, so we'll add it in as a child
-		add_child_node(function_node, compound_stmt_node);
+			//If we get here we know that it worked, so we'll add it in as a child
+			add_child_node(function_node, compound_stmt_node);
 		
-		//We now need to check and see if our jump statements are actually valid
-		if(check_jump_labels() == FAILURE){
-			//If this fails, we fail out here too
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//We now need to check and see if our jump statements are actually valid
+			if(check_jump_labels() == FAILURE){
+				//If this fails, we fail out here too
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		} else {
+			sprintf(info, "Function %s has no body", function_record->func_name);
+			print_parse_message(WARNING, info, parser_line_num);
 		}
 
+		
 		//Finalize the variable scope for the parameter list
 		finalize_variable_scope(variable_symtab);
 

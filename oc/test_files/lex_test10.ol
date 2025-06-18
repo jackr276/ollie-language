@@ -12,6 +12,10 @@ fn unused() -> u32{
 	ret 2;
 }
 
+fn empty_func() -> void{
+
+}
+
 
 fn my_func(error_code:u32) -> u32{
 	let l:u32 := 0;

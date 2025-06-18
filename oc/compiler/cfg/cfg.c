@@ -5374,7 +5374,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 /**
  * Go through a function end block and determine/insert the ret statements that we need
  */
-static void determine_and_insert_return_statements(basic_block_t* function_exit_block){
+static void determine_and_insert_return_statements(basic_block_t* function_entry_block, basic_block_t* function_exit_block){
 	//For convenience
 	symtab_function_record_t* function_defined_in = function_exit_block->function_defined_in;
 
@@ -5382,6 +5382,11 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	for(u_int16_t i = 0; i < function_exit_block->predecessors->current_index; i++){
 		//Grab the predecessor out
 		basic_block_t* block = dynamic_array_get_at(function_exit_block->predecessors, i);
+
+		//No point in looking at this if it's null and not the function entry block
+		if(block->exit_statement == NULL && block != function_entry_block){
+			continue;
+		}
 
 		//If the exit statement is not a return statement, we need to know what's happening here
 		if(block->exit_statement == NULL || block->exit_statement->CLASS != THREE_ADDR_CODE_RET_STMT){
@@ -5430,52 +5435,41 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	//We don't care about anything until we reach the compound statement
 	generic_ast_node_t* func_cursor = function_node->first_child;
 
-	//Developer error here
-	if(func_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		print_parse_message(PARSE_ERROR, "Expected compound statement as only child to function declaration", func_cursor->line_number);
-		exit(0);
-	}
+	//It could be null, though it usually is not
+	if(func_cursor != NULL){
+		//Package the values up
+		values_package_t compound_stmt_values = pack_values(func_cursor, //Initial Node
+														NULL, //Loop statement start
+														NULL, //Exit block of loop
+														NULL); //For loop update block
 
-	//Package the values up
-	values_package_t compound_stmt_values = pack_values(func_cursor, //Initial Node
-											 		NULL, //Loop statement start
-											 		NULL, //Exit block of loop
-											 		NULL); //For loop update block
+		//Once we get here, we know that func cursor is the compound statement that we want
+		basic_block_t* compound_stmt_block = visit_compound_statement(&compound_stmt_values);
 
-	//Once we get here, we know that func cursor is the compound statement that we want
-	basic_block_t* compound_stmt_block = visit_compound_statement(&compound_stmt_values);
-
-	//If this compound statement is NULL(which is possible) we just add the starting and ending
-	//blocks as successors
-	if(compound_stmt_block == NULL){
-		//We'll also throw a warning
-		sprintf(error_info, "Function \"%s\" was given no body", function_node->func_record->func_name);
-		print_cfg_message(WARNING, error_info, func_cursor->line_number);
-		//One more warning
-		(*num_warnings_ref)++;
-
-	//Otherwise we merge them
-	} else {
 		//Once we're done with the compound statement, we will merge it into the function
 		merge_blocks(function_starting_block, compound_stmt_block);
-		//add_successor(function_starting_block, compound_stmt_block);
+
+		//Let's see if we actually made it all the way through and found a return
+		basic_block_t* compound_stmt_cursor = function_starting_block;
+
+		//Until we hit the end
+		while(compound_stmt_cursor->direct_successor != NULL){
+			compound_stmt_cursor = compound_stmt_cursor->direct_successor;
+		}
+
+		//We will mark that this end here has a direct successor in the function exit block
+		add_successor(compound_stmt_cursor, function_exit_block);
+		//Ensure that it's the direct successor
+		compound_stmt_cursor->direct_successor = function_exit_block;
+	
+	//Otherwise we'll just connect the exit and entry
+	} else {
+		add_successor(function_starting_block, function_exit_block);
+		function_starting_block->direct_successor = function_exit_block;
 	}
-
-	//Let's see if we actually made it all the way through and found a return
-	basic_block_t* compound_stmt_cursor = function_starting_block;
-
-	//Until we hit the end
-	while(compound_stmt_cursor->direct_successor != NULL){
-		compound_stmt_cursor = compound_stmt_cursor->direct_successor;
-	}
-
-	//We will mark that this end here has a direct successor in the function exit block
-	add_successor(compound_stmt_cursor, function_exit_block);
-	//Ensure that it's the direct successor
-	compound_stmt_cursor->direct_successor = function_exit_block;
 
 	//Determine and insert any needed ret statements
-	determine_and_insert_return_statements(function_exit_block);
+	determine_and_insert_return_statements(function_starting_block, function_exit_block);
 
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
