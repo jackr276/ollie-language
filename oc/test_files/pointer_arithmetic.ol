@@ -10,7 +10,9 @@ fn main(argc:i32, argv:char**) -> i32 {
 	x := x - 3;
 	y++;
 
-	y := y -2;
+	x := 2 + *y;
+
+	*y := 32;
 
 	ret *y;
 }

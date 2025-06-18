@@ -2630,6 +2630,32 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 
 
 /**
+ * Emit a pointer indirection code
+ */
+static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, three_addr_var_t* assignee){
+	//No actual code here, we are just accessing this guy's memory
+	//Create a new variable with an indirection level
+	three_addr_var_t* indirect_var = emit_var_copy(assignee);
+
+	//This will count as live if we read from it
+	if(indirect_var->is_temporary == FALSE){
+		add_used_variable(basic_block, indirect_var);
+	}
+
+	//Increment the indirection
+	indirect_var->indirection_level++;
+	//Temp or not same deal
+	indirect_var->is_temporary = assignee->is_temporary;
+
+	//Store the dereferenced type
+	indirect_var->type = assignee->type->pointer_type->points_to;
+
+	//And get out
+	return indirect_var;
+}
+
+
+/**
  * Emit a bitwise not statement 
  */
 static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, temp_selection_t use_temp, u_int8_t is_branch_ending){
@@ -3083,17 +3109,21 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		//Dereferencing here. If we're on the lefthand side of an equation,
 		//we need to emit a temp var
 		} else if (unary_operator->unary_operator == STAR){
+			printf("HERE\n\n\n\n");
 			//Get the dereferenced variable
-			three_addr_var_t* dereferenced = emit_mem_code(basic_block, assignee);
+			three_addr_var_t* dereferenced = emit_pointer_indirection(basic_block, assignee);
 
 			//If we're on the right hand side, we need to have a temp assignment
 			if(side == SIDE_TYPE_RIGHT){
 				//Emit the temp assignment
-				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type->pointer_type->points_to), dereferenced);
+				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+
 				//Add it in
 				add_statement(basic_block, temp_assignment);
+
 				//Return the assignee of this
 				return temp_assignment->assignee;
+
 			//Otherwise just give back what we had
 			} else {
 				return dereferenced;
