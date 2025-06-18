@@ -444,7 +444,7 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 	}
 
 	//If this needs to be spilled, then the whole live range needs to be spilled
-	if(variable->must_be_spilled == TRUE){
+	if(variable->linked_var != NULL && variable->linked_var->must_be_spilled == TRUE){
 		live_range->must_be_spilled = TRUE;
 	}
 
@@ -1427,6 +1427,50 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 
 /**
+ * After we do a necessary pre-spill on a live range whose address we want, we'll
+ * need to go back and fill the placeholders for where the lea statements are
+ */
+static void update_address_information(cfg_t* cfg){
+	//Start at the head
+	basic_block_t* current = cfg->head_block;
+	
+	//So long as current isn't null
+	while(current != NULL){
+		//Now that we're down here, we know that current has the needed function. All we need
+		//to do now is find the memory address assignment instruction that we need to update here
+		instruction_t* current_instruction = current->leader_statement;
+
+		//So long as this isn't null
+		while(current_instruction != NULL){
+			//Keep going until we find this
+			if(current_instruction->CLASS != THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
+				current_instruction = current_instruction->next_statement;
+				continue;
+			}
+
+			printf("\n\n\n\n\n\n\nMust be spilled\n");
+
+			//We'll just need to use op1's stack offset here
+			current_instruction->offset->long_const = current_instruction->op1->stack_offset;
+
+			printf("stack offset is %d\n", current_instruction->op1->stack_offset);
+
+			//Make sure that we unset this flag
+			if(current_instruction->offset->long_const != 0){
+				current_instruction->offset->is_value_0 = FALSE;
+			}
+
+			//Now move this up
+			current_instruction = current_instruction->next_statement;
+		}
+
+		//Advance it
+		current = current->direct_successor; 
+	}
+}
+
+
+/**
  * Pre-spill any live ranges that must be spilled
  */
 static void pre_spill(cfg_t* cfg, dynamic_array_t* live_ranges) {
@@ -1443,6 +1487,9 @@ static void pre_spill(cfg_t* cfg, dynamic_array_t* live_ranges) {
 
 			//Set it to false now so we don't respill it
 			range->must_be_spilled = FALSE;
+
+			//Update the address info
+			update_address_information(cfg);
 		}
 	}
 }

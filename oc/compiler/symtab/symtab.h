@@ -165,6 +165,8 @@ struct symtab_variable_record_t{
 	u_int8_t is_label;
 	//Is this a global variable?
 	u_int8_t is_global;
+	//Does this need to be spilled
+	u_int8_t must_be_spilled;
 	//Is this variable ever required, or considered live, by a basic block?
 	u_int8_t has_ever_been_live;
 	//What's the storage class?

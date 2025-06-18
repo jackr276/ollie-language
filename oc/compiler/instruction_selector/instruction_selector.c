@@ -1825,6 +1825,29 @@ static void handle_to_register_move_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a memory address assignment instruction. This instruction will take
+ * the form of a lea statement, where the stack pointer is the first operand
+ */
+static void handle_address_assignment_instruction(instruction_t* instruction, type_symtab_t* symtab, three_addr_var_t* stack_pointer){
+	//Always a leaq, we are dealing with addresses
+	instruction->instruction_type = LEAQ;
+
+	//The destination is the assignee
+	instruction->destination_register = instruction->assignee;
+
+	//The first address calculation register is the stack pointer
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//This is just a placeholder for now - it will be occupied later on
+	three_addr_const_t* constant = emit_long_constant_direct(0, symtab);
+	instruction->offset = constant;
+
+	//This will print out with the offset only
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+}
+
+
+/**
  * Handle a lea statement(in the three address code statement form)
  *
  * Lea statements(by the time we get here..) have the following in them:
@@ -2593,6 +2616,9 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 			case THREE_ADDR_CODE_ASSN_STMT:
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
 				handle_to_register_move_instruction(current);
+				break;
+			case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
+				handle_address_assignment_instruction(current, cfg->type_symtab, cfg->stack_pointer);
 				break;
 			case THREE_ADDR_CODE_LEA_STMT:
 				handle_lea_statement(current);

@@ -3172,7 +3172,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 			assnment->is_branch_ending = is_branch_ending;
 
 			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
-			assignee->must_be_spilled = TRUE;
+			assignee->linked_var->must_be_spilled = TRUE;
 
 			//Add this into the block
 			add_statement(basic_block, assnment);
