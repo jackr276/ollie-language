@@ -1087,6 +1087,13 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 		printf(" <- ");
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
+	//Assigning a memory address to a variable
+	} else if (stmt->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
+		//We'll print out the left and right ones here
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+		printf(" <- Memory Address of ");
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+		printf("\n");
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//First print out the assignee
 		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
@@ -2755,6 +2762,24 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 
 	//Let's now populate it with values
 	stmt->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll just leave our now
+	return stmt;
+}
+
+
+/**
+ * Emit a memory address assignment statement
+ */
+instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	//What function are we in

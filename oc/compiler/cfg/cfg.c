@@ -3168,7 +3168,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		} else if (unary_operator->unary_operator == SINGLE_AND){
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
-			instruction_t* assnment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+			instruction_t* assnment = emit_memory_address_assignment(emit_temp_var(assignee->type), assignee);
 			assnment->is_branch_ending = is_branch_ending;
 
 			//We now need to flag that the assignee here absolutely must be spilled by the register allocator

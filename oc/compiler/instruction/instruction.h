@@ -308,9 +308,10 @@ typedef enum{
 	//A phi function - for SSA analysis only
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A memory access statement
-	THREE_ADDR_CODE_MEM_ACCESS_STMT
+	THREE_ADDR_CODE_MEM_ACCESS_STMT,
+	//An address assignment instruction for memory address
+	THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT
 } instruction_stmt_class_t;
-
 
 
 /**
@@ -617,6 +618,11 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
  * Emit a statement that only uses two vars of the form var1 <- var2
  */
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
+
+/**
+ * Emit a memory address assignment statement
+ */
+instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
