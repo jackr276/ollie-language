@@ -5372,6 +5372,36 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 
 /**
+ * Go through a function end block and determine/insert the ret statements that we need
+ */
+static void determine_and_insert_return_statements(basic_block_t* function_exit_block){
+	//For convenience
+	symtab_function_record_t* function_defined_in = function_exit_block->function_defined_in;
+
+	//Run through all of the predecessors
+	for(u_int16_t i = 0; i < function_exit_block->predecessors->current_index; i++){
+		//Grab the predecessor out
+		basic_block_t* block = dynamic_array_get_at(function_exit_block->predecessors, i);
+
+		//If the exit statement is not a return statement, we need to know what's happening here
+		if(block->exit_statement == NULL || block->exit_statement->CLASS != THREE_ADDR_CODE_RET_STMT){
+			//If this isn't void, then we need to throw a warning
+			if(function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
+				|| function_defined_in->return_type->basic_type->basic_type != VOID){
+				print_parse_message(WARNING, "Non-void function does not return in all control paths", 0);
+			}
+			
+			//We'll now manually insert the ret statement here
+			instruction_t* instruction = emit_ret_instruction(NULL);
+			
+			//We'll now add this at the very end of the block
+			add_statement(block, instruction);
+		}
+	}
+}
+
+
+/**
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
@@ -5443,6 +5473,9 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 	add_successor(compound_stmt_cursor, function_exit_block);
 	//Ensure that it's the direct successor
 	compound_stmt_cursor->direct_successor = function_exit_block;
+
+	//Determine and insert any needed ret statements
+	determine_and_insert_return_statements(function_exit_block);
 
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;

@@ -489,6 +489,11 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	//The first instruction is the leader statement
 	window.instruction1 = head->leader_statement;
 
+	//If this is null(possible but rare), just give it back
+	if(window.instruction1 == NULL){
+		return window;
+	}
+
 	//If the next one is NULL, we have 2 NULL instructions
 	//following this. This is very rare, but it could happen
 	if(window.instruction1->next_statement == NULL){

@@ -8108,36 +8108,13 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//If this function is a void return type, we need to manually insert
 		//a ret statement at the very end, if there isn't one already
-		if(strcmp(type->type_name, "void") == 0){
-			//Let's drill down to the very end
-			generic_ast_node_t* cursor = compound_stmt_node->first_child;
+		//Let's drill down to the very end
+		generic_ast_node_t* cursor = compound_stmt_node->first_child;
 
-			//So long as we don't see ret statements here, we keep going
-			while(cursor->next_sibling != NULL && cursor->CLASS != AST_NODE_CLASS_RET_STMT){
-				//Advance
-				cursor = cursor->next_sibling;
-			}
-
-			//Once we get here, we need to check and see if we have a ret stmt
-			if(cursor->CLASS != AST_NODE_CLASS_RET_STMT){
-				//Allocate a ret node - leave it blank
-				generic_ast_node_t* ret_node = ast_node_alloc(AST_NODE_CLASS_RET_STMT);
-
-				//We'll add in all of our deferred statements here too, if we have them
-				if(deferred_stmts_node != NULL){
-					//Make a clone of it
-					generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node);
-
-					//Link the ret node in
-					deferred_stmts->next_sibling = ret_node;
-
-					//Add this as the child to the compound stmt node
-					add_child_node(compound_stmt_node, deferred_stmts);
-				} else {
-					//No deferred statements here
-					add_child_node(compound_stmt_node, ast_node_alloc(AST_NODE_CLASS_RET_STMT));
-				}
-			}
+		//So long as we don't see ret statements here, we keep going
+		while(cursor->next_sibling != NULL && cursor->CLASS != AST_NODE_CLASS_RET_STMT){
+			//Advance
+			cursor = cursor->next_sibling;
 		}
 
 		//If we get here we know that it worked, so we'll add it in as a child

@@ -15,7 +15,7 @@ fn unused() -> u32{
 
 fn my_func(error_code:u32) -> u32{
 	let l:u32 := 0;
-	let a:u32 = 1;
+	let a:u32 := 1;
 	let k:u32 := 0;
 	declare struct_arr:construct my_struct[300];
 
