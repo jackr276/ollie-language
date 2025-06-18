@@ -336,6 +336,8 @@ struct live_range_t{
 	u_int8_t carries_function_param;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
+	//Does this live range need to be spilled?
+	u_int8_t must_be_spilled;
 	//What register is this live range in?
 	register_holder_t reg; 
 	//The size of the variable in the live range
@@ -377,6 +379,8 @@ struct three_addr_var_t{
 	//What is the parameter number of this var? Used for parameter passing. If
 	//it is 0, it's ignored
 	u_int8_t parameter_number;
+	//Does this need to be spilled?
+	u_int8_t must_be_spilled;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//Store the type info for faster access

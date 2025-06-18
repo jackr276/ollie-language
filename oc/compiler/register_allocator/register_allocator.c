@@ -443,6 +443,11 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 		return;
 	}
 
+	//If this needs to be spilled, then the whole live range needs to be spilled
+	if(variable->must_be_spilled == TRUE){
+		live_range->must_be_spilled = TRUE;
+	}
+
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
 
@@ -841,6 +846,7 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
 		current = current->next_statement;
 	}
 }
+
 
 
 /**
@@ -1412,7 +1418,6 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			current = current->next_statement;
 		}
 
-
 		//Advance it up
 		function_block = function_block->direct_successor;
 	}
@@ -1422,6 +1427,29 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 
 /**
+ * Pre-spill any live ranges that must be spilled
+ */
+static void pre_spill(cfg_t* cfg, dynamic_array_t* live_ranges) {
+	u_int16_t max_index = live_ranges->current_index;
+
+	//Run through and see what must be spilled
+	for(u_int16_t i = 0; i < max_index; i++){
+		//Do we need to spill this one
+		live_range_t* range = dynamic_array_get_at(live_ranges, i);
+
+		//Does this need to be spilled?
+		if(range->must_be_spilled == TRUE){
+			spill(cfg, live_ranges, range);
+
+			//Set it to false now so we don't respill it
+			range->must_be_spilled = FALSE;
+		}
+	}
+}
+
+
+/**
+ *
  * Allocate an individual register to a given live range
  *
  * We return TRUE if we were able to color, and we return false if we were not
@@ -1951,6 +1979,9 @@ void allocate_all_registers(cfg_t* cfg){
 
 	//Print whatever live ranges we did find
 	print_all_live_ranges(live_ranges);
+
+	//Pre-spill if we need to
+	pre_spill(cfg, live_ranges);
 
 	//We now need to compute all of the LIVE OUT values
 	calculate_liveness_sets(cfg);

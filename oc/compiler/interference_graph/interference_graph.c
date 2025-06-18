@@ -190,6 +190,11 @@ u_int8_t do_live_ranges_interfere(interference_graph_t* graph, live_range_t* a, 
 		return TRUE;
 	}
 
+	//If either of these need to be spilled, then they interfere
+	if(a->must_be_spilled == TRUE || b->must_be_spilled == TRUE){
+		return TRUE;
+	}
+
 	//If they have differing sizes we cannot coalesce
 	if(a->size != b->size){
 		return TRUE;
