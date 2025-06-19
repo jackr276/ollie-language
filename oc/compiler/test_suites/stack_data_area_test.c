@@ -56,8 +56,8 @@ int main(int argc, char** argv){
 	dynamic_array_t* array_of_vars = dynamic_array_alloc();
 
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < results.variable_symtab->num_sheafs; i++){
-		cursor = results.variable_symtab->sheafs[i];
+	for	(u_int16_t i = 0; i < results.variable_symtab->sheafs->current_index; i++){
+		cursor = dynamic_array_get_at(results.variable_symtab->sheafs, i);
 
 		//Look for anything in the records that is an array
 		for(u_int16_t j = 0; j < KEYSPACE; j++){

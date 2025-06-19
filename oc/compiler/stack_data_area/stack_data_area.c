@@ -298,6 +298,9 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 		//This offset is now nothing - it's at the bottom
 		current->previous->offset = 0;
 
+		//Update this one's variable too
+		((three_addr_var_t*)(current->previous->variable))->stack_offset = 0;
+
 		//Now redo all of our offsets
 		recalculate_all_offsets(area, current->previous);
 
