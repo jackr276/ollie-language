@@ -17,6 +17,10 @@
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
 
+//For standardization across all modules
+#define TRUE 1
+#define FALSE 0
+
 //The number of errors and warnings
 u_int32_t num_errors;
 u_int32_t num_warnings;
@@ -32,8 +36,9 @@ u_int32_t num_warnings;
  *  level-order traversal and compile in that order
  */
 static void compile(char* fname, front_end_results_package_t* results){
-	//For errors
+	//For any/all error printing
 	char info[2000];
+	//For errors
 	//These are all NULL initially
 	results->constant_symtab = NULL;
 	results->function_symtab = NULL;
@@ -84,9 +89,6 @@ int main(int argc, char** argv){
 	double time_spent;
 	//By default, we assume that we've errored
 	ast_node_class_t CLASS = AST_NODE_CLASS_ERR_NODE;
-
-	//We'll be giving summaries for the user as we go
-	fprintf(stderr, "==================================== Ollie Compiler ======================================\n");
 
 	//Display the filename for now
 	fprintf(stdout, "INPUT FILE: %s\n\n", argv[1]);

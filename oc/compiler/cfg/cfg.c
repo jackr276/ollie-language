@@ -2630,9 +2630,10 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 
 
 /**
- * Emit a pointer indirection code
+ * Emit a pointer indirection statement. The parser has already done the dereferencing for us, so we'll just
+ * be able to store the dereferenced type in here
  */
-static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, three_addr_var_t* assignee){
+static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, three_addr_var_t* assignee, generic_type_t* dereferenced_type){
 	//No actual code here, we are just accessing this guy's memory
 	//Create a new variable with an indirection level
 	three_addr_var_t* indirect_var = emit_var_copy(assignee);
@@ -2648,7 +2649,7 @@ static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, th
 	indirect_var->is_temporary = assignee->is_temporary;
 
 	//Store the dereferenced type
-	indirect_var->type = assignee->type->pointer_type->points_to;
+	indirect_var->type = dereferenced_type;
 
 	//And get out
 	return indirect_var;
@@ -3110,7 +3111,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		//we need to emit a temp var
 		} else if (unary_operator->unary_operator == STAR){
 			//Get the dereferenced variable
-			three_addr_var_t* dereferenced = emit_pointer_indirection(basic_block, assignee);
+			three_addr_var_t* dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expr_parent->inferred_type);
 
 			//If we're on the right hand side, we need to have a temp assignment
 			if(side == SIDE_TYPE_RIGHT){
