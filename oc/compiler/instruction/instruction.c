@@ -1439,9 +1439,7 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
 
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
 			//Only print this if it's not 0
-			if(instruction->offset->is_value_0 == FALSE){
-				print_immediate_value_no_prefix(instruction->offset);
-			}
+			print_immediate_value_no_prefix(instruction->offset);
 			printf("(");
 			print_variable(instruction->address_calc_reg1, mode);
 			printf(")");
@@ -1457,9 +1455,7 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
 			//Only print this if it's not 0
-			if(instruction->offset->is_value_0 == FALSE){
-				print_immediate_value_no_prefix(instruction->offset);
-			}
+			print_immediate_value_no_prefix(instruction->offset);
 			printf("(");
 			print_variable(instruction->address_calc_reg1, mode);
 			printf(", ");
@@ -1469,9 +1465,7 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
 		//Only print this if it's not 0
-			if(instruction->offset->is_value_0 == FALSE){
-				print_immediate_value_no_prefix(instruction->offset);
-			}
+			print_immediate_value_no_prefix(instruction->offset);
 			printf("(");
 			print_variable(instruction->address_calc_reg1, mode);
 			printf(", ");

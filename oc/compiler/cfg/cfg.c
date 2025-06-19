@@ -3109,7 +3109,6 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		//Dereferencing here. If we're on the lefthand side of an equation,
 		//we need to emit a temp var
 		} else if (unary_operator->unary_operator == STAR){
-			printf("HERE\n\n\n\n");
 			//Get the dereferenced variable
 			three_addr_var_t* dereferenced = emit_pointer_indirection(basic_block, assignee);
 
@@ -3168,7 +3167,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		} else if (unary_operator->unary_operator == SINGLE_AND){
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
-			instruction_t* assnment = emit_memory_address_assignment(emit_temp_var(assignee->type), assignee);
+			instruction_t* assnment = emit_memory_address_assignment(emit_temp_var(unary_expr_parent->inferred_type), assignee);
 			assnment->is_branch_ending = is_branch_ending;
 
 			//We now need to flag that the assignee here absolutely must be spilled by the register allocator

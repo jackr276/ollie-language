@@ -1971,6 +1971,8 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 	//Store the type that we have here
 	unary_node->inferred_type = return_type;
+	//Store this down the chain as well
+	unary_node->inferred_type = return_type;
 	//Store the line number
 	unary_node->line_number = parser_line_num;
 	//Store the variable
