@@ -9,6 +9,16 @@ define construct my_struct{
 
 	} as my_struct;
 
+
+fn construct_pointer_arrays(arg:i32) -> i64 {
+	//An array of structure pointers
+	declare mut arr:my_struct*[232];
+
+	arr[2]=>x := 32;
+
+}
+
+
 fn not_main(arg:i32, argv:char**) -> i64 {
 	//Stack allocate a structure
 	declare mut structure:my_struct;

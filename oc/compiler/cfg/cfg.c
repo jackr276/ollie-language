@@ -2978,6 +2978,17 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//Remember - when we get here, current var will hold the base address of the construct
 			//If current var is a pointer, then we need to dereference it to get the actual construct type	
 			if(current_type->type_class == TYPE_CLASS_POINTER){
+				//We need to first dereference this
+				three_addr_var_t* dereferenced = emit_pointer_indirection(basic_block, current_var, current_type->pointer_type->points_to);
+
+				//Assign temp to be the current address
+				instruction_t* assnment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+				add_statement(basic_block, assnment);
+
+				//Reassign what current address really is
+				current_address = assnment->assignee;
+
+				//Dereference the current type
 				current_type = current_type->pointer_type->points_to;
 			}
 
