@@ -2885,7 +2885,6 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 	//So long as we're hitting arrays or constructs, we need to be memory conscious
 	while(cursor != NULL &&
 		(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR)){
-
 		//First of two potentialities is the array accessor
 		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
@@ -2977,6 +2976,10 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			symtab_variable_record_t* var = cursor->variable;
 
 			//Remember - when we get here, current var will hold the base address of the construct
+			//If current var is a pointer, then we need to dereference it to get the actual construct type	
+			if(current_type->type_class == TYPE_CLASS_POINTER){
+				current_type = current_type->pointer_type->points_to;
+			}
 
 			//Now we'll grab the associated construct record
 			constructed_type_field_t* field = get_construct_member(current_type->construct_type, var->var_name);

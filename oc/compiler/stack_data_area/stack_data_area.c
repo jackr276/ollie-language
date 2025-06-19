@@ -11,6 +11,33 @@
 #include <sys/types.h>
 #include "../instruction/instruction.h"
 
+//For standardization across all modules
+#define TRUE 1
+#define FALSE 0
+
+
+/**
+ * Does the stack already contain this variable? This is important for types like
+ * constructs and arrays
+ */
+static u_int8_t does_stack_contain_variable(stack_data_area_t* area, three_addr_var_t* var){
+	//Grab the highest node out
+	stack_data_area_node_t* node = area->highest;
+
+	//So long as this isn't null
+	while(node != NULL){
+		//If they're equal give back true
+		if(node->variable == var){
+			return TRUE;
+		}
+
+		//Go down the list
+		node = node->next;
+	}
+
+	return FALSE;
+}
+
 
 /**
  * Whenever we delete or insert something, we'll need to recompute all of the offsets
@@ -177,6 +204,12 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 void add_spilled_variable_to_stack(stack_data_area_t* area, void* variable){
 	//We already know it's one of these
 	three_addr_var_t* var = variable;
+
+	if(does_stack_contain_variable(area, var) == TRUE){
+		return;
+	}
+
+	
 
 	//First, let's create what we'll use to store this 
 	stack_data_area_node_t* node = calloc(1, sizeof(stack_data_area_node_t));
