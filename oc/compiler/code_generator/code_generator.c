@@ -16,7 +16,7 @@ void generate_assembly_code(cfg_t* cfg){
 	printf("=============================== Instruction Selection ==================================\n");
 
 	printf("=============================== Register Allocation ====================================\n");
-	allocate_all_registers(cfg);
+	//allocate_all_registers(cfg);
 	printf("=============================== Register Allocation  ===================================\n");
 
 }
