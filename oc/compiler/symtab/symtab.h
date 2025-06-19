@@ -14,6 +14,7 @@
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
 #include "../stack/lightstack.h"
+#include "../dynamic_array/dynamic_array.h"
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
@@ -21,8 +22,6 @@
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
 #define KEYSPACE 997
-//By default we have 100 sheafs. Sheafs are dynamically resizable however
-#define MAX_SHEAFS 50
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
 
@@ -244,14 +243,10 @@ struct symtab_type_sheaf_t{
  * This struct represents the overall collection of the sheafs of symtabs
  */
 struct variable_symtab_t{
-	//A global storage array for all symtab "sheaths"
-	symtab_variable_sheaf_t** sheafs;
+	//Dynamic array of sheafs
+	dynamic_array_t* sheafs;
 	//The current symtab sheaf
 	symtab_variable_sheaf_t* current;
-	//The number of sheafs that we currently have
-	u_int16_t num_sheafs;
-	//The current maximum number of sheafs
-	u_int16_t max_sheafs;
 	//The current lexical scope
 	u_int16_t current_lexical_scope;
 };
@@ -261,14 +256,10 @@ struct variable_symtab_t{
  * This struct represents the overall collection of the sheafs of symtabs
  */
 struct type_symtab_t{
-	//A global storage array for all symtab "sheaths"
-	symtab_type_sheaf_t** sheafs;
+	//Dynamic array of sheafs
+	dynamic_array_t* sheafs;
 	//The current symtab sheaf
 	symtab_type_sheaf_t* current;
-	//The number of sheafs that we currently have
-	u_int16_t num_sheafs;
-	//The current maximum number of sheafs
-	u_int16_t max_sheafs;
 	//The current lexical scope
 	u_int16_t current_lexical_scope;
 };

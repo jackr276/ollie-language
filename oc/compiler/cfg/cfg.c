@@ -1836,9 +1836,9 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	// FIRST STEP: FOR EACH variable we have
 	//------------------------------------------
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < var_symtab->num_sheafs; i++){
+	for	(u_int16_t i = 0; i < var_symtab->sheafs->current_index; i++){
 		//Grab the current sheaf
-		sheaf_cursor = var_symtab->sheafs[i];
+		sheaf_cursor = dynamic_array_get_at(var_symtab->sheafs, i);
 
 		//Now we'll free all non-null records
 		for(u_int16_t j = 0; j < KEYSPACE; j++){

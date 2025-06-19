@@ -2541,7 +2541,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
 
 		//This is our fail case
-		if(is_temp_holder_valid == FALSE){
+		if(is_right_child_valid == FALSE){
 			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, op.lexeme); 
 			return print_and_return_error(info, parser_line_num);
 		}
