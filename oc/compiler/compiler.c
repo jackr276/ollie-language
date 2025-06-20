@@ -16,6 +16,7 @@
 #include "cfg/cfg.h"
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
+#include "type_system/type_system.h"
 
 //For standardization across all modules
 #define TRUE 1
@@ -25,6 +26,61 @@
 u_int32_t num_errors;
 u_int32_t num_warnings;
 
+
+/**
+ * A help printer function for users of the compiler
+ */
+static void print_help(){
+
+}
+
+
+
+/**
+ * We'll use this helper function to process the compiler flags and return a structure that
+ * tells us what we need to do throughout the compiler
+ */
+static compiler_options_t* parse_and_store_options(int argc, char** argv){
+	//Allocate it
+	compiler_options_t* options = calloc(1, sizeof(compiler_options_t));
+	
+	//For storing our opt
+	int opt;
+
+	while((opt = getopt(argc, argv, "hf:o:?")) != -1){
+		//Switch based on opt
+		switch(opt){
+			//Invalid option
+			case '?':
+				printf("Invalid option: %c\n", optopt);
+				print_help();
+				exit(0);
+			//After we print help we exit
+			case 'h':
+				print_help();
+				exit(0);
+			//Store the input file name
+			case 'f':
+				options->file_name = optarg;
+				printf("%s\n\n", options->file_name);
+				break;
+			case 'o':
+				options->output_file = optarg;
+				break;
+		}
+	}
+
+	//This is an error, so we'll fail out here
+	if(options->file_name == NULL){
+		printf("[COMPILER ERROR]: No input file name provided. Use -f <filename> to specify a .ol source file\n");
+		exit(1);
+	}
+
+	//Now using the getopt function, we will run through and store our options
+	
+
+	return options;
+}
 
 /**
  *	Compile an individual file. This function can be recursively called to deal 
@@ -90,24 +146,16 @@ int main(int argc, char** argv){
 	//By default, we assume that we've errored
 	ast_node_class_t CLASS = AST_NODE_CLASS_ERR_NODE;
 
-	//Display the filename for now
-	fprintf(stdout, "INPUT FILE: %s\n\n", argv[1]);
-
-	//Just hop out here
-	if(argc < 2){
-		fprintf(stderr, "Ollie compiler requires a filename to be passed in\n");
-		goto final_printout; 
-	}
+	//Let the helper run through and store all of our options. This will
+	//also error out if any options are bad
+	compiler_options_t* options = parse_and_store_options(argc, argv);
 
 	//Start the timer
 	clock_t begin = clock();
 
-	//Grab whatever this file is
-	char* fname = argv[1];
-
 	//Call the compiler, let this handle it
 	front_end_results_package_t results;
-	compile(fname, &results);
+	compile(options->file_name, &results);
 
 	//If the AST root is bad, there's no use in going on here
 	if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -176,5 +224,4 @@ int main(int argc, char** argv){
 	}
 
 	printf("==========================================================================================\n\n");
-	// ========================================================
 }

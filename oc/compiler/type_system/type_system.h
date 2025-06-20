@@ -37,6 +37,32 @@ typedef struct constructed_type_t constructed_type_t;
 typedef struct constructed_type_field_t constructed_type_field_t;
 //An aliased type
 typedef struct aliased_type_t aliased_type_t;
+//Compiler option type
+typedef struct compiler_options_t compiler_options_t;
+
+
+/**
+ * Define an enum that stores all compiler options.
+ * This struct will be used throughout the compiler
+ * to tell us what to print out
+ */
+struct compiler_options_t {
+	//The name of the file(-f)
+	char* file_name;
+	//The name of the output file(-o )
+	char* output_file;
+	//Do we want to skip outputting
+	//to assembly? (--skip-output)
+	u_int8_t skip_output;
+	//Enable all debug printing (--debug-print)
+	u_int8_t enable_debug_printing;
+	//Print out summary? (--show-summary)
+	u_int8_t show_summary;
+	//Print help
+	u_int8_t print_help;
+	//TODO may add more
+};
+
 
 //A type for which side we're on
 typedef enum{
