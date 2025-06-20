@@ -297,7 +297,7 @@ front_test: front_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -f
 
 middle_test: middle_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -f
 
 compiler_test: oc
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/oc -f
@@ -455,7 +455,7 @@ front_test-CI: front_end_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test -f
 
 middle_test-CI: middle_end_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test -f
 
 compiler_test-CI: oc-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -f
