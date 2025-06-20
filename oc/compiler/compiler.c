@@ -52,7 +52,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt(argc, argv, "atdhsf:o:?")) != -1){
+	while((opt = getopt(argc, argv, "a@tdhsf:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option
@@ -67,6 +67,10 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			//Time execution for performance test
 			case 't':
 				options->time_execution = TRUE;
+				break;
+			//Flag that this is a test run
+			case '@':
+				options->is_test_run = TRUE;
 				break;
 			//Store the input file name
 			case 'f':
@@ -112,15 +116,15 @@ static void print_summary(compiler_options_t* options, double time_spent, u_int3
 
 	//Show a success
 	if(success == TRUE){
-		sprintf(info, "Ollie compiler successfully compiled %s with %d warnings\n", options->file_name, num_warnings);
+		sprintf(info, "Ollie compiler successfully compiled %s with %d warnings", options->file_name, num_warnings);
 	} else {
-		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", num_errors, num_warnings, time_spent);
+		sprintf(info, "Parsing failed with %d errors and %d warnings", num_errors, num_warnings);
 	}
 
 	printf("============================================= SUMMARY =======================================\n");
 	printf("Lexer processed %d lines\n", lines_processed);
 	if(options->time_execution == TRUE){
-		printf("Compilation took %.5f seconds\n", time_spent);
+		printf("Compilation took %.8f seconds\n", time_spent);
 	}
 	printf("%s\n", info);
 	printf("=============================================================================================\n");
@@ -135,6 +139,11 @@ static void print_summary(compiler_options_t* options, double time_spent, u_int3
 static u_int8_t compile(compiler_options_t* options){
 	//For any/all error printing
 	char info[2000];
+
+	//Print out the file name if we're debug printing
+	if(options->enable_debug_printing == TRUE){
+		printf("Compiling source file: %s\n\n\n", options->file_name);
+	}
 
 	//Timer vars if we want to time things
 	double time_spent = 0;
@@ -162,12 +171,18 @@ static u_int8_t compile(compiler_options_t* options){
 		//Crude time calculation
 		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 
+		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, TRUE);
+			print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, FALSE);
 		}
 
-		//Generic failure
-		return 1;
+		//If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
+		//is not, we'll return 1 to show the error
+		if(options->is_test_run == TRUE){
+			return 0;
+		} else {
+			return 1;
+		}
 	}
 
 	//Now we'll build the cfg using our results
@@ -204,6 +219,7 @@ static u_int8_t compile(compiler_options_t* options){
 		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 	}
 
+	//Show the summary if we need to
 	if(options->show_summary == TRUE){
 		print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, TRUE);
 	}
@@ -219,6 +235,10 @@ static u_int8_t compile(compiler_options_t* options){
 	variable_symtab_dealloc(results->variable_symtab);
 	constants_symtab_dealloc(results->constant_symtab);
 	dealloc_cfg(cfg);
+
+	//Destroy the options array
+	free(options);
+	free(results);
 
 	//Return 0 for success
 	return 0;

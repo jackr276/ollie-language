@@ -300,7 +300,7 @@ middle_test: middle_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -f
 
 compiler_test: oc
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/oc -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/oc -@ -s -t -d -f
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
@@ -458,7 +458,7 @@ middle_test-CI: middle_end_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test -f
 
 compiler_test-CI: oc-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -d -f
 
 array_test-CI: dynamic_array_test-CI
 	$(OUT_CI)/dynamic_array_test

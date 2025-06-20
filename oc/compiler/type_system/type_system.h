@@ -62,7 +62,8 @@ struct compiler_options_t {
 	u_int8_t go_to_assembly; 
 	//Time execution for performance testing
 	u_int8_t time_execution;
-	//TODO may add more
+	//Is this a CI run?
+	u_int8_t is_test_run;
 };
 
 
