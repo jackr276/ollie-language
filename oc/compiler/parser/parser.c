@@ -7824,6 +7824,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		function_record->call_graph_node = create_call_graph_node(function_record);
 		//By default, this function has never been called
 		function_record->called = 0;
+		//Copy the module it was defined in
+		strncpy(function_record->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -8446,6 +8448,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	num_errors = 0;
 	num_warnings = 0;
 
+	//Store the current file name
+	current_file_name = options->file_name;
+
 	//Open the file up
 	FILE* fl = fopen(options->file_name, "r");
 
@@ -8491,7 +8496,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	check_for_unused_functions(function_symtab, &num_warnings);
 	//Check for any bad variable declarations
 	check_for_var_errors(variable_symtab, &num_warnings);
-
 
 	//Package up everything that we need
 	results->function_symtab = function_symtab;
