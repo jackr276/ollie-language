@@ -3213,10 +3213,14 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  *
  */
 static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
-	//The return package here
+		//The return package here
 	expr_ret_package_t package;
 	//Operator is blank by default
 	package.operator = BLANK;
+
+	//Store the left and right hand types
+	generic_type_t* left_hand_type;
+	generic_type_t* right_hand_type;
 
 	//Is the cursor a unary expression? If so just emit that. This is our base case 
 	//essentially
@@ -3232,7 +3236,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//Otherwise we actually have a binary operation of some kind
 	//Grab a cursor
 	generic_ast_node_t* cursor = logical_or_expr->first_child;
-	generic_type_t* return_type = logical_or_expr->inferred_type;
+	left_hand_type = cursor->inferred_type;
 	
 	//Emit the binary expression on the left first
 	expr_ret_package_t left_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
@@ -3243,14 +3247,13 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//	add %rax, %rbx is the same as saying %rbx = %rbx + %rax. So whatever RBX was it no longer is
 	
 	three_addr_var_t* op1;
-	three_addr_var_t* op2;
 	
 	//If this is temporary, we're fine. Otherwise emit one
 	if(left_hand_temp.assignee->is_temporary == TRUE){
 		op1 = left_hand_temp.assignee;
 	} else {
 		//emit the temp assignment
-		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(return_type), left_hand_temp.assignee);
+		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(left_hand_temp.assignee->type), left_hand_temp.assignee);
 		//Add it into here
 		add_statement(basic_block, temp_assnment);
 		
@@ -3263,37 +3266,31 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 
 	//Advance up here
 	cursor = cursor->next_sibling;
+	right_hand_type = cursor->inferred_type;
 
 	//Then grab the right hand temp
 	expr_ret_package_t right_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
-
-	//If this is temporary, we're fine. Otherwise emit one
-	if(right_hand_temp.assignee->is_temporary == TRUE){
-		op2 = right_hand_temp.assignee;
-	} else {
-		//emit the temp assignment
-		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(return_type), right_hand_temp.assignee);
-		//Add it into here
-		add_statement(basic_block, temp_assnment);
-		
-		//We can mark that op1 was used
-		add_used_variable(basic_block, right_hand_temp.assignee);
-		
-		//Grab the assignee out
-		op2 = temp_assnment->assignee;
-	}
-
 
 	//Let's see what binary operator that we have
 	Token binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
 	package.operator = binary_operator;
 
-	//Generic holder for us
-	instruction_t* stmt;
+	three_addr_var_t* op2 = right_hand_temp.assignee;
+
+	if(right_hand_temp.assignee->type != right_hand_type){
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(right_hand_type), right_hand_temp.assignee);
+
+		add_statement(basic_block, temp_assignment);
+		//add_used_variable(basic_block, right_hand_temp.assignee);
+
+		op2 = temp_assignment->assignee;
+
+		printf("TYPE MISMATCH\n");
+	}
 
 	//Emit the binary operator expression using our helper
-	stmt = emit_binary_operation_instruction(op1, op1, binary_operator, op2);
+	instruction_t* stmt = emit_binary_operation_instruction(op1, op1, binary_operator, op2);
 
 	//Mark this with what we have
 	stmt->is_branch_ending = is_branch_ending;
