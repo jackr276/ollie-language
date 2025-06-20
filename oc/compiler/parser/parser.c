@@ -8440,13 +8440,24 @@ static generic_ast_node_t* program(FILE* fl){
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
-front_end_results_package_t parse(FILE* fl, char* file_name){
-	//We always reset the entire thing
-	reset_file(fl);
+front_end_results_package_t* parse(compiler_options_t* options){
+	//Initialize our results package here
+	front_end_results_package_t* results = calloc(1, sizeof(front_end_results_package_t));
 
 	//Set the number of errors here
 	num_errors = 0;
 	num_warnings = 0;
+
+	//Open the file up
+	FILE* fl = fopen(options->file_name, "r");
+
+	//Error out if it's null
+	if(fl == NULL){
+		sprintf(info, "The file %s could not be found or opened", options->file_name);
+		results->root = print_and_return_error(info, 0);
+		//Give back the results structure
+		return results;
+	}
 
 	function_symtab = function_symtab_alloc();
 	variable_symtab = variable_symtab_alloc();
@@ -8456,9 +8467,7 @@ front_end_results_package_t parse(FILE* fl, char* file_name){
 	//Initialize the OS call graph. This is because the OS always calls the main function
 	os = calloc(1, sizeof(call_graph_node_t));
 
-	//Assign the file token
-	current_file_name = file_name;
-
+	
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
 	
@@ -8485,24 +8494,25 @@ front_end_results_package_t parse(FILE* fl, char* file_name){
 	//Check for any bad variable declarations
 	check_for_var_errors(variable_symtab, &num_warnings);
 
-	//Initialize our results package here
-	front_end_results_package_t results;
 
 	//Package up everything that we need
-	results.function_symtab = function_symtab;
-	results.variable_symtab = variable_symtab;
-	results.type_symtab = type_symtab;
-	results.constant_symtab = constant_symtab;
-	results.grouping_stack = grouping_stack;
+	results->function_symtab = function_symtab;
+	results->variable_symtab = variable_symtab;
+	results->type_symtab = type_symtab;
+	results->constant_symtab = constant_symtab;
+	results->grouping_stack = grouping_stack;
 	//AST root
-	results.root = prog;
+	results->root = prog;
 	//Call graph OS root
-	results.os = os;
+	results->os = os;
 	//Record how many errors that we had
-	results.num_errors = num_errors;
-	results.num_warnings = num_warnings;
+	results->num_errors = num_errors;
+	results->num_warnings = num_warnings;
 	//How many lines did we process?
-	results.lines_processed = parser_line_num;
+	results->lines_processed = parser_line_num;
+
+	//Close the file out
+	fclose(fl);
 
 	return results;
 }

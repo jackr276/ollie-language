@@ -31,9 +31,13 @@ u_int32_t num_warnings;
  * A help printer function for users of the compiler
  */
 static void print_help(){
-
+	printf("===================================== Ollie Compiler Options =====================================\n");
+	printf("-f <filename>: Required field. Specifies the .ol source file to be compiled\n");
+	printf("-o <filename>: Optional field. Specificy the output location. If none is given, out.ol will be used\n");
+	printf("-d: Optional field. Show all debug information printed to stdout\n");
+	printf("-h: Show help\n");
+	printf("==================================================================================================\n");
 }
-
 
 
 /**
@@ -47,7 +51,8 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	//For storing our opt
 	int opt;
 
-	while((opt = getopt(argc, argv, "hf:o:?")) != -1){
+	//Run through all of our options
+	while((opt = getopt(argc, argv, "atdhfs:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option
@@ -59,11 +64,27 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			case 'h':
 				print_help();
 				exit(0);
+			//Time execution for performance test
+			case 't':
+				options->time_execution = TRUE;
+				break;
 			//Store the input file name
 			case 'f':
 				options->file_name = optarg;
-				printf("%s\n\n", options->file_name);
 				break;
+			//Turn on debug printing
+			case 'd':
+				options->enable_debug_printing = TRUE;
+				break;
+			//Output to assembly only
+			case 'a':
+				options->go_to_assembly = TRUE;
+				break;
+			//Specify that we want a summary to be shown
+			case 's':
+				options->show_summary = TRUE;
+				break;
+			//Specific output file
 			case 'o':
 				options->output_file = optarg;
 				break;
@@ -76,55 +97,53 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 		exit(1);
 	}
 
-	//Now using the getopt function, we will run through and store our options
-	
-
+	//Give back the options we got in the structure
 	return options;
 }
 
+
 /**
- *	Compile an individual file. This function can be recursively called to deal 
- *	with dependencies
- *
- *  STRATEGY: This function will first invoke the preprocessor. The preprocessor
- *  will perform dependency analysis and return a tree, rooted at the current node, 
- *  that gives us the order needed for compilation. We will then perform a reverse
- *  level-order traversal and compile in that order
+ * Print a final summary for the ollie compiler. This could show success or
+ * failure, based on what the caller wants
  */
-static void compile(char* fname, front_end_results_package_t* results){
+static void print_summary(){
+	printf("============================================= SUMMARY =======================================\n");
+
+	printf("=============================================================================================\n");
+}
+
+
+/**
+ * The compile function handles all of the compilation logic for us. Compilation
+ * in oc requires the passing of data between one module and another. This function
+ * manages that for us
+ */
+static void compile(compiler_options_t* options){
 	//For any/all error printing
 	char info[2000];
-	//For errors
-	//These are all NULL initially
-	results->constant_symtab = NULL;
-	results->function_symtab = NULL;
-	results->type_symtab = NULL;
-	results->variable_symtab = NULL;
-	results->os = NULL;
-	results->root = NULL;
-
-	//First we try to open the file
-	FILE* fl = fopen(fname, "r");
-
-	//If this is the case, we fail immediately
-	if(fl == NULL){
-		sprintf(info, "The file %s either could not be found or could not be opened", fname);
-		//Error out
-		print_parse_message(PARSE_ERROR, info, 0);
-		num_errors++;
-		return;
-	}
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
-	*results = parse(fl, fname);
+	front_end_results_package_t* results = parse(options);
 
 	//Increment these while we're here
 	num_errors += results->num_errors;
 	num_warnings += results->num_warnings;
 
-	//Now that we're done, we can close
-	fclose(fl);
+	//This is our fail case
+	if(results->root->CLASS == AST_NODE_CLASS_ERR_NODE){
+
+	}
+
+	//Now we'll build the cfg using our results
+	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
+
+	//If we're doing debug printing, then we'll print this
+	if(options->enable_debug_printing == TRUE){
+		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
+		print_all_cfg_blocks(cfg);
+		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
+	}
 
 	//Give back the results
 	return;
@@ -141,38 +160,16 @@ static void compile(char* fname, front_end_results_package_t* results){
  *  in the #dependencies block
 */
 int main(int argc, char** argv){
-	//How much time we've spent
-	double time_spent;
-	//By default, we assume that we've errored
-	ast_node_class_t CLASS = AST_NODE_CLASS_ERR_NODE;
-
 	//Let the helper run through and store all of our options. This will
 	//also error out if any options are bad
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
-	//Start the timer
-	clock_t begin = clock();
-
 	//Call the compiler, let this handle it
 	front_end_results_package_t results;
-	compile(options->file_name, &results);
+	compile(options);
 
-	//If the AST root is bad, there's no use in going on here
-	if(results.root == NULL || results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
-		goto final_printout;
-	}
-
-	//============================= Middle End =======================================
-		/**
-	 	 * The middle end is responsible for control-flow checks and optimization for the parser. The first 
-		 * part of this is the construction of the control-flow-graph
-		*/
-	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
 
 	//FOR NOW to simplify debugging
-	printf("============================================= BEFORE OPTIMIZATION =======================================\n");
-	print_all_cfg_blocks(cfg);
-	printf("============================================= BEFORE OPTIMIZATION =======================================\n");
 
 	//Now we will run the optimizer
 	cfg = optimize(cfg, results.os, 5);
@@ -212,15 +209,11 @@ int main(int argc, char** argv){
 		printf("Lexer processed %d lines\n", results.lines_processed);
 		printf("%s\n", info);
 		printf("=======================================================================\n\n");
-		//Failure here
-		results.result_type = PARSER_RESULT_FAILURE;
 	} else {
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", results.lines_processed);
 		printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
 		printf("=======================================================================\n\n");
-		//If we get here we know that we succeeded
-		results.result_type = PARSER_RESULT_SUCCESS;
 	}
 
 	printf("==========================================================================================\n\n");

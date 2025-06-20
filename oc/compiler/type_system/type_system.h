@@ -52,14 +52,16 @@ struct compiler_options_t {
 	//The name of the output file(-o )
 	char* output_file;
 	//Do we want to skip outputting
-	//to assembly? (--skip-output)
+	//to assembly? 
 	u_int8_t skip_output;
-	//Enable all debug printing (--debug-print)
+	//Enable all debug printing 
 	u_int8_t enable_debug_printing;
-	//Print out summary? (--show-summary)
+	//Print out summary? 
 	u_int8_t show_summary;
-	//Print help
-	u_int8_t print_help;
+	//Only output assembly(no .o)
+	u_int8_t go_to_assembly; 
+	//Time execution for performance testing
+	u_int8_t time_execution;
 	//TODO may add more
 };
 

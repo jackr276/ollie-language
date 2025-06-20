@@ -27,14 +27,6 @@ typedef enum {
 	INFO=2,
 } parse_message_type_t;
 
-/**
- * What is the return status of the parser
- */
-typedef enum{
-	PARSER_RESULT_SUCCESS,
-	PARSER_RESULT_FAILURE
-} parser_result_type_t;
-
 
 /**
  * A specific type of error that we can give back if needed
@@ -54,8 +46,6 @@ struct parse_message_t{
  * A struct that specifically returns the results of the compiler front-end
  */
 struct front_end_results_package_t{
-	//Success = 1, failure = 0
-	parser_result_type_t result_type;
 	//The root of the AST
 	generic_ast_node_t* root;
 	//The function, variable and type symtabs
@@ -86,6 +76,6 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 /**
  * Parse the entirety of the file. Returns 0 if successful
  */
-front_end_results_package_t parse(FILE* fl, char* file_name);
+front_end_results_package_t* parse(compiler_options_t* options);
 
 #endif /* PARSER_H */

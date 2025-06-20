@@ -167,7 +167,7 @@ struct basic_block_t{
  * Build the entire CFG from the AST. This function returns the CFG struct, which
  * always has the root block
  */
-cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings);
+cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 /**
  * Add a statement to the basic block

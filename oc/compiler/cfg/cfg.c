@@ -5686,13 +5686,13 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh, u_int8_t 
 /**
  * Build a cfg from the ground up
 */
-cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_int32_t* num_warnings){
+cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
 	//Store our references here
 	num_errors_ref = num_errors;
 	num_warnings_ref = num_warnings;
 
 	//Add this in
-	type_symtab = results.type_symtab;
+	type_symtab = results->type_symtab;
 
 	//Keep this on hand
 	u64 = lookup_type_name_only(type_symtab, "u64")->type;
@@ -5714,7 +5714,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	current_function = NULL;
 
 	//Create the stack pointer
-	stack_pointer = initialize_stack_pointer(results.variable_symtab, results.type_symtab);
+	stack_pointer = initialize_stack_pointer(results->variable_symtab, results->type_symtab);
 	//Initialize the variable to
 	stack_pointer_var = emit_var(stack_pointer, u64, FALSE);
 	//Mark it
@@ -5723,14 +5723,8 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	//Store the stack pointer
 	cfg->stack_pointer = stack_pointer_var;
 
-	//For dev use here
-	if(results.root->CLASS != AST_NODE_CLASS_PROG){
-		print_parse_message(PARSE_ERROR, "Expected prog node as first node", results.root->line_number);
-		exit(1);
-	}
-
 	// -1 block ID, this means that the whole thing failed
-	if(visit_prog_node(cfg, results.root) == FALSE){
+	if(visit_prog_node(cfg, results->root) == FALSE){
 		print_parse_message(PARSE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
@@ -5742,7 +5736,7 @@ cfg_t* build_cfg(front_end_results_package_t results, u_int32_t* num_errors, u_i
 	calculate_liveness_sets(cfg);
 
 	//Add all phi functions for SSA
-	insert_phi_functions(cfg, results.variable_symtab);
+	insert_phi_functions(cfg, results->variable_symtab);
 
 	//Rename all variables after we're done with the phi functions
 	rename_all_variables(cfg);
