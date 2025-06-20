@@ -5,6 +5,7 @@
 */
 
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
@@ -14,8 +15,73 @@
 //Link to cfg
 #include "../cfg/cfg.h"
 
+//For standardization across all modules
+#define TRUE 1
+#define FALSE 0 
+
 u_int32_t num_warnings;
 u_int32_t num_errors;
+
+
+/**
+ * We'll use this helper function to process the compiler flags and return a structure that
+ * tells us what we need to do throughout the compiler
+ */
+static compiler_options_t* parse_and_store_options(int argc, char** argv){
+	//Allocate it
+	compiler_options_t* options = calloc(1, sizeof(compiler_options_t));
+	
+	//For storing our opt
+	int opt;
+
+	//Run through all of our options
+	while((opt = getopt(argc, argv, "atdhsf:o:?")) != -1){
+		//Switch based on opt
+		switch(opt){
+			//Invalid option
+			case '?':
+				printf("Invalid option: %c\n", optopt);
+				exit(0);
+			//After we print help we exit
+			case 'h':
+				exit(0);
+			//Time execution for performance test
+			case 't':
+				options->time_execution = TRUE;
+				break;
+			//Store the input file name
+			case 'f':
+				options->file_name = optarg;
+				break;
+			//Turn on debug printing
+			case 'd':
+				options->enable_debug_printing = TRUE;
+				break;
+			//Output to assembly only
+			case 'a':
+				options->go_to_assembly = TRUE;
+				break;
+			//Specify that we want a summary to be shown
+			case 's':
+				options->show_summary = TRUE;
+				break;
+			//Specific output file
+			case 'o':
+				options->output_file = optarg;
+				break;
+		}
+	}
+
+	//This is an error, so we'll fail out here
+	if(options->file_name == NULL){
+		printf("[COMPILER ERROR]: No input file name provided. Use -f <filename> to specify a .ol source file\n");
+		exit(1);
+	}
+
+	//Give back the options we got in the structure
+	return options;
+}
+
 
 /**
  * Our main and only function
@@ -29,33 +95,17 @@ int main(int argc, char** argv){
 
 	fprintf(stderr, "==================================== FRONT END TEST ======================================\n");
 
-	//Just hop out here
-	if(argc < 2){
-		fprintf(stderr, "Ollie compiler requires a filename to be passed in\n");
-		//Jump to the very end
-		goto final_printout;
-	}
-
-	//Just for user convenience
-	fprintf(stderr, "INPUT FILE: %s\n\n", argv[1]);
-
-	//First we try to open the file
-	FILE* fl = fopen(argv[1], "r");
-
-	//If this fails, the whole thing is done
-	if(fl == NULL){
-		fprintf(stderr, "[FATAL COMPILER ERROR]: Failed to open file \"%s\"", argv[1]);
-		goto final_printout;
-	}
+	//Grab all the options using the helper
+	compiler_options_t* options = parse_and_store_options(argc, argv);
 
 	//Start the timer
 	clock_t begin = clock();
 
 	//Now that we can actually open the file, we'll parse
-	front_end_results_package_t parse_results = parse(fl, argv[1]);
+	front_end_results_package_t* parse_results = parse(options);
 
 	//Let's see what kind of results we got
-	if(parse_results.root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(parse_results->root->CLASS == AST_NODE_CLASS_ERR_NODE){
 		//Timer end
 		clock_t end = clock();
 
@@ -63,9 +113,9 @@ int main(int argc, char** argv){
 		time_spent = (double)(end - begin)/CLOCKS_PER_SEC;
 
 		char info[500];
-		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", parse_results.num_errors, parse_results.num_warnings, time_spent);
+		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", parse_results->num_errors, parse_results->num_warnings, time_spent);
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
-		printf("Lexer processed %d lines\n", parse_results.lines_processed);
+		printf("Lexer processed %d lines\n", parse_results->lines_processed);
 		printf("%s\n", info);
 		printf("=======================================================================\n\n");
 		//Jump to the end, we're done here
@@ -73,8 +123,8 @@ int main(int argc, char** argv){
 	}
 
 	//The number of warnings and errors
-	num_warnings += parse_results.num_warnings;
-	num_errors += parse_results.num_errors;
+	num_warnings += parse_results->num_warnings;
+	num_errors += parse_results->num_errors;
 
 	//Now we'll invoke the cfg builder
 	cfg_t* cfg = build_cfg(parse_results, &num_errors, &num_warnings);
@@ -85,11 +135,11 @@ int main(int argc, char** argv){
 	//Deallocate everything at the end
 	ast_dealloc();
 	//Free the call graph holder
-	free(parse_results.os);
-	function_symtab_dealloc(parse_results.function_symtab);
-	type_symtab_dealloc(parse_results.type_symtab);
-	variable_symtab_dealloc(parse_results.variable_symtab);
-	constants_symtab_dealloc(parse_results.constant_symtab);
+	free(parse_results->os);
+	function_symtab_dealloc(parse_results->function_symtab);
+	type_symtab_dealloc(parse_results->type_symtab);
+	variable_symtab_dealloc(parse_results->variable_symtab);
+	constants_symtab_dealloc(parse_results->constant_symtab);
 	dealloc_cfg(cfg);
 
 	//Now stop the clock - we want to test the deallocation overhead too
@@ -101,7 +151,7 @@ int main(int argc, char** argv){
 
 	//Print out the summary now that we're done
 	printf("\n===================== FRONT END TEST SUMMARY ==========================\n");
-	printf("Lexer processed %d lines\n", parse_results.lines_processed);
+	printf("Lexer processed %d lines\n", parse_results->lines_processed);
 	printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
 	printf("=======================================================================\n\n");
 

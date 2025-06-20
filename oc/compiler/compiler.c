@@ -52,7 +52,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt(argc, argv, "atdhfs:o:?")) != -1){
+	while((opt = getopt(argc, argv, "atdhsf:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option

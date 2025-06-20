@@ -7824,8 +7824,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		function_record->call_graph_node = create_call_graph_node(function_record);
 		//By default, this function has never been called
 		function_record->called = 0;
-		//Copy the module it was defined in
-		strncpy(function_record->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
