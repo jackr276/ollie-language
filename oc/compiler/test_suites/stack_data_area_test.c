@@ -12,34 +12,87 @@
 #include "../dynamic_array/dynamic_array.h"
 #include <stdio.h>
 #include <sys/types.h>
+#include <unistd.h>
 
+//For standardization across all modules
 #define TRUE 1
 #define FALSE 0
+
+
+/**
+ * We'll use this helper function to process the compiler flags and return a structure that
+ * tells us what we need to do throughout the compiler
+ */
+static compiler_options_t* parse_and_store_options(int argc, char** argv){
+	//Allocate it
+	compiler_options_t* options = calloc(1, sizeof(compiler_options_t));
+	
+	//For storing our opt
+	int opt;
+
+	//Run through all of our options
+	while((opt = getopt(argc, argv, "atdhsf:o:?")) != -1){
+		//Switch based on opt
+		switch(opt){
+			//Invalid option
+			case '?':
+				printf("Invalid option: %c\n", optopt);
+				exit(0);
+			//After we print help we exit
+			case 'h':
+				exit(0);
+			//Time execution for performance test
+			case 't':
+				options->time_execution = TRUE;
+				break;
+			//Store the input file name
+			case 'f':
+				options->file_name = optarg;
+				break;
+			//Turn on debug printing
+			case 'd':
+				options->enable_debug_printing = TRUE;
+				break;
+			//Output to assembly only
+			case 'a':
+				options->go_to_assembly = TRUE;
+				break;
+			//Specify that we want a summary to be shown
+			case 's':
+				options->show_summary = TRUE;
+				break;
+			//Specific output file
+			case 'o':
+				options->output_file = optarg;
+				break;
+		}
+	}
+
+	//This is an error, so we'll fail out here
+	if(options->file_name == NULL){
+		printf("[COMPILER ERROR]: No input file name provided. Use -f <filename> to specify a .ol source file\n");
+		exit(1);
+	}
+
+	//Give back the options we got in the structure
+	return options;
+}
+
+
+
 
 /**
  * We'll just have one big run through here
 */
 int main(int argc, char** argv){
-	//We bail out if this is the case
-	if(argc < 2){
-		printf("[STACK_DATA_AREA_TEST]: Fatal Error. An input file must be provided\n");
-		exit(1);
-	}
-
-	//Open the file
-	FILE* fl = fopen(argv[1], "r");
-
-	//Ensure we worked here
-	if(fl == NULL){
-		printf("[STACK_DATA_AREA_TEST]: Fatal Error. File %s could not be found or opened\n", argv[1]);
-		exit(1);
-	}
+	//Grab the compiler options
+	compiler_options_t* options = parse_and_store_options(argc, argv);
 
 	//Leverage the parser to do all of the heavy lifting
-	front_end_results_package_t results = parse(fl, argv[1]);
+	front_end_results_package_t* results = parse(options);
 
 	//Lookup our main function from here
-	symtab_function_record_t* main_function = lookup_function(results.function_symtab, "main");
+	symtab_function_record_t* main_function = lookup_function(results->function_symtab, "main");
 
 	//Sample blank print. Should say blank
 	print_stack_data_area(&(main_function->data_area));
@@ -56,8 +109,8 @@ int main(int argc, char** argv){
 	dynamic_array_t* array_of_vars = dynamic_array_alloc();
 
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < results.variable_symtab->sheafs->current_index; i++){
-		cursor = dynamic_array_get_at(results.variable_symtab->sheafs, i);
+	for	(u_int16_t i = 0; i < results->variable_symtab->sheafs->current_index; i++){
+		cursor = dynamic_array_get_at(results->variable_symtab->sheafs, i);
 
 		//Look for anything in the records that is an array
 		for(u_int16_t j = 0; j < KEYSPACE; j++){

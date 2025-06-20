@@ -84,6 +84,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	return options;
 }
 
+
 /**
  * Our main and only function
 */

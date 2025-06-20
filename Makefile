@@ -288,7 +288,7 @@ stestd: symtab_testd
 	$(OUT_LOCAL)/symtab_testd
 
 test_data_area: stack_data_area_test
-	$(OUT_LOCAL)/stack_data_area_test ./oc/test_files/data_area_test_input.ol
+	$(OUT_LOCAL)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest: parser_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test -f
@@ -446,7 +446,7 @@ stest-CI: symtab_test-CI
 	$(OUT_CI)/symtab_test
 
 test_data_area-CI: stack_data_area_test-CI
-	$(OUT_CI)/stack_data_area_test ./oc/test_files/data_area_test_input.ol
+	$(OUT_CI)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest-CI: parser_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -f
