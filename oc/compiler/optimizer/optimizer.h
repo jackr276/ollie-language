@@ -17,9 +17,8 @@
 #include <sys/types.h>
 
 /**
- * Invoke the optimizer with a certain number of passes. At least
- * one pass is guaranteed, but the user can specify more
+ * Invoke the ollie optimizer
  */
-cfg_t* optimize(cfg_t* cfg, call_graph_node_t* call_graph, u_int8_t num_passes);
+cfg_t* optimize(cfg_t* cfg);
 
 #endif /* OPTIMIZER_H */

@@ -106,9 +106,23 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
  * Print a final summary for the ollie compiler. This could show success or
  * failure, based on what the caller wants
  */
-static void print_summary(){
-	printf("============================================= SUMMARY =======================================\n");
+static void print_summary(compiler_options_t* options, double time_spent, u_int32_t lines_processed, u_int32_t num_errors, u_int32_t num_warnings, u_int8_t success){
+	//For holding our message
+	char info[500];
 
+	//Show a success
+	if(success == TRUE){
+		sprintf(info, "Ollie compiler successfully compiled %s with %d warnings\n", options->file_name, num_warnings);
+	} else {
+		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", num_errors, num_warnings, time_spent);
+	}
+
+	printf("============================================= SUMMARY =======================================\n");
+	printf("Lexer processed %d lines\n", lines_processed);
+	if(options->time_execution == TRUE){
+		printf("Compilation took %.5f seconds\n", time_spent);
+	}
+	printf("%s\n", info);
 	printf("=============================================================================================\n");
 }
 
@@ -118,9 +132,19 @@ static void print_summary(){
  * in oc requires the passing of data between one module and another. This function
  * manages that for us
  */
-static void compile(compiler_options_t* options){
+static u_int8_t compile(compiler_options_t* options){
 	//For any/all error printing
 	char info[2000];
+
+	//Timer vars if we want to time things
+	double time_spent = 0;
+	clock_t begin = 0;
+	clock_t end = 0;
+
+	//If we want to time the execution, we'll start the clock
+	if(options->time_execution == TRUE){
+		begin = clock();
+	}
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
@@ -132,7 +156,18 @@ static void compile(compiler_options_t* options){
 
 	//This is our fail case
 	if(results->root->CLASS == AST_NODE_CLASS_ERR_NODE){
+		//Timer end
+		clock_t end = clock();
 
+		//Crude time calculation
+		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+
+		if(options->show_summary == TRUE){
+			print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, TRUE);
+		}
+
+		//Generic failure
+		return 1;
 	}
 
 	//Now we'll build the cfg using our results
@@ -145,8 +180,48 @@ static void compile(compiler_options_t* options){
 		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
 	}
 
-	//Give back the results
-	return;
+	//Now we will run the optimizer
+	cfg = optimize(cfg);
+
+	//Again if we're doing debug printing, this is coming out
+	if(options->enable_debug_printing == TRUE){
+		printf("============================================= AFTER OPTIMIZATION =======================================\n");
+		print_all_cfg_blocks(cfg);
+		printf("============================================= AFTER OPTIMIZATION =======================================\n");
+	}
+
+	//Now that we're done optimizing, we can invoke the code generator
+	
+	//Invoke the back end
+	generate_assembly_code(cfg);
+
+	//Finish the timer here if we need to
+	if(options->time_execution == TRUE){
+		//Timer end
+		clock_t end = clock();
+
+		//Crude time calculation
+		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+	}
+
+	if(options->show_summary == TRUE){
+		print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, TRUE);
+	}
+
+	/**
+	 * REQUIRED CLEANUP: Now that we're done, we'll free all of our memory
+	 */
+	//Deallocate the ast
+	ast_dealloc();
+	free(results->os);
+	function_symtab_dealloc(results->function_symtab);
+	type_symtab_dealloc(results->type_symtab);
+	variable_symtab_dealloc(results->variable_symtab);
+	constants_symtab_dealloc(results->constant_symtab);
+	dealloc_cfg(cfg);
+
+	//Return 0 for success
+	return 0;
 }
 
 
@@ -164,57 +239,6 @@ int main(int argc, char** argv){
 	//also error out if any options are bad
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
-	//Call the compiler, let this handle it
-	front_end_results_package_t results;
-	compile(options);
-
-
-	//FOR NOW to simplify debugging
-
-	//Now we will run the optimizer
-	cfg = optimize(cfg, results.os, 5);
-
-	printf("============================================= AFTER OPTIMIZATION =======================================\n");
-	print_all_cfg_blocks(cfg);
-	printf("============================================= AFTER OPTIMIZATION =======================================\n");
-
-	//Invoke the back end
-	generate_assembly_code(cfg);
-
-
-	//Grab bfore freeing
-	CLASS = results.root->CLASS;
-
-	//FOR NOW -- deallocate this stuff
-	ast_dealloc();
-	//Free the call graph holder
-	free(results.os);
-	function_symtab_dealloc(results.function_symtab);
-	type_symtab_dealloc(results.type_symtab);
-	variable_symtab_dealloc(results.variable_symtab);
-	constants_symtab_dealloc(results.constant_symtab);
-	dealloc_cfg(cfg);
-	
-	//Timer end
-	clock_t end = clock();
-	//Crude time calculation
-	time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-
-	final_printout:
-	//If we failed
-	if(CLASS == AST_NODE_CLASS_ERR_NODE || num_errors > 0){
-		char info[500];
-		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", num_errors, num_warnings, time_spent);
-		printf("\n===================== Ollie Compiler Summary ==========================\n");
-		printf("Lexer processed %d lines\n", results.lines_processed);
-		printf("%s\n", info);
-		printf("=======================================================================\n\n");
-	} else {
-		printf("\n===================== Ollie Compiler Summary ==========================\n");
-		printf("Lexer processed %d lines\n", results.lines_processed);
-		printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
-		printf("=======================================================================\n\n");
-	}
-
-	printf("==========================================================================================\n\n");
+	//Invoke the compiler
+	return compile(options);
 }
