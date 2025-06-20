@@ -44,14 +44,6 @@ typedef enum{
 	SIDE_TYPE_RIGHT,
 } side_type_t;
 
-/**
- * Is a type signed or unsigned
- */
-typedef enum {
-	SIGNED,
-	UNSIGNED
-} signedness_t;
-
 
 /**
  * Which class of type is it?

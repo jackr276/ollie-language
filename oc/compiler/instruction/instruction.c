@@ -47,15 +47,15 @@ void set_new_function(symtab_function_record_t* func){
 /**
  * Determine the signedness of a jump type
  */
-signedness_t is_jump_type_signed(jump_type_t type){
+u_int8_t is_jump_type_signed(jump_type_t type){
 	switch(type){
 		case JUMP_TYPE_JG:
 		case JUMP_TYPE_JGE:
 		case JUMP_TYPE_JLE:
 		case JUMP_TYPE_JL:
-			return SIGNED;
+			return TRUE;
 		default:
-			return UNSIGNED;
+			return FALSE;
 	}
 }
 

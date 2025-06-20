@@ -1359,14 +1359,17 @@ u_int8_t is_type_signed(generic_type_t* type){
 	//If we get here there's a chance it could be signed
 	Token basic_type_token = type->basic_type->basic_type;
 
-	//This is a comprehensive list of all of our signed types
-	if(basic_type_token == S_INT8 || basic_type_token == S_INT16 || basic_type_token == S_INT32
-		|| basic_type_token == S_INT64 || basic_type_token == FLOAT32 || basic_type_token == FLOAT64){
-		return TRUE;
+	switch(basic_type_token){
+		case S_INT8:
+		case S_INT16:
+		case S_INT32:
+		case S_INT64:
+		case FLOAT32:
+		case FLOAT64:
+			return TRUE;
+		default:
+			return FALSE;
 	}
-
-	//Otherwise, we're not signed
-	return FALSE;
 }
 
 
