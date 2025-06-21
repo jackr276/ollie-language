@@ -31,12 +31,18 @@ u_int32_t num_warnings;
  * A help printer function for users of the compiler
  */
 static void print_help(){
-	printf("===================================== Ollie Compiler Options =====================================\n");
+	printf("\n===================================== Ollie Compiler Options =====================================\n");
+	printf("\n######################################## Required Fields #########################################\n");
 	printf("-f <filename>: Required field. Specifies the .ol source file to be compiled\n");
-	printf("-o <filename>: Optional field. Specificy the output location. If none is given, out.ol will be used\n");
-	printf("-d: Optional field. Show all debug information printed to stdout\n");
+	printf("\n######################################## Optional Fields #########################################\n");
+	printf("-o <filename>: Specificy the output location. If none is given, out.ol will be used\n");
+	printf("-a: Generate an assembly code file with a .s extension\n");
+	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
+	printf("-t: Time execution of compiler. Can be used for performance testing\n");
+	printf("-@: Should only be used for CI runs\n");
+	printf("-i: Print intermediate representations. This will generate *a lot* of text, so be careful\n");
 	printf("-h: Show help\n");
-	printf("==================================================================================================\n");
+	printf("\n==================================================================================================\n");
 }
 
 
@@ -52,7 +58,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt(argc, argv, "a@tdhsf:o:?")) != -1){
+	while((opt = getopt(argc, argv, "ia@tdhsf:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option

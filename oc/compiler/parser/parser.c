@@ -70,8 +70,11 @@ static u_int16_t parser_line_num = 1;
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
 
-//Did we find a main function?
-u_int8_t found_main_function = 0;
+//Are we enabling debug printing? By default no
+u_int8_t enable_debug_printing = FALSE;
+
+//Did we find a main function? By default no
+u_int8_t found_main_function = FALSE;
 
 //The current file name
 static char* current_file_name = NULL;
@@ -107,9 +110,12 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 	parse_message.info = info;
 	parse_message.line_num = line_num;
 
-	//Fatal if error
-	if(message_type == PARSE_ERROR){
-		parse_message.fatal = 1;
+	//If we don't want debug printing, we'll skip printing this out if it's a warning or info message
+	if(message_type == INFO || message_type == WARNING){
+		//Skip if this isn't enabled
+		if(enable_debug_printing == FALSE){
+			return;
+		}
 	}
 
 	//Now print it
@@ -8450,6 +8456,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Store the current file name
 	current_file_name = options->file_name;
+	//Store whether or not we want to do any debug printing
+	enable_debug_printing = options->enable_debug_printing;
 
 	//Open the file up
 	FILE* fl = fopen(options->file_name, "r");
@@ -8492,10 +8500,13 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//the root being here
 	prog = program(fl);
 
-	//Check for any unused functions
-	check_for_unused_functions(function_symtab, &num_warnings);
-	//Check for any bad variable declarations
-	check_for_var_errors(variable_symtab, &num_warnings);
+	//We'll only perform these tests if we want debug printing enabled
+	if(enable_debug_printing == TRUE){
+		//Check for any unused functions
+		check_for_unused_functions(function_symtab, &num_warnings);
+		//Check for any bad variable declarations
+		check_for_var_errors(variable_symtab, &num_warnings);
+	}
 
 	//Package up everything that we need
 	results->function_symtab = function_symtab;
