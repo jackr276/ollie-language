@@ -31,7 +31,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt(argc, argv, "atdhsf:o:?")) != -1){
+	while((opt = getopt(argc, argv, "iatdhsf:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option
@@ -41,6 +41,10 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			//After we print help we exit
 			case 'h':
 				exit(0);
+			//Specify that we want to print intermediate representations
+			case 'i':
+				options->print_irs = TRUE;
+				break;
 			//Time execution for performance test
 			case 't':
 				options->time_execution = TRUE;
