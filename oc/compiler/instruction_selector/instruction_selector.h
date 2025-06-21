@@ -15,6 +15,6 @@
  * operation completely translates the CFG out of a CFG. When done, we have a straight line
  * of code that we print out
  */
-basic_block_t* select_all_instructions(cfg_t* cfg);
+void select_all_instructions(compiler_options_t* options, cfg_t* cfg);
 
 #endif /* INTSTRUCTION_SELECTOR_H */

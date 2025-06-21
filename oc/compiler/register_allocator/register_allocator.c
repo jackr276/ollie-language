@@ -1987,13 +1987,19 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 /**
  * Perform our register allocation algorithm on the entire cfg
  */
-void allocate_all_registers(cfg_t* cfg){
+void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
+	//Save whether or not we want to actually print IRs
+	u_int8_t print_irs = options->print_irs;
+
 	//The first thing that we'll do is reconstruct everything in terms of live ranges
 	//This should be simplified by our values already being in SSA form
 	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
 
-	//Print whatever live ranges we did find
-	print_all_live_ranges(live_ranges);
+	//If we want to print, we'll show all live ranges
+	if(print_irs == TRUE){
+		//Print whatever live ranges we did find
+		print_all_live_ranges(live_ranges);
+	}
 
 	//Pre-spill if we need to
 	pre_spill(cfg, live_ranges);
@@ -2004,28 +2010,35 @@ void allocate_all_registers(cfg_t* cfg){
 	//Now let's determine the interference graph
 	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
 
-	printf("============= After Live Range Determination ==============\n");
-	print_blocks_with_live_ranges(cfg->head_block);
-	printf("============= After Live Range Determination ==============\n");
+	//Again if we want to print, now is the time
+	if(print_irs == TRUE){
+		printf("============= After Live Range Determination ==============\n");
+		print_blocks_with_live_ranges(cfg->head_block);
+		printf("============= After Live Range Determination ==============\n");
+	}
 
 	//Now let's perform our live range coalescence to reduce the overall size of our
 	//graph
 	perform_live_range_coalescence(cfg, live_ranges, graph);
 
-	//Show our live ranges once again
-	print_all_live_ranges(live_ranges);
-
-	printf("================= After Coalescing =======================\n");
-	print_blocks_with_live_ranges(cfg->head_block);
-	printf("================= After Coalescing =======================\n");
-
+	//Show our live ranges once again if requested
+	if(print_irs == TRUE){
+		print_all_live_ranges(live_ranges);
+		printf("================= After Coalescing =======================\n");
+		print_blocks_with_live_ranges(cfg->head_block);
+		printf("================= After Coalescing =======================\n");
+	}
+	
 	//Let the allocator method take care of everything
 	allocate_registers(cfg, live_ranges, graph);
 
 	//Once registers are allocated, we need to crawl and insert all stack allocations/subtractions
 	insert_all_stack_and_saving_logic(cfg);
 
-	printf("================= After Allocation =======================\n");
-	print_blocks_with_registers(cfg->head_block, FALSE);
-	printf("================= After Allocation =======================\n");
+	//One final print post allocation
+	if(print_irs == TRUE){
+		printf("================= After Allocation =======================\n");
+		print_blocks_with_registers(cfg->head_block, FALSE);
+		printf("================= After Allocation =======================\n");
+	}
 }

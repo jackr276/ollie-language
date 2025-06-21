@@ -4072,30 +4072,38 @@ static void print_ordered_blocks(basic_block_t* head_block, instruction_printing
  * operation completely translates the CFG out of a CFG. When done, we have a straight line
  * of code that we print out
  */
-basic_block_t* select_all_instructions(cfg_t* cfg){
+void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Our very first step in the instruction selector is to order all of the blocks in one 
 	//straight line. This step is also able to recognize and exploit some early optimizations,
 	//such as when a block ends in a jump to the block right below it
 	basic_block_t* head_block = order_blocks(cfg);
 
-	//DEBUG
-	//We'll first print before we simplify
-	printf("============================== BEFORE SIMPLIFY ========================================\n");
-	print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
+	//Do we need to print intermediate representations?
+	u_int8_t print_irs = options->print_irs;
 
-	printf("============================== AFTER SIMPLIFY ========================================\n");
+	//We'll first print before we simplify
+	if(print_irs == TRUE){
+		printf("============================== BEFORE SIMPLIFY ========================================\n");
+		print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
+		printf("============================== AFTER SIMPLIFY ========================================\n");
+	}
+
 	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
 	//format that is used in the optimization phase. Now, we need to take that expanded IR and
 	//recognize any redundant operations, dead values, unnecessary loads, etc.
 	simplify(cfg, head_block);
-	print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
 
-	printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
+	//If we need to print IRS, we can do so here
+	if(print_irs == TRUE){
+		print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
+		printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
+	}
+
 	//Once we're done simplifying, we'll use the same sliding window technique to select instructions.
 	select_instructions(cfg, head_block);
-	//Print them out
-	print_ordered_blocks(head_block,PRINT_INSTRUCTION);
 
-	//FOR NOW
-	return NULL;
+	//Final IR printing if requested by user
+	if(print_irs == TRUE){
+		print_ordered_blocks(head_block,PRINT_INSTRUCTION);
+	}
 }

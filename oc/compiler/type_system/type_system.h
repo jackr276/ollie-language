@@ -64,6 +64,8 @@ struct compiler_options_t {
 	u_int8_t time_execution;
 	//Is this a CI run?
 	u_int8_t is_test_run;
+	//Print intermediate representations
+	u_int8_t print_irs;
 };
 
 

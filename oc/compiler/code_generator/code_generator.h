@@ -14,7 +14,7 @@
 /**
  * Generate the assembly code for this file
 */
-void generate_assembly_code(cfg_t* cfg);
+void generate_assembly_code(compiler_options_t* options, cfg_t* cfg);
 
 
 #endif

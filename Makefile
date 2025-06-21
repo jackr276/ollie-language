@@ -291,16 +291,16 @@ test_data_area: stack_data_area_test
 	$(OUT_LOCAL)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest: parser_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test -i -d -f
 
 front_test: front_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -d -f
 
 middle_test: middle_end_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
 
 compiler_test: oc
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/oc -@ -s -t -d -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/oc -@ -s -t -i -d -f
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
@@ -449,16 +449,16 @@ test_data_area-CI: stack_data_area_test-CI
 	$(OUT_CI)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest-CI: parser_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -i -d -f
 
 front_test-CI: front_end_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test -i -d -f
 
 middle_test-CI: middle_end_test-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/middle_end_test -i -d -f
 
 compiler_test-CI: oc-CI
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -d -f
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -i -d -f
 
 array_test-CI: dynamic_array_test-CI
 	$(OUT_CI)/dynamic_array_test

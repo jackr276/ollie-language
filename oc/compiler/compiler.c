@@ -94,6 +94,10 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			case 's':
 				options->show_summary = TRUE;
 				break;
+			//Specify that we want to print intermediate representations
+			case 'i':
+				options->print_irs = TRUE;
+				break;
 			//Specific output file
 			case 'o':
 				options->output_file = optarg;
@@ -195,7 +199,7 @@ static u_int8_t compile(compiler_options_t* options){
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
 
 	//If we're doing debug printing, then we'll print this
-	if(options->enable_debug_printing == TRUE){
+	if(options->print_irs == TRUE){
 		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
 		print_all_cfg_blocks(cfg);
 		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
@@ -205,7 +209,7 @@ static u_int8_t compile(compiler_options_t* options){
 	cfg = optimize(cfg);
 
 	//Again if we're doing debug printing, this is coming out
-	if(options->enable_debug_printing == TRUE){
+	if(options->print_irs == TRUE){
 		printf("============================================= AFTER OPTIMIZATION =======================================\n");
 		print_all_cfg_blocks(cfg);
 		printf("============================================= AFTER OPTIMIZATION =======================================\n");
@@ -214,7 +218,7 @@ static u_int8_t compile(compiler_options_t* options){
 	//Now that we're done optimizing, we can invoke the code generator
 	
 	//Invoke the back end
-	generate_assembly_code(cfg);
+	generate_assembly_code(options, cfg);
 
 	//Finish the timer here if we need to
 	if(options->time_execution == TRUE){
