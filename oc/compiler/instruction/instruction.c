@@ -423,6 +423,44 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
 
 
 /**
+ * Emit a movzx(zero extend) instruction
+ */
+instruction_t* emit_movzx_instruction(three_addr_var_t* source, three_addr_var_t* destination){
+	//First we allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the instruction type
+	instruction->instruction_type = MOVZX;
+
+	//Set the source and destination
+	instruction->source_register = source;
+	instruction->destination_register = destination;
+
+	//And following that, we're all set
+	return instruction;
+}
+
+
+/**
+ * Emit a movsx(sign extend) instruction
+ */
+instruction_t* emit_movsx_instruction(three_addr_var_t* source, three_addr_var_t* destination){
+	//First we allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the instruction type
+	instruction->instruction_type = MOVSX;
+
+	//Set the source and destination
+	instruction->source_register = source;
+	instruction->destination_register = destination;
+
+	//And following that, we're all set
+	return instruction;
+}
+
+
+/**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
@@ -1087,6 +1125,13 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 		printf(" <- ");
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
+	//Emit a converting assignment statement that is used when we have type mismatches
+	} else if(stmt->CLASS == THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT){
+		//We'll print out the left and right ones here
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+		printf(" <-CONVERTING-- ");
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+		printf("\n");
 	//Assigning a memory address to a variable
 	} else if (stmt->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
 		//We'll print out the left and right ones here
@@ -1476,6 +1521,26 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
 		default:
 			break;
 	}
+}
+
+
+/**
+ * Print a movzx or movsx(converting move) instruction
+ */
+static void print_converting_move(instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll determine what to print
+	if(instruction->instruction_type == MOVZX){
+		printf("movzx ");
+	} else {
+		printf("movsx ");
+	}
+
+	//Now we'll print the source and destination
+	print_variable(instruction->source_register, mode);
+	printf(", ");
+	print_variable(instruction->destination_register, mode);
+
+	printf("\n");
 }
 
 
@@ -2416,6 +2481,12 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 			print_register_to_register_move(instruction, mode);
 			break;
 
+		//Handle a converting move
+		case MOVSX:
+		case MOVZX:
+			print_converting_move(instruction, mode);
+			break;
+
 		//Handle lea printing
 		case LEAL:
 		case LEAQ:
@@ -2742,6 +2813,25 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 	//What function are we in
 	stmt->function = current_function;
 	//Give back the newly allocated statement
+	return stmt;
+}
+
+
+/**
+ * Emit a converting move statement. This is basically an assignee, except for the fact that we're explicitly marking that
+ * there will be a conversion(either sign extend or zero extend) that will take place here
+ */
+instruction_t* emit_converting_move_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll just leave our now
 	return stmt;
 }
 

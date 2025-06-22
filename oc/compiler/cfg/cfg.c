@@ -3218,6 +3218,10 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//Operator is blank by default
 	package.operator = BLANK;
 
+	//Store the left and right hand types
+	generic_type_t* left_hand_type;
+	generic_type_t* right_hand_type;
+
 	//Is the cursor a unary expression? If so just emit that. This is our base case 
 	//essentially
 	if(logical_or_expr->CLASS == AST_NODE_CLASS_UNARY_EXPR){
@@ -3232,6 +3236,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//Otherwise we actually have a binary operation of some kind
 	//Grab a cursor
 	generic_ast_node_t* cursor = logical_or_expr->first_child;
+	left_hand_type = cursor->inferred_type;
 	
 	//Emit the binary expression on the left first
 	expr_ret_package_t left_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
@@ -3243,6 +3248,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	
 	three_addr_var_t* op1;
 	
+
 	//If this is temporary, we're fine. Otherwise emit one
 	if(left_hand_temp.assignee->is_temporary == TRUE){
 		op1 = left_hand_temp.assignee;
@@ -3261,6 +3267,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 
 	//Advance up here
 	cursor = cursor->next_sibling;
+	right_hand_type = cursor->inferred_type;
 
 	//Then grab the right hand temp
 	expr_ret_package_t right_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
@@ -3269,12 +3276,24 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	Token binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
 	package.operator = binary_operator;
+	//Grab this out for convenience
+	three_addr_var_t* op2 = right_hand_temp.assignee;
 
-	//Generic holder for us
-	instruction_t* stmt;
+	//Emit a converting move instruction if we don't have a const assignment as the immediate previous statement
+	if(op2->type != right_hand_type && basic_block->exit_statement->CLASS != THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//We'll need a converting move instruction here to deal with this
+		instruction_t* temp_assignment = emit_converting_move_instruction(emit_temp_var(right_hand_type), op2);
+
+		add_statement(basic_block, temp_assignment);
+		//add_used_variable(basic_block, right_hand_temp.assignee);
+
+		op2 = temp_assignment->assignee;
+
+		printf("TYPE MISMATCH\n");
+	}
 
 	//Emit the binary operator expression using our helper
-	stmt = emit_binary_operation_instruction(op1, op1, binary_operator, right_hand_temp.assignee);
+	instruction_t* stmt = emit_binary_operation_instruction(op1, op1, binary_operator, op2);
 
 	//Mark this with what we have
 	stmt->is_branch_ending = is_branch_ending;

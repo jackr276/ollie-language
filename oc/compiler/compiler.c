@@ -36,6 +36,7 @@ static void print_help(){
 	printf("-f <filename>: Required field. Specifies the .ol source file to be compiled\n");
 	printf("\n######################################## Optional Fields #########################################\n");
 	printf("-o <filename>: Specificy the output location. If none is given, out.ol will be used\n");
+	printf("-s: Show a summary at the end of compilation\n");
 	printf("-a: Generate an assembly code file with a .s extension\n");
 	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
 	printf("-t: Time execution of compiler. Can be used for performance testing\n");

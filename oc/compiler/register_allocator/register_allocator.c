@@ -487,7 +487,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 	//For developer flagging
 	if(live_range == NULL){
 		//This is a function parameter, we need to make it ourselves
-		if(variable->linked_var->is_function_paramater == TRUE){
+		if(variable->linked_var != NULL && variable->linked_var->is_function_paramater == TRUE){
 			print_variable(variable, PRINTING_VAR_INLINE);
 			//Create it. Since this is a function parameter, we start at line 0
 			live_range = live_range_alloc(block->function_defined_in, variable->variable_size);
@@ -502,7 +502,8 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 		} else {
 			printf("Fatal compiler error: variable found with that has no live range\n");
 			print_variable(variable, PRINTING_VAR_INLINE);
-			exit(1);
+			//TODO THIS MUST BE FIXED
+			exit(0);
 		}
 	}
 
@@ -846,7 +847,6 @@ static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ran
 		current = current->next_statement;
 	}
 }
-
 
 
 /**
