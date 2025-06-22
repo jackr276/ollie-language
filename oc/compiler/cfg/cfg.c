@@ -3176,16 +3176,15 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	three_addr_var_t* op2 = right_hand_temp.assignee;
 
 	//Emit a converting move instruction if we don't have a const assignment as the immediate previous statement
-	if(op2->type != right_hand_type && basic_block->exit_statement->CLASS != THREE_ADDR_CODE_ASSN_CONST_STMT){
+	if(is_type_conversion_needed(right_hand_type, op2->type) == TRUE
+		&& basic_block->exit_statement->CLASS != THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//We'll need a converting move instruction here to deal with this
 		instruction_t* temp_assignment = emit_converting_move_instruction(emit_temp_var(right_hand_type), op2);
-
+		//Add the temp assignment to the block
 		add_statement(basic_block, temp_assignment);
-		//add_used_variable(basic_block, right_hand_temp.assignee);
 
+		//Reassign op2 for later processing
 		op2 = temp_assignment->assignee;
-
-		printf("TYPE MISMATCH\n");
 	}
 
 	//Emit the binary operator expression using our helper
@@ -4298,19 +4297,7 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
 	basic_block_t* if_compound_stmt_end;
 
-	//If this is null, it's fine, but we should throw a warning
-	if(if_compound_stmt_entry == NULL){
-		print_cfg_message(WARNING, "Empty if clause in if-statement", cursor->line_number);
-		(*num_warnings_ref)++;
-
-		//We'll just set this to jump out of here
-		//We will perform a normal jump to this one
-		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-		emit_jump(entry_block, exit_block, jump_to_if, TRUE, FALSE);
-		add_successor(entry_block, exit_block);
-
-	//We expect this to be the most likely option
-	} else {
+	if(if_compound_stmt_entry != NULL){
 		//Add the if statement node in as a direct successor
 		add_successor(entry_block, if_compound_stmt_entry);
 		//We will perform a normal jump to this one
@@ -4335,6 +4322,17 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			//If this is the case, the end block is a successor of the if_stmt end
 			add_successor(if_compound_stmt_end, exit_block);
 		}
+
+	//If this is null, it's fine, but we should throw a warning
+	} else {
+		print_cfg_message(WARNING, "Empty if clause in if-statement", cursor->line_number);
+		(*num_warnings_ref)++;
+
+		//We'll just set this to jump out of here
+		//We will perform a normal jump to this one
+		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
+		emit_jump(entry_block, exit_block, jump_to_if, TRUE, FALSE);
+		add_successor(entry_block, exit_block);
 	}
 
 	//Advance the cursor up to it's next sibling

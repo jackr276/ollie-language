@@ -212,6 +212,11 @@ struct aliased_type_t{
 u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 
 /**
+ * Is a type conversion needed between these two types for b to fit into a
+ */
+u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b);
+
+/**
  * Determine the compatibility of two types and coerce appropraitely. The double pointer
  * reference exists so that this method may transform types as appropriate
  */

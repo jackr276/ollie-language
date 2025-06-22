@@ -76,8 +76,39 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 		default:
 			return FALSE;
 	}
-
 }
+
+/**
+ * Is a type conversion needed between these two types for b to fit into a
+ */
+u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b){
+	//If the two types are the exact same, nothing is needed
+	if(a == b){
+		return FALSE;
+	}
+
+	//If they're both basic types
+	if(a->type_class == TYPE_CLASS_BASIC && b->type_class == TYPE_CLASS_BASIC){
+		Token a_basic_type = a->basic_type->basic_type;
+		Token b_basic_type = b->basic_type->basic_type;
+
+		//Determine if either is a float
+		u_int8_t a_is_float = a_basic_type == FLOAT32 || a_basic_type == FLOAT64;
+		u_int8_t b_is_float = b_basic_type == FLOAT32 || b_basic_type == FLOAT64;
+
+		//If their float status is the same and they're the same size, no conversion is needed
+		if(a_is_float == b_is_float && a->type_size == b->type_size){
+			return FALSE;
+		} else {
+			return TRUE;
+		}
+	}
+	
+
+
+	return TRUE;
+}
+
 
 
 /**
