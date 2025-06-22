@@ -1081,9 +1081,28 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
-			if(operation->instruction_type == PHI_FUNCTION || operation->destination_register == NULL){
-				printf("HERE\n\n\n");
+			if(operation->instruction_type == PHI_FUNCTION){
 				//Skip it
+				operation = operation->previous_statement;
+				continue;
+			}
+
+			//If the destination register here is NULL, we
+			//may actually be dealing with a comparison operation of some kind.
+			//In doing this, we'll want to still mark the operands as LIVE
+			if(operation->destination_register == NULL){
+				//Now we'll add all interferences like this
+				if(operation->source_register != NULL
+					&& dynamic_array_contains(live_now, operation->source_register->associated_live_range) == NOT_FOUND){
+					dynamic_array_add(live_now, operation->source_register->associated_live_range);
+				}
+
+				//Check the second source register(could be a comparison op)
+				if(operation->source_register2 != NULL
+					&& dynamic_array_contains(live_now, operation->source_register2->associated_live_range) == NOT_FOUND){
+					dynamic_array_add(live_now, operation->source_register2->associated_live_range);
+				}
+
 				operation = operation->previous_statement;
 				continue;
 			}
