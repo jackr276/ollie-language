@@ -3213,7 +3213,7 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  *
  */
 static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
-		//The return package here
+	//The return package here
 	expr_ret_package_t package;
 	//Operator is blank by default
 	package.operator = BLANK;
