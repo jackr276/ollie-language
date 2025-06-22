@@ -61,6 +61,24 @@ u_int8_t is_jump_type_signed(jump_type_t type){
 
 
 /**
+ * Helper function to determine if an operator is a relational operator
+ */
+u_int8_t is_operator_relational_operator(Token op){
+	switch(op){
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case NOT_EQUALS:
+		case DOUBLE_EQUALS:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Select the size of a constant based on its type
  */
 variable_size_t select_constant_size(three_addr_const_t* constant){
@@ -611,7 +629,7 @@ instruction_t* emit_idle_instruction(){
 /**
  * Emit a setX instruction
  */
-instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_register, u_int8_t signedness){
+instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_register, u_int8_t is_signed){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -619,7 +637,7 @@ instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_reg
 	stmt->destination_register = destination_register;
 
 	//We'll determine the actual instruction type using the helper
-	stmt->instruction_type = select_appropriate_set_stmt(op, signedness);
+	stmt->instruction_type = select_appropriate_set_stmt(op, is_signed);
 
 	//Once that's done, we'll return
 	return stmt;

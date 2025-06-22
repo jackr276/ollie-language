@@ -531,6 +531,11 @@ variable_size_t select_variable_size(three_addr_var_t* variable);
 u_int8_t is_jump_type_signed(jump_type_t type);
 
 /**
+ * Helper function to determine if an operator is a relational operator
+ */
+u_int8_t is_operator_relational_operator(Token op);
+
+/**
  * Does a given operation overwrite it's source? Think add, subtract, etc
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction);
@@ -764,7 +769,7 @@ instruction_t* emit_idle_instruction();
 /**
  * Emit a setX instruction
  */
-instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_register, u_int8_t signedness);
+instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_register, u_int8_t is_signed);
 
 /**
  * Emit a stack allocation statement

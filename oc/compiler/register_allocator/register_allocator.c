@@ -1082,6 +1082,7 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
 			if(operation->instruction_type == PHI_FUNCTION || operation->destination_register == NULL){
+				printf("HERE\n\n\n");
 				//Skip it
 				operation = operation->previous_statement;
 				continue;

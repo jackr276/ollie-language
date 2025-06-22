@@ -2245,6 +2245,39 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		}
 	}
 
+	/**
+	 * If we have an assignment that follows a relational operator, we need to do appropriate
+	 * setting logic. We'll do this by inserting a setX statement inbetween the relational operator
+	 * and the assignment
+	 */
+	if((window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT || window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT)
+		&& is_operator_relational_operator(window->instruction1->op) == TRUE
+		&& (window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT)
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+
+		//Set the comparison and assignment instructions
+		instruction_t* comparison = window->instruction1;
+		instruction_t* assignment = window->instruction2;
+
+		//We'll now need to insert inbetween here
+		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(lookup_type_name_only(cfg->type_symtab, "u8")->type), is_type_signed(assignment->assignee->type));
+
+		//We now also need to modify the move instruction
+		//It will always be movzx
+		assignment->instruction_type = MOVZX;
+		//Assignee and destination are the same
+		assignment->destination_register = assignment->assignee;
+		//The source is now this set instruction's destination
+		assignment->source_register = set_instruction->destination_register;
+
+		//Now once we have the set instruction, we need to insert it between 1 and 2
+		comparison->next_statement = set_instruction;
+		set_instruction->previous_statement = comparison;
+		//Link to assignment
+		set_instruction->next_statement = assignment;
+		assignment->previous_statement = comparison;
+	}
+
 
 	//============================= Address Calculation Optimization  ==============================
 	//These are patterns that span multiple instructions. Often we're able to
