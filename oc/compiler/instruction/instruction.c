@@ -3368,6 +3368,110 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 
 
 /**
+ * Select the appropriate jump type to use. We can either use
+ * inverse jumps or direct jumps
+ */
+jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, u_int8_t is_signed){
+	//Let's see what we have here
+	switch(op){
+		case G_THAN:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				if(is_signed == TRUE){
+					//Signed version
+					return JUMP_TYPE_JLE;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JBE;
+				}
+			} else {
+				if(is_signed == TRUE){
+					//Signed version
+					return JUMP_TYPE_JG;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JA;
+				}
+			}
+		case L_THAN:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				if(is_signed == TRUE){
+					//Signed version
+					return JUMP_TYPE_JGE;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JAE;
+				}
+			} else {
+				if(is_signed == TRUE){
+					//Signed version
+					return JUMP_TYPE_JL;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JB;
+				}
+			}
+		case L_THAN_OR_EQ:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				if(is_signed == TRUE){
+					//Signed version
+					return JUMP_TYPE_JG;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JA;
+				}
+			} else {
+				if(is_signed == TRUE){
+					//Signed version
+					return JUMP_TYPE_JLE;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JBE;
+				}
+			}
+		case G_THAN_OR_EQ:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				if(is_signed == TRUE){
+					//Signed version
+					return JUMP_TYPE_JL;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JB;
+				}
+			} else {
+				if(is_signed == TRUE){
+					//Signed version
+					return JUMP_TYPE_JGE;
+				} else {
+					//Unsigned version
+					return JUMP_TYPE_JAE;
+				}
+			}
+		case DOUBLE_EQUALS:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JNE;
+			} else {
+				return JUMP_TYPE_JE;
+			}
+		case NOT_EQUALS:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JE;
+			} else {
+				return JUMP_TYPE_JNE;
+			}
+		//If we get here, it was some kind of
+		//non relational operator. In this case,
+		//we default to 0 = false non zero = true
+		default:
+			if(jump_type == JUMP_CATEGORY_INVERSE){
+				return JUMP_TYPE_JZ;
+			} else {
+				return JUMP_TYPE_JNZ;
+			}
+	}
+}
+
+
+/**
  * Is the given register caller saved?
  */
 u_int8_t is_register_caller_saved(register_holder_t reg){

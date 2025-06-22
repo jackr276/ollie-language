@@ -28,6 +28,15 @@ typedef struct three_addr_const_t three_addr_const_t;
 //A struct that stores all of our live ranges
 typedef struct live_range_t live_range_t;
 
+/**
+ * What kind of jump do we want to select
+ */
+typedef enum{
+	JUMP_CATEGORY_INVERSE,
+	JUMP_CATEGORY_NORMAL,
+} jump_category_t;
+
+
 
 /**
  * What type of instruction do we have? This saves us a lot of space
@@ -162,7 +171,15 @@ typedef enum{
 	PUSH,
 	POP,
 	SETE, //Set if equal
-	SETNE,
+	SETNE, //Set if not equal
+	SETGE, //Set >= signed
+	SETLE, //Set <= signed
+	SETL, //Set < signed
+	SETG, //Set > signed
+	SETAE, //Set >= unsigned
+	SETA, //Set > unsigned
+	SETBE, //Set <= unsigned
+	SETB, //Set < unsigned
 	MOVZBL, //move if zero or below long word
 } instruction_type_t;
 
@@ -776,6 +793,11 @@ instruction_t* copy_instruction(instruction_t* copied);
  * The result will be: constant2 = constant1 + constant2
  */
 three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Select the appropriate jump type given the circumstances, including the operand and the signedness
+ */
+jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, u_int8_t is_signed);
 
 /**
  * Is the given register caller saved?

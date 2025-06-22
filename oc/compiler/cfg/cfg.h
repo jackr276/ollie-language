@@ -38,13 +38,6 @@ typedef enum {
 	BLOCK_TERM_TYPE_LOOP_END, //This block is the end of a loop
 } block_terminal_type_t;
 
-/**
- * What kind of jump do we want to select
- */
-typedef enum{
-	JUMP_CATEGORY_INVERSE,
-	JUMP_CATEGORY_NORMAL,
-} jump_category_t;
 
 /**
  * What is the general type of the block. Again most
@@ -184,10 +177,6 @@ void delete_statement(cfg_t* cfg, basic_block_t* block, instruction_t* stmt);
  */
 void add_successor(basic_block_t* target, basic_block_t* successor);
 
-/**
- * Select the appropriate jump type given the circumstances, including the operand and the signedness
- */
-jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, u_int8_t is_signed);
 
 /**
  * Add a predecessor to the block
