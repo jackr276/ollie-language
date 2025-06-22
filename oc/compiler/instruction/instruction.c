@@ -1125,6 +1125,13 @@ void print_three_addr_code_stmt(instruction_t* stmt){
 		printf(" <- ");
 		print_variable(stmt->op1, PRINTING_VAR_INLINE);
 		printf("\n");
+	//Emit a converting assignment statement that is used when we have type mismatches
+	} else if(stmt->CLASS == THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT){
+		//We'll print out the left and right ones here
+		print_variable(stmt->assignee, PRINTING_VAR_INLINE);
+		printf(" <-CONVERTING-- ");
+		print_variable(stmt->op1, PRINTING_VAR_INLINE);
+		printf("\n");
 	//Assigning a memory address to a variable
 	} else if (stmt->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
 		//We'll print out the left and right ones here
@@ -1514,6 +1521,26 @@ static void print_addressing_mode_expression(instruction_t* instruction, variabl
 		default:
 			break;
 	}
+}
+
+
+/**
+ * Print a movzx or movsx(converting move) instruction
+ */
+static void print_converting_move(instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll determine what to print
+	if(instruction->instruction_type == MOVZX){
+		printf("movzx ");
+	} else {
+		printf("movsx");
+	}
+
+	//Now we'll print the source and destination
+	print_variable(instruction->source_register, mode);
+	printf(", ");
+	print_variable(instruction->destination_register, mode);
+
+	printf("\n");
 }
 
 
@@ -2452,6 +2479,12 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 		case MOVQ:
 			//Invoke the helper
 			print_register_to_register_move(instruction, mode);
+			break;
+
+		//Handle a converting move
+		case MOVSX:
+		case MOVZX:
+			print_converting_move(instruction, mode);
 			break;
 
 		//Handle lea printing
