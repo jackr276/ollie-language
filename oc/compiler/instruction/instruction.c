@@ -2014,6 +2014,52 @@ static void print_cmp_instruction(instruction_t* instruction, variable_printing_
 
 
 /**
+ * Print out a setX instruction
+ */
+static void print_set_instruction(instruction_t* instruction, variable_printing_mode_t mode){
+	switch(instruction->instruction_type){
+		case SETE:
+			printf("sete ");
+			break;
+		case SETNE:
+			printf("setne ");
+			break;
+		case SETGE:
+			printf("setge ");
+			break;
+		case SETLE:
+			printf("setle ");
+			break;
+		case SETL:
+			printf("setl ");
+			break;
+		case SETG:
+			printf("setg ");
+			break;
+		case SETAE:
+			printf("setae ");
+			break;
+		case SETA:
+			printf("seta ");
+			break;
+		case SETBE:
+			printf("setbe ");
+			break;
+		case SETB:
+			printf("setb ");
+			break;
+		//We should never get here
+		default:
+			break;
+	}
+
+	//Now we'll print the destination register
+	print_variable(instruction->destination_register, mode);
+	printf("\n");
+}
+
+
+/**
  * Print out a standard test instruction
  */
 static void print_test_instruction(instruction_t* instruction, variable_printing_mode_t mode){
@@ -2520,18 +2566,18 @@ void print_instruction(instruction_t* instruction, variable_printing_mode_t mode
 
 		//Handle a simple sete instruction
 		case SETE:
-			printf("sete ");
-			print_variable(instruction->destination_register, mode);
-			printf("\n");
+		case SETNE:
+		case SETGE:
+		case SETLE:
+		case SETL:
+		case SETG:
+		case SETAE:
+		case SETA:
+		case SETBE:
+		case SETB:
+			print_set_instruction(instruction, mode);
 			break;
 		
-		//Handle a simple setne instruction
-		case SETNE:
-			printf("setne ");
-			print_variable(instruction->destination_register, mode);
-			printf("\n");
-			break;
-
 		//Handle a test instruction
 		case TESTB:
 		case TESTL:
