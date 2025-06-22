@@ -1782,6 +1782,30 @@ static void handle_dec_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a converting move statement. This will end up taking the form of
+ * either a movsx or movzx statement, all based on what signedness the destination
+ * expected
+ */
+static void handle_converting_move_instruction(instruction_t* instruction){
+	//We don't need to worry about the variable size here, but we do need to
+	//worry about the signedness
+	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
+
+	//If it is signed, we'll do a sign extending move
+	if(is_signed == TRUE){
+		instruction->instruction_type = MOVSX;
+	//Otherwise we'll do a zero extending move
+	} else {
+		instruction->instruction_type = MOVZX;
+	}
+
+	//Set the source and destination appropriately
+	instruction->source_register = instruction->op1;
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
  * Handle a regular move condition
  *
  * We also account for cases where we have variables with indirection levels
@@ -2621,6 +2645,9 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 			case THREE_ADDR_CODE_ASSN_STMT:
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
 				handle_to_register_move_instruction(current);
+				break;
+			case THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT:
+				handle_converting_move_instruction(current);
 				break;
 			case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
 				handle_address_assignment_instruction(current, cfg->type_symtab, cfg->stack_pointer);

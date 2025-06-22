@@ -3275,13 +3275,13 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	Token binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
 	package.operator = binary_operator;
-
+	//Grab this out for convenience
 	three_addr_var_t* op2 = right_hand_temp.assignee;
 
-	//Emit a converting move instruction if we don't have a const assignment
-	if(right_hand_temp.assignee->type != right_hand_type && basic_block->exit_statement->CLASS != THREE_ADDR_CODE_ASSN_CONST_STMT){
+	//Emit a converting move instruction if we don't have a const assignment as the immediate previous statement
+	if(op2->type != right_hand_type && basic_block->exit_statement->CLASS != THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//We'll need a converting move instruction here to deal with this
-		instruction_t* temp_assignment = emit_converting_move_instruction(emit_temp_var(right_hand_type), right_hand_temp.assignee);
+		instruction_t* temp_assignment = emit_converting_move_instruction(emit_temp_var(right_hand_type), op2);
 
 		add_statement(basic_block, temp_assignment);
 		//add_used_variable(basic_block, right_hand_temp.assignee);
