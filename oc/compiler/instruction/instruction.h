@@ -42,6 +42,8 @@ typedef enum{
 	MOVW, //Regular register-to-register or immediate to register
 	MOVL,
 	MOVQ,
+	MOVSX, //Move with sign extension from small to large register
+	MOVZX, //Move with zero extension from small to large register
 	REG_TO_MEM_MOVB,
 	REG_TO_MEM_MOVW,
 	REG_TO_MEM_MOVL,
@@ -577,6 +579,16 @@ three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* sy
  * deal with getting granular when pushing
  */
 instruction_t* emit_push_instruction(three_addr_var_t* pushee);
+
+/**
+ * Emit a movzx(zero extend) instruction
+ */
+instruction_t* emit_movzx_instruction(three_addr_var_t* source, three_addr_var_t* destination);
+
+/**
+ * Emit a movsx(sign extend) instruction
+ */
+instruction_t* emit_movsx_instruction(three_addr_var_t* source, three_addr_var_t* destination);
 
 /**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
