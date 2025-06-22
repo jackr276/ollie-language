@@ -2304,9 +2304,9 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	 * mov(w/l/q) $3, 340(arr_0, arg_0, 4)
 	 */
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2 != NULL && window->instruction3 != NULL
+		&& window->instruction2 != NULL
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
-		&& (window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT || window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT)
+		&& is_instruction_assignment_operation(window->instruction3) == TRUE
 		&& window->instruction3->assignee->indirection_level == 1
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
@@ -2430,10 +2430,10 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	 * Should become
 	 * mov(w/l/q) t29, 8(arr_0, t25)
 	 */
-	if(window->instruction2 != NULL && window->instruction3 != NULL
+	if(window->instruction2 != NULL
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& (window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
+		&& is_instruction_assignment_operation(window->instruction3) == TRUE
 		&& window->instruction3->assignee->indirection_level == 1 //Only works for memory movement
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
@@ -2478,8 +2478,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	//register to memory or immediate to memory move. Either way, we can rewrite this using address computation mode
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction1->op == PLUS 
-		&& window->instruction2 != NULL
-		&& (window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
+		&& is_instruction_assignment_operation(window->instruction2) == TRUE
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
 		&& window->instruction2->assignee->indirection_level == 1){
 
@@ -3323,7 +3322,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
 	if(is_instruction_binary_operation(window->instruction2) == TRUE
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT && is_comparison_operator(window->instruction2->op) == TRUE){
+		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& is_comparison_operator(window->instruction2->op) == TRUE){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE 
