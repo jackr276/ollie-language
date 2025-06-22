@@ -1532,7 +1532,7 @@ static void print_converting_move(instruction_t* instruction, variable_printing_
 	if(instruction->instruction_type == MOVZX){
 		printf("movzx ");
 	} else {
-		printf("movsx");
+		printf("movsx ");
 	}
 
 	//Now we'll print the source and destination

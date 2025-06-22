@@ -3248,6 +3248,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	
 	three_addr_var_t* op1;
 	
+
 	//If this is temporary, we're fine. Otherwise emit one
 	if(left_hand_temp.assignee->is_temporary == TRUE){
 		op1 = left_hand_temp.assignee;
