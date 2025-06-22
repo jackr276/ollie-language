@@ -2219,8 +2219,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	}
 
 	//We could see logical and/logical or
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
-	  	|| window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+	if(is_instruction_binary_operation(window->instruction1) == TRUE){
 		//Handle the logical and case
 		if(window->instruction1->op == DOUBLE_AND){
 			handle_logical_and_instruction(cfg, window);
@@ -2250,7 +2249,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	 * setting logic. We'll do this by inserting a setX statement inbetween the relational operator
 	 * and the assignment
 	 */
-	if((window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT || window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT)
+	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& is_operator_relational_operator(window->instruction1->op) == TRUE
 		&& (window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT)
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
@@ -2477,9 +2476,9 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	  */
 	//If we have some kind of offset calculation followed by a dereferencing assingment, we have either a 
 	//register to memory or immediate to memory move. Either way, we can rewrite this using address computation mode
-	if(window->instruction2 != NULL
-		&& (window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT)
+	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction1->op == PLUS 
+		&& window->instruction2 != NULL
 		&& (window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT)
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
 		&& window->instruction2->assignee->indirection_level == 1){
@@ -2521,7 +2520,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 	 * Unlike the prior case, we won't need to worry about immediate source operands here
 	 */
 	if(window->instruction2 != NULL
-		&& (window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT)
+		&& is_instruction_binary_operation(window->instruction1)
 		&& window->instruction1->op == PLUS
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE
@@ -3323,8 +3322,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 */
 	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
-	if(window->instruction2 != NULL 
-		&& (window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_STMT || window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT)
+	if(is_instruction_binary_operation(window->instruction2) == TRUE
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT && is_comparison_operator(window->instruction2->op) == TRUE){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
@@ -3377,8 +3375,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//If the first statement is an assignmehnt statement, and the second statement is a binary operation,
 	//and the third statement is an assignment statement, we have our chance to optimize
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction2 != NULL && (window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_STMT ||
-		window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT) && window->instruction3 != NULL
+		&& is_instruction_binary_operation(window->instruction2) == TRUE
+		&& window->instruction3 != NULL
 		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 
 		//Grab these out for convenience
@@ -3563,8 +3561,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 	//If the first instruction is a binary operation and the immediately following instruction is an assignment
 	//operation, this is a potential match
-	if((window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		|| window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT)
+	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction2 != NULL
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT){
 		//For convenience/memory ease

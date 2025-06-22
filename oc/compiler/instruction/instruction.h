@@ -536,6 +536,11 @@ u_int8_t is_jump_type_signed(jump_type_t type);
 u_int8_t is_operator_relational_operator(Token op);
 
 /**
+ * Helper function to determine if an instruction is a binary operation
+ */
+u_int8_t is_instruction_binary_operation(instruction_t* instruction);
+
+/**
  * Does a given operation overwrite it's source? Think add, subtract, etc
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction);
