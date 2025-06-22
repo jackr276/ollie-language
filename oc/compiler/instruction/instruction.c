@@ -2818,6 +2818,25 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 
 
 /**
+ * Emit a converting move statement. This is basically an assignee, except for the fact that we're explicitly marking that
+ * there will be a conversion(either sign extend or zero extend) that will take place here
+ */
+instruction_t* emit_converting_move_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll just leave our now
+	return stmt;
+}
+
+
+/**
  * Emit an assignment three address code statement. Once we're here, we expect that the caller has created and supplied the
  * appropriate variables
  */
