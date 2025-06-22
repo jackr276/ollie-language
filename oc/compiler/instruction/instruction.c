@@ -609,6 +609,24 @@ instruction_t* emit_idle_instruction(){
 
 
 /**
+ * Emit a setX instruction
+ */
+instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_register, u_int8_t signedness){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//We'll need to give it the assignee
+	stmt->destination_register = destination_register;
+
+	//We'll determine the actual instruction type using the helper
+	stmt->instruction_type = select_appropriate_set_stmt(op, signedness);
+
+	//Once that's done, we'll return
+	return stmt;
+}
+
+
+/**
  * Print an 8-bit register out. The names used for these are still
  * 64 bits because 8, 16, 32 and 64 bit uses can't occupy the same register at the 
  * same time
@@ -3516,6 +3534,47 @@ jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, u_
 	}
 }
 
+
+/**
+ * Select the appropriate set type given the circumstances, including the operand and the signedness
+ */
+instruction_type_t select_appropriate_set_stmt(Token op, u_int8_t is_signed){
+	if(is_signed == TRUE){
+		switch(op){
+			case G_THAN:
+				return SETG;
+			case L_THAN:
+				return SETL;
+			case G_THAN_OR_EQ:
+				return SETGE;
+			case L_THAN_OR_EQ:
+				return SETLE;
+			case NOT_EQUALS:
+				return SETNE;
+			case EQUALS:
+				return SETE;
+			default:
+				return SETE;
+		}
+	} else {
+		switch(op){
+			case G_THAN:
+				return SETA;
+			case L_THAN:
+				return SETB;
+			case G_THAN_OR_EQ:
+				return SETAE;
+			case L_THAN_OR_EQ:
+				return SETBE;
+			case NOT_EQUALS:
+				return SETNE;
+			case EQUALS:
+				return SETE;
+			default:
+				return SETE;
+		}
+	}
+}
 
 /**
  * Is the given register caller saved?

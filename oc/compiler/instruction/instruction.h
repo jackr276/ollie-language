@@ -762,6 +762,11 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable, generic_typ
 instruction_t* emit_idle_instruction();
 
 /**
+ * Emit a setX instruction
+ */
+instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_register, u_int8_t signedness);
+
+/**
  * Emit a stack allocation statement
  */
 instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset);
@@ -798,6 +803,11 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
  * Select the appropriate jump type given the circumstances, including the operand and the signedness
  */
 jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, u_int8_t is_signed);
+
+/**
+ * Select the appropriate set type given the circumstances, including the operand and the signedness
+ */
+instruction_type_t select_appropriate_set_stmt(Token op, u_int8_t is_signed);
 
 /**
  * Is the given register caller saved?
