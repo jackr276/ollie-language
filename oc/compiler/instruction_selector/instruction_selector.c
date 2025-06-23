@@ -2345,19 +2345,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
 
-		//Now we'll rearrange the window to reflect this
-		window->instruction1 = window->instruction3;
-		window->instruction2 = window->instruction1->next_statement;
-
-		//Avoid any null pointer dereference
-		if(window->instruction2 == NULL){
-			window->instruction3 = NULL;
-		} else {
-			window->instruction3 = window->instruction2->next_statement;
-		}
-
-		//Let the helper handle the status
-		set_window_status(window);
+		//Reconstruct the window with instruction3 as the seed
+		reconstruct_window(window, window->instruction3);
 
 		//This counts as a change
 		changed = TRUE;
@@ -2387,20 +2376,9 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//Once we're done doing this, the first 2 instructions are now useless
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
-
-		//Now we'll rearrange the window to reflect this
-		window->instruction1 = window->instruction3;
-		window->instruction2 = window->instruction1->next_statement;
-
-		//Avoid any null pointer dereference
-		if(window->instruction2 == NULL){
-			window->instruction3 = NULL;
-		} else {
-			window->instruction3 = window->instruction2->next_statement;
-		}
-
-		//Let the helper handle the status
-		set_window_status(window);
+		
+		//Reconstruct the window so that instruction3 is the start
+		reconstruct_window(window, window->instruction3);
 
 		//This counts as a change
 		changed = TRUE;
@@ -3228,20 +3206,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//We can now delete the very first statement
 			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 
-			//Following this, we'll shift everything appropriately now that instruction1 is gone
-			window->instruction1 = window->instruction2;
-			window->instruction2 = window->instruction3;
-
-			//If this is NULL, mark that we're at the end
-			if(window->instruction2 == NULL){
-				window->instruction3 = NULL;
-			} else {
-				//Otherwise we'll shift this forward
-				window->instruction3 = window->instruction2->next_statement;
-			}
-
-			//Let the helper set the status
-			set_window_status(window);
+			//Reconstruct the window with instruction2 as the start
+			reconstruct_window(window, window->instruction2);
 
 			//This does count as a change
 			changed = TRUE;
@@ -3276,15 +3242,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//We can now delete the very first statement
 			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 
-			//Following this, we'll shift everything appropriately now that instruction1 is gone
-			window->instruction1 = window->instruction2;
-			window->instruction2 = window->instruction3;
-
-			//Otherwise we'll shift this forward
-			window->instruction3 = window->instruction2->next_statement;
-
-			//Let the helper set the window status
-			set_window_status(window);
+			//Reconstruct the window with instruction2 as the seed
+			reconstruct_window(window, window->instruction2);
 
 			//This does count as a change
 			changed = TRUE;
@@ -3319,20 +3278,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//We can now delete the very first statement
 			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 
-			//Following this, we'll shift everything appropriately now that instruction1 is gone
-			window->instruction1 = window->instruction2;
-			window->instruction2 = window->instruction3;
-
-			//If this is NULL, mark that we're at the end
-			if(window->instruction2 == NULL){
-				window->instruction3 = NULL;
-			} else {
-				//Otherwise we'll shift this forward
-				window->instruction3 = window->instruction2->next_statement;
-			}
-
-			//Let the helper set the status
-			set_window_status(window);
+			//Reconstruct the window with instruction2 as the seed
+			reconstruct_window(window, window->instruction2);
 
 			//This does count as a change
 			changed = TRUE;
@@ -3384,21 +3331,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			delete_statement(cfg, first->block_contained_in, first);
 			delete_statement(cfg, third->block_contained_in, third);
 
-			//Now that the second is the only one left, we'll shift the window down
-			//Second becomes first
-			window->instruction1 = second;
-			window->instruction2 = second->next_statement;
-
-			//We need to account for cases where this happens
-			if(window->instruction2 == NULL){
-				window->instruction3 = NULL;
-			} else {
-				//Advance it
-				window->instruction3 = window->instruction2->next_statement;
-			}
-
-			//Allow the helper to set this status
-			set_window_status(window);
+			//Reconstruct the window with second as the new instruction1
+			reconstruct_window(window, second);
 
 			//Regardless of what happened, we did change the window, so we'll
 			//update this
@@ -3508,7 +3442,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 		//If we make it here we know that we have a case where this is doable
 		printf("FOUND OPPORTUNITY\n");
-
 	}
 
 
