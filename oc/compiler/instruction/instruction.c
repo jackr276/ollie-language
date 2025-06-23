@@ -122,30 +122,27 @@ u_int8_t is_instruction_assignment_operation(instruction_t* instruction){
  * Select the size of a constant based on its type
  */
 variable_size_t select_constant_size(three_addr_const_t* constant){
-	variable_size_t size;
+	//Switch on the const type
+	switch(constant->const_type){
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+		case HEX_CONST:
+			return DOUBLE_WORD;
 
-	//This are all 32 bit
-	if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U
-		|| constant->const_type == HEX_CONST){
-		size = DOUBLE_WORD;
+		case FLOAT_CONST:
+			return DOUBLE_PRECISION;
 
-	//Default for a float is double precision
-	} else if(constant->const_type == FLOAT_CONST){
-		size = DOUBLE_PRECISION;
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+			return QUAD_WORD;
 
-	//These are all 64 bit
-	} else if(constant->const_type == LONG_CONST || constant->const_type == LONG_CONST_FORCE_U){
-		size = QUAD_WORD;
+		case CHAR:
+			return BYTE;
 
-	} else if(constant->const_type == CHAR_CONST){
-		size = BYTE;
-
-	//Sane default
-	} else {
-		size = QUAD_WORD;
+		//Everything is dword by default
+		default:
+			return DOUBLE_WORD;
 	}
-
-	return size;
 }
 
 

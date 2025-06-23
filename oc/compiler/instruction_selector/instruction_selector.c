@@ -2408,19 +2408,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
 
-		//Now we'll shift the window appropriately
-		window->instruction1 = window->instruction3;
-		window->instruction2 = window->instruction1->next_statement;
-
-		//Avoid a null pointer dereference
-		if(window->instruction2 == NULL){
-			window->instruction3 = NULL;
-		} else {
-			window->instruction3 = window->instruction2->next_statement;
-		}
-
-		//Update the window after this
-		set_window_status(window);
+		//Reconstruct the window with instruction3 as the start
+		reconstruct_window(window, window->instruction3);
 
 		//This counts as a change
 		changed = TRUE;
@@ -2450,19 +2439,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
 
-		//Now we'll shift the window appropriately
-		window->instruction1 = window->instruction3;
-		window->instruction2 = window->instruction1->next_statement;
-
-		//Avoid a null pointer dereference
-		if(window->instruction2 == NULL){
-			window->instruction3 = NULL;
-		} else {
-			window->instruction3 = window->instruction2->next_statement;
-		}
-
-		//Update the window after this
-		set_window_status(window);
+		//Reconstruct the window with instruction3 as the start
+		reconstruct_window(window, window->instruction3);
 
 		//This counts as a change
 		changed = TRUE;
@@ -2493,18 +2471,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//We can now delete instruction 1
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 
-		//Once that's done, everything needs to be shifted back by 1
-		window->instruction1 = window->instruction2;
-		window->instruction2 = window->instruction1->next_statement;
-
-		if(window->instruction2 == NULL){
-			window->instruction3 = NULL;
-		} else {
-			window->instruction3 = window->instruction2->next_statement;
-		}
-
-		//We'll need to update the status accordingly
-		set_window_status(window);
+		//Reconstruct the window with instruction2 as the start
+		reconstruct_window(window, window->instruction2);
 
 		//This counts as a change
 		changed = TRUE;
@@ -2536,19 +2504,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//We can scrap instruction 1 now, it's useless
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 
-		//Push everyting back by 1
-		window->instruction1 = window->instruction2;
-		window->instruction2 = window->instruction3;
-
-		//Avoid any null pointer dereference
-		if(window->instruction2 == NULL){
-			window->instruction3 = NULL;
-		} else {
-			window->instruction3 = window->instruction2->next_statement;
-		}
-
-		//Let the helper update the status
-		set_window_status(window);
+		//Reconstruct the window with instruction2 as the start
+		reconstruct_window(window, window->instruction2);
 
 		//This counts as a change
 		changed = TRUE;
@@ -2556,7 +2513,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 
 	//Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT && window->instruction2->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
+	if(window->instruction1->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT
+		&& window->instruction2->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
 		//This will be flagged as an indirect jump
 		window->instruction2->instruction_type = INDIRECT_JMP;
 
@@ -2572,19 +2530,8 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		//We're now able to delete instruction 1
 		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
 
-		//Now we shift everything backwards
-		window->instruction1 = window->instruction2;
-		window->instruction2 = window->instruction2->next_statement;
-
-		//Avoid any kind of null pointer dereference
-		if(window->instruction2 == NULL){
-			window->instruction3 = NULL;
-		} else {
-			window->instruction3 = window->instruction2->next_statement;
-		}
-
-		//Reevaluate the status now
-		set_window_status(window);
+		//Reconstruct the window with instruction2 as the start
+		reconstruct_window(window, window->instruction2);
 
 		//This counts as a change
 		changed = TRUE;
