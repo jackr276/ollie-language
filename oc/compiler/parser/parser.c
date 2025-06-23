@@ -332,81 +332,98 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 	//Add the line number
 	constant_node->line_number = parser_line_num;
 
+	//The constant node
+	constant_ast_node_t* const_node = constant_node->node;
+
 	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
+		//Regular signed int
 		case INT_CONST:
-		case INT_CONST_FORCE_U:
-			((constant_ast_node_t*)(constant_node->node))->constant_type = INT_CONST;
-			//Store the int value we were given
-			int32_t int_val = atoi(lookahead.lexeme);
+			//Mark what it is
+			const_node->constant_type = INT_CONST;
 
-			((constant_ast_node_t*)(constant_node->node))->int_val = int_val;
+			//Store the integer value
+			const_node->int_val = atoi(lookahead.lexeme);
 
-			//By default, int constants are of type s_int32
-			if(lookahead.tok == INT_CONST_FORCE_U){
-				//If we force it to be unsigned then it will be
-				constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
-			} else {
-				//Otherwise it's signed by default
-				constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
-			}
+			//This is signed by default
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+
 			break;
 
-		case HEX_CONST:
-			((constant_ast_node_t*)(constant_node->node))->constant_type = HEX_CONST;
+		//Forced unsigned
+		case INT_CONST_FORCE_U:
+			//Mark what it is
+			const_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			int32_t hex_val = strtol(lookahead.lexeme, NULL, 16);
+			const_node->int_val = atoi(lookahead.lexeme);
 
-			((constant_ast_node_t*)(constant_node->node))->int_val = hex_val;
+			//If we force it to be unsigned then it will be
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
+
+			break;
+
+		//Hexadecimal constant
+		case HEX_CONST:
+			const_node->constant_type = HEX_CONST;
+			//Store the int value we were given
+			const_node->int_val = strtol(lookahead.lexeme, NULL, 16);
 
 			//By default, int constants are of type s_int32
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 			break;
 
+		//Regular signed long constant
 		case LONG_CONST:
-		case LONG_CONST_FORCE_U:
-			((constant_ast_node_t*)(constant_node->node))->constant_type = LONG_CONST;
-			//Store the int value we were given
-			int64_t long_val = atol(lookahead.lexeme);
+			//Store the type
+			const_node->constant_type = LONG_CONST;
 
-			((constant_ast_node_t*)(constant_node->node))->long_val = long_val;
+			//Store the value we've been given
+			const_node->long_val = atol(lookahead.lexeme);
+
+			//This is a signed i64
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
+
+			break;
+
+		//Unsigned long constant
+		case LONG_CONST_FORCE_U:
+			//Store the type
+			const_node->constant_type = LONG_CONST;
+
+			//Store the value we've been given
+			const_node->long_val = atol(lookahead.lexeme);
 
 			//By default, int constants are of type s_int64 
-			if(lookahead.tok == LONG_CONST_FORCE_U){
-				constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
-			} else {
-				//Otherwise it's signed 
-				constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
-			}
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
 			break;
 
 		case FLOAT_CONST:
-			((constant_ast_node_t*)(constant_node->node))->constant_type = FLOAT_CONST;
+			const_node->constant_type = FLOAT_CONST;
 			//Grab the float val
 			float float_val = atof(lookahead.lexeme);
 
 			//Store the float value we were given
-			((constant_ast_node_t*)(constant_node->node))->float_val = float_val;
+			const_node->float_val = float_val;
 
 			//By default, float constants are of type float32
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f32")->type;
 			break;
 
 		case CHAR_CONST:
-			((constant_ast_node_t*)(constant_node->node))->constant_type = CHAR_CONST;
+			const_node->constant_type = CHAR_CONST;
 			//Grab the char val
 			char char_val = *(lookahead.lexeme);
 
 			//Store the char value that we were given
-			((constant_ast_node_t*)(constant_node->node))->char_val = char_val;
+			const_node->char_val = char_val;
 
 			//Char consts are of type char(obviously)
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "char")->type;
 			break;
 
 		case STR_CONST:
-			((constant_ast_node_t*)(constant_node->node))->constant_type = STR_CONST;
+			const_node->constant_type = STR_CONST;
 			//String contants are of a char[] type. We will determine what the size of this char[] is here
 			//Let's first find the string length
 			u_int32_t length = strlen(lookahead.lexeme + 1);
@@ -433,7 +450,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			
 			//By the time we make it down here, the type has been accounted for
 			//We'll now copy the lexeme in
-			strcpy(((constant_ast_node_t*)(constant_node->node))->string_val, lookahead.lexeme);
+			strcpy(const_node->string_val, lookahead.lexeme);
 			break;
 
 		default:
@@ -1036,7 +1053,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
 	//this assignment is illegal
-	if(current_var->initialized == 1 && current_var->is_mutable == 0){
+	if(current_var->initialized == TRUE && current_var->is_mutable == FALSE){
 		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(current_var);
@@ -1080,13 +1097,15 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Let's now see if we have compatible types
 	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
 	generic_type_t* right_hand_type = expr->inferred_type;
-	
+
+
 	/**
 	 * We will make use of the types assignable module here, as the rules are slightly 
 	 * different than the types compatible rule
 	 */
 	generic_type_t* final_type = types_assignable(left_hand_type, right_hand_type);
-	
+
+
 	//If they're not, we fail here
 	if(final_type == NULL){
 		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
