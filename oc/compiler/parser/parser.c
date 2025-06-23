@@ -7141,8 +7141,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	declared_var->line_number = current_line;
 	//Is it global? This speeds up optimization down the line
 	declared_var->is_global = is_global;
-	//Store what module this was defined in
-	strncpy(declared_var->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -7390,8 +7388,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	declared_var->is_global = is_global;
 	//Save the line num
 	declared_var->line_number = current_line;
-	//Insert what module this came from
-	strncpy(declared_var->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
@@ -7849,8 +7845,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		function_record->call_graph_node = create_call_graph_node(function_record);
 		//By default, this function has never been called
 		function_record->called = 0;
-		//Copy the module it was defined in
-		strncpy(function_record->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -8288,8 +8282,6 @@ static u_int8_t replace_statement(FILE* fl){
 	//Once we've created it, we'll pack it with values
 	created_const->constant_node = constant_node;
 	created_const->line_number = parser_line_num;
-	//Store what module this was defined in
-	strncpy(created_const->module_defined_in, current_file_name, MAX_IDENT_LENGTH);
 
 	//Insert the record into the symtab
 	insert_constant(constant_symtab, created_const);

@@ -84,8 +84,6 @@ struct symtab_function_record_t{
 	void* entrance_block;
 	//The name that we are storing. This is used to derive the hash
 	char func_name[MAX_IDENT_LENGTH];
-	//The module it was defined in
-	char module_defined_in[MAX_IDENT_LENGTH];
 	//The parameters
 	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The data area for the whole function
@@ -122,8 +120,6 @@ struct symtab_function_record_t{
 struct symtab_variable_record_t{
 	//Variable name
 	char var_name[MAX_IDENT_LENGTH];
-	//The module it was defined in
-	char module_defined_in[MAX_IDENT_LENGTH];
 	//For SSA renaming
 	lightstack_t counter_stack;
 	//What function was it declared in?
@@ -201,8 +197,6 @@ struct symtab_type_record_t{
 struct symtab_constant_record_t{
 	//The name
 	char name[MAX_IDENT_LENGTH];
-	//The module it was defined in
-	char module_defined_in[MAX_IDENT_LENGTH];
 	//We'll link directly to the constant node here
 	void* constant_node;
 	//For linked list functionality
