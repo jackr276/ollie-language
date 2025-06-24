@@ -721,6 +721,167 @@ static generic_ast_node_t* function_call(FILE* fl){
 
 
 /**
+ * Handle a sizeof statement
+ *
+ * NOTE: By the time we get here, we have already seen and consumed the sizeof token
+ */
+static generic_ast_node_t* sizeof_statement(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//We must then see left parenthesis
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail case here
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected after sizeof call", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we'll push to the stack for checking
+	push_token(grouping_stack, lookahead);
+
+	//We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
+	//actual expression result will be unused. It's important to note that we will not actually evaluate the expression here at
+	//all - sall we can about is the return type
+	generic_ast_node_t* expr_node = logical_or_expression(fl);
+	
+	//If it's an error
+	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Unable to use sizeof on invalid expression",  parser_line_num);
+		num_errors++;
+		//It's already an error, so give it back that way
+		return expr_node;
+	}
+
+	//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail out here if we don't see it
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", parser_line_num);
+		num_errors++;
+		//Create and return the error
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We can also fail if we somehow see unmatched parenthesis
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
+		num_errors++;
+		//Create and return the error
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
+	//type information for ourselves
+	generic_type_t* return_type = expr_node->inferred_type;
+
+	//Create a constant node
+	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+	//Extract this here to avoid repeated casting
+	constant_ast_node_t* constant = const_node->node;
+
+	//This will be an int const
+	constant->constant_type = INT_CONST;
+	//Store the actual value of the type size
+	constant->int_val = return_type->type_size;
+	//Grab and store type info
+	//This will always end up as a generic signed int
+	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
+	//We cannot assign to this
+	const_node->is_assignable = FALSE;
+	//Store this too
+	const_node->line_number = parser_line_num;
+
+	//Finally we'll return this constant node
+	return const_node;
+}
+
+
+/**
+ * Handle a typesize expression
+ *
+ * NOTE: by the time we get here, we have already seen and consumed the typesize token
+ */
+static generic_ast_node_t* typesize_statement(FILE* fl){
+	//Lookahead token
+	Lexer_item lookahead;
+
+	//We must then see left parenthesis
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail case here
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize call", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise we'll push to the stack for checking
+	push_token(grouping_stack, lookahead);
+
+	//Now we need to see a valid type-specifier. It is important to note that the type
+	//specifier requires that a type has actually been defined. If it wasn't defined,
+	//then this will return an error node
+	generic_type_t* type_spec = type_specifier(fl);
+
+	//If it's an error
+	if(type_spec == NULL){
+		print_parse_message(PARSE_ERROR, "Unable to use typesize on undefined type",  parser_line_num);
+		num_errors++;
+		//It's already an error, so give it back that way
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Once we've done this, we can grab the actual size of the type-specifier
+	u_int32_t type_size = type_spec->type_size;
+
+	//And then we no longer need the type-spec node, we can just remove it
+
+	//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail out here if we don't see it
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Right parenthesis expected after type specifer", parser_line_num);
+		num_errors++;
+		//Create and return the error
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//We can also fail if we somehow see unmatched parenthesis
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
+		num_errors++;
+		//Create and return the error
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Create a constant node
+	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+	//Extract the constant area for convenience
+	constant_ast_node_t* constant = const_node->node;
+
+	//Add the line number
+	const_node->line_number = parser_line_num;
+	//Add the constant
+	constant->constant_type = INT_CONST;
+	//Store the actual value
+	constant->int_val = type_size;
+	//Grab and store type info
+	//These will be generic signed ints
+	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
+
+	//Finally we'll return this constant node
+	return const_node;
+}
+
+
+/**
  * A primary expression is, in a way, the termination of our expression chain. However, it can be used 
  * to chain back up to an expression in general using () as an enclosure. Just like all rules, a primary expression
  * itself has a parent and will produce children. The reference to the primary expression itself is always returned
@@ -733,6 +894,9 @@ static generic_ast_node_t* function_call(FILE* fl){
  * 									| <function-call>
  */
 static generic_ast_node_t* primary_expression(FILE* fl){
+	//For the function call rule if we make it there
+	generic_ast_node_t* func_call;
+
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -741,272 +905,143 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	//Grab the next token, we'll multiplex on this
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//We've seen an ident, so we'll put it back and let
-	//that rule handle it. This identifier will always be 
-	//a variable. It must also be a variable that has been initialized.
-	//We will check that it was initialized here
-	if(lookahead.tok == IDENT){
-		//Put it back
-		push_back_token(lookahead);
+	//Switch based on the token
+	switch(lookahead.tok){
+		//We've seen an ident, so we'll put it back and let
+		//that rule handle it. This identifier will always be 
+		//a variable. It must also be a variable that has been initialized.
+		//We will check that it was initialized here
+		case IDENT:
+			//Put it back
+			push_back_token(lookahead);
 
-		//We will let the identifier rule actually grab the ident. In this case
-		//the identifier will be a variable of some sort, that we'll need to check
-		//against the symbol table
-		generic_ast_node_t* ident = identifier(fl);
+			//We will let the identifier rule actually grab the ident. In this case
+			//the identifier will be a variable of some sort, that we'll need to check
+			//against the symbol table
+			generic_ast_node_t* ident = identifier(fl);
 
-		//If there was a failure of some kind, we'll allow it to propogate up
-		if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-			//Send the error up the chain
+			//If there was a failure of some kind, we'll allow it to propogate up
+			if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+				//Send the error up the chain
+				return ident;
+			}
+
+			//Grab this out for convenience
+			char* var_name = ident->identifier;
+
+			//We have a few options here, we could find a constant that has been declared
+			//like this. If so, we'll return a duplicate of the constant node that we have
+			//inside of here
+			symtab_constant_record_t* found_const = lookup_constant(constant_symtab, var_name);
+			
+			//If this is in fact a constant, we'll duplicate the whole thing and send it
+			//out the door
+			if(found_const != NULL){
+				return duplicate_node(found_const->constant_node);
+			}
+
+			//Now we will look this up in the variable symbol table
+			symtab_variable_record_t* found = lookup_variable(variable_symtab, var_name);
+
+			//Record the current var for later use
+			current_var = found;
+
+			//We now must see a variable that was intialized. If it was not
+			//initialized, then we have an issue
+			if(found == NULL){
+				sprintf(info, "Variable \"%s\" has not been declared", var_name);
+				return print_and_return_error(info, current_line);
+			}
+
+			//Store the inferred type
+			ident->inferred_type = found->type_defined_as;
+			//Store the variable that's associated
+			ident->variable = found;
+			//Idents are assignable
+			ident->is_assignable = ASSIGNABLE;
+
+			//Give back the ident node
 			return ident;
-		}
 
-		//Grab this out for convenience
-		char* var_name = ident->identifier;
+		//If we see any constant
+		case INT_CONST:
+		case STR_CONST:
+		case FLOAT_CONST:
+		case CHAR_CONST:
+		case LONG_CONST:
+		case HEX_CONST:
+		case INT_CONST_FORCE_U:
+		case LONG_CONST_FORCE_U:
+			//Again put the token back
+			push_back_token(lookahead);
 
-		//We have a few options here, we could find a constant that has been declared
-		//like this. If so, we'll return a duplicate of the constant node that we have
-		//inside of here
-		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, var_name);
-		
-		//If this is in fact a constant, we'll duplicate the whole thing and send it
-		//out the door
-		if(found_const != NULL){
-			return duplicate_node(found_const->constant_node);
-		}
+			//Call the constant rule to grab the constant node
+			generic_ast_node_t* constant_node = constant(fl, SEARCHING_FOR_CONSTANT);
 
-		//Now we will look this up in the variable symbol table
-		symtab_variable_record_t* found = lookup_variable(variable_symtab, var_name);
-
-		//Record the current var for later use
-		current_var = found;
-
-		//We now must see a variable that was intialized. If it was not
-		//initialized, then we have an issue
-		if(found == NULL){
-			sprintf(info, "Variable \"%s\" has not been declared", var_name);
-			return print_and_return_error(info, current_line);
-		}
-
-		//Store the inferred type
-		ident->inferred_type = found->type_defined_as;
-		//Store the variable that's associated
-		ident->variable = found;
-		//Idents are assignable
-		ident->is_assignable = ASSIGNABLE;
-
-		//Give back the ident node
-		return ident;
-
-	//We can also see a constant
-	} else if (lookahead.tok == INT_CONST || lookahead.tok == STR_CONST || lookahead.tok == FLOAT_CONST
-			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == HEX_CONST
-			  || lookahead.tok == INT_CONST_FORCE_U || lookahead.tok == LONG_CONST_FORCE_U){
-		//Again put the token back
-		push_back_token(lookahead);
-
-		//Call the constant rule to grab the constant node
-		generic_ast_node_t* constant_node = constant(fl, SEARCHING_FOR_CONSTANT);
-
-		//Fail out here if this happens
-		if(constant_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Give back the constant node - if it's an error, the parent will handle
 			return constant_node;
-		}
-
-		//Give back the constant node
-		return constant_node;
-
-	/**
-	 * We can take the size of a logical or expression. We will not be evaluating this expression, but
-	 * will instead be returning a constant of it's return type
-	 */
-	} else if(lookahead.tok == SIZEOF){
-		//We must then see left parenthesis
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Fail case here
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after sizeof call", parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Otherwise we'll push to the stack for checking
-		push_token(grouping_stack, lookahead);
-
-		//We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
-		//actual expression result will be unused. It's important to note that we will not actually evaluate the expression here at
-		//all - sall we can about is the return type
-		generic_ast_node_t* expr_node = logical_or_expression(fl);
 		
-		//If it's an error
-		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Unable to use sizeof on invalid expression",  parser_line_num);
-			num_errors++;
-			//It's already an error, so give it back that way
-			return expr_node;
-		}
+		//We can see a sizeof call
+		case SIZEOF:
+			//Let the helper handle this
+			return sizeof_statement(fl);
 
-		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		//If we see the typesize keyword, we are locked in to the typesize rule
+		//The typesize rule is a compiler only directive. Since we know the size of all
+		//valid types at compile-time, we will be able to return an INT-CONST node with the
+		//size here
+		case TYPESIZE:
+			//Let the helper deal with this
+			return typesize_statement(fl);
 
-		//Fail out here if we don't see it
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", parser_line_num);
-			num_errors++;
-			//Create and return the error
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
+		//We could see a case where we have a parenthesis in an expression
+		case L_PAREN:
+			//We'll push it up to the stack for matching
+			push_token(grouping_stack, lookahead);
 
-		//We can also fail if we somehow see unmatched parenthesis
-		if(pop_token(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
-			num_errors++;
-			//Create and return the error
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
+			//We are now required to see a valid logical or expression expression
+			generic_ast_node_t* expr = logical_or_expression(fl);
 
-		//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
-		//type information for ourselves
-		generic_type_t* return_type = expr_node->inferred_type;
+			//If it's an error, just give the node back
+			if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+				return expr;
+			}
 
-		//Create a constant node
-		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
-		//This will be an int const
-		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
-		//Store the actual value of the type size
-		((constant_ast_node_t*)(const_node->node))->int_val = return_type->type_size;
-		//Grab and store type info
-		//Constants are ALWAYS of type i32
-		const_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
-		//We cannot assign to this
-		const_node->is_assignable = FALSE;
-		//Store this too
-		const_node->line_number = current_line;
+			//Otherwise it worked, but we're still not done. We now must see the R_PAREN and
+			//match it with the accompanying L_PAREN
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-		//Finally we'll return this constant node
-		return const_node;
+			//Fail case here
+			if(lookahead.tok != R_PAREN){
+				//Create and return an error node
+				return print_and_return_error("Right parenthesis expected after expression", parser_line_num);
+			}
 
-	//If we see the typesize keyword, we are locked in to the typesize rule
-	//The typesize rule is a compiler only directive. Since we know the size of all
-	//valid types at compile-time, we will be able to return an INT-CONST node with the
-	//size here
-	} else if(lookahead.tok == TYPESIZE){
-		//We must then see left parenthesis
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			//Another fail case, if they're unmatched
+			if(pop_token(grouping_stack).tok != L_PAREN){
+				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+			}
 
-		//Fail case here
-		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize call", parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Otherwise we'll push to the stack for checking
-		push_token(grouping_stack, lookahead);
-
-		//Now we need to see a valid type-specifier. It is important to note that the type
-		//specifier requires that a type has actually been defined. If it wasn't defined,
-		//then this will return an error node
-		generic_type_t* type_spec = type_specifier(fl);
-
-		//If it's an error
-		if(type_spec == NULL){
-			print_parse_message(PARSE_ERROR, "Unable to use typesize on undefined type",  parser_line_num);
-			num_errors++;
-			//It's already an error, so give it back that way
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Once we've done this, we can grab the actual size of the type-specifier
-		u_int32_t type_size = type_spec->type_size;
-
-		//And then we no longer need the type-spec node, we can just remove it
-
-		//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Fail out here if we don't see it
-		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after type specifer", parser_line_num);
-			num_errors++;
-			//Create and return the error
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//We can also fail if we somehow see unmatched parenthesis
-		if(pop_token(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
-			num_errors++;
-			//Create and return the error
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
-
-		//Create a constant node
-		generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
-		//Add the line number
-		const_node->line_number = parser_line_num;
-		//Add the constant
-		((constant_ast_node_t*)(const_node->node))->constant_type = INT_CONST;
-		//Store the actual value
-		((constant_ast_node_t*)(const_node->node))->int_val = type_size;
-		//Grab and store type info
-		//Constants are ALWAYS of type s_int32
-		const_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
-
-		//Finally we'll return this constant node
-		return const_node;
-
-	//This is the case where we are putting the expression
-	//In parens
-	} else if (lookahead.tok == L_PAREN){
-		//We'll push it up to the stack for matching
-		push_token(grouping_stack, lookahead);
-
-		//We are now required to see a valid logical or expression expression
-		generic_ast_node_t* expr = logical_or_expression(fl);
-
-		//If it's an error, just give the node back
-		if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Return the expression node
 			return expr;
-		}
 
-		//Otherwise it worked, but we're still not done. We now must see the R_PAREN and
-		//match it with the accompanying L_PAREN
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		//We could see a function call
+		case AT:
+			//We will let this rule handle the function call
+			func_call = function_call(fl);
 
-		//Fail case here
-		if(lookahead.tok != R_PAREN){
-			//Create and return an error node
-			return print_and_return_error("Right parenthesis expected after expression", parser_line_num);
-		}
+			//If we failed here
+			if(func_call->CLASS == AST_NODE_CLASS_ERR_NODE){
+				return func_call;
+			}
 
-		//Another fail case, if they're unmatched
-		if(pop_token(grouping_stack).tok != L_PAREN){
-			return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-		}
-
-		//Return the expression node
-		return expr;
-	
-	//Otherwise, if we see an @ symbol, we know it's a function call
-	} else if(lookahead.tok == AT){
-		//We will let this rule handle the function call
-		generic_ast_node_t* func_call = function_call(fl);
-
-		//If we failed here
-		if(func_call->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Return the function call node
 			return func_call;
-		}
 
-		//Return the function call node
-		return func_call;
-
-	//Generic fail case
-	} else {
-		sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme);
-		return print_and_return_error(info, current_line);
+		//If we get here we fail
+		default:
+			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme);
+			return print_and_return_error(info, current_line);
 	}
 }
 
