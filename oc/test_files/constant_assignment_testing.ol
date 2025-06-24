@@ -7,5 +7,7 @@ fn main() -> i32 {
 	let mut a:i32 := 3;
 	let mut b:i16 := 3;
 
-	ret a + b;
+	let mut c:i16 := b + 6;
+
+	ret a + b + c;
 }

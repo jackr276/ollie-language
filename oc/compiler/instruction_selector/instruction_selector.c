@@ -3184,7 +3184,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
 			instruction_t* const_assignment = window->instruction1;
-			printf("HERE\n");
 
 			//Let's mark that this is now a binary op with const statement
 			window->instruction3->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -3672,7 +3671,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		instruction_t* second = window->instruction2;
 
 		//Calculate this for now in case we need it
-		generic_type_t* final_type = types_assignable(second->op1_const->type, first->op1_const->type);
+		generic_type_t* final_type = types_assignable(&(second->op1_const->type), &(first->op1_const->type));
 
 		//If these are the same variable and the types are compatible, then we're good to go
 		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL){

@@ -347,6 +347,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//This is signed by default
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
 
 			break;
 
@@ -358,6 +359,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->int_val = atoi(lookahead.lexeme);
 
 			//If we force it to be unsigned then it will be
+			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_unsigned_int")->type;
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
 
 			break;
@@ -369,9 +371,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			//Store the int value we were given
 			const_node->int_val = strtol(lookahead.lexeme, NULL, 0);
 
-			printf("VALUE IS %d\n\n\n", const_node->int_val);
-
 			//If we force it to be unsigned then it will be
+			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 
 			break;
@@ -385,6 +386,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->long_val = atol(lookahead.lexeme);
 
 			//This is a signed i64
+			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
 
 			break;
@@ -398,6 +400,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->long_val = atol(lookahead.lexeme);
 
 			//By default, int constants are of type s_int64 
+			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_unsigned_int")->type;
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
 			break;
@@ -605,7 +608,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 		 * We will use the types_assignable function here because in a way we are trying to assign
 		 * this value into the parameter
 		 */
-		generic_type_t* param_type_checked = types_assignable(param_type, expr_type);
+		generic_type_t* param_type_checked = types_assignable(&param_type, &expr_type);
 
 		//If this is null, it means that our check failed
 		if(param_type_checked == NULL){
@@ -1107,7 +1110,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	 * We will make use of the types assignable module here, as the rules are slightly 
 	 * different than the types compatible rule
 	 */
-	generic_type_t* final_type = types_assignable(left_hand_type, right_hand_type);
+	generic_type_t* final_type = types_assignable(&left_hand_type, &right_hand_type);
 
 
 	//If they're not, we fail here
@@ -1300,7 +1303,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u32")->type;
 
 	//Let's make sure that this is an int
-	if(types_assignable(reference_type, expr->inferred_type) == NULL){
+	if(types_assignable(&reference_type, &(expr->inferred_type)) == NULL){
 		sprintf(info, "Array accessing requires types compatible with \"u32\", but instead got \"%s\"", expr->inferred_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
@@ -2101,7 +2104,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	/**
 	 * We will use the types_assignable function to check this
 	 */
-	generic_type_t* return_type = types_assignable(casting_to_type, being_casted_type);
+	generic_type_t* return_type = types_assignable(&casting_to_type, &being_casted_type);
 
 	//This is our fail case
 	if(return_type == NULL){
@@ -5368,7 +5371,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	}
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
-	if(types_assignable(current_function->return_type, expr_node->inferred_type) == NULL){
+	if(types_assignable(&(current_function->return_type), &(expr_node->inferred_type)) == NULL){
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name, current_function->return_type->type_name,
 		  		expr_node->inferred_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
@@ -6816,7 +6819,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 		//Otherwise we know that it is good, but is it the right type
 		//Are the types here compatible?
-		case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, enum_ident_node->inferred_type);
+		case_stmt->inferred_type = types_assignable(&(switch_stmt_node->inferred_type), &(enum_ident_node->inferred_type));
 
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
@@ -6890,7 +6893,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 		//Otherwise we know that it is good, but is it the right type
 		//Are the types here compatible?
-		case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, const_node->inferred_type);
+		case_stmt->inferred_type = types_assignable(&(switch_stmt_node->inferred_type), &(const_node->inferred_type));
 
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
@@ -7351,7 +7354,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	generic_type_t* left_hand_type = type_spec;
 	generic_type_t* right_hand_type = expr_node->inferred_type;
 
-	generic_type_t* return_type = types_assignable(left_hand_type, right_hand_type);
+	generic_type_t* return_type = types_assignable(&left_hand_type, &right_hand_type);
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(expr_node->inferred_type->type_class == TYPE_CLASS_POINTER){
@@ -7958,7 +7961,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			symtab_variable_record_t* param_rec = param_list_cursor->variable;
 
 			//Let's now compare the types here
-			if(types_assignable(func_param->type_defined_as, param_rec->type_defined_as) == NULL){
+			if(types_assignable(&(func_param->type_defined_as), &(param_rec->type_defined_as)) == NULL){
 				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				print_function_name(function_record);
