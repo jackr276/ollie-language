@@ -70,6 +70,10 @@ static u_int16_t parser_line_num = 1;
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
 
+//These types are used *a lot*, so we'll store them to avoid constant lookups
+generic_type_t* generic_unsigned_int;
+generic_type_t* generic_signed_int;
+
 //Are we enabling debug printing? By default no
 u_int8_t enable_debug_printing = FALSE;
 
@@ -163,6 +167,48 @@ static void update_inferred_type_in_subtree(generic_ast_node_t* sub_tree_node, s
 		//If the current child has the same var as the one passed in, we will
 		//update it to be the new inferred type
 		if(current->variable == var){
+			current->inferred_type = new_inferred_type;
+		}
+
+		//Now enqueue all of the siblings of current
+		generic_ast_node_t* current_sibling = current->first_child;
+		
+		//So long as we have more siblings
+		while(current_sibling != NULL){
+			//Add to the queue
+			enqueue(queue, current_sibling);
+			//Push this one up
+			current_sibling = current_sibling->next_sibling;
+		}
+	}
+
+	//Once we're done, destroy the whole thing
+	heap_queue_dealloc(queue);
+}
+
+
+/**
+ * Update the inferred type in a subtree for a given variable. This
+ * happens when type coercion takes place at a certain level of the
+ * tree and we want to propogate it through
+ */
+static void update_type_in_subtree(generic_ast_node_t* sub_tree_node, generic_type_t* old_type, generic_type_t* new_inferred_type){
+	//Initialize a queue for level-order traversal
+	heap_queue_t* queue = heap_queue_alloc();
+
+	//Seed the queue with the sub_tree_node
+	enqueue(queue, sub_tree_node);
+
+	//Current pointer
+	generic_ast_node_t* current;
+
+	//So long as the queue isn't empty
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		//Dequeue off the queue
+		current = dequeue(queue);
+
+		//If the old type has a new inferred type to give, we'll do that
+		if(current->inferred_type == old_type){
 			current->inferred_type = new_inferred_type;
 		}
 
@@ -347,7 +393,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//This is signed by default
 			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
+			constant_node->inferred_type = generic_signed_int;
 
 			break;
 
@@ -359,7 +405,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->int_val = atoi(lookahead.lexeme);
 
 			//If we force it to be unsigned then it will be
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_unsigned_int")->type;
+			constant_node->inferred_type = generic_unsigned_int;
 			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
 
 			break;
@@ -372,7 +418,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->int_val = strtol(lookahead.lexeme, NULL, 0);
 
 			//If we force it to be unsigned then it will be
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
+			constant_node->inferred_type = generic_signed_int;
 			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 
 			break;
@@ -602,14 +648,11 @@ static generic_ast_node_t* function_call(FILE* fl){
 		generic_type_t* param_type = current_function_param->type_defined_as;
 		generic_type_t* expr_type = current_param->inferred_type;
 
-		/**
-		 * We will use the types_assignable function here because in a way we are trying to assign
-		 * this value into the parameter
-		 */
-		generic_type_t* param_type_checked = types_assignable(&param_type, &expr_type);
+		//Let's see if we're even able to assign this here
+		generic_type_t* final_type = types_assignable(&param_type, &expr_type);
 
 		//If this is null, it means that our check failed
-		if(param_type_checked == NULL){
+		if(final_type == NULL){
 			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". First defined here:",
 		   			function_name, param_type->type_name, num_params, expr_type->type_name);
 			print_parse_message(PARSE_ERROR, info,  parser_line_num);
@@ -621,6 +664,11 @@ static generic_ast_node_t* function_call(FILE* fl){
 		}
 
 		//Otherwise it worked
+		
+		//If this is the case, we'll need to propogate all of the types down the chain here
+		if(param_type == generic_unsigned_int || param_type == generic_signed_int){
+			update_type_in_subtree(current_param, param_type, current_param->inferred_type);
+		}
 
 		//We can now safely add this into the function call node as a child. In the function call node, 
 		//the parameters will appear in order from left to right
@@ -2207,12 +2255,12 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		}
 
 		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 		} 
 
 		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
@@ -2329,14 +2377,12 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			}
 
 			//If this is not null, assign the var too
-			if(temp_holder->variable != NULL){
-				printf("Updating temp holder inferred type\n");
+			if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 				update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 			} 
 
 			//If this is not null, assign the var too
-			if(right_child->variable != NULL){
-				printf("Updating right child inferred type\n");
+			if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 				update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 			}
 
@@ -2362,8 +2408,6 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		
 		//Now we can finally assign the sub tree type
 		sub_tree_root->inferred_type = return_type;
-
-		sub_tree_root->variable = right_child->variable;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -2464,22 +2508,22 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		//The return type is always the left child's type
 		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
-			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-		} 
-
-		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
-			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-		}
-
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//If this is not null, assign the var too
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
+			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
+		} 
+
+		//If this is not null, assign the var too
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
+			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
+		}
+	
 	} else {
 		//Otherwise just push the token back
 		push_back_token(lookahead);
@@ -2586,12 +2630,12 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		}
 
 		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 		} 
 
 		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
@@ -2699,12 +2743,12 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		}
 
 		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 		} 
 
 		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
@@ -2807,12 +2851,12 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		}
 
 		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 		} 
 
 		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
@@ -2918,12 +2962,12 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 		}
 
 		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 		} 
 
 		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
@@ -3028,12 +3072,12 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		}
 
 		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 		} 
 
 		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
@@ -3141,12 +3185,12 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		}
 
 		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 		} 
 
 		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
@@ -3257,12 +3301,12 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		}
 
 		//If this is not null, assign the var too
-		if(temp_holder->variable != NULL){
+		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 		} 
 
 		//If this is not null, assign the var too
-		if(right_child->variable != NULL){
+		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 		}
 
@@ -5368,8 +5412,14 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-	//If the current function's return type is not compatible with the return type here, we'll bail out
-	if(types_assignable(&(current_function->return_type), &(expr_node->inferred_type)) == NULL){
+	//Grab the old type out here
+	generic_type_t* old_expr_node_type = expr_node->inferred_type;
+
+	//Figure out what the final type is here
+	generic_type_t* final_type = types_assignable(&(current_function->return_type), &(expr_node->inferred_type));
+
+//If the current function's return type is not compatible with the return type here, we'll bail out
+	if(final_type == NULL){
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name, current_function->return_type->type_name,
 		  		expr_node->inferred_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
@@ -5377,6 +5427,11 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		print_function_name(current_function);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//If this is the case, we'll need to propogate all of the types down the chain here
+	if(old_expr_node_type == generic_unsigned_int || old_expr_node_type == generic_signed_int){
+		update_type_in_subtree(expr_node, old_expr_node_type, expr_node->inferred_type);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -5395,6 +5450,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//Add in the line number
 	return_stmt->line_number = parser_line_num;
+	return_stmt->inferred_type = final_type;
 	
 	//If we have deferred statements
 	if(deferred_stmts_node != NULL){
@@ -8507,6 +8563,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Add all basic types into the type symtab
 	add_all_basic_types(type_symtab);
+
+	generic_unsigned_int = lookup_type_name_only(type_symtab, "generic_unsigned_int")->type;
+	generic_signed_int = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	if(grouping_stack == NULL){

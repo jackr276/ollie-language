@@ -355,7 +355,7 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, basic_
 		case S_INT64:
 			return lookup_type_name_only(symtab, "u64")->type;
 		case SIGNED_INT_CONST:
-			return lookup_type_name_only(symtab, "unsigned_int_const")->type;
+			return lookup_type_name_only(symtab, "generic_unsigned_int")->type;
 		//We should never get here
 		default:
 			return lookup_type_name_only(symtab, "u32")->type;
