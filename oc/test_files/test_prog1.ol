@@ -6,7 +6,7 @@ define construct my_struct {
 } as my_struct;
 
 
-fn my_func(mut args:u32, mut my_float:f32) -> u32{
+fn my_func(mut args:u32) -> u32{
 	if(args == 2) then{
 		ret 3;
 	} else {
@@ -18,10 +18,7 @@ fn my_func(mut args:u32, mut my_float:f32) -> u32{
 		ret args;
 	} else if(args > 0) then {
 		args++;
-	} else {
-		my_float := 32.2;
-		//ret *(<u32*>(&my_float));
-	}
+	} 
 
 	for(let mut i:u32 := 0; i < 232; i++) do{
 		i--;
@@ -54,7 +51,7 @@ fn main(argc:i32, argv:char**) -> i32{
 	let mut idx:u32 := 0;
 
 	while(idx < 15) do{
-		let bab:u32 := @my_func(idx, 32.2);
+		let bab:u32 := @my_func(idx);
 		idx++;
 	}
 	

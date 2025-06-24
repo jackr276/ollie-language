@@ -188,9 +188,7 @@ static void update_inferred_type_in_subtree(generic_ast_node_t* sub_tree_node, s
 
 
 /**
- * Update the inferred type in a subtree for a given variable. This
- * happens when type coercion takes place at a certain level of the
- * tree and we want to propogate it through
+ * In a given subtree, update everything of type "old_type" to be of type new_inferred_type
  */
 static void update_type_in_subtree(generic_ast_node_t* sub_tree_node, generic_type_t* old_type, generic_type_t* new_inferred_type){
 	//Initialize a queue for level-order traversal
@@ -649,7 +647,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 		generic_type_t* expr_type = current_param->inferred_type;
 
 		//Let's see if we're even able to assign this here
-		generic_type_t* final_type = types_assignable(&param_type, &expr_type);
+		generic_type_t* final_type = types_assignable(&param_type, &(current_param->inferred_type));
 
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
@@ -666,8 +664,8 @@ static generic_ast_node_t* function_call(FILE* fl){
 		//Otherwise it worked
 		
 		//If this is the case, we'll need to propogate all of the types down the chain here
-		if(param_type == generic_unsigned_int || param_type == generic_signed_int){
-			update_type_in_subtree(current_param, param_type, current_param->inferred_type);
+		if(expr_type == generic_unsigned_int || expr_type == generic_signed_int){
+			update_type_in_subtree(current_param, expr_type, current_param->inferred_type);
 		}
 
 		//We can now safely add this into the function call node as a child. In the function call node, 
@@ -5431,6 +5429,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If this is the case, we'll need to propogate all of the types down the chain here
 	if(old_expr_node_type == generic_unsigned_int || old_expr_node_type == generic_signed_int){
+		printf("UPDATING TYPE\n\n");
 		update_type_in_subtree(expr_node, old_expr_node_type, expr_node->inferred_type);
 	}
 
