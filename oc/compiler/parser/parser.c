@@ -190,7 +190,7 @@ static void update_inferred_type_in_subtree(generic_ast_node_t* sub_tree_node, s
 /**
  * In a given subtree, update everything of type "old_type" to be of type new_inferred_type
  */
-static void update_type_in_subtree(generic_ast_node_t* sub_tree_node, generic_type_t* old_type, generic_type_t* new_inferred_type){
+static void update_constant_type_in_subtree(generic_ast_node_t* sub_tree_node, generic_type_t* old_type, generic_type_t* new_inferred_type){
 	//Initialize a queue for level-order traversal
 	heap_queue_t* queue = heap_queue_alloc();
 
@@ -665,7 +665,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 		
 		//If this is the case, we'll need to propogate all of the types down the chain here
 		if(expr_type == generic_unsigned_int || expr_type == generic_signed_int){
-			update_type_in_subtree(current_param, expr_type, current_param->inferred_type);
+			update_constant_type_in_subtree(current_param, expr_type, current_param->inferred_type);
 		}
 
 		//We can now safely add this into the function call node as a child. In the function call node, 
@@ -1361,7 +1361,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 
 	//If this is the case, we'll need to propogate all of the types down the chain here
 	if(old_type == generic_unsigned_int || old_type == generic_signed_int){
-		update_type_in_subtree(expr, old_type, expr->inferred_type);
+		update_constant_type_in_subtree(expr, old_type, expr->inferred_type);
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets
@@ -2194,6 +2194,10 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 	generic_ast_node_t* right_child;
 	//Holding the return type
 	generic_type_t* return_type;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid cast expression expression
 	generic_ast_node_t* sub_tree_root = cast_expression(fl);
@@ -2253,6 +2257,10 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
+
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
 		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
@@ -2270,6 +2278,16 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
+		}
+
+		//If this is the case, we'll need to propogate all of the types down the chain here
+		if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
+			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
+		}
+
+		//If this is the case, we'll need to propogate all of the types down the chain here
+		if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
+			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
@@ -2315,6 +2333,10 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 	generic_ast_node_t* right_child;
 	//Hold the return type for us here
 	generic_type_t* return_type;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid multiplicative expression
 	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl);
@@ -2372,6 +2394,10 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name, op.lexeme);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
 
 		//We have a pointer here in the temp holder, and we're trying to add/subtract something to it
 		if(temp_holder->inferred_type->type_class != TYPE_CLASS_POINTER){
@@ -2451,6 +2477,10 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid additive expression
 	generic_ast_node_t* sub_tree_root = additive_expression(fl);
@@ -2509,6 +2539,10 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name); 
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
@@ -2569,6 +2603,11 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
+
 
 	//No matter what, we do need to first see a valid shift expression
 	generic_ast_node_t* sub_tree_root = shift_expression(fl);
@@ -2628,6 +2667,10 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
+
 		//The return type is always the left child's type
 		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
@@ -2679,6 +2722,11 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
+
 
 	//No matter what, we do need to first see a valid relational expression
 	generic_ast_node_t* sub_tree_root = relational_expression(fl);
@@ -2738,6 +2786,10 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2790,6 +2842,11 @@ static generic_ast_node_t* and_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
+
 
 	//No matter what, we do need to first see a valid equality expression
 	generic_ast_node_t* sub_tree_root = equality_expression(fl);
@@ -2846,6 +2903,10 @@ static generic_ast_node_t* and_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2901,6 +2962,11 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
+
 
 	//No matter what, we do need to first see a valid and expression
 	generic_ast_node_t* sub_tree_root = and_expression(fl);
@@ -2956,6 +3022,10 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name);
 			return print_and_return_error(info, parser_line_num);
 		}
+		
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
@@ -3011,6 +3081,10 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid exclusive or expression
 	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl);
@@ -3066,6 +3140,10 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
@@ -3124,6 +3202,11 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
+
 
 	//No matter what, we do need to first see a valid inclusive or expression
 	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl);
@@ -3179,6 +3262,10 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
@@ -3240,6 +3327,10 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The old temp older type
+	generic_type_t* old_temp_holder_type;
+	//The old right child type
+	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a logical and expression
 	generic_ast_node_t* sub_tree_root = logical_and_expression(fl);
@@ -3295,6 +3386,10 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Store the old types in here
+		old_temp_holder_type = temp_holder->inferred_type;
+		old_right_child_type = right_child->inferred_type;
 		
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
@@ -5439,7 +5534,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If this is the case, we'll need to propogate all of the types down the chain here
 	if(old_expr_node_type == generic_unsigned_int || old_expr_node_type == generic_signed_int){
-		update_type_in_subtree(expr_node, old_expr_node_type, expr_node->inferred_type);
+		update_constant_type_in_subtree(expr_node, old_expr_node_type, expr_node->inferred_type);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
