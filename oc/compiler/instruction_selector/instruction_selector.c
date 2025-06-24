@@ -2889,17 +2889,26 @@ static u_int32_t log2_of_known_power_of_2(u_int64_t value){
  * Take in a constant and update it with its binary log value
  */
 static void update_constant_with_log2_value(three_addr_const_t* constant){
-	//These types use the 32 bit field
-	if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U || constant->const_type == HEX_CONST){
-		constant->int_const = log2_of_known_power_of_2(constant->int_const);
-	//Use the 64 bit field
-	} else if(constant->const_type == LONG_CONST || constant->const_type == LONG_CONST_FORCE_U){
-		constant->long_const = log2_of_known_power_of_2(constant->long_const);
-	//Use the 8 bit field
-	} else if(constant->const_type == CHAR_CONST){
-		constant->char_const = log2_of_known_power_of_2(constant->char_const);
+	//Switch based on the type
+	switch(constant->const_type){
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+			constant->int_const = log2_of_known_power_of_2(constant->int_const);
+			break;
+
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+			constant->long_const = log2_of_known_power_of_2(constant->long_const);
+			break;
+
+		case CHAR_CONST:
+			constant->char_const = log2_of_known_power_of_2(constant->char_const);
+			break;
+
+		//We should never get here
+		default:
+			break;
 	}
-	//Anything else we ignore
 }
 
 
@@ -3313,8 +3322,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			three_addr_const_t* constant = window->instruction1->op1_const;
 			
 			//What kind of constant do we have?
-			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST
-			   || constant->const_type == INT_CONST_FORCE_U){
+			if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U){
 				//If this is a the case, we'll multiply the address const by the int value
 				address_offset *= constant->int_const;
 			//Otherwise, this has to be a long const
@@ -3508,8 +3516,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			u_int8_t const_is_power_of_2 = FALSE;
 
 			//What kind of constant do we have?
-			if(constant->const_type == INT_CONST || constant->const_type == HEX_CONST
-			   || constant->const_type == INT_CONST_FORCE_U){
+			if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U){
 				//Set the flag if we find anything
 				if(constant->int_const == 0){
 					const_is_0 = TRUE;

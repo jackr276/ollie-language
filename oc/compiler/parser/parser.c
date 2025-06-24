@@ -362,14 +362,18 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			break;
 
-		//Hexadecimal constant
+		//Hex constants are really just integers
 		case HEX_CONST:
-			const_node->constant_type = HEX_CONST;
+			//Mark what it is 
+			const_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			const_node->int_val = strtol(lookahead.lexeme, NULL, 16);
+			const_node->int_val = strtol(lookahead.lexeme, NULL, 0);
 
-			//By default, int constants are of type s_int32
+			printf("VALUE IS %d\n\n\n", const_node->int_val);
+
+			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+
 			break;
 
 		//Regular signed long constant
@@ -4358,7 +4362,7 @@ static generic_type_t* type_specifier(FILE* fl){
 
 		//If it's not a certain kind of constant, we also don't want it
 		if(constant_value->constant_type == FLOAT_CONST || constant_value->constant_type == CHAR_CONST ||
-			constant_value->constant_type == HEX_CONST || constant_value->constant_type == STR_CONST){
+			constant_value->constant_type == STR_CONST){
 			print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
 			num_errors++;
 			return NULL;
@@ -6832,8 +6836,9 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//We already have the value -- so this doesn't need to be a child node
 
 		//Is the lookahead a constant?
-	} else if(lookahead.tok == INT_CONST || lookahead.tok == INT_CONST_FORCE_U || lookahead.tok == HEX_CONST
-			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST || lookahead.tok == LONG_CONST_FORCE_U){
+	} else if(lookahead.tok == INT_CONST || lookahead.tok == INT_CONST_FORCE_U
+			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST 
+			  || lookahead.tok == LONG_CONST_FORCE_U || lookahead.tok == HEX_CONST){
 		//Put it back
 		push_back_token(lookahead);
 	
@@ -6856,7 +6861,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		constant_ast_node_t* const_inner_node = (constant_ast_node_t*)(const_node->node);
 
 		//If it's an int, make sure it isn't negative
-		if(const_inner_node->constant_type == INT_CONST || const_inner_node->constant_type == HEX_CONST
+		if(const_inner_node->constant_type == INT_CONST 
 		   || const_inner_node->constant_type == INT_CONST_FORCE_U){
 			//Fail case here
 			if(const_inner_node->int_val < 0){

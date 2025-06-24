@@ -126,7 +126,6 @@ variable_size_t select_constant_size(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
-		case HEX_CONST:
 			return DOUBLE_WORD;
 
 		case FLOAT_CONST:
@@ -1009,8 +1008,6 @@ static void print_three_addr_constant(three_addr_const_t* constant){
 	//We'll now interpret what we have here
 	if(constant->const_type == INT_CONST){
 		printf("%d", constant->int_const);
-	} else if(constant->const_type == HEX_CONST){
-		printf("0x%x", constant->int_const);
 	} else if(constant->const_type == LONG_CONST){
 		printf("%ld", constant->long_const);
 	} else if(constant->const_type == FLOAT_CONST){
@@ -1481,8 +1478,6 @@ static void print_immediate_value(three_addr_const_t* constant){
 	//We'll now interpret what we have here
 	if(constant->const_type == INT_CONST){
 		printf("$%d", constant->int_const);
-	} else if(constant->const_type == HEX_CONST){
-		printf("$0x%x", constant->int_const);
 	} else if(constant->const_type == LONG_CONST){
 		printf("$%ld", constant->long_const);
 	} else if(constant->const_type == FLOAT_CONST){
@@ -1500,8 +1495,6 @@ static void print_immediate_value_no_prefix(three_addr_const_t* constant){
 	//We'll now interpret what we have here
 	if(constant->const_type == INT_CONST){
 		printf("%d", constant->int_const);
-	} else if(constant->const_type == HEX_CONST){
-		printf("0x%x", constant->int_const);
 	} else if(constant->const_type == LONG_CONST){
 		printf("%ld", constant->long_const);
 	} else if(constant->const_type == FLOAT_CONST){
@@ -2853,13 +2846,6 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 				constant->is_value_0 = TRUE;
 			}
 			break;
-		case HEX_CONST:
-			constant->int_const = const_node_raw->int_val;
-			//Set the 0 flag if true
-			if(const_node_raw->int_val == 0){
-				constant->is_value_0 = TRUE;
-			}
-			break;
 		//Some very weird error here
 		default:
 			fprintf(stderr, "Unrecognizable constant type found in constant\n");
@@ -3442,10 +3428,8 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 		//by the calloc
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
-		case HEX_CONST:
 			//If it's any of these we'll add the int value
-			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U
-				|| constant1->const_type == HEX_CONST){
+			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
 				constant2->int_const += constant1->int_const;
 			//Otherwise add the long value
 			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
@@ -3458,8 +3442,7 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 		case LONG_CONST:
 		case LONG_CONST_FORCE_U:
 			//If it's any of these we'll add the int value
-			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U
-				|| constant1->const_type == HEX_CONST){
+			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
 				constant2->long_const += constant1->int_const;
 			//Otherwise add the long value
 			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
