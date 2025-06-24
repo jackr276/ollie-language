@@ -408,6 +408,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is
 
 		//Should never reach this
 		default:
+			printf("REACHED DEFAULT\n\n\n\n");
 			break;
 	}
 
@@ -1556,6 +1557,7 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//Now we should have what we need, so we can emit the division instruction
 	instruction_t* division = emit_div_instruction(window->instruction1->op2, is_signed);
+
 	//This is the assignee, we just don't see it
 	division->destination_register = emit_temp_var(division_instruction->assignee->type);
 
@@ -1581,10 +1583,8 @@ static void handle_division_instruction(instruction_window_t* window){
 		block->exit_statement = result_movement;
 	}
 
-	//Now we need to repopulate the window
-	window->instruction1 = move_to_rax;
-	window->instruction2 = window->instruction1->next_statement;
-	window->instruction3 = window->instruction2->next_statement;
+	//Reconstruct the window here
+	reconstruct_window(window, move_to_rax);
 
 	//Now we'll cycle the window to get to the end
 	slide_window(window);

@@ -1345,6 +1345,11 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 
 	//We use a u_int32 as our reference
 	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u32")->type;
+	//Store this for processing
+	generic_type_t* old_type = expr->inferred_type;
+
+	//Find the final type here
+	generic_type_t* final_type = types_assignable(&reference_type, &(expr->inferred_type));
 
 	//Let's make sure that this is an int
 	if(types_assignable(&reference_type, &(expr->inferred_type)) == NULL){
@@ -1352,6 +1357,11 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//If this is the case, we'll need to propogate all of the types down the chain here
+	if(old_type == generic_unsigned_int || old_type == generic_signed_int){
+		update_type_in_subtree(expr, old_type, expr->inferred_type);
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets
@@ -5429,7 +5439,6 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If this is the case, we'll need to propogate all of the types down the chain here
 	if(old_expr_node_type == generic_unsigned_int || old_expr_node_type == generic_signed_int){
-		printf("UPDATING TYPE\n\n");
 		update_type_in_subtree(expr_node, old_expr_node_type, expr_node->inferred_type);
 	}
 
