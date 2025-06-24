@@ -346,8 +346,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->int_val = atoi(lookahead.lexeme);
 
 			//This is signed by default
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
-			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
+			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
 
 			break;
 
@@ -359,8 +359,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->int_val = atoi(lookahead.lexeme);
 
 			//If we force it to be unsigned then it will be
-			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_unsigned_int")->type;
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_unsigned_int")->type;
+			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
 
 			break;
 
@@ -372,8 +372,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->int_val = strtol(lookahead.lexeme, NULL, 0);
 
 			//If we force it to be unsigned then it will be
-			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
+			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 
 			break;
 
@@ -386,7 +386,6 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->long_val = atol(lookahead.lexeme);
 
 			//This is a signed i64
-			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
 
 			break;
@@ -400,7 +399,6 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->long_val = atol(lookahead.lexeme);
 
 			//By default, int constants are of type s_int64 
-			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "generic_unsigned_int")->type;
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
 			break;
@@ -2332,11 +2330,13 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 
 			//If this is not null, assign the var too
 			if(temp_holder->variable != NULL){
+				printf("Updating temp holder inferred type\n");
 				update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
 			} 
 
 			//If this is not null, assign the var too
 			if(right_child->variable != NULL){
+				printf("Updating right child inferred type\n");
 				update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
 			}
 
@@ -2355,8 +2355,6 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 
 			//Once we're done here, the right child is the pointer arithmetic
 			right_child = pointer_arithmetic;
-
-			printf("FOUND POINTER\n");
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in

@@ -197,7 +197,6 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 		
 			//We shouldn't get here
 			default:
-				size = QUAD_WORD;
 				break;
 		}
 

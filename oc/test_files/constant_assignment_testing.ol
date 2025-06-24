@@ -9,5 +9,7 @@ fn main() -> i32 {
 
 	let mut c:i16 := b + 6;
 
+	let mut x:i16 := b + c;
+
 	ret a + b + c;
 }

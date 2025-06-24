@@ -403,12 +403,9 @@ static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generi
 	if(a_basic_type == SIGNED_INT_CONST || a_basic_type == UNSIGNED_INT_CONST){
 		//If B is not one of these, we'll just make A whatever B is
 		if(b_basic_type != SIGNED_INT_CONST && b_basic_type != UNSIGNED_INT_CONST){
-			printf("HERE1\n\n\n");
 			*a = *b;
 			return;
 		}
-
-		printf("IN DEFAULT\n\n");
 
 		//The final type
 		generic_type_t* final_type;
@@ -431,12 +428,9 @@ static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generi
 	} else if(b_basic_type == SIGNED_INT_CONST || b_basic_type == UNSIGNED_INT_CONST){
 		//If B is not one of these, we'll just make A whatever B is
 		if(a_basic_type != SIGNED_INT_CONST && a_basic_type != UNSIGNED_INT_CONST){
-			printf("HERE2\n\n\n");
 			*b = *a;
 			return;
 		}
-
-		printf("IN DEFAULT\n\n");
 
 		//The final type
 		generic_type_t* final_type;
