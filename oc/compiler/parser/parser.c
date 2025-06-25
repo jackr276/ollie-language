@@ -6905,78 +6905,83 @@ static generic_ast_node_t* statement(FILE* fl){
 	//Let's grab the next item and see what we have here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we see a label ident, we know we're seeing a labeled statement
-	if(lookahead.tok == LABEL_IDENT){
-		//This rule relies on these tokens, so we'll push them back
-		push_back_token(lookahead);
+	//Switch based on the token
+	switch(lookahead.tok){
+		//If we see a label ident, we know we're seeing a labeled statement
+		case LABEL_IDENT:
+			//This rule relies on these tokens, so we'll push them back
+			push_back_token(lookahead);
 	
-		//Just return whatever the rule gives us
-		return labeled_statement(fl);
+			//Just return whatever the rule gives us
+			return labeled_statement(fl);
+
+		//We're seeing a compound statement
+		case L_CURLY:
+			//The rule relies on it, so put it back
+			push_back_token(lookahead);
+
+			//Return whatever the rule gives us
+			return compound_statement(fl);
 	
-	//If we see an L_CURLY, we are seeing a compound statement
-	} else if(lookahead.tok == L_CURLY){
-		//The rule relies on it, so put it back
-		push_back_token(lookahead);
+		//If we see for, we are seeing a for statement
+		case FOR:
+			//This rule relies on for already being consumed, so we won't put it back
+			return for_statement(fl);
 
-		//Return whatever the rule gives us
-		return compound_statement(fl);
-	
-	//If we see for, we are seeing a for statement
-	} else if(lookahead.tok == FOR){
-		//This rule relies on for already being consumed, so we won't put it back
-		return for_statement(fl);
+		//We can see a defer statement
+		case DEFER:
+			//This rule relies on the defer keyword already being consumed, so we won't put it back
+			return defer_statement(fl);
 
-	//If we see this, we are seeing a defer statment
-	} else if(lookahead.tok == DEFER){
-		//This rule relies on the defer keyword already being consumed, so we won't put it back
-		return defer_statement(fl);
+		//While statement
+		case WHILE:
+			//This rule relies on while already being consumed, so we won't put it back
+			return while_statement(fl);
 
-	//While statement
-	} else if(lookahead.tok == WHILE){
-		//This rule relies on while already being consumed, so we won't put it back
-		return while_statement(fl);
+		//Idle statement
+		case IDLE:
+			//This rule just gives back an idle statement
+			return idle_statement(fl);
 
-	//An idle(nop) statement
-	} else if(lookahead.tok == IDLE){
-		//This rule just gives back an idle statement
-		return idle_statement(fl);
+		//Do while statement
+		case DO:
+			//This rule relies on do already being consumed, so we won't put it back
+			return do_while_statement(fl);
 
-	//Do while statement
-	} else if(lookahead.tok == DO){
-		//This rule relies on do already being consumed, so we won't put it back
-		return do_while_statement(fl);
+		//Switch statement
+		case SWITCH:
+			//This rule relies on switch already being consumed, so we won't put it back
+			return switch_statement(fl);
 
-	//Switch statement
-	} else if(lookahead.tok == SWITCH){
-		//This rule relies on switch already being consumed, so we won't put it back
-		return switch_statement(fl);
+		//If statement
+		case IF:
+			//This rule relies on if already being consumed, so we won't put it back
+			return if_statement(fl);
 
-	//If statement
-	} else if(lookahead.tok == IF){
-		//This rule relies on if already being consumed, so we won't put it back
-		return if_statement(fl);
+		//Branching statement here
+		case JUMP:
+		case RETURN:
+		case BREAK:
+		case CONTINUE:
+			//The branch rule needs these, so we'll put them back
+			push_back_token(lookahead);
+			//return whatever this gives us
+			return branch_statement(fl);
 
-	//Some kind of branch statement
-	} else if(lookahead.tok == JUMP || lookahead.tok == BREAK || lookahead.tok == CONTINUE
-			|| lookahead.tok == RETURN){
-		//The branch rule needs these, so we'll put them back
-		push_back_token(lookahead);
-		//return whatever this gives us
-		return branch_statement(fl);
-	//We have an asm statement here--this really acts like a compiler directive, but we still
-	//need to consider it
-	} else if(lookahead.tok == ASM){
-		return assembly_inline_statement(fl);
-	//Common mistake, but this isn't allowed in Ollie
-	} else if(lookahead.tok == REPLACE){
-		print_parse_message(PARSE_ERROR, "Replace statements have global effects, and therefore must be declared in the global scope", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	} else {
-		//Otherwise, this is some kind of expression statement. We'll put the token back and
-		//return that
-		push_back_token(lookahead);
-		return expression_statement(fl);
+		//Inline assembly statement
+		case ASM:
+			return assembly_inline_statement(fl);
+		
+		//Replace statement is an error here
+		case REPLACE:
+			print_parse_message(PARSE_ERROR, "Replace statements have global effects, and therefore must be declared in the global scope", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+
+		//By default push this back and return an expression statement
+		default:
+			push_back_token(lookahead);
+			return expression_statement(fl);
 	}
 }
 
@@ -8576,6 +8581,8 @@ static u_int8_t replace_statement(FILE* fl){
 static generic_ast_node_t* declaration_partition(FILE* fl){
 	//Lookahead token
 	Lexer_item lookahead;
+	//The status
+	u_int8_t status;
 
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8586,63 +8593,62 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 	}
 
-
-	//We know that we have a function here
-	//We consume the function token here, NOT in the function rule
-	if(lookahead.tok == FN){
-		//We'll just let the function definition rule handle this. If it fails, 
-		//that will be caught above
-		return function_definition(fl);
+	//Switch based on the token
+	switch(lookahead.tok){
+		case FN:
+			//We'll just let the function definition rule handle this. If it fails, 
+			//that will be caught above
+			return function_definition(fl);
 	
-	//We'll let the definition rule handle this
-	} else if(lookahead.tok == DEFINE || lookahead.tok == ALIAS){
-		//Put whatever we saw back
-		push_back_token(lookahead);
+		//Let the define and/or alias rule handle this
+		case DEFINE:
+		case ALIAS:
+			//Put whatever we saw back
+			push_back_token(lookahead);
 
-		//Call definition
-		u_int8_t status = definition(fl);
+			//Call definition
+			status = definition(fl);
 
-		//If it's bad, we'll return an error node
-		if(status == FAILURE){
+			//If it's bad, we'll return an error node
+			if(status == FAILURE){
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise we'll just return null, the caller will know what to do with it
+			return NULL;
+
+		//Let the replace rule handle this
+		case REPLACE:	
+			//We don't need to put it back
+			status = replace_statement(fl);
+
+			//If it's bad, we'll return an error node
+			if(status == FAILURE){
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+
+			//Otherwise we'll just return null, the caller will know what to do with it
+			return NULL;
+
+		//This is an error. The #dependencies directive must be the very first thing in a file
+		case DEPENDENCIES:
+			print_parse_message(PARSE_ERROR, "The #dependencies section must be the very first thing in a file", parser_line_num);
+			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
 
-		//Otherwise we'll just return null, the caller will know what to do with it
-		return NULL;
-
-	//We'll let the replace rule handle this
-	} else if(lookahead.tok == REPLACE){
-		//We don't need to put it back
-		u_int8_t status = replace_statement(fl);
-
-		//If it's bad, we'll return an error node
-		if(status == FAILURE){
+		//This is out of place if we see it here
+		case REQUIRE:
+			print_parse_message(PARSE_ERROR, "Any require statements must be nested in a top level #dependencies block", parser_line_num);
+			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-		}
 
-		//Otherwise we'll just return null, the caller will know what to do with it
-		return NULL;
+		default:
+			//Put the token back
+			push_back_token(lookahead);
 
-	//This is an error. The #dependencies directive must be the very first thing in a 
-	//file
-	} else if(lookahead.tok == DEPENDENCIES){
-		print_parse_message(PARSE_ERROR, "The #dependencies section must be the very first thing in a file", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	//This is out of place if we find it
-	} else if(lookahead.tok == REQUIRE){
-		print_parse_message(PARSE_ERROR, "Any require statements must be nested in a top level #dependencies block", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-
-	//Otherwise it must be a declaration
-	} else {
-		//Put the token back
-		push_back_token(lookahead);
-
-		//We'll simply return whatever the product of the declaration function is
-		//Do note: these variables will all be global
-		return declaration(fl, TRUE);
+			//We'll simply return whatever the product of the declaration function is
+			//Do note: these variables will all be global
+			return declaration(fl, TRUE);
 	}
 }
 
