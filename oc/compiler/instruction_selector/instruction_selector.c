@@ -72,6 +72,23 @@ static void set_window_status(instruction_window_t* window){
 
 
 /**
+ * Is an operation valid for token folding? If it is, we'll return true
+ * The invalid operations are &&, ||, / and %
+ */
+static u_int8_t is_operation_valid_for_constant_folding(Token op){
+	switch(op){
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+		case F_SLASH:
+		case MOD:
+			return FALSE;
+		default:
+			return TRUE;
+	}
+
+}
+
+/**
  * Multiply two constants together
  * 
  * NOTE: The result is always stored in the first one
@@ -561,8 +578,8 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 	//If the third operation is not the end, then we're good to just bump everything up
 	//This is the simplest case, and allows us to just bump everything up and get out
 	if(window->instruction3 != NULL){
-		window->instruction1 = window->instruction1->next_statement;
-		window->instruction2 = window->instruction2->next_statement;
+		window->instruction1 = window->instruction2;
+		window->instruction2 = window->instruction3;
 		window->instruction3 = window->instruction3->next_statement;
 		//We're in the thick of it here
 		window->status = WINDOW_AT_MIDDLE;
@@ -577,8 +594,8 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 	//This means that we don't have a full block, but we also don't have a null
 	//instruction 2
 	} else {
-		window->instruction1 = window->instruction1->next_statement;
-		window->instruction2 = window->instruction2->next_statement;
+		window->instruction1 = window->instruction2;
+		window->instruction2 = window->instruction3;
 		window->instruction3 = NULL;
 		//We know we're at the end
 		window->status = WINDOW_AT_END;
@@ -2849,19 +2866,6 @@ static u_int8_t is_power_of_2(int64_t value){
 
 
 /**
- * A simple helper function to determine if an operator is a comparison operator
- */
-static u_int8_t is_comparison_operator(Token op){
-	if(op == G_THAN || op == L_THAN || op == G_THAN_OR_EQ || op == L_THAN_OR_EQ
-	   || op == DOUBLE_EQUALS || op == NOT_EQUALS){
-		return TRUE;
-	}
-
-	return FALSE;
-}
-
-
-/**
  * Take the binary logarithm of something that we already know
  * is a power of 2. 
  *
@@ -2961,11 +2965,6 @@ static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
 static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//By default, we didn't change anything
 	u_int8_t changed = FALSE;
-
-	//Store the instructions here
-	instruction_t* instruction1 = window->instruction1;
-	instruction_t* instruction2 = window->instruction2;
-	instruction_t* instruction3 = window->instruction3;
 
 	//Let's perform some quick checks. If we see a window where the first instruction
 	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
@@ -3154,10 +3153,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE
-			&& window->instruction2->op != DOUBLE_AND  //Due to the way we use these, we can't optimize in this way
-			&& window->instruction2->op != DOUBLE_OR
-			&& window->instruction2->op != F_SLASH //These are also excluded due to the way x86 division works
-			&& window->instruction2->op != MOD
+			&& is_operation_valid_for_constant_folding(window->instruction2->op) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
@@ -3188,10 +3184,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE
-			&& window->instruction3->op != DOUBLE_AND  //Due to the way we use these, we can't optimize in this way
-			&& window->instruction3->op != DOUBLE_OR
-			&& window->instruction3->op != F_SLASH //These are also excluded due to the way x86 division works
-			&& window->instruction3->op != MOD
+			&& is_operation_valid_for_constant_folding(window->instruction3->op) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
 			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
@@ -3233,7 +3226,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
 	if(is_instruction_binary_operation(window->instruction2) == TRUE
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT
-		&& is_comparison_operator(window->instruction2->op) == TRUE){
+		&& is_operator_relational_operator(window->instruction2->op) == TRUE){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE 

@@ -61,16 +61,16 @@ u_int8_t is_jump_type_signed(jump_type_t type){
 
 
 /**
- * Helper function to determine if an operator is a relational operator
+ * A simple helper function to determine if an operator is a comparison operator
  */
 u_int8_t is_operator_relational_operator(Token op){
 	switch(op){
 		case G_THAN:
-		case G_THAN_OR_EQ:
 		case L_THAN:
+		case G_THAN_OR_EQ:
 		case L_THAN_OR_EQ:
-		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
 			return TRUE;
 		default:
 			return FALSE;
