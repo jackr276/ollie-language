@@ -350,9 +350,6 @@ static void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var)
 	
 	//we didn't find it, so we will add
 	dynamic_array_add(basic_block->used_variables, var); 
-
-	//This variable has been live
-	var->linked_var->has_ever_been_live = TRUE;
 }
 
 
@@ -2403,9 +2400,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Emit the variable
 		three_addr_var_t* var = emit_var(ident_node->variable, ident_node->inferred_type, FALSE);
 
-		//This variable now is live
-		ident_node->variable->has_ever_been_live = TRUE;
-		
 		//This variable has been assigned to, so we'll add that too
 		if(side == SIDE_TYPE_LEFT){
 			//We only do this if it's the LHS
@@ -2429,9 +2423,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	} else {
 		//First we'll create the non-temp var here
 		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, ident_node->inferred_type, FALSE);
-
-		//THis has been live
-		ident_node->variable->has_ever_been_live = TRUE;
 
 		//Add this in as a used variable
 		add_used_variable(basic_block, non_temp_var);
@@ -3254,9 +3245,6 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 		//Create the variable associated with this
 	 	three_addr_var_t* left_hand_var = emit_var(var, expr_node->inferred_type, FALSE);
-
-		//Mark that this has been live
-		var->has_ever_been_live = TRUE;
 
 		//This has been assigned to
 		add_assigned_variable(basic_block, left_hand_var);

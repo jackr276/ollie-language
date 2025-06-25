@@ -2247,27 +2247,35 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 	//We could see logical and/logical or
 	if(is_instruction_binary_operation(window->instruction1) == TRUE){
-		//Handle the logical and case
-		if(window->instruction1->op == DOUBLE_AND){
-			handle_logical_and_instruction(cfg, window);
-			changed = TRUE;
-			
-		} else if(window->instruction1->op == DOUBLE_OR){
-			handle_logical_or_instruction(cfg, window);
-			changed = TRUE;
+		switch(window->instruction1->op){
+			//Handle the logical and case
+			case DOUBLE_AND:
+				handle_logical_and_instruction(cfg, window);
+				changed = TRUE;
+				break;
 
-		//Division is a bit unique
-		} else if(window->instruction1->op == F_SLASH){
-			//This will generate more than one instruction
-			handle_division_instruction(window);
-			changed = TRUE;
+			//Handle logical or
+			case DOUBLE_OR:
+				handle_logical_or_instruction(cfg, window);
+				changed = TRUE;
+				break;
 
-		//Mod is very similar to division but there are some differences
-		//that warrant a separate function
-		} else if(window->instruction1->op == MOD){
-			//This will generate more than one instruction
-			handle_modulus_instruction(window);
-			changed = TRUE;
+			//Handle division
+			case F_SLASH:
+				//This will generate more than one instruction
+				handle_division_instruction(window);
+				changed = TRUE;
+				break;
+
+			//Handle modulus
+			case MOD:	
+				//This will generate more than one instruction
+				handle_modulus_instruction(window);
+				changed = TRUE;
+				break;
+
+			default:
+				break;
 		}
 	}
 
@@ -2954,6 +2962,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//By default, we didn't change anything
 	u_int8_t changed = FALSE;
 
+	//Store the instructions here
+	instruction_t* instruction1 = window->instruction1;
+	instruction_t* instruction2 = window->instruction2;
+	instruction_t* instruction3 = window->instruction3;
+
 	//Let's perform some quick checks. If we see a window where the first instruction
 	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
 	//case
@@ -3514,113 +3527,155 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Is the const a power of 2?
 			u_int8_t const_is_power_of_2 = FALSE;
 
-			//What kind of constant do we have?
-			if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U){
-				//Set the flag if we find anything
-				if(constant->int_const == 0){
-					const_is_0 = TRUE;
-				} else if (constant->int_const == 1){
-					const_is_1 = TRUE;
-				} else {
-					const_is_power_of_2 = is_power_of_2(constant->int_const);
-				}
+			//Switch based on the constant type
+			switch(constant->const_type){
+				case INT_CONST:
+				case INT_CONST_FORCE_U:
+					//Set the flag if we find anything
+					if(constant->int_const == 0){
+						const_is_0 = TRUE;
+					} else if (constant->int_const == 1){
+						const_is_1 = TRUE;
+					} else {
+						const_is_power_of_2 = is_power_of_2(constant->int_const);
+					}
+					
+					break;
 
-			//Otherwise, this has to be a long const
-			} else if(constant->const_type == LONG_CONST || constant->const_type == LONG_CONST_FORCE_U){
-				//Set the flag if we find zero
-				if(constant->long_const == 0){
-					const_is_0 = TRUE;
-				} else if(constant->long_const == 1){
-					const_is_1 = TRUE;
-				} else {
-					const_is_power_of_2 = is_power_of_2(constant->long_const);
-				}
 
-			//If we have a character constant, this is also a candidate
-			} else if(constant->const_type == CHAR_CONST){
-				//Set the flag if we find zero
-				if(constant->char_const == 0){
-					const_is_0 = TRUE;
-				} else if(constant->char_const == 1){
-					const_is_1 = TRUE;
-				} else {
-					const_is_power_of_2 = is_power_of_2(constant->long_const);
-				}
+				case LONG_CONST:
+				case LONG_CONST_FORCE_U:
+					//Set the flag if we find zero
+					if(constant->long_const == 0){
+						const_is_0 = TRUE;
+					} else if(constant->long_const == 1){
+						const_is_1 = TRUE;
+					} else {
+						const_is_power_of_2 = is_power_of_2(constant->long_const);
+					}
+					
+					break;
+
+				case CHAR_CONST:
+					//Set the flag if we find zero
+					if(constant->char_const == 0){
+						const_is_0 = TRUE;
+					} else if(constant->char_const == 1){
+						const_is_1 = TRUE;
+					} else {
+						const_is_power_of_2 = is_power_of_2(constant->long_const);
+					}
+
+					break;
+					
+
+				//Just do nothing in the default case
+				default:
+					break;
 			}
-		
+
 			//If this is 0, then we can optimize
 			if(const_is_0 == TRUE){
-				//If we made it out of this conditional with the flag being set, we can simplify.
-				//If this is the case, then this just becomes a regular assignment expression
-				if(current_instruction->op == PLUS || current_instruction->op == MINUS){
-					//We're just assigning here
-					current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
-					//Wipe the values out
-					current_instruction->op1_const = NULL;
-					current_instruction->op2 = NULL;
-					//We changed something
-					changed = TRUE;
-				//If this is a multiplication, we'll turn this into a 0 assignment
-				} else if(current_instruction->op == STAR){
-					//Now we're assigning a const
-					current_instruction->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
-					//The constant is still the same thing(0), let's just wipe out the ops
-					current_instruction->op1 = NULL;
-					current_instruction->op2 = NULL;
-					//We changed something
-					changed = TRUE;
-				//We'll need to throw a warning here about 0 division
-				// TODO ADD MORE
-				} else if (current_instruction->op == F_SLASH || current_instruction->op == MOD){
-					//Throw a warning, not much else to do here
-					print_parse_message(PARSE_ERROR, "Division by 0 will always error", 0);
-					//Throw a failure in this case
-					exit(0);
+				//Switch based on current instruction's op
+				switch(current_instruction->op){
+					//If we made it out of this conditional with the flag being set, we can simplify.
+					//If this is the case, then this just becomes a regular assignment expression
+					case PLUS:
+					case MINUS:
+						//We're just assigning here
+						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+						//Wipe the values out
+						current_instruction->op1_const = NULL;
+						current_instruction->op2 = NULL;
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					case STAR:
+						//Now we're assigning a const
+						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+						//The constant is still the same thing(0), let's just wipe out the ops
+						current_instruction->op1 = NULL;
+						current_instruction->op2 = NULL;
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					//Just do nothing here
+					default:
+						break;
 				}
 
-				//Notice how we do NOT mark any change as true here. This is because, even though yes we
-				//did change the instructions, the sliding window itself did not change at all. This is
-				//an important note as if we did mark a change, there are cases where this could
-				//cause an infinite loop
+
+			//Notice how we do NOT mark any change as true here. This is because, even though yes we
+			//did change the instructions, the sliding window itself did not change at all. This is
+			//an important note as if we did mark a change, there are cases where this could
+			//cause an infinite loop
 			
 			//What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
 			//if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
 			//or division
 			} else if(const_is_1 == TRUE){
-				//If it's an addition statement, turn it into an inc statement
-				/**
-				 * NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
-				 * want to first make sure that the assignees are not temporary variables. If they are temporary variables,
-				 * then doing this would mess the whole operation up
-				 */
-				if(current_instruction->op == PLUS && current_instruction->assignee->is_temporary == FALSE){
-					//Now turn it into an inc statement
-					current_instruction->CLASS = THREE_ADDR_CODE_INC_STMT;
-					//Wipe the values out
-					current_instruction->op1_const = NULL;
-					current_instruction->op = BLANK;
-					//We changed something
-					changed = TRUE;
-				//Otherwise if we have a minus, we can turn this into a dec statement
-				} else if(current_instruction->op == MINUS && current_instruction->assignee->is_temporary == FALSE){
-					//Change what the class is
-					current_instruction->CLASS = THREE_ADDR_CODE_DEC_STMT;
-					//Wipe the values out
-					current_instruction->op1_const = NULL;
-					current_instruction->op = BLANK;
-					//We changed something
-					changed = TRUE;
-				//What if we have multiplication or division? If so, multiplying/dividing by 1
-				//is idempotent, so we can transform these into assignment statements
-				} else if(current_instruction->op == STAR || current_instruction->op == F_SLASH){
-					//Change it to a regular assignment statement
-					current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
-					//Wipe the operator out
-					current_instruction->op1_const = NULL;
-					current_instruction->op = BLANK;
-					//We changed something
-					changed = TRUE;
+				//Switch based on the op in the current instruction
+				switch(current_instruction->op){
+					//If it's an addition statement, turn it into an inc statement
+					/**
+				 	* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
+				 	* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
+				 	* then doing this would mess the whole operation up
+				 	*/
+					case PLUS:
+						//If it's temporary, we jump out
+						if(current_instruction->assignee->is_temporary == TRUE){
+							break;
+						}
+
+						//Now turn it into an inc statement
+						current_instruction->CLASS = THREE_ADDR_CODE_INC_STMT;
+						//Wipe the values out
+						current_instruction->op1_const = NULL;
+						current_instruction->op = BLANK;
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					case MINUS:
+						//If it's temporary, we jump out
+						if(current_instruction->assignee->is_temporary == TRUE){
+							break;
+						}
+
+						//Change what the class is
+						current_instruction->CLASS = THREE_ADDR_CODE_DEC_STMT;
+						//Wipe the values out
+						current_instruction->op1_const = NULL;
+						current_instruction->op = BLANK;
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					//These are both the same - handle a 1 multiply
+					case STAR:
+					case F_SLASH:
+						//Change it to a regular assignment statement
+						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+						//Wipe the operator out
+						current_instruction->op1_const = NULL;
+						current_instruction->op = BLANK;
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					//Just bail out
+					default:
+						break;
 				}
+
 			//What if we have a power of 2 here? For any kind of multiplication or division, this can
 			//be optimized into a left or right shift if we have a compatible type(not a float)
 			} else if(const_is_power_of_2 && current_instruction->assignee->type->type_class == TYPE_CLASS_BASIC 
