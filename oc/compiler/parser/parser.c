@@ -6413,88 +6413,97 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 	//Let's grab the next item and see what we have here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we see a label ident, we know we're seeing a labeled statement
-	if(lookahead.tok == LABEL_IDENT){
-		//This rule relies on these tokens, so we'll push them back
-		push_back_token(lookahead);
+	//Switch based on the lookahead token
+	switch(lookahead.tok){
+		//If we see a label ident, we know we're seeing a labeled statement
+		case LABEL_IDENT:
+			//This rule relies on these tokens, so we'll push them back
+			push_back_token(lookahead);
 	
-		//Just return whatever the rule gives us
-		return labeled_statement(fl);
+			//Just return whatever the rule gives us
+			return labeled_statement(fl);
+			
+		//Compound statement here
+		case L_CURLY:
+			//The rule relies on it, so put it back
+			push_back_token(lookahead);
+
+			//Return whatever the rule gives us
+			return compound_statement(fl);
+
+		//For statement
+		case FOR:
+			//This rule relies on for already being consumed, so we won't put it back
+			return for_statement(fl);
+
+		//Defer statement
+		case DEFER:
+			//This rule relies on the defer keyword already being consumed, so we won't put it back
+			return defer_statement(fl);
+
+		//Idle statement
+		case IDLE:
+			return idle_statement(fl);
 	
-	//If we see an L_CURLY, we are seeing a compound statement
-	} else if(lookahead.tok == L_CURLY){
-		//The rule relies on it, so put it back
-		push_back_token(lookahead);
+		//While statement
+		case WHILE:
+			//This rule relies on while already being consumed, so we won't put it back
+			return while_statement(fl);
 
-		//Return whatever the rule gives us
-		return compound_statement(fl);
-	
-	//If we see for, we are seeing a for statement
-	} else if(lookahead.tok == FOR){
-		//This rule relies on for already being consumed, so we won't put it back
-		return for_statement(fl);
+		//Handle a do-while
+		case DO:
+			//This rule relies on do already being consumed, so we won't put it back
+			return do_while_statement(fl);
 
-	//If we see this, we are seeing a defer statment
-	} else if(lookahead.tok == DEFER){
-		//This rule relies on the defer keyword already being consumed, so we won't put it back
-		return defer_statement(fl);
-	
-	//If we see this, we have an idle statement
-	} else if(lookahead.tok == IDLE){
-		return idle_statement(fl);
+		//This will give an error
+		case SWITCH:
+			print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested switch statements", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
-	//While statement
-	} else if(lookahead.tok == WHILE){
-		//This rule relies on while already being consumed, so we won't put it back
-		return while_statement(fl);
+		//These will also error
+		case CASE:
+		case DEFAULT:
+			print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested case or default statements", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
-	//Do while statement
-	} else if(lookahead.tok == DO){
-		//This rule relies on do already being consumed, so we won't put it back
-		return do_while_statement(fl);
+		//If statement
+		case IF:
+			//This rule relies on if already being consumed, so we won't put it back
+			return if_statement(fl);
 
-	//Switch statement -- not allowed here
-	} else if(lookahead.tok == SWITCH){
-		print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested switch statements", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Break and continue
+		case BREAK:
+		case CONTINUE:
+			print_parse_message(PARSE_ERROR, "Ollie language does not allow continue or break in switch statments", parser_line_num);
+			num_errors++;
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 
-	//Nested case statements -- should not happen
-	} else if(lookahead.tok == CASE || lookahead.tok == DEFAULT){
-		print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested case or default statements", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	
-	//If statement
-	} else if(lookahead.tok == IF){
-		//This rule relies on if already being consumed, so we won't put it back
-		return if_statement(fl);
+		//Jump/return
+		case JUMP:
+		case RETURN:
+			//The branch rule needs these, so we'll put them back
+			push_back_token(lookahead);
 
-	//Continue or break statements - these aren't allows
-	} else if(lookahead.tok == BREAK || lookahead.tok == CONTINUE){
-		print_parse_message(PARSE_ERROR, "Ollie language does not allow continue or break in switch statments", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			//return whatever this gives us
+			return branch_statement(fl);
 
-	//Some kind of branch statement
-	} else if(lookahead.tok == JUMP || lookahead.tok == RETURN){
-		//The branch rule needs these, so we'll put them back
-		push_back_token(lookahead);
-		//return whatever this gives us
-		return branch_statement(fl);
+		//Variable declaration & assign
+		case LET:
+			return let_statement(fl, FALSE);
 
-	//Let statement
-	} else if(lookahead.tok == LET){
-		return let_statement(fl, FALSE);
+		//Pure declaration
+		case DECLARE:
+			return declare_statement(fl, FALSE);
 
-	} else if(lookahead.tok == DECLARE){
-		return declare_statement(fl, FALSE);
+		//By default - we just have some kind of expression
+		default:
+			//Put the token back
+			push_back_token(lookahead);
 
-	} else {
-		//Otherwise, this is some kind of expression statement. We'll put the token back and
-		//return that
-		push_back_token(lookahead);
-		return expression_statement(fl);
+			//Give back the expression statement
+			return expression_statement(fl);
 	}
 }
 
