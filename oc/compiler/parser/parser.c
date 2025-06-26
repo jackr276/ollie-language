@@ -5870,37 +5870,44 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
-		//We need to see a valid case or default statement
-		if(lookahead.tok == CASE){
-			//Handle a case statement here. We'll need to pass
-			//the node in because of the type checking that we do
-			stmt = case_statement(fl, switch_stmt_node, values);
+		//Switch by the lookahead
+		switch(lookahead.tok){
+			//We can see a case statement here
+			case CASE:
+				//Handle a case statement here. We'll need to pass
+				//the node in because of the type checking that we do
+				stmt = case_statement(fl, switch_stmt_node, values);
 
-			//If it fails, then we're done
-			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-				return stmt;
-			}
+				//If it fails, then we're done
+				if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+					return stmt;
+				}
 			
-			//No longer empty
-			is_empty = FALSE;
+				//No longer empty
+				is_empty = FALSE;
 
-		} else if(lookahead.tok == DEFAULT){
-			//Handle a default statement
-			stmt = default_statement(fl);
+				break;
 
-			//If it fails, then we're done
-			if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-				return stmt;
-			}
+			//Handle the default case
+			case DEFAULT:
+				//Handle a default statement
+				stmt = default_statement(fl);
 
-			//We've found it
-			found_default_clause = TRUE;
+				//If it fails, then we're done
+				if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+					return stmt;
+				}
 
-		//We fail out here -- something went wrong
-		} else {
-			print_parse_message(PARSE_ERROR, "\"case\" or \"default\" keywords expected", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				//We've found it
+				found_default_clause = TRUE;
+
+				break;
+
+			//Fail out here -- something went wrong
+			default:
+				print_parse_message(PARSE_ERROR, "\"case\" or \"default\" keywords expected", parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
 
 		//If we get here we know it worked, so we can add it in as a child
@@ -6638,62 +6645,68 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 
 	//So long as we don't reach the end
 	while(lookahead.tok != R_CURLY){
-		//We can choose between a declaration or a statement
-		//All these keywords indicate a declaraion
-		if(lookahead.tok == DECLARE || lookahead.tok == LET){
-			//We'll let the actual rule handle it, so push the token back
-			push_back_token(lookahead);
+		//Switch based on the lookahead
+		switch(lookahead.tok){
+			//Declare or let, we'll let that rule handle it
+			case DECLARE:
+			case LET:
+				//We'll let the actual rule handle it, so push the token back
+				push_back_token(lookahead);
 
-			//We now need to see a valid version
-			generic_ast_node_t* declaration_node = declaration(fl, FALSE);
+				//We now need to see a valid version
+				generic_ast_node_t* declaration_node = declaration(fl, FALSE);
 
-			//If it's invalid, we pass right through, no error printing
-			if(declaration_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-				//It's already an error, so just send it back up
-				return declaration_node;
-			}
+				//If it's invalid, we pass right through, no error printing
+				if(declaration_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+					//It's already an error, so just send it back up
+					return declaration_node;
+				}
 
-			//Otherwise it's worked just fine, so we'll add it in as a child
-			add_child_node(compound_stmt_node, declaration_node);
+				//Otherwise it's worked just fine, so we'll add it in as a child
+				add_child_node(compound_stmt_node, declaration_node);
+				
+				break;
+	
+			//Definition of type or alias statement
+			case DEFINE:
+			case ALIAS:
+				//Put the token back
+				push_back_token(lookahead);
 
-		//Otherwise we can see a definition of some kind. Definitions are compiler-only
-		//directives, and as such produce no nodes
-		} else if(lookahead.tok == DEFINE || lookahead.tok == ALIAS){
-			//Put the token back
-			push_back_token(lookahead);
+				//Let's see if it worked
+				u_int8_t status = definition(fl);
 
-			//Let's see if it worked
-			u_int8_t status = definition(fl);
+				//If we fail here we'll throw an error
+				if(status == FAILURE){
+					//Return an error node
+					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				}
+				
+				break;
 
-			//If we fail here we'll throw an error
-			if(status == FAILURE){
-				//Return an error node
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-			}
+			default:
+				//Push it back
+				push_back_token(lookahead);
 
-			//There is nothing to add into here, again these are 100% compiler directives
+				//We now need to see a valid statement
+				generic_ast_node_t* stmt_node = statement(fl);
 
-		//Otherwise, we need to see a statement of some kind
-		} else {
-			//Put whatever we saw back
-			push_back_token(lookahead);
-			
-			//We now need to see a valid statement
-			generic_ast_node_t* stmt_node = statement(fl);
+				//If it's null(which is possible) we just move along
+				if(stmt_node == NULL){
+					goto loop_end;
+				}
 
-			//If it's null(which is possible) we just move along
-			if(stmt_node == NULL){
-				goto loop_end;
-			}
+				//If it's invalid we'll pass right through, no error printing
+				if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+					//Send it right back
+					return stmt_node;
+				}
 
-			//If it's invalid we'll pass right through, no error printing
-			if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-				//Send it right back
-				return stmt_node;
-			}
+				//Otherwise, we'll add it as a child node
+				add_child_node(compound_stmt_node, stmt_node);
 
-			//Otherwise, we'll add it as a child node
-			add_child_node(compound_stmt_node, stmt_node);
+				//Break out
+				break;
 		}
 
 	loop_end:
