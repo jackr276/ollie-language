@@ -837,23 +837,23 @@ u_int8_t is_register_callee_saved(register_holder_t reg);
 /**
  * Pretty print a three address code statement
 */
-void print_three_addr_code_stmt(instruction_t* stmt);
+void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt);
 
 /**
  * Print an instruction that has not yet been given registers
  */
-void print_instruction(instruction_t* instruction, variable_printing_mode_t mode);
+void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode);
 
 /**
  * Print a variable and everything about it. If the variable is in
  * "Block header" mode, we won't print out any dereferencing info
  */
-void print_variable(three_addr_var_t* variable, variable_printing_mode_t mode);
+void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode_t mode);
 
 /**
  * Print a live range out
  */
-void print_live_range(live_range_t* live_range);
+void print_live_range(FILE* fl, live_range_t* live_range);
 
 /**
  * Destroy a three address variable
