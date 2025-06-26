@@ -26,9 +26,13 @@ CODE_GENERATOR_PATH = ./oc/compiler/code_generator
 JUMP_TABLE_PATH = ./oc/compiler/jump_table
 QUEUE_PATH = ./oc/compiler/queue
 TEST_FILE_DIR = ./oc/test_files/
+OUTPUTTED_ASSEMBLY_DIR = ./oc/generated_assembly/
 OUT_LOCAL = ./oc/out
 OUT_CI = $$RUNNER_TEMP
 PROGS = lexer_test symtab_test parser_test oc
+
+# Input and output arrays
+inputs := $(shell find $(TEST_FILE_DIR) -type f -name "*.ol" | sort)
 
 all: $(PROGS)
 
@@ -299,8 +303,15 @@ front_test: front_end_test
 middle_test: middle_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
 
+
 compiler_test: oc
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/oc -@ -s -t -i -d -f
+	@i=0; \
+	for input in $(inputs); do \
+		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		echo "Running ./oc/out/oc -ditsa -f $$input -o $$output"; \
+		./oc/out/oc -ditsa -f $$input -o $$output; \
+		i=$$((i+1)); \
+	done
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test

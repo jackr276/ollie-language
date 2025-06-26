@@ -10,8 +10,6 @@
 #define TRUE 1
 #define FALSE 0
 
-//Generic info array for printing
-char info[2000];
 
 /**
  * Assemble the program by first writing it to a .s file, and then
@@ -35,8 +33,9 @@ u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg){
 
 	//If the file is null, we fail out here
 	if(output == NULL){
-		sprintf(info, "[ERROR]: Could not open output file: %s\n", options->output_file != NULL ? options->output_file : "out.s");
-		printf("%s", info);
+		char error_info[2000];
+		sprintf(error_info, "[ERROR]: Could not open output file: %s\n", options->output_file != NULL ? options->output_file : "out.s");
+		printf("%s", error_info);
 		//1 means we failed
 		return 1;
 	}
