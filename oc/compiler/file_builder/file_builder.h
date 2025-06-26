@@ -15,6 +15,6 @@
  * Assemble the program by first writing it to a .s file, and then
  * assembling that file into an object file
 */
-u_int8_t assemble(cfg_t* cfg, char* file_name, FILE* output_file);
+u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg);
 
-#endif
+#endif /* FILE_BUILDER_H */

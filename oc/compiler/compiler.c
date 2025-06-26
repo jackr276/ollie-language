@@ -156,6 +156,11 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("Compiling source file: %s\n\n\n", options->file_name);
 	}
 
+	//Warn the user if no file name is given
+	if(options->output_file == NULL){
+		printf("[WARNING]: No output file name given. The name \"out.s\" will be used\n\n");
+	}
+
 	//Timer vars if we want to time things
 	double time_spent = 0;
 	clock_t begin = 0;
@@ -220,6 +225,11 @@ static u_int8_t compile(compiler_options_t* options){
 	
 	//Invoke the back end
 	generate_assembly_code(options, cfg);
+
+	//Now we'll assemble the file *if* we are not doing a CI run
+	if(options->is_test_run == FALSE){
+		output_generated_code(options, cfg);
+	}
 
 	//Finish the timer here if we need to
 	if(options->time_execution == TRUE){
