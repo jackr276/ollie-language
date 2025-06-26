@@ -305,12 +305,10 @@ middle_test: middle_end_test
 
 
 compiler_test: oc
-	@i=0; \
-	for input in $(inputs); do \
+	@for input in $(inputs); do \
 		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
 		echo "Running ./oc/out/oc -ditsa -f $$input -o $$output"; \
 		./oc/out/oc -ditsa -f $$input -o $$output; \
-		i=$$((i+1)); \
 	done
 
 array_test: dynamic_array_test

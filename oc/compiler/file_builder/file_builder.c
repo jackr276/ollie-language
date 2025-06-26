@@ -11,6 +11,16 @@
 #define FALSE 0
 
 
+static void print_text_section(compiler_options_t* options, FILE* fl, cfg_t* cfg){
+	//Declare the start of the new file to gas
+	fprintf(fl, "\t.file\t\"%s\"\n", options->file_name);
+
+	//Print the .text declaration part of the program
+	fprintf(fl, "\t.text\n");
+
+}
+
+
 /**
  * Assemble the program by first writing it to a .s file, and then
  * assembling that file into an object file
@@ -30,7 +40,6 @@ u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg){
 		output = fopen("out.s", "w");
 	}
 
-
 	//If the file is null, we fail out here
 	if(output == NULL){
 		char error_info[2000];
@@ -39,6 +48,9 @@ u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg){
 		//1 means we failed
 		return 1;
 	}
+
+	//We'll first print the text segment of the program
+	print_text_section(options, output, cfg);
 
 	//Once we're done, close the file
 	fclose(output);
