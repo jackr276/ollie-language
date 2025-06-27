@@ -2427,6 +2427,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Add this in as a used variable
 		add_used_variable(basic_block, non_temp_var);
 
+		//Do we need a type conversion here
+		if(is_type_conversion_needed(ident_node->variable->type_defined_as, ident_node->inferred_type) == TRUE){
+			printf("TYPE CONVERSION NEEDED IN IDENT");
+		}
+
 		//Let's first create the assignment statement
 		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
 
