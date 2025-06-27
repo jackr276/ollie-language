@@ -165,7 +165,7 @@ static void live_range_dealloc(live_range_t* live_range){
 static void print_block_with_live_ranges(basic_block_t* block){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
-		print_jump_table(&(block->jump_table));
+		print_jump_table(stdout, &(block->jump_table));
 	}
 
 	//If it's a function entry block, we need to print this out
@@ -281,7 +281,7 @@ static void print_blocks_with_live_ranges(basic_block_t* head_block){
 static void print_block_with_registers(basic_block_t* block){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
-		print_jump_table(&(block->jump_table));
+		print_jump_table(stdout, &(block->jump_table));
 	}
 
 	//If it's a function entry block, we need to print this out

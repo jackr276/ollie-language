@@ -383,7 +383,7 @@ static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* 
 static void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
-		print_jump_table(&(block->jump_table));
+		print_jump_table(stdout, &(block->jump_table));
 	}
 
 	//Print the block's ID or the function name

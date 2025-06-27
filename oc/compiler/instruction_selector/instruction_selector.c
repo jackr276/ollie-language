@@ -3940,7 +3940,7 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 static void print_ordered_block(basic_block_t* block, instruction_printing_mode_t mode){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
-		print_jump_table(&(block->jump_table));
+		print_jump_table(stdout, &(block->jump_table));
 	}
 
 	//If it's a function entry block, we need to print this out

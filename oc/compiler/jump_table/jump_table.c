@@ -64,10 +64,10 @@ void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry){
  * Print a jump table in a stylized fashion. This jump table will be printed
  * out in full assembly ready order, as no optimization takes place on it
  */
-void print_jump_table(jump_table_t* table){
+void print_jump_table(FILE* fl, jump_table_t* table){
 	//First thing that we'll print is the header info
 	//This is in the read only data section and we want to align by 8 bytes
-	printf(".section .rodata\n\t.align 8\n.JT%d:\n", table->jump_table_id);
+	fprintf(fl, ".section .rodata\n\t.align 8\n.JT%d:\n", table->jump_table_id);
 
 	//Now we'll run through and print out everything in the table's values
 	for(u_int16_t _ = 0; _ < table->num_nodes; _++){
@@ -75,11 +75,11 @@ void print_jump_table(jump_table_t* table){
 		basic_block_t* node = table->nodes[_];
 
 		//Now we'll print it
-		printf("\t.quad\t.L%d\n", node->block_id);
+		fprintf(fl, "\t.quad\t.L%d\n", node->block_id);
 	}
 
-	//Extra newline for readability
-	printf("\n");
+	//For readabilitiy
+	fprintf(fl, "\n");
 }
 
 

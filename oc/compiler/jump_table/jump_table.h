@@ -11,6 +11,7 @@
 #define JUMP_TABLE_H
 
 #include <sys/types.h>
+#include <stdio.h>
 
 //Jump table structure
 typedef struct jump_table_t jump_table_t;
@@ -45,7 +46,7 @@ void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry);
 /**
  * Print a jump table in a stylized fashion
  */
-void print_jump_table(jump_table_t* table);
+void print_jump_table(FILE* fl, jump_table_t* table);
 
 /**
  * Deallocate the jump table
