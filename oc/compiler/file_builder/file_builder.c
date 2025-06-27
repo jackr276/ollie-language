@@ -35,6 +35,8 @@ static void print_assembly_block(FILE* fl, basic_block_t* block){
 	while(cursor != NULL){
 		//We actually no longer need these
 		if(cursor->instruction_type != PHI_FUNCTION){
+			//Print a tab in the beginning for spacing
+			fprintf(fl, "\t");
 			print_instruction(fl, cursor, PRINTING_REGISTERS);
 		}
 
@@ -44,6 +46,28 @@ static void print_assembly_block(FILE* fl, basic_block_t* block){
 }
 
 
+/**
+ * Print all assembly blocks in a CFG in order. Remember, by the time that we reach
+ * here, these blocks will all already be in order from the block ordering procedure
+ */
+static void print_all_basic_blocks(FILE* fl, cfg_t* cfg){
+	//Grab the head block out
+	basic_block_t* current = cfg->head_block;
+
+	//We can use the direct successor strategy here
+	while(current != NULL){
+		//Print it out
+		print_assembly_block(fl, current);
+
+		//Advance the pointer
+		current = current->direct_successor;
+	}
+}
+
+
+/**
+ * Print the .text section by running through and printing all of our basic blocks in assembly
+ */
 static void print_text_section(compiler_options_t* options, FILE* fl, cfg_t* cfg){
 	//Declare the start of the new file to gas
 	fprintf(fl, "\t.file\t\"%s\"\n", options->file_name);
@@ -51,6 +75,8 @@ static void print_text_section(compiler_options_t* options, FILE* fl, cfg_t* cfg
 	//Print the .text declaration part of the program
 	fprintf(fl, "\t.text\n");
 
+	//Now that we've printed the text section, we need to print all basic blocks
+	print_all_basic_blocks(fl, cfg);
 }
 
 

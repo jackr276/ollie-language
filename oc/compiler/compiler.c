@@ -182,7 +182,7 @@ static u_int8_t compile(compiler_options_t* options){
 	//This is our fail case
 	if(results->root->CLASS == AST_NODE_CLASS_ERR_NODE){
 		//Timer end
-		clock_t end = clock();
+		end = clock();
 
 		//Crude time calculation
 		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
