@@ -119,19 +119,19 @@ static void print_instruction_window_three_address_code(instruction_window_t* wi
 	printf("----------- Instruction Window ------------\n");
 	//We'll just print out all three instructions
 	if(window->instruction1 != NULL){
-		print_three_addr_code_stmt(window->instruction1);
+		print_three_addr_code_stmt(stdout, window->instruction1);
 	} else {
 		printf("EMPTY\n");
 	}
 
 	if(window->instruction2 != NULL){
-		print_three_addr_code_stmt(window->instruction2);
+		print_three_addr_code_stmt(stdout, window->instruction2);
 	} else {
 		printf("EMPTY\n");
 	}
 	
 	if(window->instruction3 != NULL){
-		print_three_addr_code_stmt(window->instruction3);
+		print_three_addr_code_stmt(stdout, window->instruction3);
 	} else {
 		printf("EMPTY\n");
 	}
@@ -148,19 +148,19 @@ static void print_instruction_window(instruction_window_t* window){
 	printf("----------- Instruction Window ------------\n");
 	//We'll just print out all three instructions
 	if(window->instruction1 != NULL){
-		print_instruction(window->instruction1, PRINTING_VAR_IN_INSTRUCTION);
+		print_instruction(stdout, window->instruction1, PRINTING_VAR_IN_INSTRUCTION);
 	} else {
 		printf("EMPTY\n");
 	}
 
 	if(window->instruction2 != NULL){
-		print_instruction(window->instruction2, PRINTING_VAR_IN_INSTRUCTION);
+		print_instruction(stdout, window->instruction2, PRINTING_VAR_IN_INSTRUCTION);
 	} else {
 		printf("EMPTY\n");
 	}
 	
 	if(window->instruction3 != NULL){
-		print_instruction(window->instruction3, PRINTING_VAR_IN_INSTRUCTION);
+		print_instruction(stdout, window->instruction3, PRINTING_VAR_IN_INSTRUCTION);
 	} else {
 		printf("EMPTY\n");
 	}
@@ -3961,9 +3961,9 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
 		//print statement
 		if(mode == PRINT_THREE_ADDRESS_CODE){
 			//Hand off to printing method
-			print_three_addr_code_stmt(cursor);
+			print_three_addr_code_stmt(stdout, cursor);
 		} else {
-			print_instruction(cursor, PRINTING_VAR_IN_INSTRUCTION);
+			print_instruction(stdout, cursor, PRINTING_VAR_IN_INSTRUCTION);
 		}
 
 

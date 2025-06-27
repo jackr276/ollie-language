@@ -1624,7 +1624,7 @@ static void mark(cfg_t* cfg){
 			//Mark the conditional and add it to the worklist
 			if(conditional_stmt->mark == FALSE){
 				printf("Marking conditional statement: ");
-				print_three_addr_code_stmt(conditional_stmt);
+				print_three_addr_code_stmt(stdout, conditional_stmt);
 				printf("\n");
 
 				//Mark
@@ -1637,7 +1637,7 @@ static void mark(cfg_t* cfg){
 			//any list - there's nothing else to mark
 			if(jump_to_if->mark == FALSE){
 				printf("Marking if statement: ");
-				print_three_addr_code_stmt(jump_to_if);
+				print_three_addr_code_stmt(stdout, jump_to_if);
 				printf("\n");
 
 				//Mark
@@ -1648,7 +1648,7 @@ static void mark(cfg_t* cfg){
 			//to any list - there's nothing else to mark
 			if(jump_to_else->mark == FALSE){
 				printf("Marking else statement: ");
-				print_three_addr_code_stmt(jump_to_else);
+				print_three_addr_code_stmt(stdout, jump_to_else);
 				printf("\n");
 				//Mark
 				jump_to_else->mark = TRUE;

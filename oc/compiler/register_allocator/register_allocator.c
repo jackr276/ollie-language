@@ -181,7 +181,7 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf("Assigned: (");
 
 		for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
-			print_live_range(dynamic_array_get_at(block->assigned_variables, i));
+			print_live_range(stdout, dynamic_array_get_at(block->assigned_variables, i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->assigned_variables->current_index - 1){
@@ -196,7 +196,7 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf("Used: (");
 
 		for(u_int16_t i = 0; i < block->used_variables->current_index; i++){
-			print_live_range(dynamic_array_get_at(block->used_variables, i));
+			print_live_range(stdout, dynamic_array_get_at(block->used_variables, i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->used_variables->current_index - 1){
@@ -211,7 +211,7 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf("LIVE IN: (");
 
 		for(u_int16_t i = 0; i < block->live_in->current_index; i++){
-			print_live_range(dynamic_array_get_at(block->live_in, i));
+			print_live_range(stdout, dynamic_array_get_at(block->live_in, i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->live_in->current_index - 1){
@@ -226,7 +226,7 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf("LIVE OUT: (");
 
 		for(u_int16_t i = 0; i < block->live_out->current_index; i++){
-			print_live_range(dynamic_array_get_at(block->live_out, i));
+			print_live_range(stdout, dynamic_array_get_at(block->live_out, i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->live_out->current_index - 1){
@@ -244,7 +244,7 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	while(cursor != NULL){
 		//We actually no longer need these
 		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(cursor, PRINTING_LIVE_RANGES);
+			print_instruction(stdout, cursor, PRINTING_LIVE_RANGES);
 		}
 
 		//Move along to the next one
@@ -278,7 +278,7 @@ static void print_blocks_with_live_ranges(basic_block_t* head_block){
 /**
  * Print instructions with registers
 */
-static void print_block_with_registers(basic_block_t* block, u_int8_t final_run){
+static void print_block_with_registers(basic_block_t* block){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
 		print_jump_table(&(block->jump_table));
@@ -289,9 +289,7 @@ static void print_block_with_registers(basic_block_t* block, u_int8_t final_run)
 		printf("%s:\n", block->function_defined_in->func_name);
 
 		//We'd only want to print the stack if this is not the final run
-		if(final_run == FALSE){
-			print_stack_data_area(&(block->function_defined_in->data_area));
-		}
+		print_stack_data_area(&(block->function_defined_in->data_area));
 
 	} else {
 		printf(".L%d:\n", block->block_id);
@@ -306,7 +304,7 @@ static void print_block_with_registers(basic_block_t* block, u_int8_t final_run)
 	while(cursor != NULL){
 		//We actually no longer need these
 		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(cursor, PRINTING_REGISTERS);
+			print_instruction(stdout, cursor, PRINTING_REGISTERS);
 		}
 
 		//Move along to the next one
@@ -322,14 +320,14 @@ static void print_block_with_registers(basic_block_t* block, u_int8_t final_run)
  * Run through using the direct successor strategy and print all
  * ordered blocks with their registers after allocation
  */
-static void print_blocks_with_registers(basic_block_t* head_block, u_int8_t final_run){
+static void print_blocks_with_registers(basic_block_t* head_block){
 	//Run through the direct successors so long as the block is not null
 	basic_block_t* current = head_block;
 
 	//So long as this one isn't NULL
 	while(current != NULL){
 		//Print it
-		print_block_with_registers(current, final_run);
+		print_block_with_registers(current);
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
@@ -352,7 +350,7 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		//Now we'll run through and print out all of its variables
 		for(u_int16_t j = 0; j < current->variables->current_index; j++){
 			//Print the variable name
-			print_variable(dynamic_array_get_at(current->variables, j), PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, dynamic_array_get_at(current->variables, j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
 			if(j != current->variables->current_index - 1){
@@ -488,7 +486,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 	if(live_range == NULL){
 		//This is a function parameter, we need to make it ourselves
 		if(variable->linked_var != NULL && variable->linked_var->is_function_paramater == TRUE){
-			print_variable(variable, PRINTING_VAR_INLINE);
+			print_variable(stdout, variable, PRINTING_VAR_INLINE);
 			//Create it. Since this is a function parameter, we start at line 0
 			live_range = live_range_alloc(block->function_defined_in, variable->variable_size);
 			//Add it in
@@ -501,7 +499,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 
 		} else {
 			printf("Fatal compiler error: variable found with that has no live range\n");
-			print_variable(variable, PRINTING_VAR_INLINE);
+			print_variable(stdout, variable, PRINTING_VAR_INLINE);
 			//TODO THIS MUST BE FIXED
 			exit(0);
 		}
@@ -706,7 +704,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 					instruction = instruction->next_statement;
 
 					printf("Deleting:\n");
-					print_instruction(temp, PRINTING_VAR_INLINE);
+					print_instruction(stdout, temp, PRINTING_VAR_INLINE);
 
 					//Delete the old one from the graph
 					delete_statement(cfg, current, temp);
@@ -719,7 +717,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 					instruction = instruction->next_statement;
 
 					printf("Deleting DUPLICATE:\n");
-					print_instruction(temp, PRINTING_LIVE_RANGES);
+					print_instruction(stdout, temp, PRINTING_LIVE_RANGES);
 
 					//Delete the old one from the block
 					delete_statement(cfg, current, temp);
@@ -2058,7 +2056,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//One final print post allocation
 	if(print_irs == TRUE){
 		printf("================= After Allocation =======================\n");
-		print_blocks_with_registers(cfg->head_block, FALSE);
+		print_blocks_with_registers(cfg->head_block);
 		printf("================= After Allocation =======================\n");
 	}
 }

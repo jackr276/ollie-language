@@ -400,7 +400,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		//Run through all of the live variables and print them out
 		for(u_int16_t i = 0; i < block->used_variables->current_index; i++){
 			//Print it out
-			print_variable(block->used_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, block->used_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->used_variables->current_index - 1){
@@ -461,7 +461,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("Assigned: (");
 
 		for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
-			print_variable(block->assigned_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, block->assigned_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->assigned_variables->current_index - 1){
@@ -476,7 +476,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("LIVE_IN: (");
 
 		for(u_int16_t i = 0; i < block->live_in->current_index; i++){
-			print_variable(block->live_in->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, block->live_in->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
 			if(i != block->live_in->current_index - 1){
@@ -493,7 +493,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		printf("LIVE_OUT: (");
 
 		for(u_int16_t i = 0; i < block->live_out->current_index; i++){
-			print_variable(block->live_out->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, block->live_out->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
 			if(i != block->live_out->current_index - 1){
@@ -629,7 +629,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	//So long as it isn't null
 	while(cursor != NULL){
 		//Hand off to printing method
-		print_three_addr_code_stmt(cursor);
+		print_three_addr_code_stmt(stdout, cursor);
 		//Move along to the next one
 		cursor = cursor->next_statement;
 	}
