@@ -1357,7 +1357,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	
 	//If we didn't see it, that's some weird internal error
 	if(lookahead.tok != L_BRACKET){
-		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Array accessor did not see [", current_line);
+		print_parse_message(PARSE_ERROR, "Opening bracket expected for array access", current_line);
 		num_errors++;
 		//Fail out here
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -1378,17 +1378,24 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 		return expr;
 	}
 
-	//We use a u_int32 as our reference
-	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u32")->type;
+	//Let's first check to see if this can be used in an array at all
+	//If we can't we'll fail out here
+	if(is_type_valid_for_memory_addressing(expr->inferred_type) == FALSE){
+		sprintf(info, "Type %s cannot be used as an array index", expr->inferred_type->type_name);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//We use a u_int64 as our reference
+	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u64")->type;
 	//Store this for processing
 	generic_type_t* old_type = expr->inferred_type;
 
-	//Find the final type here
-	generic_type_t* final_type = types_assignable(&reference_type, &(expr->inferred_type));
+	//Find the final type here. If it's not currently a U64, we'll need to coerce it
+	generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &reference_type, &(expr->inferred_type), L_BRACKET);
 
 	//Let's make sure that this is an int
-	if(types_assignable(&reference_type, &(expr->inferred_type)) == NULL){
-		sprintf(info, "Array accessing requires types compatible with \"u32\", but instead got \"%s\"", expr->inferred_type->type_name);
+	if(final_type == NULL){
+		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
@@ -1397,6 +1404,10 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	//If this is the case, we'll need to propogate all of the types down the chain here
 	if(old_type == generic_unsigned_int || old_type == generic_signed_int){
 		update_constant_type_in_subtree(expr, old_type, expr->inferred_type);
+
+	//Otherwise if there is some kind of variable here, we'll need to update that too
+	} else if(expr->variable->type_defined_as != expr->inferred_type){
+		update_inferred_type_in_subtree(expr, expr->variable, expr->inferred_type);
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets

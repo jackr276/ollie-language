@@ -56,8 +56,8 @@ fn main() -> i32{
 		asm{
 		push %rax \
 		push %rbx \
-		mov $2, %rax \
-		addl $3, %rax \
+		movq $2, %rax \
+		addq $3, %rax \
 		pop %rbx \
 		pop %rax \
 		};

@@ -49,6 +49,46 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 
 
 /**
+ * Is this type valid for memory addressing. Specifically, can this
+ * be used as the index to an array
+ */
+u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
+	//First we dealias just to make sure
+	type = dealias_type(type);
+
+	//The basic type token
+	Token basic_type_token;
+
+	//Switch based on the type to determine
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_POINTER:
+			return FALSE;
+		case TYPE_CLASS_ENUMERATED:
+			return TRUE;
+		case TYPE_CLASS_BASIC:
+			//Grab this out
+			basic_type_token = type->basic_type->basic_type;
+
+			//We just can't see floats or void here
+			if(basic_type_token == VOID || basic_type_token == FLOAT32
+				|| basic_type_token == FLOAT64){
+				return FALSE;
+			}
+
+			//Otherwise we're good
+			return TRUE;
+
+		//By default we can't
+		default:
+			return FALSE;
+	}
+
+}
+
+
+/**
  * Is the type valid to be used in a conditional?
  */
 u_int8_t is_type_valid_for_conditional(generic_type_t* type){
@@ -696,6 +736,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		case R_SHIFT:
 		case SINGLE_AND:
 		case SINGLE_OR:
+		case L_BRACKET: //Array access
 		case CARROT:
 			//We always apply the signedness coercion first
 			basic_type_signedness_coercion(symtab, a, b);

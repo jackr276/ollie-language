@@ -207,6 +207,11 @@ struct aliased_type_t{
 };
 
 /**
+ * Is this type valid for memory addressing?
+ */
+u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type);
+
+/**
  * Is the type valid to be used in a conditional?
  */
 u_int8_t is_type_valid_for_conditional(generic_type_t* type);

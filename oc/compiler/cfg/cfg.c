@@ -2089,7 +2089,7 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
  */
 static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(u64);
+	three_addr_var_t* assignee = emit_temp_var(base_addr->type);
 
 	//If the base addr is not temporary, this counts as a read
 	if(base_addr->is_temporary == FALSE){

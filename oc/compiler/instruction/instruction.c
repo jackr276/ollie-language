@@ -2500,7 +2500,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 		case CALL:
 			fprintf(fl, "call %s", instruction->called_function->func_name);
-			if(instruction->destination_register != NULL){
+			if(instruction->destination_register != NULL && mode != PRINTING_REGISTERS){
 				fprintf(fl, " -> ");
 				print_variable(fl, instruction->destination_register, mode);
 			}
