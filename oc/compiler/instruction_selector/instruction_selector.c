@@ -10,6 +10,7 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1850,12 +1851,56 @@ static void handle_converting_move_instruction(instruction_t* instruction){
 
 
 /**
- * Handle a regular move condition
- *
- * We also account for cases where we have variables with indirection levels
+ * Handle the case where we have a constant to register move
+ */
+static void handle_constant_to_register_move_instruction(instruction_t* instruction){
+	//Select the destination size first
+	variable_size_t destination_size;
+
+	//If it's 0(most common), we don't need to do anything fancy
+	if(instruction->assignee->indirection_level == 0){
+		//Use the standard function here
+		destination_size = select_variable_size(instruction->assignee);
+
+	//Otherwise, we'll want to see what the dereferenced type is
+	} else {
+		//Grab the type
+		generic_type_t* destination_type = get_referenced_type(instruction->assignee->type, instruction->assignee->indirection_level);
+		//Now select the size from the type
+		destination_size = select_type_size(destination_type);
+	}
+
+	//Use the helper to get the right sized move instruction
+	instruction->instruction_type = select_move_instruction(destination_size);
+	
+	//We've already set the sources, now we set the destination as the assignee
+	instruction->destination_register = instruction->assignee;
+
+	//Handle the indirection levels here if we have a deref only case
+	if(instruction->destination_register->indirection_level > 0){
+		instruction->indirection_level = instruction->destination_register->indirection_level;
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+
+	} else if(instruction->source_register != NULL && instruction->source_register->indirection_level > 0){
+		instruction->indirection_level = instruction->source_register->indirection_level;
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+	}
+}
+
+
+/**
+ * Handle a register to register move condition
  */
 static void handle_to_register_move_instruction(instruction_t* instruction){
-	variable_size_t size;
+	//We have both a destination and source size to look at here
+	variable_size_t destination_size = select_variable_size(instruction->assignee);
+	variable_size_t source_size;
+
+
+	//If the operand here is not null, 
+	if(instruction->op1 != NULL){
+
+	}
 
 	//Select the variable size based on the assignee, unless it's an address
 	if(instruction->assignee->indirection_level == 0){
@@ -2651,8 +2696,10 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
 		switch (current->CLASS) {
 			//These have a helper
 			case THREE_ADDR_CODE_ASSN_STMT:
+				handle_register_to_register_move_instruction(current);
+				break;
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
-				handle_to_register_move_instruction(current);
+				handle_constant_to_register_move_instruction(current);
 				break;
 			case THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT:
 				handle_converting_move_instruction(current);

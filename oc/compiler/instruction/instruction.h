@@ -516,6 +516,11 @@ struct instruction_t{
 void set_new_function(symtab_function_record_t* func);
 
 /**
+ * Select the size based only on a type
+ */
+variable_size_t select_type_size(generic_type_t* type);
+
+/**
  * Select the size of a constant based on its type
  */
 variable_size_t select_constant_size(three_addr_const_t* constant);

@@ -18,6 +18,34 @@
 
 
 /**
+ * Get the referenced type regardless of how many indirection levels there are
+ */
+generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t indirection_level){
+	//Here's the current type that we have. Initially it is the start type
+	generic_type_t* current_type = starting_type;
+
+	//We need to repeat this process for however many indirections that we have
+	for(u_int16_t i = 0; i < indirection_level; i++){
+		switch (current_type->type_class) {
+			//This is really all we should have here
+			case TYPE_CLASS_ARRAY:
+				current_type = current_type->array_type->member_type;
+				break;
+			case TYPE_CLASS_POINTER:
+				current_type = current_type->pointer_type->points_to;
+				break;
+			//Nothing for us here
+			default:
+				break;
+		}
+	}
+
+	//Give back the current type
+	return current_type;
+}
+
+
+/**
  * Are two types equivalent(as in, the exact same)
  */
 static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){

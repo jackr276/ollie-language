@@ -206,6 +206,12 @@ struct aliased_type_t{
 	generic_type_t* aliased_type;
 };
 
+
+/**
+ * Get the referenced type regardless of how many indirection levels there are
+ */
+generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t indirection_level);
+
 /**
  * Is this type valid for memory addressing?
  */

@@ -146,6 +146,76 @@ variable_size_t select_constant_size(three_addr_const_t* constant){
 
 
 /**
+ * Select the size based only on a type
+ */
+variable_size_t select_type_size(generic_type_t* type){
+	//What the size will be
+	variable_size_t size;
+
+	//Probably the most common option
+	if(type->type_class == TYPE_CLASS_BASIC){
+		//Extract for convenience
+		Token basic_type = type->basic_type->basic_type;
+
+		//Switch based on this
+		switch (basic_type) {
+			case U_INT8:
+			case S_INT8:
+			case CHAR:
+				size = BYTE;
+				break;
+
+			case U_INT16:
+			case S_INT16:
+				size = WORD;
+				break;
+
+			//These are 32 bit(double word)
+			case S_INT32:
+			case U_INT32:
+				size = DOUBLE_WORD;
+				break;
+
+			//This is SP
+			case FLOAT32:
+				size = SINGLE_PRECISION;
+				break;
+
+			//This is double precision
+			case FLOAT64:
+				size = DOUBLE_PRECISION;
+				break;
+
+			//These are all quad word(64 bit)
+			case U_INT64:
+			case S_INT64:
+				size = QUAD_WORD;
+				break;
+		
+			//We shouldn't get here
+			default:
+				break;
+		}
+
+	//These will always be 64 bits
+	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
+				|| type->type_class == TYPE_CLASS_CONSTRUCT){
+		size = QUAD_WORD;
+
+	//This should never happen, but a sane default doesn't hurt
+	} else if(type->type_class == TYPE_CLASS_ALIAS){
+		size = QUAD_WORD;
+	//Catch all down here
+	} else {
+		size = DOUBLE_WORD;
+	}
+
+	//Give it back
+	return size;
+}
+
+
+/**
  * Select the size of a given variable based on its type
  */
 variable_size_t select_variable_size(three_addr_var_t* variable){
