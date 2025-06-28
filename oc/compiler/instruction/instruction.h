@@ -509,6 +509,10 @@ struct instruction_t{
 	address_calculation_mode_t calculation_mode;
 };
 
+/**
+ * Insert an instruction in a block before the given instruction
+ */
+void insert_instruction_before_given(instruction_t* insertee, instruction_t* given);
 
 /**
  * Declare that we are in a new function

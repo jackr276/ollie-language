@@ -44,7 +44,7 @@ symtab_variable_record_t* stack_pointer = NULL;
 //Keep a variable for it too
 three_addr_var_t* stack_pointer_var = NULL;
 //Store this for usage
-generic_type_t* u64 = NULL;
+static generic_type_t* u64 = NULL;
 //The current stack offset for any given function
 u_int64_t stack_offset = 0;
 //For any/all error printing

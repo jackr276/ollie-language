@@ -36,6 +36,34 @@ static int32_t increment_and_get_temp_id(){
 
 
 /**
+ * Insert an instruction in a block before the given instruction
+ */
+void insert_instruction_before_given(instruction_t* insertee, instruction_t* given){
+	//Let's first grab out which block we've got
+	basic_block_t* block = given->block_contained_in;
+	//Mark this while we're here
+	insertee->block_contained_in = block;
+
+	//Grab out what's before the given
+	instruction_t* before_given = given->previous_statement;
+
+	//The insertee is before the given, so its next is the given
+	insertee->next_statement = given;
+	given->previous_statement = insertee;
+	
+	//Most common case
+	if(before_given != NULL){
+		before_given->next_statement = insertee;
+		insertee->previous_statement = before_given;
+
+	//This means that we were at the head, so now this is the head
+	} else {
+		block->leader_statement = insertee;
+	}
+}
+
+
+/**
  * Declare that we are in a new function
  */
 void set_new_function(symtab_function_record_t* func){

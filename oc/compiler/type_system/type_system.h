@@ -213,6 +213,11 @@ struct aliased_type_t{
 generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t indirection_level);
 
 /**
+ * Is the given type memory movement appropriate
+ */
+u_int8_t is_type_address_calculation_compatible(generic_type_t* type);
+
+/**
  * Is this type valid for memory addressing?
  */
 u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type);

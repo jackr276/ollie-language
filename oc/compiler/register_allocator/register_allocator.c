@@ -1097,6 +1097,19 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 					dynamic_array_add(live_now, operation->source_register2->associated_live_range);
 				}
 
+				//Check the address calc registers
+				if(operation->address_calc_reg1 != NULL
+					&& dynamic_array_contains(live_now, operation->address_calc_reg1->associated_live_range) == NOT_FOUND){
+					dynamic_array_add(live_now, operation->address_calc_reg1->associated_live_range);
+				}
+				
+				//Check the address calc registers
+				if(operation->address_calc_reg2 != NULL
+					&& dynamic_array_contains(live_now, operation->address_calc_reg2->associated_live_range) == NOT_FOUND){
+					dynamic_array_add(live_now, operation->address_calc_reg2->associated_live_range);
+				}
+
+
 				operation = operation->previous_statement;
 				continue;
 			}

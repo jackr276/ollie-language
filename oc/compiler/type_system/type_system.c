@@ -77,6 +77,26 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 
 
 /**
+ * Is the given type memory movement appropriate
+ */
+u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
+	//Must be basic
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return FALSE;
+	}
+
+	//Switch on it. Only 64 bits are appropriate
+	switch(type->basic_type->basic_type){
+		case U_INT64:
+		case S_INT64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this type valid for memory addressing. Specifically, can this
  * be used as the index to an array
  */

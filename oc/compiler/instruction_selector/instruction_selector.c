@@ -20,6 +20,9 @@
 #define TRUE 1
 #define FALSE 0
 
+//We'll need this a lot, so we may as well have it here
+static generic_type_t* u64;
+
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
@@ -108,6 +111,29 @@ static void multiply_constants(three_addr_const_t* constant1, three_addr_const_t
 			constant1->long_const *= constant2->long_const;
 		}
 	}
+}
+
+
+/**
+ * Emit a converting move instruction directly, with no need to do instruction selection afterwards
+ */
+static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* assignee, three_addr_var_t* source){
+	//Allocate it
+	instruction_t* converting_move = calloc(1, sizeof(instruction_t));
+
+	//Select type based on signedness
+	if(is_type_signed(assignee->type) == TRUE){
+		converting_move->instruction_type = MOVSX;
+	} else {
+		converting_move->instruction_type = MOVZX;
+	}
+
+	//Now load in the registers
+	converting_move->destination_register = assignee;
+	converting_move->source_register = source;
+
+	//And return it
+	return converting_move;
 }
 
 
@@ -907,11 +933,40 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 	//The offset comes from the first instruction
 	memory_access->offset = offset_calc->op1_const;
 
+	//Pull these out for our uses
+	three_addr_var_t* address_calc_reg1 = offset_calc->op1;
+	three_addr_var_t* address_calc_reg2 = lea_statement->op2;
+
+	//If this is the case, we need a converting move
+	if(is_type_address_calculation_compatible(offset_calc->op1->type) == FALSE){
+		//Emit the conversion
+		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), offset_calc->op1);
+		//Insert it before the memory access
+		insert_instruction_before_given(conversion, memory_access);
+
+		//Reassign what reg1 is
+		address_calc_reg1 = conversion->destination_register;
+	}
+
+	//If this is the case, we need a converting move
+	if(is_type_address_calculation_compatible(lea_statement->op2->type) == FALSE){
+		//Emit the conversion
+		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), lea_statement->op2);
+
+		//Insert it before the memory access
+		insert_instruction_before_given(conversion, memory_access);
+
+		//Reassign what reg2 is
+		address_calc_reg2 = conversion->destination_register;
+	}
+
 	//The first operand also comes from the first instruction
-	memory_access->address_calc_reg1 = offset_calc->op1;
+	memory_access->address_calc_reg1 = address_calc_reg1;
 
 	//The second instruction gives us the second register and lea offset
-	memory_access->address_calc_reg2 = lea_statement->op2;
+	memory_access->address_calc_reg2 = address_calc_reg2;
+	
+	//There is nothing typewise to worry about with this
 	memory_access->lea_multiplicator = lea_statement->lea_multiplicator;
 
 	//Now we'll set the sources that we have
@@ -4067,6 +4122,9 @@ static void print_ordered_blocks(basic_block_t* head_block, instruction_printing
  * of code that we print out
  */
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
+	//Grab this first
+	u64 = lookup_type_name_only(cfg->type_symtab, "u64")->type;
+
 	//Our very first step in the instruction selector is to order all of the blocks in one 
 	//straight line. This step is also able to recognize and exploit some early optimizations,
 	//such as when a block ends in a jump to the block right below it
