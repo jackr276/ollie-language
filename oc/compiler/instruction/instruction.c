@@ -1865,7 +1865,7 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	//We'll only have a source register here
 	print_variable(fl, instruction->source_register, mode);
 
-	fprintf(fl, " -> ");
+	fprintf(fl, " ; -> ");
 	print_variable(fl, instruction->destination_register, mode);
 	fprintf(fl, "\n");
 }
@@ -2435,8 +2435,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		//These first ones are very simple - no real variations here
 		case RET:
 			fprintf(fl, "ret");
-			if(instruction->source_register != NULL && mode != PRINTING_REGISTERS){
-				fprintf(fl, " --> ");
+			if(instruction->source_register != NULL){
+				fprintf(fl, " ; --> ");
 				print_variable(fl, instruction->source_register, mode);
 			}
 			fprintf(fl, "\n");
@@ -2500,8 +2500,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 		case CALL:
 			fprintf(fl, "call %s", instruction->called_function->func_name);
-			if(instruction->destination_register != NULL && mode != PRINTING_REGISTERS){
-				fprintf(fl, " -> ");
+			if(instruction->destination_register != NULL){
+				fprintf(fl, " ; -> ");
 				print_variable(fl, instruction->destination_register, mode);
 			}
 			fprintf(fl, "\n");

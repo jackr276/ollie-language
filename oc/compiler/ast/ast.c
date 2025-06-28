@@ -26,36 +26,47 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 	//We will perform a deep copy here
 	memcpy(duplicated, node, sizeof(generic_ast_node_t));
 
-	//Special case for assembly nodes
-	if(node->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-		//Allocate the inner node
-		duplicated->node = calloc(1, sizeof(AST_NODE_CLASS_ASM_INLINE_STMT));
-		//Grab a reference for convenience
-		asm_inline_stmt_ast_node_t* duplicated_asm = (asm_inline_stmt_ast_node_t*)(duplicated->node);
-		asm_inline_stmt_ast_node_t* old_asm = (asm_inline_stmt_ast_node_t*)(node->node);
-		duplicated_asm->asm_line_statements = calloc(sizeof(char), old_asm->max_length);
-		duplicated_asm->max_length = old_asm->max_length;
-		duplicated_asm->length = old_asm->length;
+	//Let's see if we have any special cases here that require extra attention
+	switch(node->CLASS){
+		//Asm inline is a special case because we'll need to copy the assembly over
+		case AST_NODE_CLASS_ASM_INLINE_STMT:
+			//Allocate the inner node
+			duplicated->node = calloc(1, sizeof(AST_NODE_CLASS_ASM_INLINE_STMT));
+			//Grab a reference for convenience
+			asm_inline_stmt_ast_node_t* duplicated_asm = (asm_inline_stmt_ast_node_t*)(duplicated->node);
+			asm_inline_stmt_ast_node_t* old_asm = (asm_inline_stmt_ast_node_t*)(node->node);
+			duplicated_asm->asm_line_statements = calloc(sizeof(char), old_asm->max_length);
+			duplicated_asm->max_length = old_asm->max_length;
+			duplicated_asm->length = old_asm->length;
 
-		//Copy over the entirety of the inlined assembly
-		strcpy(duplicated_asm->asm_line_statements, old_asm->asm_line_statements);
-	}
+			//Copy over the entirety of the inlined assembly
+			strcpy(duplicated_asm->asm_line_statements, old_asm->asm_line_statements);
+			
+			break;
 
-	//Special case as well for constant nodes
-	if(node->CLASS == AST_NODE_CLASS_CONSTANT){
-		//Allocate the constant node
-		duplicated->node = calloc(1, sizeof(constant_ast_node_t));
+		//Constants are another special case, because they contain a special inner node
+		case AST_NODE_CLASS_CONSTANT:
+			//Allocate the constant node
+			duplicated->node = calloc(1, sizeof(constant_ast_node_t));
 
-		//And then we'll copy the two onto eachother
-		memcpy(duplicated->node, node->node, sizeof(constant_ast_node_t));
-	}
+			//And then we'll copy the two onto eachother
+			memcpy(duplicated->node, node->node, sizeof(constant_ast_node_t));
 
-	//If it's an ident, we'll need to duplicate that
-	if(node->CLASS == AST_NODE_CLASS_IDENTIFIER){
-		//Allocate this
-		duplicated->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
-		//Copy the string over
-		memcpy(duplicated->identifier, node->identifier, MAX_IDENT_LENGTH);
+			break;
+
+		//Final case is that we have an identifier
+		case AST_NODE_CLASS_IDENTIFIER:
+			//Allocate this
+			duplicated->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
+			//Copy the string over
+			memcpy(duplicated->identifier, node->identifier, MAX_IDENT_LENGTH);
+
+			break;
+
+		//By default we do nothing, this is just there for the compiler to not complain
+		default:
+			break;
+
 	}
 	
 	//We don't want to hold onto any of these old references here
@@ -87,6 +98,8 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
+	//A pointer for referencing the asm inline statement
+	asm_inline_stmt_ast_node_t* asm_node;
 
 	//If we have the very first node
 	if(head_node == NULL){
@@ -100,24 +113,32 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 	//Assign the class
 	node->CLASS = CLASS;
 	
-	/**
-	 * Handle the various special cases that we have here
-	 */
-	//Assembly nodes make use of the external pointer
-	if(CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-		//Allocate the inner node with the proper size
-		node->node = calloc(1, sizeof(asm_inline_stmt_ast_node_t));
-		//We need to allocate the inside string as well
-		((asm_inline_stmt_ast_node_t*)(node->node))->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
-		((asm_inline_stmt_ast_node_t*)(node->node))->length = 0;
-		((asm_inline_stmt_ast_node_t*)(node->node))->max_length = DEFAULT_ASM_INLINE_SIZE;
+	//Switch based on what we have for special cases
+	switch(CLASS){
+		//The needs extra allocation
+		case AST_NODE_CLASS_ASM_INLINE_STMT:
+			//Allocate the inner node with the proper size
+			node->node = calloc(1, sizeof(asm_inline_stmt_ast_node_t));
+			//Extract the actual node
+			asm_node = node->node;
+			//We need to allocate the inside string as well
+			asm_node->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
+			asm_node->length = 0;
+			asm_node->max_length = DEFAULT_ASM_INLINE_SIZE;
+
+			break;
 	
-	//Constant nodes also make use of the external pointer
-	} else if(CLASS == AST_NODE_CLASS_CONSTANT){
-		node->node = calloc(1, sizeof(constant_ast_node_t));
-	//Type and ident nodes make use of the internal string pointers
-	} else if(CLASS == AST_NODE_CLASS_IDENTIFIER){
-		node->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
+		//Constants and idents both require extra allocation
+		case AST_NODE_CLASS_CONSTANT:
+			node->node = calloc(1, sizeof(constant_ast_node_t));
+			break;
+		case AST_NODE_CLASS_IDENTIFIER:
+			node->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
+			break;
+
+		//By default do nothing, this is just so the compiler doesn't complain
+		default:
+			break;
 	}
 
 	return node;
