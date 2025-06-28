@@ -2667,22 +2667,22 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
  * tree
  */
 static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
-	if(primary_parent->CLASS == AST_NODE_CLASS_IDENTIFIER){
-		//If it's an identifier, emit this and leave
-		 return emit_identifier(basic_block, primary_parent, use_temp, side, is_branch_ending);
-	//If it's a constant, emit this and leave
-	} else if(primary_parent->CLASS == AST_NODE_CLASS_CONSTANT){
-		return emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
-	} else if(primary_parent->CLASS == AST_NODE_CLASS_BINARY_EXPR){
-		return emit_binary_operation(basic_block, primary_parent, is_branch_ending).assignee;
-	//Handle a function call
-	} else if(primary_parent->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
-		return emit_function_call(basic_block, primary_parent, is_branch_ending);
-	} else {
-		//Throw some error here, really this should never occur
-		print_parse_message(PARSE_ERROR, "Did not find identifier, constant, expression or function call in primary expression", primary_parent->line_number);
-		(*num_errors_ref)++;
-		exit(0);
+	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
+	switch(primary_parent->CLASS){
+		case AST_NODE_CLASS_IDENTIFIER:
+		 	return emit_identifier(basic_block, primary_parent, use_temp, side, is_branch_ending);
+		case AST_NODE_CLASS_CONSTANT:
+			return emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
+		case AST_NODE_CLASS_BINARY_EXPR:
+			return emit_binary_operation(basic_block, primary_parent, is_branch_ending).assignee;
+		case AST_NODE_CLASS_FUNCTION_CALL:
+			return emit_function_call(basic_block, primary_parent, is_branch_ending);
+		//Something went wrong here if we're hitting the default rule
+		default:
+			//Throw some error here, really this should never occur
+			print_parse_message(PARSE_ERROR, "Did not find identifier, constant, expression or function call in primary expression", primary_parent->line_number);
+			(*num_errors_ref)++;
+			exit(0);
 	}
 }
 
@@ -4373,19 +4373,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		basic_block_t* else_if_compound_stmt_entry = visit_compound_statement(&else_if_compound_stmt_values);
 		basic_block_t* else_if_compound_stmt_exit;
 
-		//If this is NULL, it's fine, but we should warn
-		if(else_if_compound_stmt_entry == NULL){
-			print_cfg_message(WARNING, "Empty else-if clause in else-if-statement", cursor->line_number);
-			(*num_warnings_ref)++;
-
-			//We'll just set this to jump out of here
-			//We will perform a normal jump to this one
-			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-			emit_jump(current_entry_block, exit_block, jump_to_else_if, TRUE, FALSE);
-			add_successor(current_entry_block, exit_block);
-
-		//We expect this to be the most likely option
-		} else {
+		//If it's not null, we'll process fully
+		if(else_if_compound_stmt_entry != NULL){
 			//Add the if statement node in as a direct successor
 			add_successor(current_entry_block, else_if_compound_stmt_entry);
 			//We will perform a normal jump to this one
@@ -4409,6 +4398,17 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 			}	else {
 				add_successor(else_if_compound_stmt_exit, exit_block);
 			}
+
+		//If this is NULL, it's fine, but we should warn
+		} else {
+			print_cfg_message(WARNING, "Empty else-if clause in else-if-statement", cursor->line_number);
+			(*num_warnings_ref)++;
+
+			//We'll just set this to jump out of here
+			//We will perform a normal jump to this one
+			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
+			emit_jump(current_entry_block, exit_block, jump_to_else_if, TRUE, FALSE);
+			add_successor(current_entry_block, exit_block);
 		}
 
 		//Advance this up to the next one
@@ -4634,31 +4634,36 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 
 	//So long as this isn't null
 	while(case_stmt_cursor != NULL){
-		//Handle a case statement
-		if(case_stmt_cursor->CLASS == AST_NODE_CLASS_CASE_STMT){
-			//Update this
-			passing_values.initial_node = case_stmt_cursor;
-			//Visit our case stmt here
-			case_block = visit_case_statement(&passing_values);
+		//Switch based on the class
+		switch(case_stmt_cursor->CLASS){
+			//Handle a case statement
+			case AST_NODE_CLASS_CASE_STMT:
+				//Update this
+				passing_values.initial_node = case_stmt_cursor;
+				//Visit our case stmt here
+				case_block = visit_case_statement(&passing_values);
 
-			//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
-			//that we start down at 0 as the lowest value
-			add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val - offset, case_block);
+				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
+				//that we start down at 0 as the lowest value
+				add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val - offset, case_block);
+				break;
 
-		//Handle a default statement
-		} else if(case_stmt_cursor->CLASS == AST_NODE_CLASS_DEFAULT_STMT){
-			//Update this
-			passing_values.initial_node = case_stmt_cursor;
-			//Visit the default statement
-			case_block = visit_default_statement(&passing_values);
+			//Handle a default statement
+			case AST_NODE_CLASS_DEFAULT_STMT:
+				//Update this
+				passing_values.initial_node = case_stmt_cursor;
+				//Visit the default statement
+				case_block = visit_default_statement(&passing_values);
 
-			//This is the default block, so save for now
-			default_block = case_block;
+				//This is the default block, so save for now
+				default_block = case_block;
 
-		//Otherwise we fail out here
-		} else {
-			print_cfg_message(PARSE_ERROR, "Switch statements are only allowed \"case\" and \"default\" statements", case_stmt_cursor->line_number);
-			exit(0);
+				break;
+
+			//Otherwise we have some weird error, so we'll fail out
+			default:
+				print_cfg_message(PARSE_ERROR, "Switch statements are only allowed \"case\" and \"default\" statements", case_stmt_cursor->line_number);
+				exit(0);
 		}
 
 		//Now we'll add this one into the overall structure
