@@ -10,7 +10,6 @@
 
 #include "instruction_selector.h"
 #include "../queue/heap_queue.h"
-#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -677,6 +676,25 @@ static instruction_type_t select_move_instruction(variable_size_t size){
 			return MOVQ;
 		default:
 			return MOVQ;
+	}
+}
+
+
+/**
+ * Select a register movement instruction based on the source and destination sizes
+ */
+static instruction_type_t select_register_movement_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
+
+	//If these are the exact same, then we can just call the helper and be done
+	if(destination_size == source_size){
+		return select_move_instruction(destination_size);
+	} 
+
+	//However, if they're not the same, we'll need some kind of converting move here
+	if(is_signed == TRUE){
+		return MOVSX;
+	} else {
+		return MOVZX;
 	}
 }
 
@@ -1855,87 +1873,85 @@ static void handle_converting_move_instruction(instruction_t* instruction){
  */
 static void handle_constant_to_register_move_instruction(instruction_t* instruction){
 	//Select the destination size first
-	variable_size_t destination_size;
+	variable_size_t size;
 
-	//If it's 0(most common), we don't need to do anything fancy
+	//If this has a 0 indirection, we'll use it's size
 	if(instruction->assignee->indirection_level == 0){
-		//Use the standard function here
-		destination_size = select_variable_size(instruction->assignee);
-
-	//Otherwise, we'll want to see what the dereferenced type is
+		size = select_variable_size(instruction->assignee);
+	//Otherwise take the constant's size
 	} else {
-		//Grab the type
-		generic_type_t* destination_type = get_referenced_type(instruction->assignee->type, instruction->assignee->indirection_level);
-		//Now select the size from the type
-		destination_size = select_type_size(destination_type);
+		size = select_constant_size(instruction->op1_const);
 	}
 
-	//Use the helper to get the right sized move instruction
-	instruction->instruction_type = select_move_instruction(destination_size);
+	//Select based on size
+	instruction->instruction_type = select_move_instruction(size);
 	
 	//We've already set the sources, now we set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
+	//Set the source immediate here
+	instruction->source_immediate = instruction->op1_const;
 
 	//Handle the indirection levels here if we have a deref only case
 	if(instruction->destination_register->indirection_level > 0){
 		instruction->indirection_level = instruction->destination_register->indirection_level;
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
-
-	} else if(instruction->source_register != NULL && instruction->source_register->indirection_level > 0){
-		instruction->indirection_level = instruction->source_register->indirection_level;
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
-	}
+	} 
 }
 
 
 /**
  * Handle a register to register move condition
  */
-static void handle_to_register_move_instruction(instruction_t* instruction){
+static void handle_register_to_register_move_instruction(instruction_t* instruction){
 	//We have both a destination and source size to look at here
-	variable_size_t destination_size = select_variable_size(instruction->assignee);
+	variable_size_t destination_size;
 	variable_size_t source_size;
 
+	//Are these being dereferenced?
+	u_int8_t assignee_is_deref = TRUE;
+	u_int8_t op1_is_deref = TRUE;
 
-	//If the operand here is not null, 
-	if(instruction->op1 != NULL){
-
-	}
-
-	//Select the variable size based on the assignee, unless it's an address
+	//If it's 0(most common), we don't need to do anything fancy
 	if(instruction->assignee->indirection_level == 0){
-		size = select_variable_size(instruction->assignee);
-	} else {
-		if(instruction->op1 != NULL){
-			size = select_variable_size(instruction->op1);
-		} else {
-			//Use the const
-			size = select_constant_size(instruction->op1_const);
-		}
+		//Use the standard function here
+		destination_size = select_variable_size(instruction->assignee);
+		//Set the flag
+		assignee_is_deref = FALSE;
 	}
 
-	//Set the source appropriately for later
-	if(instruction->op1 != NULL){
-		//We'll have a register source
-		instruction->source_register = instruction->op1;
-	//Otherwise it must be a constant
-	} else {
-		//Set this as well if we can
-		instruction->source_immediate = instruction->op1_const;
+	//If it's 0(most common), we don't need to do anything fancy
+	if(instruction->op1->indirection_level == 0){
+		//Use the standard function here
+		source_size = select_variable_size(instruction->op1);
+		//Set the flag
+		op1_is_deref = FALSE;
 	}
 
-	//Use the helper to get the right sized move instruction
-	instruction->instruction_type = select_move_instruction(size);
-	
-	//We've already set the sources, now we set the destination as the assignee
+	//Set the sources and destinations
 	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op1;
+
+	//If they both are not derferenced(most common), we'll invoke the
+	//moving helper
+	if(assignee_is_deref == FALSE && op1_is_deref == FALSE){
+		//Use the helper to get the right sized move instruction
+		instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(instruction->assignee->type));
+
+	//If the assignee is being dereferenced, we'll need to rely on the souce
+	} else if(assignee_is_deref == TRUE && op1_is_deref == FALSE){
+		instruction->instruction_type = select_move_instruction(source_size);
+
+	//Final case - the source is being derferenced. We'll need to rely on the destination
+	} else if(assignee_is_deref == FALSE && op1_is_deref == TRUE){
+		instruction->instruction_type = select_move_instruction(destination_size);
+	}
 
 	//Handle the indirection levels here if we have a deref only case
 	if(instruction->destination_register->indirection_level > 0){
 		instruction->indirection_level = instruction->destination_register->indirection_level;
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
 
-	} else if(instruction->source_register != NULL && instruction->source_register->indirection_level > 0){
+	} else if(instruction->source_register->indirection_level > 0){
 		instruction->indirection_level = instruction->source_register->indirection_level;
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
 	}
