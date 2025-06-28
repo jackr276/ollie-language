@@ -1391,7 +1391,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	generic_type_t* old_type = expr->inferred_type;
 
 	//Find the final type here. If it's not currently a U64, we'll need to coerce it
-	generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &reference_type, &(expr->inferred_type), L_BRACKET);
+	generic_type_t* final_type = types_assignable(&reference_type, &(expr->inferred_type));
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
@@ -1404,10 +1404,6 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	//If this is the case, we'll need to propogate all of the types down the chain here
 	if(old_type == generic_unsigned_int || old_type == generic_signed_int){
 		update_constant_type_in_subtree(expr, old_type, expr->inferred_type);
-
-	//Otherwise if there is some kind of variable here, we'll need to update that too
-	} else if(expr->variable->type_defined_as != expr->inferred_type){
-		update_inferred_type_in_subtree(expr, expr->variable, expr->inferred_type);
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets

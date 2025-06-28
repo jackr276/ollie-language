@@ -871,6 +871,9 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 	//Select the variable size
 	variable_size_t size;
 
+	//Grab out what block we're in
+	basic_block_t* block = offset_calc->block_contained_in;
+
 	//Select the size based on what we're moving in
 	if(memory_access->op1 != NULL){
 		size = select_variable_size(memory_access->op1);
