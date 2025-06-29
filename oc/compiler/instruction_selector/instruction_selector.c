@@ -1568,11 +1568,8 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 */
 static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
 	printf("HERE\n\n\n");
-	exit(0);
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	basic_block_t* block = multiplication_instruction->block_contained_in;
 
 	//Dev use TODO GETRID
 	if(multiplication_instruction->op2 == NULL){
@@ -1585,15 +1582,8 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//We first need to move the first operand into RAX
 	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
 
-	//Let's now attach this where division was
-	if(multiplication_instruction->previous_statement != block->leader_statement){
-		//This effectively deletes the old division instruction
-		multiplication_instruction->previous_statement->next_statement = move_to_rax;
-		move_to_rax->previous_statement = multiplication_instruction->previous_statement;
-	} else {
-		//Otherwise, this is the leader statement of its block
-		block->leader_statement = move_to_rax;
-	}
+	//Insert the move to rax before the multiplication instruction
+	insert_instruction_before_given(move_to_rax, multiplication_instruction);
 
 	//We determine the instruction that we need based on signedness and size
 	switch (size) {
@@ -1621,26 +1611,11 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
 
-	//Tie it in here
-	multiplication_instruction->next_statement = result_movement;
-	result_movement->previous_statement = multiplication_instruction;
-
-	//And now we can tie it in to our overall statement
-	result_movement->next_statement = multiplication_instruction->next_statement;
-	
-	//Avoid any null pointer dereference here
-	if(multiplication_instruction->next_statement != NULL){
-		multiplication_instruction->next_statement->previous_statement = result_movement;
-	} else {
-		//This is the new exit statement
-		block->exit_statement = result_movement;
-	}
+	//Insert the result movement instruction to be after the multiplication operation
+	insert_instruction_after_given(result_movement, multiplication_instruction);
 
 	//We now need to reset the window here
 	reconstruct_window(window, result_movement);
-
-	slide_window(window);
-	slide_window(window);
 }
 
 
@@ -2466,6 +2441,10 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
  * which is part of the plan
  */
 static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
+	if(window->instruction1->instruction_type != NONE){
+		return FALSE;
+	}
+
 	//Have we changed the window at all? Very similar to the simplify function
 	u_int8_t changed = FALSE;
 
