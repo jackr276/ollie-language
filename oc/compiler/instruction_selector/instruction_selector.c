@@ -2516,8 +2516,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		handle_three_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2, window->instruction3);
 
 		//Once we're done doing this, the first 2 instructions are now useless
-		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
-		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+		delete_statement(window->instruction1);
+		delete_statement(window->instruction2);
 
 		//Reconstruct the window with instruction3 as the seed
 		reconstruct_window(window, window->instruction3);
@@ -2546,8 +2546,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		handle_three_instruction_address_calc_from_memory_move(window->instruction1, window->instruction2, window->instruction3);
 
 		//Once we're done doing this, the first 2 instructions are now useless
-		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
-		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+		delete_statement(window->instruction1);
+		delete_statement(window->instruction2);
 		
 		//Reconstruct the window so that instruction3 is the start
 		reconstruct_window(window, window->instruction3);
@@ -2575,8 +2575,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		handle_three_instruction_registers_and_offset_only_from_memory_move(window->instruction1, window->instruction2, window->instruction3);
 		
 		//Once the helper is done, we need to delete instructions 1 and 2
-		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
-		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+		delete_statement(window->instruction1);
+		delete_statement(window->instruction2);
 
 		//Reconstruct the window with instruction3 as the start
 		reconstruct_window(window, window->instruction3);
@@ -2604,8 +2604,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		handle_three_instruction_registers_and_offset_only_to_memory_move(window->instruction1, window->instruction2, window->instruction3);
 		
 		//Once the helper is done, we need to delete instructions 1 and 2
-		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
-		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+		delete_statement(window->instruction1);
+		delete_statement(window->instruction2);
 
 		//Reconstruct the window with instruction3 as the start
 		reconstruct_window(window, window->instruction3);
@@ -2634,7 +2634,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		handle_two_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2);
 
 		//We can now delete instruction 1
-		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+		delete_statement(window->instruction1);
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
@@ -2665,7 +2665,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		handle_two_instruction_address_calc_from_memory_move(window->instruction1, window->instruction2);
 
 		//We can scrap instruction 1 now, it's useless
-		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+		delete_statement(window->instruction1);
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
@@ -2689,7 +2689,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		window->instruction2->lea_multiplicator = window->instruction1->lea_multiplicator;
 
 		//We're now able to delete instruction 1
-		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+		delete_statement(window->instruction1);
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
@@ -3011,7 +3011,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			binary_operation->op1 = NULL;
 
 			//Once we've done this, the first statement is entirely useless
-			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+			delete_statement(window->instruction1);
 
 			//Once we've deleted the statement, we'll need to completely rewire the block
 			//The binary operation is now the start
@@ -3044,7 +3044,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			binary_operation->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 			//Once we've done this, the first statement is entirely useless
-			delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+			delete_statement(window->instruction2);
 
 			//We'll need to reconstruct the window. Instruction 1 is still the start
 			reconstruct_window(window, window->instruction1);
@@ -3078,7 +3078,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		window->instruction2->op1 = NULL;
 
 		//Instruction 1 is now completely useless
-		delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+		delete_statement(window->instruction1);
 
 		//Reconstruct the window with instruction 2 as the start
 		reconstruct_window(window, window->instruction2);
@@ -3131,7 +3131,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			second->op1 = first->op1;
 
 			//We can now delete the first statement
-			delete_statement(cfg, first->block_contained_in, first);
+			delete_statement( first);
 
 			//Reconstruct the window with second as the start
 			reconstruct_window(window, second);
@@ -3169,7 +3169,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			window->instruction2->op1_const = const_assignment->op1_const;
 
 			//We can now delete the very first statement
-			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+			delete_statement(window->instruction1);
 
 			//Reconstruct the window with instruction2 as the start
 			reconstruct_window(window, window->instruction2);
@@ -3201,7 +3201,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			window->instruction3->op1_const = const_assignment->op1_const;
 
 			//We can now delete the very first statement
-			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+			delete_statement(window->instruction1);
 
 			//Reconstruct the window with instruction2 as the seed
 			reconstruct_window(window, window->instruction2);
@@ -3237,7 +3237,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			window->instruction2->op1 = window->instruction1->op1;
 
 			//We can now delete the very first statement
-			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+			delete_statement(window->instruction1);
 
 			//Reconstruct the window with instruction2 as the seed
 			reconstruct_window(window, window->instruction2);
@@ -3289,8 +3289,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			second->assignee = third->assignee;
 
 			//Following this, all we need to do is delete and rearrange
-			delete_statement(cfg, first->block_contained_in, first);
-			delete_statement(cfg, third->block_contained_in, third);
+			delete_statement(first);
+			delete_statement(third);
 
 			//Reconstruct the window with second as the new instruction1
 			reconstruct_window(window, second);
@@ -3354,7 +3354,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			window->instruction2->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//We can now scrap the first instruction entirely
-			delete_statement(cfg, window->instruction1->block_contained_in, window->instruction1);
+			delete_statement(window->instruction1);
 
 			//Reconstruct the window. Instruction 2 is the new start
 			reconstruct_window(window, window->instruction2);
@@ -3392,7 +3392,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		window->instruction3->assignee->indirection_level = old_assignee->indirection_level;
 
 		//We can remove the second instruction
-		delete_statement(cfg, window->instruction2->block_contained_in, window->instruction2);
+		delete_statement(window->instruction2);
 
 		//Reconstruct this window. Instruction 1 is still the seed
 		reconstruct_window(window, window->instruction1);
@@ -3441,7 +3441,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//That's really all we need to do for the first one. Now, we need to delete the second
 			//statement entirely
-			delete_statement(cfg, second->block_contained_in, second);
+			delete_statement(second);
 
 			//We'll reconstruct the window here, the first is still the first
 			reconstruct_window(window, first);
@@ -3468,7 +3468,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			first->assignee = second->assignee;
 
 			//We can now scrap the second statement
-			delete_statement(cfg, second->block_contained_in, second);
+			delete_statement(second);
 
 			//We'll reconstruct the window here, the first is still the first
 			reconstruct_window(window, first);
@@ -3731,7 +3731,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			second->op1 = first->op1;
 
 			//Now that this is done, we can remove the first equation
-			delete_statement(cfg, first->block_contained_in, first);
+			delete_statement(first);
 
 			//We'll reconstruct the window with the second instruction being the
 			//first instruction now
@@ -3876,7 +3876,7 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 				//delete the jump statement as it is now unnecessary
 				if(end_jumps_to == previous->direct_successor){
 					//Get rid of this jump as it's no longer needed
-					delete_statement(cfg, previous, previous->exit_statement);
+					delete_statement(previous->exit_statement);
 				}
 
 				//Add this in as well

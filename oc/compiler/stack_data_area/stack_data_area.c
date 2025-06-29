@@ -44,7 +44,7 @@ static u_int8_t does_stack_contain_variable(stack_data_area_t* area, three_addr_
  * of anything that is above that node. This function will recompute the offsets
  * of anything above the value passed in as "node"
  */
-static void recalculate_all_offsets(stack_data_area_t* area, stack_data_area_node_t* node){
+static void recalculate_all_offsets(stack_data_area_node_t* node){
 	//Hang onto our current offset. This will initially be whatever this node's offset is plus
 	//it's variable size. So, the *next* node that we encounter will have an offset of current
 	//offset
@@ -165,7 +165,7 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 
 		//In this case, recalculate all of the offsets based on node because it's our
 		//very lowest value(0 offset)
-		recalculate_all_offsets(area, node);
+		recalculate_all_offsets(node);
 
 	//This means that we have a new highest
 	} else if(current == area->highest){
@@ -177,7 +177,7 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 		area->highest = node;
 
 		//Redo all the offsets based on previous
-		recalculate_all_offsets(area, current);
+		recalculate_all_offsets(current);
 
 	//Otherwise we aren't at the very end. We'll insert
 	//the node before the previous
@@ -192,7 +192,7 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 		//In this case, recalculate all of the offsets based on current
 		//because current comes below node, so we'll need to use it's offset
 		//as a seed value
-		recalculate_all_offsets(area, current);
+		recalculate_all_offsets(current);
 	}
 }
 
@@ -287,7 +287,7 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 			//Forget the reference to the dead node
 			area->highest->previous = NULL;
 			//Recalculate all of these offsets
-			recalculate_all_offsets(area, area->highest);
+			recalculate_all_offsets(area->highest);
 		}
 
 	//Other special case - it's the tail
@@ -302,7 +302,7 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 		((three_addr_var_t*)(current->previous->variable))->stack_offset = 0;
 
 		//Now redo all of our offsets
-		recalculate_all_offsets(area, current->previous);
+		recalculate_all_offsets(current->previous);
 
 		//And scrap current
 		free(current);
@@ -314,7 +314,7 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 		current->next->previous = current->previous;
 
 		//Use the next field to recalculate all offsets
-		recalculate_all_offsets(area, current->next);
+		recalculate_all_offsets(current->next);
 
 		//and now we scrap this one
 		free(current);

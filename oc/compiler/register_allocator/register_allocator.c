@@ -703,7 +703,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 					print_instruction(stdout, temp, PRINTING_VAR_INLINE);
 
 					//Delete the old one from the graph
-					delete_statement(cfg, current, temp);
+					delete_statement(temp);
 
 				//This is a theoretical possibility, wehere we could have already performed some coalescence that ends us up here. If this
 				//is the case, we'll just delete the instruction
@@ -716,7 +716,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 					print_instruction(stdout, temp, PRINTING_LIVE_RANGES);
 
 					//Delete the old one from the block
-					delete_statement(cfg, current, temp);
+					delete_statement(temp);
 
 				//Just advance it
 				} else {
@@ -1523,7 +1523,7 @@ static void pre_spill(cfg_t* cfg, dynamic_array_t* live_ranges) {
  *
  * We return TRUE if we were able to color, and we return false if we were not
  */
-static u_int8_t allocate_register(interference_graph_t* graph, dynamic_array_t* live_ranges, live_range_t* live_range){
+static u_int8_t allocate_register(live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg != NO_REG){
 		return TRUE;
@@ -1617,11 +1617,11 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 
 		//Now that we have it, we'll color it
 		if(range->degree < K_COLORS_GEN_USE){
-			allocate_register(graph, live_ranges, range);
+			allocate_register( range);
 		//Otherwise, we may still be able to allocate here
 		} else {
 			//We must still attempt to allocate it
-			u_int8_t can_allocate = allocate_register(graph, live_ranges, range);
+			u_int8_t can_allocate = allocate_register(range);
 			
 			//However if this is false, we need to perform a spill
 			if(can_allocate == FALSE){
@@ -1685,7 +1685,7 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
  * Run through the current function and insert all needed save/restore logic
  * for caller-saved registers
  */
-static void insert_caller_saved_register_logic(basic_block_t* current_function, heap_stack_t* stack){
+static void insert_caller_saved_register_logic(basic_block_t* current_function){
 	//We'll grab out everything we need from this function
 	//Extract this for convenience
 	symtab_function_record_t* function = current_function->function_defined_in;
@@ -2030,7 +2030,7 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		reset_heap_stack(heap_stack);
 
 		//And now we'll let the helper insert all of the caller-saved register logic
-		insert_caller_saved_register_logic(current_function_entry, heap_stack);
+		insert_caller_saved_register_logic(current_function_entry);
 	}
 
 	//Destroy the heapstack

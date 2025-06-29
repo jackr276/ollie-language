@@ -148,10 +148,6 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 	
 	//This block is now entirely useless, so we delete it
 	dynamic_array_delete(cfg->created_blocks, empty_block);
-
-	//Deallocate this
-	//TODO FIX - DOES NOT WORK
-	//basic_block_dealloc(empty_block);
 }
 
 
@@ -173,7 +169,7 @@ static void delete_all_branching_statements(cfg_t* cfg, basic_block_t* block){
 		//Advance this
 		current = current->previous_statement;
 		//Then we delete
-		delete_statement(cfg, block, temp);
+		delete_statement(temp);
 	}
 
 	//After we've gotten here we're all done
@@ -334,7 +330,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				if(good_to_merge == TRUE){
 					//We will combine(merge) the current block and the one that it's jumping to
 					//Remove the statement that jumps to the one we're about to merge
-					delete_statement(cfg, current, current->exit_statement); 
+					delete_statement(current->exit_statement); 
 
 					//By that same token, we no longer was current to have the jumping to block as a successor
 					dynamic_array_delete(current->successors, jumping_to_block);
@@ -388,7 +384,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				dynamic_array_delete(current->successors, jumping_to_block);
 
 				//We'll delete the statement that jumps from current to the jumping_to_block(this is the exit statement, remember from above)
-				delete_statement(cfg, current, current->exit_statement);
+				delete_statement(current->exit_statement);
 
 				//If we make it here we know that we have some kind of conditional branching logic here in the jumping to block, we'll need to create
 				//a complete copy of it. This new copy will then be added into the current block in lieu of the jump statement that we just deleted
@@ -491,6 +487,8 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	
 	//Jump to else here
 	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
+	//Mark where this came from
+	jump_to_else_stmt->block_contained_in = block;
 	//Make sure to mark that this is branch ending
 	jump_to_else_stmt->is_branch_ending = TRUE;
 
@@ -511,10 +509,10 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 	instruction_t* final_jump = next->next_statement;
 
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
-	delete_statement(cfg, block, stmt);
+	delete_statement(stmt);
 
 	//We also no longer need the following jump statement
-	delete_statement(cfg, block, next);
+	delete_statement(next);
 
 	//Our second op signedness - unsigned by default
 	u_int8_t second_op_signed = is_type_signed(previous->assignee->type);
@@ -525,6 +523,8 @@ static void optimize_compound_and_jump_inverse(cfg_t* cfg, basic_block_t* block,
 
 	//Now we'll jump to else
 	instruction_t* final_cond_jump = emit_jmp_instruction(else_target, jump);
+	//Mark where this came from
+	final_cond_jump->block_contained_in = block;
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -586,6 +586,8 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	//rest of the or to be true
 	//Jump to else here
 	instruction_t* jump_to_if_stmt = emit_jmp_instruction(if_target, jump);
+	//Mark where this came from
+	jump_to_if_stmt->block_contained_in = block;
 	//Make sure to mark that this is branch ending
 	jump_to_if_stmt->is_branch_ending = TRUE;
 
@@ -606,10 +608,10 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 	instruction_t* final_jump = next->next_statement;
 
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
-	delete_statement(cfg, block, stmt);
+	delete_statement(stmt);
 
 	//We also no longer need the following jump statement
-	delete_statement(cfg, block, next);
+	delete_statement(next);
 
 	//Our second op signedness - unsigned by default
 	u_int8_t second_op_signed = is_type_signed(previous->assignee->type);
@@ -620,6 +622,8 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 
 	//Now we'll emit the jump to else
 	instruction_t* final_cond_jump = emit_jmp_instruction(else_target, jump);
+	//Mark where this came from
+	final_cond_jump->block_contained_in = block;
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -670,6 +674,8 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 	
 	//Jump to else here
 	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
+	//Mark where this came from
+	jump_to_else_stmt->block_contained_in = block;
 	//Make sure to mark that this is branch ending
 	jump_to_else_stmt->is_branch_ending = TRUE;
 
@@ -690,10 +696,10 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 	instruction_t* final_jump = next->next_statement;
 
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
-	delete_statement(cfg, block, stmt);
+	delete_statement(stmt);
 
 	//We also no longer need the following jump statement
-	delete_statement(cfg, block, next);
+	delete_statement(next);
 
 	//Our second op signedness - unsigned by default
 	u_int8_t second_op_signed = is_type_signed(previous->assignee->type);
@@ -704,6 +710,8 @@ static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruc
 
 	//Now we'll emit the jump to if
 	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);
+	//Mark where this came from
+	final_cond_jump->block_contained_in = block;
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -743,6 +751,8 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 	//rest of the or to be true
 	//Jump to else here
 	instruction_t* jump_to_if_stmt = emit_jmp_instruction(if_target, jump);
+	//Mark where this came from
+	jump_to_if_stmt->block_contained_in = block;
 	//Make sure to mark that this is branch ending
 	jump_to_if_stmt->is_branch_ending = TRUE;
 
@@ -763,10 +773,10 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 	instruction_t* final_jump = next->next_statement;
 
 	//And even better, we now don't need the compound and at all. We can delete the whole stmt
-	delete_statement(cfg, block, stmt);
+	delete_statement(stmt);
 
 	//We also no longer need the following jump statement
-	delete_statement(cfg, block, next);
+	delete_statement(next);
 
 	//Our second op signedness - unsigned by default
 	u_int8_t second_op_signed = is_type_signed(previous->assignee->type);
@@ -777,6 +787,8 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
 
 	//Now we'll emit the jump to if
 	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);
+	//Mark where this came from
+	final_cond_jump->block_contained_in = block;
 
 	//We'll now add this one in right as the previous one
 	previous->next_statement = final_cond_jump;
@@ -1137,7 +1149,7 @@ static void sweep(cfg_t* cfg){
 						//Advance stmt
 						stmt = stmt->next_statement;
 						//Remove the statement
-						delete_statement(cfg, block, temp);
+						delete_statement(temp);
 						//And we're done
 					}
 
@@ -1162,7 +1174,7 @@ static void sweep(cfg_t* cfg){
 					instruction_t* temp = stmt;
 					stmt = stmt->next_statement;
 					//Delete the statement, now that we know it is not a jump
-					delete_statement(cfg, stmt->block_contained_in, temp);
+					delete_statement(temp);
 					instruction_dealloc(temp);
 					continue;
 				//One final snag we could catch - if it's a jump, but a conditional one, we'll also
@@ -1181,8 +1193,8 @@ static void sweep(cfg_t* cfg){
 				instruction_t* jump_to_else = stmt;
 
 				//Now we can delete these both
-				delete_statement(cfg, block, jump_to_else);
-				delete_statement(cfg, block, jump_to_if);
+				delete_statement(jump_to_else);
+				delete_statement(jump_to_if);
 
 				//We'll first find the nearest marked postdominator
 				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
@@ -1210,7 +1222,7 @@ static void sweep(cfg_t* cfg){
 				//Advance the statement
 				stmt = stmt->next_statement;
 				//Delete the statement, now that we know it is not a jump
-				delete_statement(cfg, temp->block_contained_in, temp);
+				delete_statement(temp);
 				instruction_dealloc(temp);
 			}
 		}

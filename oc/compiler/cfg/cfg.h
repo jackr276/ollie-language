@@ -170,7 +170,7 @@ void add_statement(basic_block_t* target, instruction_t* statement_node);
 /**
  * Delete a statement from the CFG - handling any/all edge cases that may arise
  */
-void delete_statement(cfg_t* cfg, basic_block_t* block, instruction_t* stmt);
+void delete_statement(instruction_t* stmt);
 
 /**
  * Add a successor to the block

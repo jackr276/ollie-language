@@ -726,7 +726,10 @@ void add_statement(basic_block_t* target, instruction_t* statement_node){
 /**
  * Delete a statement from the CFG - handling any/all edge cases that may arise
  */
-void delete_statement(cfg_t* cfg, basic_block_t* block, instruction_t* stmt){
+void delete_statement(instruction_t* stmt){
+	//Grab the block out
+	basic_block_t* block = stmt->block_contained_in;
+
 	//If it's the leader statement, we'll just update the references
 	if(block->leader_statement == stmt){
 		//Special case - it's the only statement. We'll just delete it here
@@ -2322,6 +2325,9 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
+
+	//Mark where we came from
+	stmt->block_contained_in = basic_block;
 
 	//Is this an inverse jump? Important for optimization down the line
 	stmt->inverse_jump = inverse_jump;

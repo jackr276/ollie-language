@@ -277,7 +277,7 @@ void print_adjacency_lists(dynamic_array_t* live_ranges){
  * Get the "degree" for a certain live range. The degree is the number of
  * nodes that interfere with it. We also call these neighbors
  */
-u_int16_t get_live_range_degree(interference_graph_t* graph, live_range_t* a){
+u_int16_t get_live_range_degree(live_range_t* a){
 	return a->neighbors->current_index;
 }
 

@@ -15,8 +15,6 @@
 #define FALSE 0
 
 
-static void print_generic_type(generic_type_t* type);
-
 /**
  * Print a generic warning for the type system. This is used when variables/functions are 
  * defined and not used
