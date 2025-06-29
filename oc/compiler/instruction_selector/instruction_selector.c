@@ -68,7 +68,7 @@ struct instruction_window_t{
  */
 static void set_window_status(instruction_window_t* window){
 	//This is our case to check for
-	if(window->instruction2 == NULL && window->instruction3 == NULL){
+	if(window->instruction1 == NULL){
 		window->status = WINDOW_AT_END;
 	}
 }
@@ -542,6 +542,7 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 
 	//If this is null(possible but rare), just give it back
 	if(window.instruction1 == NULL){
+		window.status = WINDOW_AT_END;
 		return window;
 	}
 
@@ -559,7 +560,7 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	}
 
 	//We're at the beginning here by default
-	if(window.instruction2 == NULL || window.instruction3 == NULL){
+	if(window.instruction1 == NULL){
 		window.status = WINDOW_AT_END;
 	} else {
 		window.status = WINDOW_AT_START;
@@ -602,12 +603,6 @@ static void reconstruct_window(instruction_window_t* window, instruction_t* seed
  * out of our window, and the one next to the highest instruction slides into it
  */
 static instruction_window_t* slide_window(instruction_window_t* window){
-	//It should be fairly easy to slide -- except in the case
-	//where we're at the end of a block. In that case, we need to slide to that
-	//new block or we'll need an entirely new window if we end in a discrete jump
-	//to said block
-
-	
 	//If the third operation is not the end, then we're good to just bump everything up
 	//This is the simplest case, and allows us to just bump everything up and get out
 	if(window->instruction3 != NULL){
@@ -2403,10 +2398,6 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
  * which is part of the plan
  */
 static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
-	if(window->instruction1->instruction_type != NONE){
-		return;
-	}
-
 	//Handle a logical not instruction selection. This does generate multiple new instructions,
 	//so it has to go here
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
@@ -2763,97 +2754,85 @@ static void handle_not_instruction(instruction_t* instruction){
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
-static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
-	//Make an array for us
-	instruction_t* instructions[3] = {window->instruction1, window->instruction2, window->instruction3};
+static void select_single_instruction_patterns(cfg_t* cfg, instruction_t* instruction){
+	//Just in case here
+	if(instruction == NULL){
+		return;
+	}
 
-	//The current instruction
-	instruction_t* current;
-
-	//Run through each of the tree instructions
-	for(u_int8_t _ = 0; _ < 3; _++){
-		//Grab whichever current is
-		current = instructions[_];
-	
-		//If this is the case, it's already been selected so bail
-		if(current == NULL || current->instruction_type != NONE){
-			continue;
-		}
-
-		//Switch on whatever we have currently
-		switch (current->CLASS) {
-			//These have a helper
-			case THREE_ADDR_CODE_ASSN_STMT:
-				handle_register_to_register_move_instruction(current);
-				break;
-			case THREE_ADDR_CODE_ASSN_CONST_STMT:
-				handle_constant_to_register_move_instruction(current);
-				break;
-			case THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT:
-				handle_converting_move_instruction(current);
-				break;
-			case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
-				handle_address_assignment_instruction(current, cfg->type_symtab, cfg->stack_pointer);
-				break;
-			case THREE_ADDR_CODE_LEA_STMT:
-				handle_lea_statement(current);
-				break;
-			//One-to-one mapping to nop
-			case THREE_ADDR_CODE_IDLE_STMT:
-				current->instruction_type = NOP;
-				break;
-			//One to one mapping here as well
-			case THREE_ADDR_CODE_RET_STMT:
-				current->instruction_type = RET;
-				//We'll still store this, just in a hidden way
-				current->source_register = current->op1;
-				break;
-			case THREE_ADDR_CODE_JUMP_STMT:
-			case THREE_ADDR_CODE_DIR_JUMP_STMT:
-				//Let the helper do this and then leave
-				select_jump_instruction(current);
-				break;
-			//Special case here - we don't change anything
-			case THREE_ADDR_CODE_ASM_INLINE_STMT:
-				current->instruction_type = ASM_INLINE;
-				break;
-			//The translation here takes the form of a call instruction
-			case THREE_ADDR_CODE_FUNC_CALL:
-				current->instruction_type = CALL;
-				//The destination register is itself the assignee
-				current->destination_register = current->assignee;
-				break;
-			//Let the helper deal with this
-			case THREE_ADDR_CODE_INC_STMT:
-				handle_inc_instruction(current);
-				break;
-			//Again use the helper
-			case THREE_ADDR_CODE_DEC_STMT:
-				handle_dec_instruction(current);
-				break;
-			//Let the helper handle this one
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-				handle_binary_operation_instruction(current);
-				break;
-			//For a phi function, we perform an exact 1:1 mapping
-			case THREE_ADDR_CODE_PHI_FUNC:
-				//This is all we'll need
-				current->instruction_type = PHI_FUNCTION;
-				break;
-			//Handle a neg statement
-			case THREE_ADDR_CODE_NEG_STATEMENT:
-				//Let the helper do it
-				handle_neg_instruction(current);
-				break;
-			//Handle a neg statement
-			case THREE_ADDR_CODE_BITWISE_NOT_STMT:
-				//Let the helper do it
-				handle_not_instruction(current);
-				break;
-			default:
-				break;
-		}
+	//Switch on whatever we have currently
+	switch (instruction->CLASS) {
+		//These have a helper
+		case THREE_ADDR_CODE_ASSN_STMT:
+			handle_register_to_register_move_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_ASSN_CONST_STMT:
+			handle_constant_to_register_move_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT:
+			handle_converting_move_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
+			handle_address_assignment_instruction(instruction, cfg->type_symtab, cfg->stack_pointer);
+			break;
+		case THREE_ADDR_CODE_LEA_STMT:
+			handle_lea_statement(instruction);
+			break;
+		//One-to-one mapping to nop
+		case THREE_ADDR_CODE_IDLE_STMT:
+			instruction->instruction_type = NOP;
+			break;
+		//One to one mapping here as well
+		case THREE_ADDR_CODE_RET_STMT:
+			instruction->instruction_type = RET;
+			//We'll still store this, just in a hidden way
+			instruction->source_register = instruction->op1;
+			break;
+		case THREE_ADDR_CODE_JUMP_STMT:
+		case THREE_ADDR_CODE_DIR_JUMP_STMT:
+			//Let the helper do this and then leave
+			select_jump_instruction(instruction);
+			break;
+		//Special case here - we don't change anything
+		case THREE_ADDR_CODE_ASM_INLINE_STMT:
+			instruction->instruction_type = ASM_INLINE;
+			break;
+		//The translation here takes the form of a call instruction
+		case THREE_ADDR_CODE_FUNC_CALL:
+			instruction->instruction_type = CALL;
+			//The destination register is itself the assignee
+			instruction->destination_register = instruction->assignee;
+			break;
+		//Let the helper deal with this
+		case THREE_ADDR_CODE_INC_STMT:
+			handle_inc_instruction(instruction);
+			break;
+		//Again use the helper
+		case THREE_ADDR_CODE_DEC_STMT:
+			handle_dec_instruction(instruction);
+			break;
+		//Let the helper handle this one
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			handle_binary_operation_instruction(instruction);
+			break;
+		//For a phi function, we perform an exact 1:1 mapping
+		case THREE_ADDR_CODE_PHI_FUNC:
+			//This is all we'll need
+			instruction->instruction_type = PHI_FUNCTION;
+			break;
+		//Handle a neg statement
+		case THREE_ADDR_CODE_NEG_STATEMENT:
+			//Let the helper do it
+			handle_neg_instruction(instruction);
+			break;
+		//Handle a neg statement
+		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
+			//Let the helper do it
+			handle_not_instruction(instruction);
+			break;
+		default:
+			break;
 	}
 }
 
@@ -2871,15 +2850,45 @@ static void multi_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* h
 		//Initialize the sliding window(very basic, more to come)
 		instruction_window_t window = initialize_instruction_window(current);
 		
-		while(window.status != WINDOW_AT_END){
+		do{
 			//Go through and select the multiple instruction patterns
 			select_multiple_instruction_patterns(cfg, &window);
 
 			//And slide it
 			slide_window(&window);
-		}
+
+		//So long as this is not at the end
+		} while(window.status != WINDOW_AT_END);
 
 		//Advance to the direct successor
+		current = current->direct_successor;
+	}
+}
+
+
+/**
+ * Make one pass over the entire CFG and select all single instruction patterns
+ */
+static void single_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* head_block){
+	//Save the current block here
+	basic_block_t* current = head_block;
+
+	while(current != NULL){
+		//Initialize the sliding window(very basic, more to come)
+		instruction_window_t window = initialize_instruction_window(current);
+
+		//Run through the window so long as we are not at the end
+		do{
+			//Select the instructions
+			select_single_instruction_patterns(cfg, window.instruction1);
+
+			//Slide the window
+			slide_window(&window);
+
+		//Keep going if we aren't at the end
+		} while(window.status != WINDOW_AT_END);
+
+		//Advance the current up
 		current = current->direct_successor;
 	}
 }
@@ -2890,9 +2899,6 @@ static void multi_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* h
  * from three address code to assembly statements
  */
 static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
-	//First we'll grab the head
-	basic_block_t* current = head_block;
-
 	/**
 	 * We first go through and perform the multiple pattern instruction
 	 * selection. This allows us to catch any large patterns and select them
@@ -2900,28 +2906,11 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 	 */
 	multi_instruction_pattern_selector_pass(cfg, head_block);
 
-	//Reset current here
-	current = head_block;
-
-	//So long as this isn't NULL
-	while(current != NULL){
-		//Initialize the sliding window(very basic, more to come)
-		instruction_window_t window = initialize_instruction_window(current);
-
-		//Keep going so long as the window isn't at the end
-		do{
-			//Select the instructions
-			select_single_instruction_patterns(cfg, &window);
-
-			//Slide the window
-			slide_window(&window);
-
-		//Keep going if we aren't at the end
-		} while(window.status != WINDOW_AT_END);
-
-		//Advance to the direct successor
-		current = current->direct_successor;
-	}
+	/**
+	 * Once we've gone through the entire cfg once and performed a pass on all
+	 * This will clean up and instructions that were not caught by the first pass
+	 */
+	single_instruction_pattern_selector_pass(cfg, head_block);
 }
 
 
