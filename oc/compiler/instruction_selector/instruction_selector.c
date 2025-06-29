@@ -2448,6 +2448,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		instruction_t* comparison = window->instruction1;
 		instruction_t* assignment = window->instruction2;
 
+		//Handle the comparison operation here
+		handle_cmp_instruction(comparison);
+
 		//We'll now need to insert inbetween here
 		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(lookup_type_name_only(cfg->type_symtab, "u8")->type), is_type_signed(assignment->assignee->type));
 
