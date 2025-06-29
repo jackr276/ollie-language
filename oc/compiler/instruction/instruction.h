@@ -566,6 +566,11 @@ u_int8_t is_destination_also_operand(instruction_t* instruction);
 u_int8_t is_instruction_pure_copy(instruction_t* instruction);
 
 /**
+ * Is this an unsigned multiplication instruction?
+ */
+u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
+
+/**
  * Is this a division instruction?
  */
 u_int8_t is_division_instruction(instruction_t* instruction);

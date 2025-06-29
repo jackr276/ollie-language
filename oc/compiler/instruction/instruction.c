@@ -376,6 +376,27 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 
 
 /**
+ * Is this an unsigned multiplication instruction?
+ */
+u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction){
+	//Just in case
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	switch(instruction->instruction_type){
+		case MULB:
+		case MULW:
+		case MULL:
+		case MULQ:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this a division instruction?
  */
 u_int8_t is_division_instruction(instruction_t* instruction){
@@ -1879,28 +1900,47 @@ static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable
 
 
 /**
- * Print a multiplication instruction, in all the forms it can take
+ * Print an usigned multiplication instruction, in all the forms it can take
  */
-static void print_multiplication_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
 		case MULB:
-			fprintf(fl, "mull ");
-			break;
-		case IMULB:
-			fprintf(fl, "mull ");
+			fprintf(fl, "mulb ");
 			break;
 		case MULW:
-			fprintf(fl, "mull ");
-			break;
-		case IMULW:
-			fprintf(fl, "mull ");
+			fprintf(fl, "mulw ");
 			break;
 		case MULL:
 			fprintf(fl, "mull ");
 			break;
 		case MULQ:
 			fprintf(fl, "mulq ");
+			break;
+		//We'll never get here, just to stop the compiler from complaining
+		default:
+			break;
+	}
+
+	//We'll only print the source register, there is no explicit destination
+	//register
+	print_variable(fl, instruction->source_register, mode);
+
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Print a signed multiplication instruction, in all the forms it can take
+ */
+static void print_signed_multiplication_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First we'll print out the appropriate variety of addition
+	switch(instruction->instruction_type){
+		case IMULB:
+			fprintf(fl, "imulb ");
+			break;
+		case IMULW:
+			fprintf(fl, "imulw ");
 			break;
 		case IMULL:
 			fprintf(fl, "imull ");
@@ -2642,13 +2682,15 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		case MULW:
 		case MULB:
-		case IMULW:
-		case IMULB:
 		case MULL:
 		case MULQ:
+			print_unsigned_multiplication_instruction(fl, instruction, mode);
+			break;
+		case IMULW:
+		case IMULB:
 		case IMULQ:
 		case IMULL:
-			print_multiplication_instruction(fl, instruction, mode);
+			print_signed_multiplication_instruction(fl, instruction, mode);
 			break;
 
 		case DIVB:

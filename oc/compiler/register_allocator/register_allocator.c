@@ -905,6 +905,7 @@ static void pre_color(instruction_t* instruction){
 				instruction->source_register->associated_live_range->is_precolored = TRUE;
 			}
 			break;
+		case MOVB:
 		case MOVL:
 		case MOVQ:
 		case MOVW:
@@ -928,8 +929,22 @@ static void pre_color(instruction_t* instruction){
 
 			break;
 
+		case MULB:
+		case MULW:
+		case MULL:
+		case MULQ:
+			//The destination must be in RAX here
+			instruction->destination_register->associated_live_range->reg = RAX;
+			instruction->destination_register->associated_live_range->is_precolored = TRUE;
+			break;
+
+
+		case DIVB:
+		case DIVW:
 		case DIVL:
 		case DIVQ:
+		case IDIVB:
+		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
 			//The destination must be in RAX here
@@ -937,6 +952,10 @@ static void pre_color(instruction_t* instruction){
 			instruction->destination_register->associated_live_range->is_precolored = TRUE;
 			break;
 
+		case DIVB_FOR_MOD:
+		case DIVW_FOR_MOD:
+		case IDIVB_FOR_MOD:
+		case IDIVW_FOR_MOD:
 		case DIVL_FOR_MOD:
 		case DIVQ_FOR_MOD:
 		case IDIVL_FOR_MOD:
