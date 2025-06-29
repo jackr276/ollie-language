@@ -76,15 +76,22 @@ static void set_window_status(instruction_window_t* window){
 
 /**
  * Is an operation valid for token folding? If it is, we'll return true
- * The invalid operations are &&, ||, / and %
+ * The invalid operations are &&, ||, / and %, and * *when* it is unsigned
  */
-static u_int8_t is_operation_valid_for_constant_folding(Token op){
-	switch(op){
+static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instruction){
+	switch(instruction->op){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
 		case F_SLASH:
 		case MOD:
 			return FALSE;
+		case STAR:
+			//If this is unsigned, we cannot do this
+			if(is_type_signed(instruction->assignee->type) == FALSE){
+				return FALSE;
+			}
+			//But if it is signed, we can
+			return TRUE;
 		default:
 			return TRUE;
 	}
@@ -1551,45 +1558,60 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
  *
  * Because of the extra instructions that this will generate, this will count as
  * a multiple instruction selection pattern
+ *
+ * x <- 3 * 2;
+ *
+ * mov $3, %rax <- Source is always in RAX
+ *
+ *
+ * NOTE: this is always the first instruction in the instruction window
 */
-static void handle_unsigned_multiplication_instruction(instruction_t* instruction){
-	//We'll need to know the variables size
-	variable_size_t size = select_variable_size(instruction->assignee);
+static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
+	//Instruction 1 is the multiplication instruction
+	instruction_t* multiplication_instruction = window->instruction1;
 
-	//We also need to determine if it's signed or not due to there being separate instructions
-	u_int8_t is_variable_signed = is_type_signed(instruction->assignee->type);
+	//Dev use TODO GETRID
+	if(multiplication_instruction->op2 == NULL){
+		printf("FOUND NULL OP2 for UNSIGNED MULT\n");
+	}
+
+	//We'll need to know the variables size
+	variable_size_t size = select_variable_size(multiplication_instruction->assignee);
+
+	//We first need to move the first operand into RAX
+	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
+
+	//Once we've moved to rax, we'll insert this before the division instruction
+	insert_instruction_before_given(move_to_rax, multiplication_instruction);
 
 	//We determine the instruction that we need based on signedness and size
 	switch (size) {
+		case BYTE:
+			multiplication_instruction->instruction_type = MULB;
+			break;
 		case WORD:
+			multiplication_instruction->instruction_type = MULW;
+			break;
 		case DOUBLE_WORD:
-			if(is_variable_signed == TRUE){
-				instruction->instruction_type = IMULL;
-			} else {
-				instruction->instruction_type = MULL;
-			}
+			multiplication_instruction->instruction_type = MULL;
 			break;
 		//Everything else falls here
 		default:
-			if(is_variable_signed == TRUE){
-				instruction->instruction_type = IMULQ;
-			} else {
-				instruction->instruction_type = MULQ;
-			}
+			multiplication_instruction->instruction_type = MULQ;
 			break;
 	}
 
-	//Following this, we'll set the assignee and source
-	instruction->destination_register = instruction->assignee;
+	//This is the case where we have a source register
+	multiplication_instruction->source_register = multiplication_instruction->op1;
 
-	//Are we using an immediate or register?
-	if(instruction->op2 != NULL){
-		//This is the case where we have a source register
-		instruction->source_register = instruction->op2;
-	} else {
-		//In this case we'll have an immediate source
-		instruction->source_immediate = instruction->op1_const;
-	}
+	//This is the assignee, we just don't see it
+	multiplication_instruction->destination_register = emit_temp_var(multiplication_instruction->assignee->type);
+
+	//Once we've done all that, we need one final movement operation
+	instruction_t* result_movement = emit_movX_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+	
+	//Add this after the division instruction
+	insert_instruction_before_given(result_movement, multiplication_instruction->next_statement);
 }
 
 
@@ -1602,26 +1624,21 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 	//We'll need to know the variables size
 	variable_size_t size = select_variable_size(instruction->assignee);
 
-	//We also need to determine if it's signed or not due to there being separate instructions
-	u_int8_t is_variable_signed = is_type_signed(instruction->assignee->type);
 
 	//We determine the instruction that we need based on signedness and size
 	switch (size) {
+		case BYTE:
+			instruction->instruction_type = IMULB;
+			break;
 		case WORD:
+			instruction->instruction_type = IMULW;
+			break;
 		case DOUBLE_WORD:
-			if(is_variable_signed == TRUE){
-				instruction->instruction_type = IMULL;
-			} else {
-				instruction->instruction_type = MULL;
-			}
+			instruction->instruction_type = IMULL;
 			break;
 		//Everything else falls here
 		default:
-			if(is_variable_signed == TRUE){
-				instruction->instruction_type = IMULQ;
-			} else {
-				instruction->instruction_type = MULQ;
-			}
+			instruction->instruction_type = IMULQ;
 			break;
 	}
 
@@ -2460,6 +2477,16 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 				//This will generate more than one instruction
 				handle_modulus_instruction(window);
 				changed = TRUE;
+				break;
+
+			//If we have a multiplication *and* it's unsigned, we go here
+			case STAR:
+				//Only do this if we're signed
+				if(is_type_signed(window->instruction1->assignee->type) == TRUE){
+					//Let the helper deal with it
+					handle_unsigned_multiplication_instruction(window);
+					changed = TRUE;
+				}
 				break;
 
 			default:
@@ -3326,7 +3353,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE
-			&& is_operation_valid_for_constant_folding(window->instruction2->op) == TRUE //And it's valid for constant folding
+			&& is_operation_valid_for_constant_folding(window->instruction2) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
@@ -3357,7 +3384,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE
-			&& is_operation_valid_for_constant_folding(window->instruction3->op) == TRUE //And it's valid for constant folding
+			&& is_operation_valid_for_constant_folding(window->instruction3) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
 			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 

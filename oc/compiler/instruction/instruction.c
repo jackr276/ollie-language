@@ -1884,6 +1884,18 @@ static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable
 static void print_multiplication_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
+		case MULB:
+			fprintf(fl, "mull ");
+			break;
+		case IMULB:
+			fprintf(fl, "mull ");
+			break;
+		case MULW:
+			fprintf(fl, "mull ");
+			break;
+		case IMULW:
+			fprintf(fl, "mull ");
+			break;
 		case MULL:
 			fprintf(fl, "mull ");
 			break;
@@ -2628,6 +2640,10 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_dec_instruction(fl, instruction, mode);
 			break;
 
+		case MULW:
+		case MULB:
+		case IMULW:
+		case IMULB:
 		case MULL:
 		case MULQ:
 		case IMULQ:
