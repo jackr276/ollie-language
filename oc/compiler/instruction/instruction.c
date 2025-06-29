@@ -44,21 +44,43 @@ void insert_instruction_before_given(instruction_t* insertee, instruction_t* giv
 	//Mark this while we're here
 	insertee->block_contained_in = block;
 
-	//Grab out what's before the given
-	instruction_t* before_given = given->previous_statement;
+	//If this isn't the leader, it will have a before
+	if(given != block->leader_statement){
+		//Grab out what's before the given
+		instruction_t* before_given = given->previous_statement;
+
+		//Next statement here is the insertee
+		before_given->next_statement = insertee;
+		insertee->previous_statement = before_given;
+
+	//Otherwise this now is the leader
+	} else {
+		block->leader_statement = insertee;
+	}
 
 	//The insertee is before the given, so its next is the given
 	insertee->next_statement = given;
 	given->previous_statement = insertee;
-	
-	//Most common case
-	if(before_given != NULL){
-		before_given->next_statement = insertee;
-		insertee->previous_statement = before_given;
+}
 
-	//This means that we were at the head, so now this is the head
-	} else {
-		block->leader_statement = insertee;
+
+/**
+ * Insert an instruction in a block after the given instruction
+ */
+void insert_instruction_after_given(instruction_t* insertee, instruction_t* given){
+	//Let's first grab out which block we've got
+	basic_block_t* block = given->block_contained_in;
+	//Mark this while we're here
+	insertee->block_contained_in = block;
+
+	//Link the given to the end
+	insertee->next_statement = given->next_statement;
+	insertee->previous_statement = given;
+
+	//Most common case here
+	if(given != block->exit_statement){
+
+
 	}
 }
 

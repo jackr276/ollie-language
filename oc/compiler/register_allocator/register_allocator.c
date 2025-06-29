@@ -911,15 +911,23 @@ static void pre_color(instruction_t* instruction){
 		case MOVW:
 			//If we're moving into something preparing for division, this needs
 			//to be in RAX
-			if(instruction->next_statement != NULL &&
-				(instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)
-				&& instruction->next_statement->next_statement != NULL
-				&& (is_division_instruction(instruction->next_statement->next_statement) == TRUE
-				|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
-				//This needs to be in RAX
-				instruction->destination_register->associated_live_range->reg = RAX;
-				instruction->destination_register->associated_live_range->is_precolored = TRUE;
+			if(instruction->next_statement != NULL){
+				if((instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)
+	   				&& instruction->next_statement->next_statement != NULL
+					&& (is_division_instruction(instruction->next_statement->next_statement) == TRUE
+					|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
 
+ 					//This needs to be in RAX
+					instruction->destination_register->associated_live_range->reg = RAX;
+					instruction->destination_register->associated_live_range->is_precolored = TRUE;
+
+				//If we have an unsigned multiplication here, we also need to be inside of rax
+				} else if(is_unsigned_multplication_instruction(instruction->next_statement) == TRUE){
+					//This needs to be in RAX
+					instruction->destination_register->associated_live_range->reg = RAX;
+					instruction->destination_register->associated_live_range->is_precolored = TRUE;
+				}
+				
 			//We also need to check for all kinds of paremeter passing
 			} else if(instruction->destination_register->parameter_number > 0){
 				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];

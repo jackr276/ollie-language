@@ -1567,8 +1567,11 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
  * NOTE: this is always the first instruction in the instruction window
 */
 static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
+	printf("HERE\n\n\n");
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
+
+	basic_block_t* block = multiplication_instruction->block_contained_in;
 
 	//Dev use TODO GETRID
 	if(multiplication_instruction->op2 == NULL){
@@ -1609,9 +1612,27 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+
+	//Tie it in here
+	multiplication_instruction->next_statement = result_movement;
+	result_movement->previous_statement = multiplication_instruction;
+
+	//And now we can tie it in to our overall statement
+	result_movement->next_statement = multiplication_instruction->next_statement;
 	
-	//Add this after the division instruction
-	insert_instruction_before_given(result_movement, multiplication_instruction->next_statement);
+	//Avoid any null pointer dereference here
+	if(multiplication_instruction->next_statement != NULL){
+		multiplication_instruction->next_statement->previous_statement = result_movement;
+	} else {
+		//This is the new exit statement
+		block->exit_statement = result_movement;
+	}
+
+	//We now need to reset the window here
+	reconstruct_window(window, result_movement);
+
+	slide_window(window);
+	slide_window(window);
 }
 
 
@@ -2482,7 +2503,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 			//If we have a multiplication *and* it's unsigned, we go here
 			case STAR:
 				//Only do this if we're signed
-				if(is_type_signed(window->instruction1->assignee->type) == TRUE){
+				if(is_type_signed(window->instruction1->assignee->type) == FALSE){
 					//Let the helper deal with it
 					handle_unsigned_multiplication_instruction(window);
 					changed = TRUE;

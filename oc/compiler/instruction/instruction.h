@@ -515,6 +515,11 @@ struct instruction_t{
 void insert_instruction_before_given(instruction_t* insertee, instruction_t* given);
 
 /**
+ * Insert an instruction in a block after the given instruction
+ */
+void insert_instruction_after_given(instruction_t* insertee, instruction_t* given);
+
+/**
  * Declare that we are in a new function
  */
 void set_new_function(symtab_function_record_t* func);
