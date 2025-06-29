@@ -1568,6 +1568,7 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 */
 static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
 	printf("HERE\n\n\n");
+	exit(0);
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
 
@@ -1584,8 +1585,15 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//We first need to move the first operand into RAX
 	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
 
-	//Once we've moved to rax, we'll insert this before the division instruction
-	insert_instruction_before_given(move_to_rax, multiplication_instruction);
+	//Let's now attach this where division was
+	if(multiplication_instruction->previous_statement != block->leader_statement){
+		//This effectively deletes the old division instruction
+		multiplication_instruction->previous_statement->next_statement = move_to_rax;
+		move_to_rax->previous_statement = multiplication_instruction->previous_statement;
+	} else {
+		//Otherwise, this is the leader statement of its block
+		block->leader_statement = move_to_rax;
+	}
 
 	//We determine the instruction that we need based on signedness and size
 	switch (size) {
