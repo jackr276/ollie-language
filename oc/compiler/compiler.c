@@ -148,9 +148,6 @@ static void print_summary(compiler_options_t* options, double time_spent, u_int3
  * manages that for us
  */
 static u_int8_t compile(compiler_options_t* options){
-	//For any/all error printing
-	char info[2000];
-
 	//Print out the file name if we're debug printing
 	if(options->enable_debug_printing == TRUE){
 		printf("Compiling source file: %s\n\n\n", options->file_name);

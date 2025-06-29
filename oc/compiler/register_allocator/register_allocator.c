@@ -737,7 +737,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 /**
  * Run through every instruction in a block and construct the live ranges
  */
-static void construct_live_ranges_in_block(cfg_t* cfg, dynamic_array_t* live_ranges, basic_block_t* basic_block){
+static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
 	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
 	//we'll allocate them fresh
 	if(basic_block->assigned_variables == NULL){
@@ -1255,7 +1255,7 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 	//Run through every single block
 	while(current != NULL){
 		//Let the helper do this
-		construct_live_ranges_in_block(cfg, live_ranges, current);
+		construct_live_ranges_in_block(live_ranges, current);
 
 		//Advance to the next
 		current = current->direct_successor;

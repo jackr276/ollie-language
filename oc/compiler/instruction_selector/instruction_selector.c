@@ -2929,9 +2929,6 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
  * step
  */
 static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
-	//What block is this instruction in
-	basic_block_t* block = instruction->block_contained_in;
-
 	//Grab this value out. We'll need it's stack offset
 	three_addr_var_t* assignee = instruction->assignee;
 

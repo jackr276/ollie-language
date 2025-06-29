@@ -157,7 +157,7 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
  *
  * NOTE: This should only be called after we have identified this block as a candidate for block folding
  */
-static void delete_all_branching_statements(cfg_t* cfg, basic_block_t* block){
+static void delete_all_branching_statements(basic_block_t* block){
 	//We'll always start from the end and work our way up
 	instruction_t* current = block->exit_statement;
 	//To hold while we delete
@@ -265,7 +265,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//If this is true all of the way down here, we've found one
 				if(redundant_branch == TRUE){
 					//We'll need to eliminate all of the branch ending statements
-					delete_all_branching_statements(cfg, current);
+					delete_all_branching_statements(current);
 					//Once we're done deleting, we'll emit a jump right to that jumping to
 					//block. This constitutes our "fold"
 					emit_jump(current, end_branch_target, JUMP_TYPE_JMP, TRUE, FALSE);
@@ -1227,36 +1227,6 @@ static void sweep(cfg_t* cfg){
 			}
 		}
 	}
-}
-
-
-/**
- * A special helper function that we use for dynamic arrays of variables. Since variables
- * can be duplicated, we need to compare the symtab variable record, not the three address
- * variable itself
- */
-static int16_t variable_dynamic_array_contains(dynamic_array_t* variable_array, three_addr_var_t* variable){
-	//No question here -- we won't be finding it
-	if(variable_array == NULL){
-		return NOT_FOUND;
-	}
-
-	//We assume that everything in here is a variable and will cast as such
-	three_addr_var_t* current_var;
-
-	//Run through every record in here
-	for(u_int16_t i = 0; i < variable_array->current_index; i++){
-		//Grab a reference
-		current_var = variable_array->internal_array[i];
-
-		//If we found it, give back the index
-		if(current_var->linked_var == variable->linked_var){
-			return i;
-		}
-	}
-
-	//We couldn't find this one, so give back not found
-	return NOT_FOUND;
 }
 
 
