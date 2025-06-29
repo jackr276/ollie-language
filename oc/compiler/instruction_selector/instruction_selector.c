@@ -1547,11 +1547,58 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 
 
 /**
+ * Handle an unsigned multiplication operation
+ *
+ * Because of the extra instructions that this will generate, this will count as
+ * a multiple instruction selection pattern
+*/
+static void handle_unsigned_multiplication_instruction(instruction_t* instruction){
+	//We'll need to know the variables size
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	//We also need to determine if it's signed or not due to there being separate instructions
+	u_int8_t is_variable_signed = is_type_signed(instruction->assignee->type);
+
+	//We determine the instruction that we need based on signedness and size
+	switch (size) {
+		case WORD:
+		case DOUBLE_WORD:
+			if(is_variable_signed == TRUE){
+				instruction->instruction_type = IMULL;
+			} else {
+				instruction->instruction_type = MULL;
+			}
+			break;
+		//Everything else falls here
+		default:
+			if(is_variable_signed == TRUE){
+				instruction->instruction_type = IMULQ;
+			} else {
+				instruction->instruction_type = MULQ;
+			}
+			break;
+	}
+
+	//Following this, we'll set the assignee and source
+	instruction->destination_register = instruction->assignee;
+
+	//Are we using an immediate or register?
+	if(instruction->op2 != NULL){
+		//This is the case where we have a source register
+		instruction->source_register = instruction->op2;
+	} else {
+		//In this case we'll have an immediate source
+		instruction->source_immediate = instruction->op1_const;
+	}
+}
+
+
+/**
  * Handle a multiplication operation
  *
  * A multiplication operation can be different based on size and sign
  */
-static void handle_multiplication_instruction(instruction_t* instruction){
+static void handle_signed_multiplication_instruction(instruction_t* instruction){
 	//We'll need to know the variables size
 	variable_size_t size = select_variable_size(instruction->assignee);
 
@@ -1824,9 +1871,14 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 			//Let the helper do it
 			handle_subtraction_instruction(instruction);
 			break;
+		/**
+		 * NOTE: By the time that we reach here, we know that any unsigned multiplication will
+		 * have already been dealt with. As such, we know for a fact that this will be the signed
+		 * version
+		 */
 		case STAR:
 			//Let the helper do it
-			handle_multiplication_instruction(instruction);
+			handle_signed_multiplication_instruction(instruction);
 			break;
 		//Hanlde a left shift instruction
 		case L_SHIFT:
