@@ -26,15 +26,6 @@ static generic_type_t* u64;
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
-/**
- * What is the status of our sliding window? Are we at the beginning,
- * middle or end of the sequence?
- */
-typedef enum {
-	WINDOW_FULL,
-	WINDOW_EMPTY
-} window_status_t;
-
 
 /**
  * Will we be printing these out as instructions or as three address code
@@ -55,24 +46,7 @@ struct instruction_window_t{
 	instruction_t* instruction1;
 	instruction_t* instruction2;
 	instruction_t* instruction3;
-	//This will tell us, at a quick glance, whether we're at the beginning,
-	//middle or end of a sequence
-	window_status_t status;
 };
-
-
-/**
- * Set the window status to see if we're actually at the end. We do not
- * count as being "at the end" unless the window's last 2 statements are NULL
- */
-static void set_window_status(instruction_window_t* window){
-	//This is our case to check for
-	if(window->instruction1 == NULL){
-		window->status = WINDOW_EMPTY;
-	} else {
-		window->status = WINDOW_FULL;
-	}
-}
 
 
 /**
@@ -543,7 +517,6 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 
 	//If this is null(possible but rare), just give it back
 	if(window.instruction1 == NULL){
-		window.status = WINDOW_EMPTY;
 		return window;
 	}
 
@@ -554,9 +527,6 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	if(window.instruction2 != NULL){
 		window.instruction3 = window.instruction2->next_statement;
 	}
-
-	//Set the status
-	window.status = WINDOW_FULL;
 	
 	//And now we give back the window
 	return window;
@@ -584,9 +554,6 @@ static void reconstruct_window(instruction_window_t* window, instruction_t* seed
 	} else {
 		window->instruction3 = NULL;
 	}
-
-	//We'll also set the window status here
-	set_window_status(window);
 }
 
 
@@ -605,13 +572,6 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 		window->instruction3 = window->instruction2->next_statement;
 	} else {
 		window->instruction3 = NULL;
-	}
-
-	//It's only empty when instruction 1 is NULL
-	if(window->instruction1 == NULL){
-		window->status = WINDOW_EMPTY;
-	} else {
-		window->status = WINDOW_FULL;
 	}
 
 	//Give it back
@@ -2369,22 +2329,71 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 }
 
 
-
 /**
- * The first part of the instruction selector to run is the pattern selector. This 
- * first set of passes will determine if there are any large patterns that we can optimize
- * with our instructions. This will likely leave a lot of instructions not selected, 
- * which is part of the plan
+ * Handle a negation instruction. Very simple - all we need to do is select the suffix and
+ * add it over
  */
-static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
-	//Handle a logical not instruction selection. This does generate multiple new instructions,
-	//so it has to go here
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
-		//Let this handle it
-		handle_logical_not_instruction(cfg, window);
-		return;
+static void handle_neg_instruction(instruction_t* instruction){
+	//Find out what size we have
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = NEGQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = NEGL;
+			break;
+		case WORD:
+			instruction->instruction_type = NEGW;
+			break;
+		case BYTE:
+			instruction->instruction_type = NEGB;
+			break;
+		default:
+			break;
 	}
 
+	//Now we'll just translate the assignee to be the destination(and source in this case) register
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
+ * Handle a bitwise not(one's complement) instruction. Very simple - all we need to do is select the suffix and
+ * add it over
+ */
+static void handle_not_instruction(instruction_t* instruction){
+	//Find out what size we have
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = NOTQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = NOTL;
+			break;
+		case WORD:
+			instruction->instruction_type = NOTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = NOTB;
+			break;
+		default:
+			break;
+	}
+
+	//Now we'll just translate the assignee to be the destination(and source in this case) register
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
+ * Select instructions that follow a singular pattern. This one single pass will run after
+ * the pattern selector ran and perform one-to-one mappings on whatever is left.
+ */
+static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
 	//We could see logical and/logical or
 	if(is_instruction_binary_operation(window->instruction1) == TRUE){
 		switch(window->instruction1->op){
@@ -2679,84 +2688,18 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 		reconstruct_window(window, window->instruction2);
 		return;
 	}
-}
 
-
-/**
- * Handle a negation instruction. Very simple - all we need to do is select the suffix and
- * add it over
- */
-static void handle_neg_instruction(instruction_t* instruction){
-	//Find out what size we have
-	variable_size_t size = select_variable_size(instruction->assignee);
-
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = NEGQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = NEGL;
-			break;
-		case WORD:
-			instruction->instruction_type = NEGW;
-			break;
-		case BYTE:
-			instruction->instruction_type = NEGB;
-			break;
-		default:
-			break;
-	}
-
-	//Now we'll just translate the assignee to be the destination(and source in this case) register
-	instruction->destination_register = instruction->assignee;
-}
-
-
-/**
- * Handle a bitwise not(one's complement) instruction. Very simple - all we need to do is select the suffix and
- * add it over
- */
-static void handle_not_instruction(instruction_t* instruction){
-	//Find out what size we have
-	variable_size_t size = select_variable_size(instruction->assignee);
-
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = NOTQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = NOTL;
-			break;
-		case WORD:
-			instruction->instruction_type = NOTW;
-			break;
-		case BYTE:
-			instruction->instruction_type = NOTB;
-			break;
-		default:
-			break;
-	}
-
-	//Now we'll just translate the assignee to be the destination(and source in this case) register
-	instruction->destination_register = instruction->assignee;
-}
-
-
-/**
- * Select instructions that follow a singular pattern. This one single pass will run after
- * the pattern selector ran and perform one-to-one mappings on whatever is left.
- */
-static void select_single_instruction_patterns(cfg_t* cfg, instruction_t* instruction){
-	//If this is null or we've already dealt with it, just return
-	if(instruction == NULL || instruction->instruction_type != NO_INSTRUCTION_SELECTED){
-		return;
-	}
+	//The instruction that we have here is the window's instruction 1
+	instruction_t* instruction = window->instruction1;
 
 	//Switch on whatever we have currently
 	switch (instruction->CLASS) {
 		//These have a helper
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_register_to_register_move_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+			handle_logical_not_instruction(cfg, window);
 			break;
 		case THREE_ADDR_CODE_ASSN_CONST_STMT:
 			handle_constant_to_register_move_instruction(instruction);
@@ -2830,38 +2773,10 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_t* instru
 
 
 /**
- * Perform one pass of the multi pattern instruction selector. We will keep performing passes
- * until we no longer see the changed flag
+ * Run through every block and convert each instruction or sequence of instructions
+ * from three address code to assembly statements
  */
-static void multi_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* head_block){
-	//Keep track of the current block
-	basic_block_t* current = head_block;
-
-	//So long as this isn't NULL
-	while(current != NULL){
-		//Initialize the sliding window(very basic, more to come)
-		instruction_window_t window = initialize_instruction_window(current);
-		
-		do{
-			//Go through and select the multiple instruction patterns
-			select_multiple_instruction_patterns(cfg, &window);
-
-			//Slide the window
-			slide_window(&window);
-
-		//So long as this is not at the end
-		} while(window.status != WINDOW_EMPTY);
-
-		//Advance to the direct successor
-		current = current->direct_successor;
-	}
-}
-
-
-/**
- * Make one pass over the entire CFG and select all single instruction patterns
- */
-static void single_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* head_block){
+static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 	//Save the current block here
 	basic_block_t* current = head_block;
 
@@ -2872,37 +2787,17 @@ static void single_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* 
 		//Run through the window so long as we are not at the end
 		do{
 			//Select the instructions
-			select_single_instruction_patterns(cfg, window.instruction1);
+			select_instruction_patterns(cfg, &window);
 
 			//Slide the window
 			slide_window(&window);
 
 		//Keep going if we aren't at the end
-		} while(window.status != WINDOW_EMPTY);
+		} while(window.instruction1 != NULL);
 
 		//Advance the current up
 		current = current->direct_successor;
 	}
-}
-
-
-/**
- * Run through every block and convert each instruction or sequence of instructions
- * from three address code to assembly statements
- */
-static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
-	/**
-	 * We first go through and perform the multiple pattern instruction
-	 * selection. This allows us to catch any large patterns and select them
-	 * first, before they'd be obfuscated by the single pattern selector
-	 */
-	multi_instruction_pattern_selector_pass(cfg, head_block);
-
-	/**
-	 * Once we've gone through the entire cfg once and performed a pass on all
-	 * This will clean up and instructions that were not caught by the first pass
-	 */
-	single_instruction_pattern_selector_pass(cfg, head_block);
 }
 
 
@@ -3888,7 +3783,7 @@ static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* head){
 			slide_window(&window);
 
 		//So long as we aren't at the end
-		} while(window.status != WINDOW_EMPTY);
+		} while(window.instruction1 != NULL);
 
 
 		//Advance to the direct successor
