@@ -364,10 +364,6 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 		case SUBW:
 		case SUBL:
 		case SUBQ:
-		case MULB:
-		case MULW:
-		case MULL:
-		case MULQ:
 		case IMULB:
 		case IMULW:
 		case IMULL:
@@ -1957,6 +1953,11 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 	//We'll only print the source register, there is no explicit destination
 	//register
 	print_variable(fl, instruction->source_register, mode);
+
+	//Print where this went
+	fprintf(fl, " ; --> ");
+	//Print this mode
+	print_variable(fl, instruction->destination_register, mode);
 
 	fprintf(fl, "\n");
 }

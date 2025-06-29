@@ -43,7 +43,7 @@ typedef enum{
  * as opposed to storing strings. These are x86-64 assembly instructions
  */
 typedef enum{
-	NONE = 0, //The NONE instruction, this is our default and we'll get this when we calloc
+	NO_INSTRUCTION_SELECTED = 0, //The NONE instruction, this is our default and we'll get this when we calloc
 	PHI_FUNCTION, //Not really an instruction, but we still need to account for these
 	RET,
 	CALL,

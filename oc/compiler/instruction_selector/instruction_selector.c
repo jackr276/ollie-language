@@ -31,9 +31,8 @@ typedef struct instruction_window_t instruction_window_t;
  * middle or end of the sequence?
  */
 typedef enum {
-	WINDOW_AT_START,
-	WINDOW_AT_MIDDLE,
-	WINDOW_AT_END,
+	WINDOW_FULL,
+	WINDOW_EMPTY
 } window_status_t;
 
 
@@ -69,7 +68,9 @@ struct instruction_window_t{
 static void set_window_status(instruction_window_t* window){
 	//This is our case to check for
 	if(window->instruction1 == NULL){
-		window->status = WINDOW_AT_END;
+		window->status = WINDOW_EMPTY;
+	} else {
+		window->status = WINDOW_FULL;
 	}
 }
 
@@ -542,29 +543,20 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 
 	//If this is null(possible but rare), just give it back
 	if(window.instruction1 == NULL){
-		window.status = WINDOW_AT_END;
+		window.status = WINDOW_EMPTY;
 		return window;
 	}
 
-	//If the next one is NULL, we have 2 NULL instructions
-	//following this. This is very rare, but it could happen
-	if(window.instruction1->next_statement == NULL){
-		window.instruction2 = NULL;
-		window.instruction3 = NULL;
-	} else {
-		//Otherwise we know we have a second instruction
-		window.instruction2 = window.instruction1->next_statement;
-		//No such checks are needed for instruction 3, we have no possibility of a null pointer
-		//error here
+	//Instruction 2 is next to the head
+	window.instruction2 = window.instruction1->next_statement;
+
+	//If this isn't null, 3 is this guy's next one
+	if(window.instruction2 != NULL){
 		window.instruction3 = window.instruction2->next_statement;
 	}
 
-	//We're at the beginning here by default
-	if(window.instruction1 == NULL){
-		window.status = WINDOW_AT_END;
-	} else {
-		window.status = WINDOW_AT_START;
-	}
+	//Set the status
+	window.status = WINDOW_FULL;
 	
 	//And now we give back the window
 	return window;
@@ -603,30 +595,23 @@ static void reconstruct_window(instruction_window_t* window, instruction_t* seed
  * out of our window, and the one next to the highest instruction slides into it
  */
 static instruction_window_t* slide_window(instruction_window_t* window){
-	//If the third operation is not the end, then we're good to just bump everything up
-	//This is the simplest case, and allows us to just bump everything up and get out
-	if(window->instruction3 != NULL){
-		window->instruction1 = window->instruction2;
-		window->instruction2 = window->instruction3;
-		window->instruction3 = window->instruction3->next_statement;
-		//We're in the thick of it here
-		window->status = WINDOW_AT_MIDDLE;
-	//Handle this case
-	} else if(window->instruction2 == NULL){
-		window->instruction1 = NULL;
-		window->instruction2 = NULL;
-		window->instruction3 = NULL;
-		//Definitely at the end
-		window->status = WINDOW_AT_END;
+	//Instruction1 becomes instruction 2
+	window->instruction1 = window->instruction2;
+	//Instruction2 becomes instruction3
+	window->instruction2 = window->instruction3;
 
-	//This means that we don't have a full block, but we also don't have a null
-	//instruction 2
+	//Instruction3 becomes what's next to instruction 2
+	if(window->instruction2 != NULL){
+		window->instruction3 = window->instruction2->next_statement;
 	} else {
-		window->instruction1 = window->instruction2;
-		window->instruction2 = window->instruction3;
 		window->instruction3 = NULL;
-		//We know we're at the end
-		window->status = WINDOW_AT_END;
+	}
+
+	//It's only empty when instruction 1 is NULL
+	if(window->instruction1 == NULL){
+		window->status = WINDOW_EMPTY;
+	} else {
+		window->status = WINDOW_FULL;
 	}
 
 	//Give it back
@@ -1562,14 +1547,8 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
  * NOTE: this is always the first instruction in the instruction window
 */
 static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
-	printf("HERE\n\n\n");
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	//Dev use TODO GETRID
-	if(multiplication_instruction->op2 == NULL){
-		printf("FOUND NULL OP2 for UNSIGNED MULT\n");
-	}
 
 	//We'll need to know the variables size
 	variable_size_t size = select_variable_size(multiplication_instruction->assignee);
@@ -2403,6 +2382,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
 		//Let this handle it
 		handle_logical_not_instruction(cfg, window);
+		return;
 	}
 
 	//We could see logical and/logical or
@@ -2411,24 +2391,24 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 			//Handle the logical and case
 			case DOUBLE_AND:
 				handle_logical_and_instruction(cfg, window);
-				break;
+				return;
 
 			//Handle logical or
 			case DOUBLE_OR:
 				handle_logical_or_instruction(cfg, window);
-				break;
+				return;
 
 			//Handle division
 			case F_SLASH:
 				//This will generate more than one instruction
 				handle_division_instruction(window);
-				break;
+				return;
 
 			//Handle modulus
 			case MOD:	
 				//This will generate more than one instruction
 				handle_modulus_instruction(window);
-				break;
+				return;
 
 			//If we have a multiplication *and* it's unsigned, we go here
 			case STAR:
@@ -2436,6 +2416,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 				if(is_type_signed(window->instruction1->assignee->type) == FALSE){
 					//Let the helper deal with it
 					handle_unsigned_multiplication_instruction(window);
+					return;
 				}
 				break;
 
@@ -2475,6 +2456,10 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 		//Link to assignment
 		set_instruction->next_statement = assignment;
 		assignment->previous_statement = comparison;
+
+		//Reconstruct the window here, starting at the end
+		reconstruct_window(window, assignment);
+		return;
 	}
 
 
@@ -2520,6 +2505,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 
 		//Reconstruct the window with instruction3 as the seed
 		reconstruct_window(window, window->instruction3);
+		return;
 	}
 
 	/**
@@ -2549,6 +2535,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 		
 		//Reconstruct the window so that instruction3 is the start
 		reconstruct_window(window, window->instruction3);
+		return;
 	}
 
 
@@ -2577,6 +2564,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 
 		//Reconstruct the window with instruction3 as the start
 		reconstruct_window(window, window->instruction3);
+		return;
 	}
 
 	
@@ -2605,6 +2593,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 
 		//Reconstruct the window with instruction3 as the start
 		reconstruct_window(window, window->instruction3);
+		return;
 	}
 
 	 /**
@@ -2633,6 +2622,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
+		return;
 	}
 
 
@@ -2663,6 +2653,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
+		return;
 	}
 
 
@@ -2686,6 +2677,7 @@ static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
+		return;
 	}
 }
 
@@ -2755,8 +2747,8 @@ static void handle_not_instruction(instruction_t* instruction){
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
 static void select_single_instruction_patterns(cfg_t* cfg, instruction_t* instruction){
-	//Just in case here
-	if(instruction == NULL){
+	//If this is null or we've already dealt with it, just return
+	if(instruction == NULL || instruction->instruction_type != NO_INSTRUCTION_SELECTED){
 		return;
 	}
 
@@ -2854,11 +2846,11 @@ static void multi_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* h
 			//Go through and select the multiple instruction patterns
 			select_multiple_instruction_patterns(cfg, &window);
 
-			//And slide it
+			//Slide the window
 			slide_window(&window);
 
 		//So long as this is not at the end
-		} while(window.status != WINDOW_AT_END);
+		} while(window.status != WINDOW_EMPTY);
 
 		//Advance to the direct successor
 		current = current->direct_successor;
@@ -2886,7 +2878,7 @@ static void single_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* 
 			slide_window(&window);
 
 		//Keep going if we aren't at the end
-		} while(window.status != WINDOW_AT_END);
+		} while(window.status != WINDOW_EMPTY);
 
 		//Advance the current up
 		current = current->direct_successor;
@@ -3896,7 +3888,7 @@ static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* head){
 			slide_window(&window);
 
 		//So long as we aren't at the end
-		} while(window.status != WINDOW_AT_END);
+		} while(window.status != WINDOW_EMPTY);
 
 
 		//Advance to the direct successor
