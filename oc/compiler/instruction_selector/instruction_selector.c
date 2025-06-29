@@ -1746,14 +1746,7 @@ static void handle_division_instruction(instruction_window_t* window){
 	}
 
 	//Reconstruct the window here
-	reconstruct_window(window, move_to_rax);
-
-	//Now we'll cycle the window to get to the end
-	slide_window(window);
-	slide_window(window);
-
-	//Set the status
-	set_window_status(window);
+	reconstruct_window(window, result_movement);
 }
 
 
@@ -1843,17 +1836,8 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		block->exit_statement = result_movement;
 	}
 
-	//Now we need to repopulate the window
-	window->instruction1 = move_to_rax;
-	window->instruction2 = window->instruction1->next_statement;
-	window->instruction3 = window->instruction2->next_statement;
-
-	//Now we'll cycle the window to get to the end
-	slide_window(window);
-	slide_window(window);
-
-	//Set the status
-	set_window_status(window);
+	//Reconstruct the window starting at the result movement
+	reconstruct_window(window, result_movement);
 }
 
 
@@ -2231,15 +2215,8 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 		block->exit_statement = movzbl_inst;
 	}
 
-	//We now need to rework the window. We know that these are 
-	//the values of the three in-window items now
-	window->instruction1 = test_inst;
-	window->instruction2 = sete_inst;
-	window->instruction3 = movzbl_inst;
-	
-	//Now we'll cycle the window twice
-	slide_window(window);
-	slide_window(window);
+	//This is the new window
+	reconstruct_window(window, movzbl_inst);
 }
 
 
@@ -2312,14 +2289,8 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 		block->exit_statement = movzbl_instruction;
 	}
 
-	//Now that we're all linked, we need to redo the window
-	window->instruction1 = or_instruction;
-	window->instruction2 = setne_instruction;
-	window->instruction3 = movzbl_instruction;
-
-	//Slide the window twice so we don't waste a cycle
-	slide_window(window);
-	slide_window(window);
+	//Reconstruct the window starting at the movzbl
+	reconstruct_window(window, movzbl_instruction);
 }
 
 
@@ -2418,18 +2389,9 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 		block->exit_statement = final_move;
 	}
 
-	//We now need to rework the window. We know that these are 
-	//the values of the three in-window items now
-	window->instruction1 = first_test;
-	window->instruction2 = first_set;
-	window->instruction3 = second_test;
-	
-	//Now we'll cycle the window five times
-	slide_window(window);
-	slide_window(window);
-	slide_window(window);
-	slide_window(window);
-	slide_window(window);
+	//Reconstruct the window starting at the final move
+	reconstruct_window(window, final_move);
+
 }
 
 
@@ -2440,22 +2402,16 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
  * with our instructions. This will likely leave a lot of instructions not selected, 
  * which is part of the plan
  */
-static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
+static void select_multiple_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction1->instruction_type != NONE){
-		return FALSE;
+		return;
 	}
-
-	//Have we changed the window at all? Very similar to the simplify function
-	u_int8_t changed = FALSE;
 
 	//Handle a logical not instruction selection. This does generate multiple new instructions,
 	//so it has to go here
 	if(window->instruction1->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
 		//Let this handle it
 		handle_logical_not_instruction(cfg, window);
-
-		//This does count as a change
-		changed = TRUE;
 	}
 
 	//We could see logical and/logical or
@@ -2464,27 +2420,23 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 			//Handle the logical and case
 			case DOUBLE_AND:
 				handle_logical_and_instruction(cfg, window);
-				changed = TRUE;
 				break;
 
 			//Handle logical or
 			case DOUBLE_OR:
 				handle_logical_or_instruction(cfg, window);
-				changed = TRUE;
 				break;
 
 			//Handle division
 			case F_SLASH:
 				//This will generate more than one instruction
 				handle_division_instruction(window);
-				changed = TRUE;
 				break;
 
 			//Handle modulus
 			case MOD:	
 				//This will generate more than one instruction
 				handle_modulus_instruction(window);
-				changed = TRUE;
 				break;
 
 			//If we have a multiplication *and* it's unsigned, we go here
@@ -2493,7 +2445,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 				if(is_type_signed(window->instruction1->assignee->type) == FALSE){
 					//Let the helper deal with it
 					handle_unsigned_multiplication_instruction(window);
-					changed = TRUE;
 				}
 				break;
 
@@ -2578,9 +2529,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 		//Reconstruct the window with instruction3 as the seed
 		reconstruct_window(window, window->instruction3);
-
-		//This counts as a change
-		changed = TRUE;
 	}
 
 	/**
@@ -2610,9 +2558,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 		
 		//Reconstruct the window so that instruction3 is the start
 		reconstruct_window(window, window->instruction3);
-
-		//This counts as a change
-		changed = TRUE;
 	}
 
 
@@ -2641,9 +2586,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 		//Reconstruct the window with instruction3 as the start
 		reconstruct_window(window, window->instruction3);
-
-		//This counts as a change
-		changed = TRUE;
 	}
 
 	
@@ -2672,10 +2614,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 		//Reconstruct the window with instruction3 as the start
 		reconstruct_window(window, window->instruction3);
-
-		//This counts as a change
-		changed = TRUE;
-
 	}
 
 	 /**
@@ -2704,9 +2642,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
-
-		//This counts as a change
-		changed = TRUE;
 	}
 
 
@@ -2737,9 +2672,6 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
-
-		//This counts as a change
-		changed = TRUE;
 	}
 
 
@@ -2763,12 +2695,7 @@ static u_int8_t select_multiple_instruction_patterns(cfg_t* cfg, instruction_win
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
-
-		//This counts as a change
-		changed = TRUE;
 	}
-
-	return changed;
 }
 
 
@@ -2935,43 +2862,26 @@ static void select_single_instruction_patterns(cfg_t* cfg, instruction_window_t*
  * Perform one pass of the multi pattern instruction selector. We will keep performing passes
  * until we no longer see the changed flag
  */
-static u_int8_t multi_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* head_block){
-	u_int8_t changed;
-	u_int8_t window_changed = FALSE;
-
+static void multi_instruction_pattern_selector_pass(cfg_t* cfg, basic_block_t* head_block){
 	//Keep track of the current block
 	basic_block_t* current = head_block;
 
 	//So long as this isn't NULL
 	while(current != NULL){
-		//By default there's no change
-		changed = FALSE;
-		
 		//Initialize the sliding window(very basic, more to come)
 		instruction_window_t window = initialize_instruction_window(current);
-
-		//Run through and simplify everything we can
-		do {
-			//Select the patterns
-			changed = select_multiple_instruction_patterns(cfg, &window);
-
-			//Set this flag if it was changed
-			if(changed == TRUE){
-				window_changed = TRUE;
-			}
+		
+		while(window.status != WINDOW_AT_END){
+			//Go through and select the multiple instruction patterns
+			select_multiple_instruction_patterns(cfg, &window);
 
 			//And slide it
 			slide_window(&window);
-
-		//So long as we aren't at the end
-		} while(window.status != WINDOW_AT_END);
-
+		}
 
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
-
-	return window_changed;
 }
 
 
@@ -2988,7 +2898,7 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 	 * selection. This allows us to catch any large patterns and select them
 	 * first, before they'd be obfuscated by the single pattern selector
 	 */
-	while(multi_instruction_pattern_selector_pass(cfg, head_block) == TRUE);
+	multi_instruction_pattern_selector_pass(cfg, head_block);
 
 	//Reset current here
 	current = head_block;
@@ -3001,7 +2911,6 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 		//Keep going so long as the window isn't at the end
 		do{
 			//Select the instructions
-			//TODO only single pattern for now
 			select_single_instruction_patterns(cfg, &window);
 
 			//Slide the window

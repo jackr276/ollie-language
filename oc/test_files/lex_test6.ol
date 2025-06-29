@@ -5,9 +5,8 @@
 
 fn tester() -> u32 {
 	let i:u16 := 0;
-	let j:u16 := 0;
 	
-	ret i * j;
+	ret 3 * i;
 }
 
 
