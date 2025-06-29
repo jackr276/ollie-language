@@ -388,14 +388,15 @@ static instruction_t* emit_movzbl_instruction(three_addr_var_t* destination, thr
 /**
  * Emit a divX or idivX instruction
  *
- * Division instructions have no destination that need be written out. They only have a source
+ * Division instructions have no destination that need be written out. They only have two sources - a direct
+ * source and an implicit source
  */
-static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is_signed){
+static instruction_t* emit_div_instruction(three_addr_var_t* direct_source, three_addr_var_t* implicit_source, u_int8_t is_signed){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(source);
+	variable_size_t size = select_variable_size(direct_source);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -433,12 +434,12 @@ static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is
 
 		//Should never reach this
 		default:
-			printf("REACHED DEFAULT\n\n\n\n");
 			break;
 	}
 
-	//Finally we set the source
-	instruction->source_register = source;
+	//Finally we set the sources
+	instruction->source_register = direct_source;
+	instruction->source_register2 = implicit_source;
 
 	//And now we'll give it back
 	return instruction;
@@ -448,14 +449,14 @@ static instruction_t* emit_div_instruction(three_addr_var_t* source, u_int8_t is
 /**
  * Emit a divX or idivX instruction that is intended for modulus
  *
- * Division instructions have no destination that need be written out. They only have a source
+ * Division instructions have no destination that need be written out. They only have a direct source and an implicit source
  */
-static instruction_t* emit_mod_instruction(three_addr_var_t* source, u_int8_t is_signed){
+static instruction_t* emit_mod_instruction(three_addr_var_t* direct_source, three_addr_var_t* implicit_source, u_int8_t is_signed){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(source);
+	variable_size_t size = select_variable_size(direct_source);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -494,8 +495,9 @@ static instruction_t* emit_mod_instruction(three_addr_var_t* source, u_int8_t is
 			break;
 	}
 
-	//Finally we set the source
-	instruction->source_register = source;
+	//Finally we set the sources
+	instruction->source_register = direct_source;
+	instruction->source_register2 = implicit_source;
 
 	//And now we'll give it back
 	return instruction;
@@ -1499,9 +1501,10 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
  * Because of the extra instructions that this will generate, this will count as
  * a multiple instruction selection pattern
  *
- * x <- 3 * 2;
+ * x <- a * 2;
  *
  * mov $3, %rax <- Source is always in RAX
+ * mull %rcx -> result in rax
  *
  *
  * NOTE: this is always the first instruction in the instruction window
@@ -1536,8 +1539,9 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 			break;
 	}
 
-	//This is the case where we have a source register
+	//This is the case where we have two source registers
 	multiplication_instruction->source_register = multiplication_instruction->op1;
+	multiplication_instruction->source_register2 = move_to_rax->op2;
 
 	//This is the assignee, we just don't see it
 	multiplication_instruction->destination_register = emit_temp_var(multiplication_instruction->assignee->type);
@@ -1652,7 +1656,7 @@ static void handle_division_instruction(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(window->instruction1->op2, is_signed);
+	instruction_t* division = emit_div_instruction(window->instruction1->op2, move_to_rax->destination_register, is_signed);
 
 	//This is the assignee, we just don't see it
 	division->destination_register = emit_temp_var(division_instruction->assignee->type);
@@ -1744,7 +1748,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_mod_instruction(window->instruction1->op2, is_signed);
+	instruction_t* division = emit_mod_instruction(window->instruction1->op2, move_to_rax->destination_register, is_signed);
 	//This is the assignee, we just don't see it
 	division->destination_register = emit_temp_var(modulus_instruction->assignee->type);
 
