@@ -762,8 +762,10 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				return NULL;
 			}
 
-			//Perform any signedness correction that is needed
-			basic_type_signedness_coercion(symtab, a, b);
+			/**
+			 * We will not perform any signedness conversion on the two of these, since in the
+			 * end we will be using flags anyways. We will only perform the widening conversion
+			 */
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
