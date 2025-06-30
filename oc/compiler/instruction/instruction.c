@@ -352,26 +352,6 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 
 
 /**
- * Is the assignee also an operand for a given instruction
- */
-u_int8_t is_assignee_also_operand(Token op){
-	/*
-	switch(op){
-		case STAR:
-		case PLUS:
-		case MINUS:
-		case CARROT:
-		case SINGLE_OR:
-		case DOUBLE_OR:
-		case 
-	}
-	*/
-	return 0;
-
-}
-
-
-/**
  * Does a given operation overwrite it's source? Think add, subtract, etc
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction){

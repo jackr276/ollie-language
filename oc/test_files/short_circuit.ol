@@ -37,7 +37,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	do{
 		b--;
 		x := x - 1;
-	} while(x == 88 || b <= 32) ;
+	} while(x == 32 || b <= 32) ;
 
 	//So it isn't optimized away
 	ret x;
