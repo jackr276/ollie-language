@@ -3119,13 +3119,19 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//Store the left and right hand types
 	generic_type_t* left_hand_type;
 	generic_type_t* right_hand_type;
+	//Temporary holders for our operands
+	three_addr_var_t* op1;
+	three_addr_var_t* op2;
 
 	//Is the cursor here a unary expression or a constant? If so just emit that
 	switch(logical_or_expr->CLASS){
+		//Process a unary expression(these are usually idents)
 		case AST_NODE_CLASS_UNARY_EXPR:
 			//Return the temporary character from here
 			package.assignee = emit_unary_expr_code(basic_block, logical_or_expr, USE_TEMP_VAR, SIDE_TYPE_RIGHT, is_branch_ending);
 			return package;
+
+		//Process a constant, we may have these in here directly
 		case AST_NODE_CLASS_CONSTANT:
 			package.assignee = emit_constant_assignment(basic_block, logical_or_expr, is_branch_ending);
 			return package;
@@ -3145,13 +3151,8 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//Emit the binary expression on the left first
 	expr_ret_package_t left_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
 
-	//Temporary holders for our operands
-	three_addr_var_t* op1;
-	three_addr_var_t* op2;
-
 	//Let's see if we need a type conversion here
 	if (is_type_conversion_needed(left_hand_type, left_hand_temp.assignee->type) == TRUE){
-		printf("%s and %s\n\n", left_hand_temp.assignee->type->type_name, left_hand_type->type_name);
 		//We'll need a converting move instruction here to deal with this
 		instruction_t* temp_assignment = emit_converting_move_instruction(emit_temp_var(left_hand_type), left_hand_temp.assignee);
 		//Add the temp assignment to the block
@@ -3160,6 +3161,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 		//Reassign op1 for later processing
 		op1 = temp_assignment->assignee;
 
+	//Otherwise if we just have  
 	} else if(left_hand_temp.assignee->is_temporary == FALSE){
 
 		//emit the temp assignment
