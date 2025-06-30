@@ -3225,7 +3225,13 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	add_statement(basic_block, stmt);
 
 	//Store the temporary var as the assignee
-	package.assignee = stmt->assignee;
+	//TODO HERE
+	if(package.operator == L_THAN){
+		package.assignee = emit_temp_var(logical_or_expr->inferred_type);
+		stmt->assignee = package.assignee;
+	} else {
+		package.assignee = stmt->assignee;
+	}
 	
 	//Return the temp variable that we assigned to
 	return package;
