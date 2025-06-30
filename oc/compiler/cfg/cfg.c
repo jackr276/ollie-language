@@ -1987,7 +1987,7 @@ static void rename_block(basic_block_t* entry){
 			symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
 
 			//Emit a new variable for this one
-			three_addr_var_t* phi_func_param = emit_var(phi_func_var, phi_func_var->type_defined_as, FALSE);
+			three_addr_var_t* phi_func_param = emit_var(phi_func_var, FALSE);
 
 			//Emit the name for this variable
 			rhs_new_name(phi_func_param);
@@ -2278,7 +2278,7 @@ static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u
  */
 static void emit_label(basic_block_t* basic_block, generic_ast_node_t* label_node, u_int8_t is_branch_ending){
 	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(label_node->variable, label_node->inferred_type, TRUE);
+	three_addr_var_t* label_var = emit_var(label_node->variable, TRUE);
 
 	//This is a special case here -- these don't really count as variables
 	//in the way that most do. As such, we will not add it in as live
@@ -2299,7 +2299,7 @@ static void emit_label(basic_block_t* basic_block, generic_ast_node_t* label_nod
  */
 static void emit_direct_jump(basic_block_t* basic_block, generic_ast_node_t* jump_statement, u_int8_t is_branch_ending){
 	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(jump_statement->variable, lookup_type_name_only(type_symtab, "u64")->type, TRUE);
+	three_addr_var_t* label_var = emit_var(jump_statement->variable, TRUE);
 
 	//This is a special case here -- these don't really count as variables
 	//in the way that most do. As such, we will not add it in as live
@@ -2404,7 +2404,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		}
 
 		//Emit the variable
-		three_addr_var_t* var = emit_var(ident_node->variable, ident_node->variable->type_defined_as, FALSE);
+		three_addr_var_t* var = emit_var(ident_node->variable, FALSE);
 
 		//This variable has been assigned to, so we'll add that too
 		if(side == SIDE_TYPE_LEFT){
@@ -2428,7 +2428,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 
 	} else {
 		//First we'll create the non-temp var here
-		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, ident_node->variable->type_defined_as, FALSE);
+		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
 
 		//Add this in as a used variable
 		add_used_variable(basic_block, non_temp_var);
@@ -3252,7 +3252,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		//If we have an array, we'll need to decrement the stack
 		if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
 			//Now we emit the variable for the array base address
-			three_addr_var_t* base_addr = emit_var(expr_node->variable, expr_node->inferred_type, FALSE);
+			three_addr_var_t* base_addr = emit_var(expr_node->variable, FALSE);
 
 			//Add this variable into the current function's stack. This is what we'll use
 			//to store the address
@@ -3270,7 +3270,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		symtab_variable_record_t* var =  expr_node->variable;
 
 		//Create the variable associated with this
-	 	three_addr_var_t* left_hand_var = emit_var(var, expr_node->inferred_type, FALSE);
+	 	three_addr_var_t* left_hand_var = emit_var(var, FALSE);
 
 		//This has been assigned to
 		add_assigned_variable(basic_block, left_hand_var);
@@ -5648,7 +5648,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	//Create the stack pointer
 	stack_pointer = initialize_stack_pointer(results->variable_symtab, results->type_symtab);
 	//Initialize the variable to
-	stack_pointer_var = emit_var(stack_pointer, u64, FALSE);
+	stack_pointer_var = emit_var(stack_pointer, FALSE);
 	//Mark it
 	stack_pointer_var->is_stack_pointer = TRUE;
 
