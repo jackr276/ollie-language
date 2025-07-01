@@ -80,16 +80,29 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
  * Is the given type memory movement appropriate
  */
 u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
-	//Must be basic
-	if(type->type_class != TYPE_CLASS_BASIC){
-		return FALSE;
-	}
+	//The basic type token for later
+	Token basic_type;
 
-	//Switch on it. Only 64 bits are appropriate
-	switch(type->basic_type->basic_type){
-		case U_INT64:
-		case S_INT64:
+	//Arrays and pointers are fine
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_POINTER:
 			return TRUE;
+
+		//Some more exploration needed here
+		case TYPE_CLASS_BASIC:
+			//Extract this
+			basic_type = type->basic_type->basic_type;
+		
+			//We're allowed to see 64 bit types here
+			if(basic_type == U_INT64 || basic_type == S_INT64){
+				return TRUE;
+			}
+
+			//Otherwise fail out
+			return FALSE;
+
+		//Default is a no
 		default:
 			return FALSE;
 	}

@@ -931,8 +931,6 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 
 /**
  * Handle a memory to register move type instruction selection with an address calculation
- *
- * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
 	//Select the variable size based on the assignee
@@ -1031,12 +1029,37 @@ static void handle_three_instruction_address_calc_from_memory_move(instruction_t
 	//Set the calculation mode
 	memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 
+	//Pull these out for our uses. We'll want to first determine if we need any conversions here
+	three_addr_var_t* address_calc_reg1 = offset_calc->op1;
+	three_addr_var_t* address_calc_reg2 = lea_statement->op2;
+
+	//If this is the case, we need a converting move
+	if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
+		//Emit the conversion
+		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg1);
+		//Insert it before the memory access
+		insert_instruction_before_given(conversion, memory_access);
+
+		//Reassign what reg1 is
+		address_calc_reg1 = conversion->destination_register;
+	}
+
+	//If this is the case, we need a converting move
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+		//Emit the conversion
+		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg2);
+
+		//Insert it before the memory access
+		insert_instruction_before_given(conversion, memory_access);
+
+		//Reassign what reg2 is
+		address_calc_reg2 = conversion->destination_register;
+	}
+
 	//The offset and first register come from the offset calculation
 	memory_access->offset = offset_calc->op1_const;
-	memory_access->address_calc_reg1 = offset_calc->op1;
-
-	//And the second register and scale come from the lea statement
-	memory_access->address_calc_reg2 = lea_statement->op2;
+	memory_access->address_calc_reg1 = address_calc_reg1;
+	memory_access->address_calc_reg2 = address_calc_reg2;
 	memory_access->lea_multiplicator = lea_statement->lea_multiplicator;
 
 	//Now we'll set the destination register. We don't need to worry about any
