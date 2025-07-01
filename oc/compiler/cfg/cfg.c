@@ -3097,6 +3097,40 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 
 
 /**
+ * Handle a converting move for a binary operation. When done, we will return a
+ * pointer to the variable that is to be used.
+ *
+ * We specifcially want to exclude the case where we're convering from 
+ * an unsigned 32 bit integer to an unsigned 64 bit integer, specifically
+ * because this is actually not even needed. It is done automatically by the CPU
+ * when 32 bit moves happen
+ *
+ * We will convert the original var into the target var
+ *
+ * TODO this should probably move to the instruction.c area
+ */
+static three_addr_var_t* handle_converting_move(basic_block_t* block, generic_type_t* target_type, three_addr_var_t* original_var){
+	//Grab the original type out
+	generic_type_t* original_type = original_var->type;
+	
+	//Check for our one special case - converting to an unsigned 64 bit integer
+	//TODO
+	if(target_type->type_class == TYPE_CLASS_BASIC && target_type->basic_type->basic_type == U_INT64
+		&& original_var->type->type_size == 32){
+		printf("Type conversion is unnecessary between: %s and %s\n", target_type->type_name, original_var->type->type_name);
+	}
+	
+	//We'll need a converting move instruction here to deal with this
+	instruction_t* temp_assignment = emit_converting_move_instruction(emit_temp_var(target_type), original_var);
+	//Add the temp assignment to the block
+	add_statement(block, temp_assignment);
+
+	//Always give back the assignee
+	return temp_assignment->assignee;
+}
+
+
+/**
  * Emit the abstract machine code needed for a binary expression. The lowest possible
  * thing that we could have here is a unary expression. If we have that, we just emit the
  * unary expression
@@ -3150,17 +3184,11 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 
 	//Let's see if we need a type conversion here
 	if (is_type_conversion_needed(left_hand_type, left_hand_temp.assignee->type) == TRUE){
-		//We'll need a converting move instruction here to deal with this
-		instruction_t* temp_assignment = emit_converting_move_instruction(emit_temp_var(left_hand_type), left_hand_temp.assignee);
-		//Add the temp assignment to the block
-		add_statement(basic_block, temp_assignment);
-
 		//Reassign op1 for later processing
-		op1 = temp_assignment->assignee;
+		op1 = handle_converting_move(basic_block, left_hand_type, left_hand_temp.assignee);
 
 	//Otherwise if we just have  
 	} else if(left_hand_temp.assignee->is_temporary == FALSE){
-
 		//emit the temp assignment
 		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(left_hand_temp.assignee->type), left_hand_temp.assignee);
 		//Add it into here
@@ -3194,13 +3222,8 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	//Emit a converting move instruction if we don't have a const assignment as the immediate previous statement
 	if(is_type_conversion_needed(right_hand_type, op2->type) == TRUE
 		&& basic_block->exit_statement->CLASS != THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//We'll need a converting move instruction here to deal with this
-		instruction_t* temp_assignment = emit_converting_move_instruction(emit_temp_var(right_hand_type), op2);
-		//Add the temp assignment to the block
-		add_statement(basic_block, temp_assignment);
-
 		//Reassign op2 for later processing
-		op2 = temp_assignment->assignee;
+		op2 = handle_converting_move(basic_block, right_hand_type, op2);
 	}
 
 	//Switch based on whatever operator that we have
