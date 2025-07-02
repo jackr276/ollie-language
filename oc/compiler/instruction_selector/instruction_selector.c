@@ -659,7 +659,6 @@ static instruction_type_t select_move_instruction(variable_size_t size){
  * Select a register movement instruction based on the source and destination sizes
  */
 static instruction_type_t select_register_movement_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
-
 	//If these are the exact same, then we can just call the helper and be done
 	if(destination_size == source_size){
 		return select_move_instruction(destination_size);
@@ -1930,6 +1929,10 @@ static void handle_converting_move_instruction(instruction_t* instruction){
 	//worry about the signedness
 	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
 
+	//Set the source and destination appropriately
+	instruction->source_register = instruction->op1;
+	instruction->destination_register = instruction->assignee;
+
 	//If it is signed, we'll do a sign extending move
 	if(is_signed == TRUE){
 		instruction->instruction_type = MOVSX;
@@ -1937,10 +1940,6 @@ static void handle_converting_move_instruction(instruction_t* instruction){
 	} else {
 		instruction->instruction_type = MOVZX;
 	}
-
-	//Set the source and destination appropriately
-	instruction->source_register = instruction->op1;
-	instruction->destination_register = instruction->assignee;
 }
 
 

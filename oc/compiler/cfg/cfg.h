@@ -163,11 +163,6 @@ struct basic_block_t{
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 /**
- * Handle a converting move instruction, if it is necessary
- */
-three_addr_var_t* handle_converting_move(void* block, generic_type_t* target_type, three_addr_var_t* original_var);
-
-/**
  * Add a statement to the basic block
  */
 void add_statement(basic_block_t* target, instruction_t* statement_node);
