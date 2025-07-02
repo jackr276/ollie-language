@@ -2966,11 +2966,114 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 /**
  * Handle a unary operator, in whatever form it may be
  */
-static three_addr_var_t* emit_unary_operation_code(basic_block_t* block, generic_ast_node_t* root_node, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
-	//The very first thing that we'll do is emit the assignee that comes after the unary expression
-	three_addr_var_t* assignee = emit_unary_expr_code(block, root_node->next_sibling, use_temp, side,  is_branch_ending);
+static three_addr_var_t* emit_unary_operation_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
+	//Top level declarations to avoid using them in the switch statement
+	three_addr_var_t* dereferenced;
+	instruction_t* assignment;
 
-	return NULL;
+	//Extract the first child from the unary expression parent node
+	generic_ast_node_t* first_child = unary_expr_parent->first_child;
+
+	//The very first thing that we'll do is emit the assignee that comes after the unary expression
+	three_addr_var_t* assignee = emit_unary_expr_code(basic_block, first_child->next_sibling, use_temp, side,  is_branch_ending);
+
+	//Now that we've emitted the assignee, we can handle the specific unary operators
+	switch(first_child->unary_operator){
+		//Handle the case of a preincrement
+		case PLUSPLUS:
+			//If the assignee is not a pointer, we'll handle the normal case
+			if(assignee->type->type_class == TYPE_CLASS_BASIC){
+				//We really just have an "inc" instruction here
+				return emit_inc_code(basic_block, assignee, is_branch_ending);
+			//If we actually do have a pointer, we need the helper to deal with this
+			} else {
+				//Let the helper deal with this
+				return handle_pointer_arithmetic(basic_block, first_child->unary_operator, assignee, is_branch_ending);
+			}
+
+		//Handle the case of a predecrement
+		case MINUSMINUS:
+			//If we have a basic type, we can use the regular process
+			if(assignee->type->type_class == TYPE_CLASS_BASIC){
+				//We really just have an "inc" instruction here
+				return emit_dec_code(basic_block, assignee, is_branch_ending);
+			//If we actually have a pointer, we'll let the helper deal with it
+			} else {
+				//Let the helper deal with this
+				return handle_pointer_arithmetic(basic_block, first_child->unary_operator, assignee, is_branch_ending);
+			}
+
+		//Handle a dereference
+		case STAR:
+			//Get the dereferenced variable
+			dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expr_parent->inferred_type);
+
+			//If we're on the right hand side, we need to have a temp assignment
+			if(side == SIDE_TYPE_RIGHT){
+				//Emit the temp assignment
+				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+
+				//Add it in
+				add_statement(basic_block, temp_assignment);
+
+				//Return the assignee of this
+				return temp_assignment->assignee;
+
+			//Otherwise just give back what we had
+			} else {
+				return dereferenced;
+			}
+	
+		//Bitwise not operator
+		case B_NOT:
+			//Let the helper handle it
+			return emit_bitwise_not_expr_code(basic_block, assignee, use_temp, is_branch_ending);
+
+		//Logical not operator
+		case L_NOT:
+			//Let the helper deal with it
+			return emit_logical_neg_stmt_code(basic_block, assignee, is_branch_ending);
+
+		/**
+		 * Negation operator
+		 * x = -a;
+		 * t <- a;
+		 * negl t;
+		 * x <- t;
+		 *
+		 * Uses strategy of: negl rdx
+		 */
+		case MINUS:
+			//We'll need to assign to a temp here, these are
+			//only ever on the RHS
+			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+			//Add this into the block
+			add_statement(basic_block, assignment);
+
+			//We will emit the negation code here
+			return emit_neg_stmt_code(basic_block, assignment->assignee, use_temp, is_branch_ending);
+
+		//Handle the case of the address operator
+		case SINGLE_AND:
+			//We'll need to assign to a temp here, these are
+			//only ever on the RHS
+			assignment = emit_memory_address_assignment(emit_temp_var(unary_expr_parent->inferred_type), assignee);
+			assignment->is_branch_ending = is_branch_ending;
+
+			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
+			assignee->linked_var->must_be_spilled = TRUE;
+
+			//Add this into the block
+			add_statement(basic_block, assignment);
+
+			//Give back the assignee
+			return assignment->assignee;
+
+		//In reality we should never actually hit this, it's just there for the C compiler to be happy
+		default:
+			return assignee;
+	}
 }
 
 
@@ -2981,10 +3084,6 @@ static three_addr_var_t* emit_unary_operation_code(basic_block_t* block, generic
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
 static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending){
-	//Variable declarations that we'll need in the switch
-	generic_ast_node_t* unary_operator;
-	three_addr_var_t* assignee;
-
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
 		//Let the helper deal with it
@@ -3001,112 +3100,10 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 		case AST_NODE_CLASS_POSTFIX_EXPR:
 			return emit_postfix_expr_code(basic_block, first_child, use_temp, side, is_branch_ending);
 
-		//We can also see a unary operator here
+		//We can also see a unary operator here. In this case, we'll let the unary operator helper function take care of it
 		case AST_NODE_CLASS_UNARY_OPERATOR:
-			//Grab this internal reference for ease
-			unary_operator = first_child;
-
-			//No matter what here, the next sibling will also be some kind of unary expression.
-			//We'll need to handle that first before going forward
-			assignee = emit_unary_expr_code(basic_block, first_child->next_sibling, use_temp, side, is_branch_ending);
-
-			//What kind of unary operator do we have?
-			//Handle plus plus case
-			if(unary_operator->unary_operator == PLUSPLUS){
-				//What if the assignee is a complex type(pointer, array, etc)
-				if(assignee->type->type_class == TYPE_CLASS_POINTER){
-					//Let the helper deal with this
-					return handle_pointer_arithmetic(basic_block, unary_operator->unary_operator, assignee, is_branch_ending);
-				} else {
-					//We really just have an "inc" instruction here
-					return emit_inc_code(basic_block, assignee, is_branch_ending);
-				}
-			} else if(unary_operator->unary_operator == MINUSMINUS){
-				//What if the assignee is a complex type(pointer, array, etc)
-				if(assignee->type->type_class == TYPE_CLASS_POINTER){
-					//Let the helper deal with this
-					return handle_pointer_arithmetic(basic_block, unary_operator->unary_operator, assignee, is_branch_ending);
-				} else {
-					//We really just have an "inc" instruction here
-					return emit_dec_code(basic_block, assignee, is_branch_ending);
-				}
-			//Dereferencing here. If we're on the lefthand side of an equation,
-			//we need to emit a temp var
-			} else if (unary_operator->unary_operator == STAR){
-				//Get the dereferenced variable
-				three_addr_var_t* dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expr_parent->inferred_type);
-
-				//If we're on the right hand side, we need to have a temp assignment
-				if(side == SIDE_TYPE_RIGHT){
-					//Emit the temp assignment
-					instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
-
-					//Add it in
-					add_statement(basic_block, temp_assignment);
-
-					//Return the assignee of this
-					return temp_assignment->assignee;
-
-				//Otherwise just give back what we had
-				} else {
-					return dereferenced;
-				}
-
-			} else if (unary_operator->unary_operator == B_NOT){
-				//Bitwise not -- this does need to be assigned from
-				return emit_bitwise_not_expr_code(basic_block, assignee, use_temp, is_branch_ending);
-
-			/**
-			 * Uses strategy of:
-			 * 	test rdx, rdx
-			 * 	sete rdx
-			 * 	movzbl %al, %rdx
-			 * for implementation
-			 */
-			} else if(unary_operator->unary_operator == L_NOT){
-				return emit_logical_neg_stmt_code(basic_block, assignee, is_branch_ending);
-
-			/**
-			 * x = -a;
-			 * t <- a;
-			 * negl t;
-			 * x <- t;
-			 *
-			 * Uses strategy of: negl rdx
-			 */
-			} else if(unary_operator->unary_operator == MINUS){
-				//We'll need to assign to a temp here, these are
-				//only ever on the RHS
-				instruction_t* assnment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-
-				//Add this into the block
-				add_statement(basic_block, assnment);
-
-				//We will emit the negation code here
-				return emit_neg_stmt_code(basic_block, assnment->assignee, use_temp, is_branch_ending);
-
-			/**
-			 * Address operator
-			 */
-			} else if (unary_operator->unary_operator == SINGLE_AND){
-				//We'll need to assign to a temp here, these are
-				//only ever on the RHS
-				instruction_t* assnment = emit_memory_address_assignment(emit_temp_var(unary_expr_parent->inferred_type), assignee);
-				assnment->is_branch_ending = is_branch_ending;
-
-				//We now need to flag that the assignee here absolutely must be spilled by the register allocator
-				assignee->linked_var->must_be_spilled = TRUE;
-
-				//Add this into the block
-				add_statement(basic_block, assnment);
-
-				return assnment->assignee;
-			}
-
-			//FOR NOW ONLY
-			return assignee;
-
-	
+			return emit_unary_operation_code(basic_block, unary_expr_parent, use_temp, side, is_branch_ending);
+				
 		//By defualt, emit a primary expression
 		default:
 			return emit_primary_expr_code(basic_block, first_child, use_temp, side, is_branch_ending);
