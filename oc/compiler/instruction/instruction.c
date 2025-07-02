@@ -2617,8 +2617,9 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			if(instruction->source_register != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->source_register, mode);
+				fprintf(fl, " */");
 			}
-			fprintf(fl, " */\n");
+			fprintf(fl, "\n");
 			break;
 		case NOP:
 			fprintf(fl, "nop\n");

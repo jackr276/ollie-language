@@ -1,0 +1,19 @@
+/**
+* Author: Jack Robbins
+* This file will test the very niche case where we do *not* need a movzx instruction
+* to cast up to a u64
+*/
+
+fn test() -> u64 {
+	let mut y:u64 := 32;
+	let mut x:i32 := 3;
+
+	y := y + x;
+	ret y;
+}
+
+
+fn main() -> i32 {
+	@test();
+	ret 0;
+}
