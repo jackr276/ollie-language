@@ -510,11 +510,6 @@ struct instruction_t{
 };
 
 /**
- * Handle a converting move instruction, if it is necessary
- */
-three_addr_var_t* handle_converting_move(void* block, generic_type_t* target_type, three_addr_var_t* original_var);
-
-/**
  * Insert an instruction in a block before the given instruction
  */
 void insert_instruction_before_given(instruction_t* insertee, instruction_t* given);
