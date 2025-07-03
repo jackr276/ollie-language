@@ -3134,8 +3134,9 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Let's now populate it with values
+	//Define the class
 	stmt->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+	//Let's now populate it with values
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	//What function are we in
