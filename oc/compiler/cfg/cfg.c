@@ -326,7 +326,7 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	fprintf(stderr, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[parse_message.message], parse_message.info);
+	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[parse_message.message], parse_message.info);
 }
 
 

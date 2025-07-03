@@ -20,7 +20,7 @@
  * defined and not used
  */
 static void print_warning(char* info, u_int16_t line_number){
-	fprintf(stderr, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info);
+	fprintf(stdout, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info);
 }
 
 
