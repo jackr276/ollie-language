@@ -300,8 +300,6 @@ typedef enum{
 	THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT,
 	//Regular two address assignment
 	THREE_ADDR_CODE_ASSN_STMT,
-	//A converting assignment statement
-	THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT,
 	//Assigning a constant to a variable
 	THREE_ADDR_CODE_ASSN_CONST_STMT,
 	//A return statement
@@ -678,12 +676,6 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
  * Emit a statement using two vars and a constant
  */
 instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2); 
-
-/**
- * Emit a converting move statement. This is basically an assignee, except for the fact that we're explicitly marking that
- * there will be a conversion(either sign extend or zero extend) that will take place here
- */
-instruction_t* emit_converting_move_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2

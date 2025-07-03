@@ -1337,13 +1337,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		fprintf(fl, " <- ");
 		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 		fprintf(fl, "\n");
-	//Emit a converting assignment statement that is used when we have type mismatches
-	} else if(stmt->CLASS == THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT){
-		//We'll print out the left and right ones here
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <-CONVERTING-- ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
 	//Assigning a memory address to a variable
 	} else if (stmt->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
 		//We'll print out the left and right ones here
@@ -3103,25 +3096,6 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 	//What function are we in
 	stmt->function = current_function;
 	//Give back the newly allocated statement
-	return stmt;
-}
-
-
-/**
- * Emit a converting move statement. This is basically an assignee, except for the fact that we're explicitly marking that
- * there will be a conversion(either sign extend or zero extend) that will take place here
- */
-instruction_t* emit_converting_move_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's now populate it with values
-	stmt->CLASS = THREE_ADDR_CODE_CONVERTING_ASSIGNMENT_STMT;
-	stmt->assignee = assignee;
-	stmt->op1 = op1;
-	//What function are we in
-	stmt->function = current_function;
-	//And that's it, we'll just leave our now
 	return stmt;
 }
 
