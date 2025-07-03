@@ -5484,69 +5484,84 @@ static basic_block_t* visit_let_statement(values_package_t* values, variable_sco
 static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	//A prog node can decay into a function definition, a let statement or otherwise
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
+	//Generic block holder
+	basic_block_t* block;
+	//The values that we have to pack
+	values_package_t values;
 
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
-		//Process a function statement
-		if(ast_cursor->CLASS == AST_NODE_CLASS_FUNC_DEF){
-			//Visit the function definition
-			basic_block_t* function_block = visit_function_definition(ast_cursor);
+		//Switch based on the class of cursor that we have here
+		switch(ast_cursor->CLASS){
+			//We can see a function definition. In this case, we'll
+			//allow the helper to do it
+			case AST_NODE_CLASS_FUNC_DEF:
+				//Visit the function definition
+				block = visit_function_definition(ast_cursor);
 			
-			//If this failed, we're out
-			if(function_block->block_id == -1){
-				return FALSE;
-			}
+				//If this failed, we're out
+				if(block->block_id == -1){
+					return FALSE;
+				}
 
-			//Otherwise we'll add him to the functions dynamic array
-			dynamic_array_add(cfg->function_blocks, function_block);
-			
-			//And we're good to move along
+				//Otherwise we'll add him to the functions dynamic array
+				dynamic_array_add(cfg->function_blocks, block);
 
-		//Process a let statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
-			//Package the values up
-			values_package_t values = pack_values(ast_cursor, //Initial Node
-											 	NULL, //Loop statement start
-											 	NULL, //Exit block of loop
-											 	NULL); //For loop update block
+				//All good to move along
+				break;
 
-			//If the cfg's global block is empty, we'll add it in here
-			if(cfg->global_variables == NULL){
-				cfg->global_variables = basic_block_alloc(1);
-				//Mark this as true
-				cfg->global_variables->is_global_var_block = TRUE;
-			}
+			//We can also see a let statement
+			case AST_NODE_CLASS_LET_STMT:
+				//Package the values up
+				values = pack_values(ast_cursor, //Initial Node
+													NULL, //Loop statement start
+													NULL, //Exit block of loop
+													NULL); //For loop update block
 
-			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_GLOBAL, FALSE);
+				//If the cfg's global block is empty, we'll add it in here
+				if(cfg->global_variables == NULL){
+					cfg->global_variables = basic_block_alloc(1);
+					//Mark this as true
+					cfg->global_variables->is_global_var_block = TRUE;
+				}
 
-		//Visit a declaration statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
-			//Package the values up
-			values_package_t values = pack_values(ast_cursor, //Initial Node
-											 	NULL, //Loop statement start
-											 	NULL, //Exit block of loop
-											 	NULL); //For loop update block
-			
-			//If the cfg's global block is empty, we'll add it in here
-			if(cfg->global_variables == NULL){
-				cfg->global_variables = basic_block_alloc(1);
-				//Mark this as true
-				cfg->global_variables->is_global_var_block = TRUE;
-			}
-
-			//We'll visit the block here
-			basic_block_t* decl_block = visit_declaration_statement(&values, VARIABLE_SCOPE_GLOBAL);
-
-		//Some weird error here
-		} else {
-			print_parse_message(PARSE_ERROR, "Unrecognizable node found as child to prog node", ast_cursor->line_number);
-			(*num_errors_ref)++;
-			//Return this because we failed
-			return FALSE;
-		}
+				//We'll visit the block here
+				basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_GLOBAL, FALSE);
+				
+				//And we'll move along here
+				break;
 		
-		//Advance to the next child
+			//Finally, we could see a declaration
+			case AST_NODE_CLASS_DECL_STMT:
+				//Package the values up
+				values = pack_values(ast_cursor, //Initial Node
+													NULL, //Loop statement start
+													NULL, //Exit block of loop
+													NULL); //For loop update block
+				
+				//If the cfg's global block is empty, we'll add it in here
+				if(cfg->global_variables == NULL){
+					cfg->global_variables = basic_block_alloc(1);
+					//Mark this as true
+					cfg->global_variables->is_global_var_block = TRUE;
+				}
+
+				//We'll visit the block here
+				basic_block_t* decl_block = visit_declaration_statement(&values, VARIABLE_SCOPE_GLOBAL);
+				
+				//And we're done here
+				break;
+
+			//Some very weird error if we hit here
+			default:
+				print_parse_message(PARSE_ERROR, "Unrecognizable node found as child to prog node", ast_cursor->line_number);
+				(*num_errors_ref)++;
+				//Return this because we failed
+				return FALSE;
+		}
+
+
+		//We now advance to the next sibling
 		ast_cursor = ast_cursor->next_sibling;
 	}
 
