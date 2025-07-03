@@ -85,8 +85,10 @@ u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 
 	//Arrays and pointers are fine
 	switch(type->type_class){
+		//These are all essentially pointers
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_CONSTRUCT:
 			return TRUE;
 
 		//Some more exploration needed here
