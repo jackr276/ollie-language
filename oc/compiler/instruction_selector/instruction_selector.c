@@ -928,9 +928,9 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 	three_addr_var_t* address_calc_reg2 = lea_statement->op2;
 
 	//If this is the case, we need a converting move
-	if(is_type_address_calculation_compatible(offset_calc->op1->type) == FALSE){
+	if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 		//Emit the conversion
-		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), offset_calc->op1);
+		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg1);
 		//Insert it before the memory access
 		insert_instruction_before_given(conversion, memory_access);
 
@@ -939,9 +939,9 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 	}
 
 	//If this is the case, we need a converting move
-	if(is_type_address_calculation_compatible(lea_statement->op2->type) == FALSE){
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
 		//Emit the conversion
-		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), lea_statement->op2);
+		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg2);
 
 		//Insert it before the memory access
 		insert_instruction_before_given(conversion, memory_access);
@@ -974,6 +974,10 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
  * Handle a memory to register move type instruction selection with an address calculation
  */
 static void handle_two_instruction_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+	//Temporary storage, declaring here
+	three_addr_var_t* address_calc_reg1;
+	three_addr_var_t* address_calc_reg2;
+
 	//Select the variable size based on the assignee
 	variable_size_t size = select_variable_size(memory_access->assignee);
 
@@ -1012,16 +1016,59 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 		//So we know that the destination will be t26, the destination will remain unchanged
 		//We'll have a register source and an offset
 		memory_access->offset = address_calculation->op1_const;
-		memory_access->address_calc_reg1 = address_calculation->op1;
+
+		//Grab this for analysis
+		address_calc_reg1 = address_calculation->op1;
+
+		//Do we need any conversion for reg1?
+		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
+			//Emit the conversion
+			instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg1);
+			//Insert it before the memory access
+			insert_instruction_before_given(conversion, memory_access);
+
+			//Reassign what reg1 is
+			address_calc_reg1 = conversion->destination_register;
+		}
+
+		//Once we're done with any needed conversions, we'll add it in here
+		memory_access->address_calc_reg1 = address_calc_reg1;
+
 		//This is offset only mode
 		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		
 	//Otherwise, we just have a regular bin op statement
 	} else {
+		//Extract these two for analysis
+		address_calc_reg1 = address_calculation->op1;
+		address_calc_reg2 = address_calculation->op2;
+
+		//Do we need any conversion for reg1?
+		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
+			//Emit the conversion
+			instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg1);
+			//Insert it before the memory access
+			insert_instruction_before_given(conversion, memory_access);
+
+			//Reassign what reg1 is
+			address_calc_reg1 = conversion->destination_register;
+		}
+
+		//Do we need any conversion for reg2?
+		if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+			//Emit the conversion
+			instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg2);
+			//Insert it before the memory access
+			insert_instruction_before_given(conversion, memory_access);
+
+			//Reassign what reg2 is
+			address_calc_reg2 = conversion->destination_register;
+		}
+
  		//So we know that the destination will be t26, the destination will remain unchanged
 		//We'll have a register source and an offset
-		memory_access->address_calc_reg1 = address_calculation->op1;
-		memory_access->address_calc_reg2 = address_calculation->op2;
+		memory_access->address_calc_reg1 = address_calc_reg1;
+		memory_access->address_calc_reg2 = address_calc_reg2;
 
 		//This is offset only mode
 		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
@@ -1120,6 +1167,10 @@ static void handle_three_instruction_address_calc_from_memory_move(instruction_t
  * mov(w/l/q) 8(arr_0, t25), t29
  */
 static void handle_three_instruction_registers_and_offset_only_from_memory_move(instruction_t* additive_statement, instruction_t* offset_calc, instruction_t* memory_access){
+	//Need these for analysis, declaring here
+	three_addr_var_t* address_calc_reg1;
+	three_addr_var_t* address_calc_reg2;
+
 	//Let's first decide what the appropriate move instruction would be
 	//We'll first select the variable size based on the destination
 	variable_size_t size = select_variable_size(memory_access->assignee);
@@ -1144,15 +1195,42 @@ static void handle_three_instruction_registers_and_offset_only_from_memory_move(
 			break;
 	}
 
-	//Now we can put in the address calculation type
-	memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+	//Extract these two values out for analysis
+	address_calc_reg1 = additive_statement->op1;
+	address_calc_reg2 = additive_statement->op2;
 
-	//We'll get the first and second register from the additive statement
-	memory_access->address_calc_reg1 = additive_statement->op1;
-	memory_access->address_calc_reg2 = additive_statement->op2;
+	//If this is the case, we need a converting move
+	if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
+		//Emit the conversion
+		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg1);
+		//Insert it before the memory access
+		insert_instruction_before_given(conversion, memory_access);
+
+		//Reassign what reg1 is
+		address_calc_reg1 = conversion->destination_register;
+	}
+
+	//If this is the case, we need a converting move
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+		//Emit the conversion
+		instruction_t* conversion =  emit_converting_move_instruction_direct(emit_temp_var(u64), address_calc_reg2);
+
+		//Insert it before the memory access
+		insert_instruction_before_given(conversion, memory_access);
+
+		//Reassign what reg2 is
+		address_calc_reg2 = conversion->destination_register;
+	}
+
+	//Now that we've done any needed conversions, we can reassign
+	memory_access->address_calc_reg1 = address_calc_reg1;
+	memory_access->address_calc_reg2 = address_calc_reg2;
 
 	//We'll get the offset from offset_calc
 	memory_access->offset = offset_calc->op1_const;
+
+	//Now we can put in the address calculation type
+	memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 	//And finally, we'll set the destination appropriately
 	memory_access->destination_register = memory_access->assignee;
