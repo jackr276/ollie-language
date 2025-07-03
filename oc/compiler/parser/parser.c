@@ -5685,45 +5685,6 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 
 /**
- * A branch statement is an entirely abstract rule that multiplexes for us based on what it sees.
- * Like all rules, it returns a reference to the root node that it creates, but that root node will
- * not be created here
- *
- * If we get here, it will have been because the caller has seen a jump, continue, break or return statement.
- * They will have pushed that token back for us to multiplex on here
- *
- * BNF Rule: <branch-statement> ::= <jump-statement> 
- * 								  | <continue-statement> 
- * 								  | <break-statement> 
- * 								  | <return-statement>
- */
-static generic_ast_node_t* branch_statement(FILE* fl){
-	//The lookahead token
-	Lexer_item lookahead;
-
-	//Let's see what we have
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//We'll now switch based on which token we have
-	switch (lookahead.tok) {
-		case JUMP:
-			return jump_statement(fl);
-		case RETURN:
-			return return_statement(fl);
-		case BREAK:
-			return break_statement(fl);
-		case CONTINUE:
-			return continue_statement(fl);
-		//This should never occur
-		default:
-			//For developer, something very wrong if this occurs
-			print_parse_message(PARSE_ERROR, "Fatal internal compiler error in branch statement",  parser_line_num);
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-}
-
-
-/**
  * A switch statement allows us to to see one or more labels defined by a certain expression. It allows
  * for the use of labeled statements followed by statements in general. We will do more static analysis
  * on this later. Like all rules in the system, this function returns the root node that it creates
@@ -6496,12 +6457,12 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 
 		//Jump/return
 		case JUMP:
-		case RETURN:
-			//The branch rule needs these, so we'll put them back
-			push_back_token(lookahead);
+			//Give back a jump statement
+			return jump_statement(fl);
 
-			//return whatever this gives us
-			return branch_statement(fl);
+		//Give back a return statement
+		case RETURN:
+			return return_statement(fl);
 
 		//Variable declaration & assign
 		case LET:
@@ -6987,15 +6948,21 @@ static generic_ast_node_t* statement(FILE* fl){
 			//This rule relies on if already being consumed, so we won't put it back
 			return if_statement(fl);
 
-		//Branching statement here
+		//Handle a direct jump statement
 		case JUMP:
+			return jump_statement(fl);
+
+		//Handle a return statement
 		case RETURN:
+			return return_statement(fl);
+
+		//Handle a break statement
 		case BREAK:
+			return break_statement(fl);
+
+		//And a continue statement
 		case CONTINUE:
-			//The branch rule needs these, so we'll put them back
-			push_back_token(lookahead);
-			//return whatever this gives us
-			return branch_statement(fl);
+			return continue_statement(fl);
 
 		//Inline assembly statement
 		case ASM:
