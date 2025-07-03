@@ -1108,15 +1108,24 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 			fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
 		} else
 
-		//Print this out based on the size
-		if(variable->associated_live_range->size == QUAD_WORD){
-			print_64_bit_register_name(fl, variable->associated_live_range->reg);
-		} else if(variable->associated_live_range->size == DOUBLE_WORD){
-			print_32_bit_register_name(fl, variable->associated_live_range->reg);
-		} else if(variable->associated_live_range->size == WORD){
-			print_16_bit_register_name(fl, variable->associated_live_range->reg);
-		} else if (variable->associated_live_range->size == BYTE){
-			print_8_bit_register_name(fl, variable->associated_live_range->reg);
+		//Switch based on the variable's size to print out the register
+		switch(variable->variable_size){
+			case QUAD_WORD:
+				print_64_bit_register_name(fl, variable->associated_live_range->reg);
+				break;
+			case DOUBLE_WORD:
+				print_32_bit_register_name(fl, variable->associated_live_range->reg);
+				break;
+			case WORD:
+				print_16_bit_register_name(fl, variable->associated_live_range->reg);
+				break;
+			case BYTE:
+				print_8_bit_register_name(fl, variable->associated_live_range->reg);
+				break;
+			default:
+				print_64_bit_register_name(fl, variable->associated_live_range->reg);
+				printf("DEFAULTED\n");
+				break;
 		}
 
 	//Otherwise if it's a temp
