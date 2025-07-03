@@ -1763,12 +1763,21 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function){
 			for(u_int16_t i = 0; i < saving_array->current_index; i++){
 				//Grab the live-range out
 				live_range_t* lr = dynamic_array_get_at(saving_array, i);
-				
-				//Save this LR onto the stack for later
-				push(stack, lr);
+
+				//Create the current live range here
+				live_range_t* range = live_range_alloc(function, QUAD_WORD);
+
+				//Duplicate the register value here
+				range->reg = lr->reg;
+			
+				//Now we'll need a variable to carry this live range in it
+				three_addr_var_t* var = emit_temp_var_from_live_range(range);
 
 				//Emit a push instruction with the live range as the source
-				instruction_t* push_inst = emit_push_instruction(dynamic_array_get_at(lr->variables, 0));
+				instruction_t* push_inst = emit_push_instruction(var);
+
+				//We can now push this new lr onto the stack
+				push(stack, range);
 
 				//We always put this push instruction above the function call, in between it and whatever else was last there
 				before_push->next_statement = push_inst;
