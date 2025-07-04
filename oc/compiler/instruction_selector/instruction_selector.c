@@ -1600,7 +1600,7 @@ static void handle_addition_instruction(instruction_t* instruction){
  * 
  * CASE 2:
  * t25 <- t15 + t17
- * leal t25, (t15, t17)
+ * leal (t15, t17), t25
  */
 static void handle_addition_instruction_lea_modification(instruction_t* instruction){
 	//Determines what instruction to use
@@ -1621,7 +1621,22 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 	if(instruction->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
 		//2 registers in this case
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-		instruction->address_calc_reg2 = instruction->op2;
+
+		//Extract for analysis
+		three_addr_var_t* addresss_calc_reg2 = instruction->op2;
+
+		//Does this adhere to the same type as reg1? It must, so if it does not we will force it
+		//to 
+		if(is_type_conversion_needed(instruction->address_calc_reg1->type, addresss_calc_reg2->type) == TRUE){
+			//printf("Converting to type is: %s\n", instruction->address_calc_reg1->type->type_name);
+			//printf("Converting from type is: %s\n", addresss_calc_reg2->type->type_name);
+
+			//Let the helper deal with it
+			addresss_calc_reg2 = handle_converting_move_operation(instruction, addresss_calc_reg2, instruction->address_calc_reg1->type);
+		}
+
+		//Whether or not a type conversion happened, we can assign this here
+		instruction->address_calc_reg2 = addresss_calc_reg2;
 
 	//Otherise it's just an offset(bin_op_with_const)
 	} else {
@@ -2157,6 +2172,10 @@ static void handle_address_assignment_instruction(instruction_t* instruction, ty
  * lea_multiplicator: a multiple of 2 that we're multiplying op2 by
  */
 static void handle_lea_statement(instruction_t* instruction){
+	//Store address calc reg's 1 and 2
+	three_addr_var_t* address_calc_reg1 = instruction->op1;
+	three_addr_var_t* address_calc_reg2 = instruction->op2;
+	
 	//Select the size of our variable
 	variable_size_t size = select_variable_size(instruction->assignee);
 
@@ -2175,6 +2194,13 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 	}
 
+	//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+	//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+	//must adhere to this one's type
+	if(is_type_conversion_needed(address_calc_reg1->type, address_calc_reg2->type)){
+		address_calc_reg2 = handle_converting_move_operation(instruction, address_calc_reg2, address_calc_reg1->type);
+	}
+
 	//We already know what mode we'll need to use here
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
 
@@ -2182,8 +2208,8 @@ static void handle_lea_statement(instruction_t* instruction){
 	instruction->destination_register = instruction->assignee;
 
 	//Add op1 and op2
-	instruction->address_calc_reg1 = instruction->op1;
-	instruction->address_calc_reg2 = instruction->op2;
+	instruction->address_calc_reg1 = address_calc_reg1;
+	instruction->address_calc_reg2 = address_calc_reg2;
 
 	//And the lea multiplicator is already in place..
 }
