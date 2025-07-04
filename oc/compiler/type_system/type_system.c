@@ -18,6 +18,56 @@
 
 
 /**
+ * Is a type an unsigned 64 bit type? This is used for type conversions in 
+ * the instruction selector
+ */
+u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
+	//Switch based on the class
+	switch(type->type_class){
+		//These are memory addresses - so yes
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_CONSTRUCT:
+			return TRUE;
+
+		//Let's see what we have here
+		case TYPE_CLASS_BASIC:
+			//If it's a u64 then yes
+			if(type->basic_type->basic_type == U_INT64){
+				return TRUE;
+			}
+
+			return FALSE; 
+
+		//By default fail out
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given type a 32 bit integer type?
+ */
+u_int8_t is_type_32_bit_int(generic_type_t* type){
+	//If it's not a basic type we're done
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return FALSE;
+	}
+
+	//Otherwise it is a basic type
+	switch(type->basic_type->basic_type){
+		//Our only real cases here
+		case U_INT32:
+		case S_INT32:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Get the referenced type regardless of how many indirection levels there are
  */
 generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t indirection_level){

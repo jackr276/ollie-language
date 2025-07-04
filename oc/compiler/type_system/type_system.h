@@ -208,6 +208,17 @@ struct aliased_type_t{
 
 
 /**
+ * Is a type an unsigned 64 bit type? This is used for type conversions in 
+ * the instruction selector
+ */
+u_int8_t is_type_unsigned_64_bit(generic_type_t* type);
+
+/**
+ * Is the given type a 32 bit integer type?
+ */
+u_int8_t is_type_32_bit_int(generic_type_t* type);
+
+/**
  * Get the referenced type regardless of how many indirection levels there are
  */
 generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t indirection_level);

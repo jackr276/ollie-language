@@ -133,11 +133,7 @@ static three_addr_var_t* handle_converting_move_operation(instruction_t* after_i
 	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
 	//zero pad when 32 bit moves happen
-	if(desired_type->type_class == TYPE_CLASS_BASIC 
-		&& desired_type->basic_type->basic_type == U_INT64
-		&& source_type->type_class == TYPE_CLASS_BASIC 
-		&& (source_type->basic_type->basic_type == U_INT32 || source_type->basic_type->basic_type == S_INT32)){
-
+	if(is_type_unsigned_64_bit(desired_type) == TRUE && is_type_32_bit_int(source->type) == TRUE){
 		//Emit a variable copy of the source
 		assignee = emit_var_copy(source);
 
