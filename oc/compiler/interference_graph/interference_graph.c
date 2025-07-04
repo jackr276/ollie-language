@@ -74,7 +74,7 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 /**
  * Redo the adjacency matrix after a change has been made(usually coalescing)
  */
-interference_graph_t* update_interference_graph(interference_graph_t* graph, dynamic_array_t* live_ranges){
+interference_graph_t* update_interference_graph(interference_graph_t* graph){
 	
 	//Give the pointer back
 	return graph;

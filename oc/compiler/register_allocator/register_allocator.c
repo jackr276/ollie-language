@@ -1600,7 +1600,7 @@ static u_int8_t allocate_register(live_range_t* live_range){
  *
  * Return TRUE if the graph was colorable, FALSE if not
  */
-static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
+static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges){
 	//We first need to construct the priority version of the live range arrays
 	//Create a new one
 	dynamic_array_t* priority_live_ranges = dynamic_array_alloc();
@@ -1659,7 +1659,7 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
 	//Let the helper function color everything. If the graph was not colorable, then
 	//we need to redo everything after a spill
-	u_int8_t colorable = graph_color_and_allocate(cfg, live_ranges, graph);
+	u_int8_t colorable = graph_color_and_allocate(cfg, live_ranges);
 
 	//So long as this wasn't colorable, we need to keep doing this
 	
@@ -1676,7 +1676,7 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 		graph = construct_interference_graph(cfg, live_ranges);
 
 		//Now we retry
-		colorable = graph_color_and_allocate(cfg, live_ranges, graph);
+		colorable = graph_color_and_allocate(cfg, live_ranges);
 	}
 }
 

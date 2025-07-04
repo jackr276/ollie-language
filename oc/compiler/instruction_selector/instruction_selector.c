@@ -120,6 +120,48 @@ static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* 
 
 
 /**
+ * Handle a converting move operation and return the variable that results from it. This function will also handle the implicit conversion
+ * between 32 bit and unsigned 64 bit integers
+ */
+static three_addr_var_t* handle_converting_move_operation(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* desired_type){
+	//A generic holder for our assignee
+	three_addr_var_t* assignee;
+
+	//Extract the source type
+	generic_type_t* source_type = source->type;
+
+	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	//zero pad when 32 bit moves happen
+	if(desired_type->type_class == TYPE_CLASS_BASIC 
+		&& desired_type->basic_type->basic_type == U_INT64
+		&& source_type->type_class == TYPE_CLASS_BASIC 
+		&& (source_type->basic_type->basic_type == U_INT32 || source_type->basic_type->basic_type == S_INT32)){
+
+		//Emit a variable copy of the source
+		assignee = emit_var_copy(source);
+
+		//Reassign it's type to be the desired type
+		assignee->type = desired_type;
+
+	//Otherwise we have a normal case here
+	} else {
+		//Emit the assignment instruction
+		instruction_t* instruction = emit_converting_move_instruction_direct(emit_temp_var(desired_type), source);
+
+		//Now we'll insert it before the "after instruction"
+		insert_instruction_before_given(instruction, after_instruction);
+
+		//Reassign the destination register
+		assignee = instruction->destination_register;
+	}
+
+	//Give back the assignee, in whatever form it may be
+	return assignee;
+}
+
+
+/**
  * Simple utility for us to print out an instruction window in its three address code
  * (before instruction selection) format
  */

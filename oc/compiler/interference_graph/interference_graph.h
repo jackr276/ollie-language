@@ -43,7 +43,7 @@ interference_graph_t* construct_interference_graph_from_adjacency_lists(dynamic_
 /**
  * Redo the adjacency matrix after a change has been made(usually coalescing)
  */
-interference_graph_t* update_interference_graph(interference_graph_t* graph, dynamic_array_t* live_ranges);
+interference_graph_t* update_interference_graph(interference_graph_t* graph);
 
 /**
  * Mark that live ranges a and b do not interfere
