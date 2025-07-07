@@ -20,6 +20,9 @@
 #include <sys/types.h>
 #include "../stack/lexstack.h"
 
+//Total number of keywords
+#define KEYWORD_COUNT 50
+
 //We will use this to keep track of what the current lexer state is
 typedef enum {
 	IN_START,
@@ -41,6 +44,22 @@ int16_t token_char_count = 0;
 
 //Our lexer stack
 static lex_stack_t* pushed_back_tokens = NULL;
+
+//Token array, we will index using their enum values
+const Token tok_array[] = {IF, THEN, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+					STATIC, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
+					U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM, ON,
+					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
+					CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE};
+
+//Direct one to one mapping
+const char* keyword_array[] = {"if", "then", "else", "do", "while", "for", "fn", "ret", "jump",
+						 "require", "#replace", "static", "external", "u8", "i8", "u16",
+						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
+						  "char", "define", "enum", "on", "register", "constant",
+						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
+						  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
+						  "with", "lib", "idle"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -72,28 +91,12 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 	//Assign our line number;
 	lex_item.line_num = line_number;
 
-	//Token array, we will index using their enum values
-	const Token tok_arr[] = {IF, THEN, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
-						STATIC, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
-						U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM, ON,
-						REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-						CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE};
-
-	//Direct one to one mapping
-	char* keyword_arr[] = {"if", "then", "else", "do", "while", "for", "fn", "ret", "jump",
-							 "require", "#replace", "static", "external", "u8", "i8", "u16",
-							 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
-							  "char", "define", "enum", "on", "register", "constant",
-							  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
-							  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
-							  "with", "lib", "idle"};
-
 	//Let's see if we have a keyword here
-	for(u_int8_t i = 0; i < 50; i++){
-		if(strcmp(keyword_arr[i], lexeme) == 0){
+	for(u_int8_t i = 0; i < KEYWORD_COUNT; i++){
+		if(strcmp(keyword_array[i], lexeme) == 0){
 			//We can get out of here
-			lex_item.tok = tok_arr[i];
-			strcpy(lex_item.lexeme, keyword_arr[i]);
+			lex_item.tok = tok_array[i];
+			strcpy(lex_item.lexeme, keyword_array[i]);
 			lex_item.char_count = token_char_count;
 			return lex_item;
 		}
@@ -117,9 +120,14 @@ static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
 	strcpy(lex_item.lexeme, lexeme);
 	lex_item.char_count = token_char_count;
 
+	//Give back the lexer item
 	return lex_item;
 }
 
+
+/**
+ * Grab the next char in the stream
+ */
 static char get_next_char(FILE* fl){
 	char ch = fgetc(fl);
 	token_char_count++;
