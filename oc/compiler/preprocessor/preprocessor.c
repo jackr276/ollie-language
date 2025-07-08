@@ -169,7 +169,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
 
 			//Copy the lexeme over
-			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
+			strncpy(added_filename, lookahead.lexeme, strlen(lookahead.lexeme) + 1);
 
 			//One last thing that we need to see -- closing semicolon
 			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -188,7 +188,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 			char* added_filename = calloc(FILE_NAME_LENGTH + 1, sizeof(char));
 
 			//Copy the lexeme over
-			strncpy(added_filename, lookahead.lexeme, lookahead.char_count + 1);
+			strncpy(added_filename, lookahead.lexeme, strlen(lookahead.lexeme) + 1);
 
 			//One last thing that we need to see -- closing semicolon
 			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

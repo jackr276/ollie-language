@@ -6738,7 +6738,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	assembly_ast_node_t->line_number = parser_line_num;
 
 	//For quick reference, grab out the assembly node in here
-	asm_inline_stmt_ast_node_t* asm_node_ref = (asm_inline_stmt_ast_node_t*)(assembly_ast_node_t->node);
+	asm_inline_stmt_ast_node_t* asm_node_ref = assembly_ast_node_t->node;
 
 	//We keep going here as long as we don't see the closing curly brace
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6760,7 +6760,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 
 		//Otherwise it worked, so we'll need to add the statement in here
 		//Let's check -- we may be overrunning our allocate bounds
-		if(asm_node_ref->length + lookahead.char_count + 1 >= asm_node_ref->max_length){
+		if(asm_node_ref->length + strlen(lookahead.lexeme) + 1 >= asm_node_ref->max_length){
 			//We'll realloc here and update the max length by doubling it
 			asm_node_ref->max_length *= 2;
 
@@ -6775,7 +6775,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		strcat(asm_node_ref->asm_line_statements, "\n");
 
 		//Update the length too
-		asm_node_ref->length += lookahead.char_count + 1;
+		asm_node_ref->length += strlen(lookahead.lexeme) + 1;
 
 		//Now we'll refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

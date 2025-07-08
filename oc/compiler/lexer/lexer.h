@@ -141,8 +141,6 @@ struct Lexer_item{
 	char lexeme[MAX_TOKEN_LENGTH];
 	//The line number of the source that we found it on
 	u_int16_t line_num;
-	//The number of characters in this token
-	int16_t char_count;
 	//The token associated with this item
 	Token tok;
 };
