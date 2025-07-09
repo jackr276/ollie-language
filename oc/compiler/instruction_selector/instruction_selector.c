@@ -1865,26 +1865,26 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 static void handle_division_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* division_instruction = window->instruction1;
-	//Also have this as a reference
-	instruction_t* after_division = window->instruction2;
-	//And we'll want this for reference too
-	basic_block_t* block = division_instruction->block_contained_in;
 
-	//We first need to perform a move of the dividence into rax
-	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+	//A temp holder for the final second source variable
+	three_addr_var_t* source;
 
-	//Let's now attach this where division was
-	if(division_instruction->previous_statement != block->leader_statement){
-		//This effectively deletes the old division instruction
-		division_instruction->previous_statement->next_statement = move_to_rax;
-		move_to_rax->previous_statement = division_instruction->previous_statement;
+	//If we need to convert, we'll do that here
+	if(is_type_conversion_needed(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		source = handle_converting_move_operation(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
 	} else {
-		//Otherwise, this is the leader statement of its block
-		block->leader_statement = move_to_rax;
-	}
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
 
-	//This may become the cl instruction
-	instruction_t* current_end = move_to_rax;
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, division_instruction);
+
+		//This is just the destination register here
+		source = move_to_rax->destination_register;
+	}
 
 	//Let's determine signedness
 	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
@@ -1892,43 +1892,29 @@ static void handle_division_instruction(instruction_window_t* window){
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
 	if(is_signed == TRUE){
 		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_conversion_instruction(move_to_rax->destination_register);
+		instruction_t* cl_instruction = emit_conversion_instruction(source);
 
-		//Link it with our move statement
-		move_to_rax->next_statement = cl_instruction;
-		cl_instruction->previous_statement = move_to_rax;
-
-		//Keep this reference so we don't get tangled up
-		current_end = cl_instruction;
+		//Insert this before the given
+		insert_instruction_before_given(cl_instruction, division_instruction);
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(window->instruction1->op2, move_to_rax->destination_register, is_signed);
+	instruction_t* division = emit_div_instruction(window->instruction1->op2, source, is_signed);
+
+	//Insert this before the division instruction
+	insert_instruction_before_given(division, division_instruction);
 
 	//This is the assignee, we just don't see it
 	division->destination_register = emit_temp_var(division_instruction->assignee->type);
 
-	//Once it's been emitted, we link it in like all the rest
-	current_end->next_statement = division;
-	division->previous_statement = current_end;
-
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, division->destination_register);
 
-	//Tie it in here
-	division->next_statement = result_movement;
-	result_movement->previous_statement = division;
+	//Insert this before the original division instruction
+	insert_instruction_before_given(result_movement, division_instruction);
 
-	//And now we can tie it in to our overall statement
-	result_movement->next_statement = after_division;
-	
-	//Avoid any null pointer dereference here
-	if(after_division != NULL){
-		after_division->previous_statement = result_movement;
-	} else {
-		//This is the new exit statement
-		block->exit_statement = result_movement;
-	}
+	//Delete the division instruction
+	delete_statement(division_instruction);
 
 	//Reconstruct the window here
 	reconstruct_window(window, result_movement);
@@ -1956,27 +1942,26 @@ static void handle_division_instruction(instruction_window_t* window){
 static void handle_modulus_instruction(instruction_window_t* window){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
-	//Also have this as a reference
-	instruction_t* after_mod = window->instruction2;
-	//And we'll want this for reference too
-	basic_block_t* block = modulus_instruction->block_contained_in;
 
-	//We first need to perform a move of the dividence into rax
-	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+	//A temp holder for the final second source variable
+	three_addr_var_t* source;
 
-	//Let's now attach this where division was
-	if(modulus_instruction->previous_statement != block->leader_statement){
-		//This effectively deletes the old division instruction
-		modulus_instruction->previous_statement->next_statement = move_to_rax;
-		//Add to the end
-		move_to_rax->previous_statement = modulus_instruction->previous_statement;
+	//If we need to convert, we'll do that here
+	if(is_type_conversion_needed(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		source = handle_converting_move_operation(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+
+	//Otherwise this can be moved directly
 	} else {
-		//Otherwise, this is the leader statement of its block
-		block->leader_statement = move_to_rax;
-	}
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
 
-	//This may become the cl instruction
-	instruction_t* current_end = move_to_rax;
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, modulus_instruction);
+
+		//This is just the destination register here
+		source = move_to_rax->destination_register;
+	}
 
 	//Let's determine signedness
 	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
@@ -1984,42 +1969,28 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
 	if(is_signed == TRUE){
 		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_conversion_instruction(move_to_rax->destination_register);
+		instruction_t* cl_instruction = emit_conversion_instruction(source);
 
-		//Link it with our move statement
-		move_to_rax->next_statement = cl_instruction;
-		cl_instruction->previous_statement = move_to_rax;
-
-		//Keep this reference so we don't get tangled up
-		current_end = cl_instruction;
+		//Insert this before the mod instruction
+		insert_instruction_before_given(cl_instruction, modulus_instruction);
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_mod_instruction(window->instruction1->op2, move_to_rax->destination_register, is_signed);
+	instruction_t* division = emit_mod_instruction(window->instruction1->op2, source, is_signed);
 	//This is the assignee, we just don't see it
 	division->destination_register = emit_temp_var(modulus_instruction->assignee->type);
 
-	//Once it's been emitted, we link it in like all the rest
-	current_end->next_statement = division;
-	division->previous_statement = current_end;
+	//Insert this before the original modulus
+	insert_instruction_before_given(division, modulus_instruction);
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, division->destination_register);
 
-	//Tie it in here
-	division->next_statement = result_movement;
-	result_movement->previous_statement = division;
+	//Insert this after the original modulus
+	insert_instruction_after_given(result_movement, modulus_instruction);
 
-	//And now we can tie it in to our overall statement
-	result_movement->next_statement = after_mod;
-	
-	//Avoid any null pointer dereference here
-	if(after_mod != NULL){
-		after_mod->previous_statement = result_movement;
-	} else {
-		//This is the new exit statement
-		block->exit_statement = result_movement;
-	}
+	//Finally we'll delete the old modulus instruction, as we no longer need it
+	delete_statement(modulus_instruction);
 
 	//Reconstruct the window starting at the result movement
 	reconstruct_window(window, result_movement);
@@ -2417,7 +2388,7 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	//And grab the block out
 	basic_block_t* block = logical_or->block_contained_in;
 
-	//Let's first emit the or instructio
+	//Let's first emit the or instruction
 	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
 	//We'll need this type for our setne's
