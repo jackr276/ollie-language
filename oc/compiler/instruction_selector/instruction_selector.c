@@ -2302,7 +2302,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
 
 	//Finally we'll move the contents into t9
-	instruction_t* movzx_instruction = emit_movzx_instruction(logical_not->assignee, sete_inst->destination_register);
+	instruction_t* movzx_instruction = emit_movzx_instruction(sete_inst->destination_register, logical_not->assignee);
 	//Ensure that we set all these flags too
 	movzx_instruction->block_contained_in = logical_not->block_contained_in;
 	movzx_instruction->is_branch_ending = logical_not->is_branch_ending;
@@ -2358,7 +2358,7 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 
 	//Following that we'll need the final movzx instruction
-	instruction_t* movzx_instruction = emit_movzx_instruction(logical_or->assignee, setne_instruction->destination_register);
+	instruction_t* movzx_instruction = emit_movzx_instruction(setne_instruction->destination_register, logical_or->assignee);
 
 	//Select this one's size 
 	logical_or->assignee->variable_size = select_variable_size(logical_or->assignee);
@@ -2425,7 +2425,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
 
 	//The final thing that we need is a movzx
-	instruction_t* movzx_instruction = emit_movzx_instruction(logical_and->assignee, and_inst->destination_register);
+	instruction_t* movzx_instruction = emit_movzx_instruction(and_inst->destination_register, logical_and->assignee);
 
 	//Select this one's size 
 	logical_and->assignee->variable_size = select_variable_size(logical_and->assignee);
