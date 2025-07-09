@@ -1739,12 +1739,27 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//We'll need to know the variables size
 	variable_size_t size = select_variable_size(multiplication_instruction->assignee);
 
-	//We first need to move the first operand into RAX
-	instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
+	//A temp holder for the final second source variable
+	three_addr_var_t* source2;
 
-	//Insert the move to rax before the multiplication instruction
-	insert_instruction_before_given(move_to_rax, multiplication_instruction);
+	//If we need to convert, we'll do that here
+	if(is_type_conversion_needed(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
+		//Let the helper deal with it
+		source2 = handle_converting_move_operation(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
 
+	//Otherwise this can be moved directly
+	} else {
+		//We first need to move the first operand into RAX
+		instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
+
+		//Insert the move to rax before the multiplication instruction
+		insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+		//This is just the destination register here
+		source2 = move_to_rax->destination_register;
+	}
+
+	
 	//We determine the instruction that we need based on signedness and size
 	switch (size) {
 		case BYTE:
@@ -1764,7 +1779,8 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 	//This is the case where we have two source registers
 	multiplication_instruction->source_register = multiplication_instruction->op1;
-	multiplication_instruction->source_register2 = move_to_rax->op2;
+	//The other source register is in RAX
+	multiplication_instruction->source_register2 = source2;
 
 	//This is the assignee, we just don't see it
 	multiplication_instruction->destination_register = emit_temp_var(multiplication_instruction->assignee->type);

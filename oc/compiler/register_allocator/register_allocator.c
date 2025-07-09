@@ -909,6 +909,8 @@ static void pre_color(instruction_t* instruction){
 		case MOVL:
 		case MOVQ:
 		case MOVW:
+		case MOVSX:
+		case MOVZX:
 			//If we're moving into something preparing for division, this needs
 			//to be in RAX
 			if(instruction->next_statement != NULL){

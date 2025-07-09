@@ -688,6 +688,9 @@ instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_v
 	variable_size_t size = select_variable_size(destination);
 
 	switch (size) {
+		case BYTE:
+			instruction->instruction_type = MOVB;
+			break;
 		case WORD:
 			instruction->instruction_type = MOVW;
 			break;
