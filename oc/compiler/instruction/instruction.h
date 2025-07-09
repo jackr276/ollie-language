@@ -180,7 +180,6 @@ typedef enum{
 	SETA, //Set > unsigned
 	SETBE, //Set <= unsigned
 	SETB, //Set < unsigned
-	MOVZBL, //move if zero or below long word
 } instruction_type_t;
 
 

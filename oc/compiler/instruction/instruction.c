@@ -2841,10 +2841,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case TESTQ:
 			print_test_instruction(fl, instruction, mode);
 			break;
-		//Handle a movzbl instruction
-		case MOVZBL:
-			print_movzbl_instruction(fl, instruction, mode);
-			break;
 
 		//Handle an arithmetic left shift instruction
 		case SALB:

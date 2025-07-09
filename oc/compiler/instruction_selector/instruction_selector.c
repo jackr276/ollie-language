@@ -408,25 +408,6 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 
 
 /**
- * Emit a movzbl instruction
- */
-static instruction_t* emit_movzbl_instruction(three_addr_var_t* destination, three_addr_var_t* source){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//And we'll set the class
-	instruction->instruction_type = MOVZBL;
-
-	//Finally we set the destination
-	instruction->destination_register = destination;
-	instruction->source_register = source;
-
-	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
  * Emit a divX or idivX instruction
  *
  * Division instructions have no destination that need be written out. They only have two sources - a direct
@@ -2292,7 +2273,7 @@ static void handle_lea_statement(instruction_t* instruction){
  * will become
  * test t9, t9
  * sete %al
- * movzbl %al, t9
+ * movzx %al, t9
  *
  * NOTE: We know that instruction1 is the one that is a logical not instruction if we
  * get here
@@ -2321,46 +2302,28 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
 
 	//Finally we'll move the contents into t9
-	instruction_t* movzbl_inst = emit_movzbl_instruction(logical_not->assignee, sete_inst->destination_register);
+	instruction_t* movzx_instruction = emit_movzx_instruction(logical_not->assignee, sete_inst->destination_register);
 	//Ensure that we set all these flags too
-	movzbl_inst->block_contained_in = logical_not->block_contained_in;
-	movzbl_inst->is_branch_ending = logical_not->is_branch_ending;
+	movzx_instruction->block_contained_in = logical_not->block_contained_in;
+	movzx_instruction->is_branch_ending = logical_not->is_branch_ending;
 
-	//Grab the block out for convenience
-	basic_block_t* block = logical_not->block_contained_in;
 	//Preserve this before we lose it
 	instruction_t* after_logical_not = logical_not->next_statement;
 
-	//If this is the case, we do a normal addition
-	if(logical_not->previous_statement != NULL){
-		//We'll sever the connection and delete 
-		logical_not->previous_statement->next_statement = test_inst;
-		test_inst->previous_statement = logical_not->previous_statement;
-	//Otherwise it's the head
-	} else {
-		block->leader_statement = test_inst;
-	}
+	//Delete the logical not statement, we no longer need it
+	delete_statement(logical_not);
 
-	//Now we'll add all of the individual linkages
-	test_inst->next_statement = sete_inst;
-	sete_inst->previous_statement = test_inst;
+	//First insert the test instruction
+	insert_instruction_before_given(test_inst, after_logical_not);
 
-	sete_inst->next_statement = movzbl_inst;
-	movzbl_inst->previous_statement = sete_inst;
+	//Then insert the sete instruction
+	insert_instruction_before_given(sete_inst, after_logical_not);
 
-	//Now connect it back to the end
-	movzbl_inst->next_statement = after_logical_not;
-
-	//If this isn't null we can point back
-	if(after_logical_not != NULL){
-		after_logical_not->previous_statement = movzbl_inst;
-	} else {
-		//We know it's the exit block then
-		block->exit_statement = movzbl_inst;
-	}
+	//Finally we insert the movzx
+	insert_instruction_before_given(movzx_instruction, after_logical_not);
 
 	//This is the new window
-	reconstruct_window(window, movzbl_inst);
+	reconstruct_window(window, movzx_instruction);
 }
 
 
@@ -2373,7 +2336,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
  *
  * orq t19, t32 <---------- bitwise or
  * setne t33 <------------ if it isn't 0, we eval to TRUE(1)
- * movzbl t33, t32  <-------------- move this into the result
+ * movzx t33, t32  <-------------- move this into the result
  *
  * NOTE: We guarantee that the first instruction in the window is the one that
  * we're after in this case
@@ -2385,9 +2348,6 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	//Save the after instruction
 	instruction_t* after_logical_or = window->instruction2;
 
-	//And grab the block out
-	basic_block_t* block = logical_or->block_contained_in;
-
 	//Let's first emit the or instruction
 	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
@@ -2397,44 +2357,26 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	//Now we need the setne instruction
 	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 
-	//Let's link the two together
-	or_instruction->next_statement = setne_instruction;
-	setne_instruction->previous_statement = or_instruction;
-
-	//Following that we'll need the final movzbl instruction
-	instruction_t* movzbl_instruction = emit_movzbl_instruction(logical_or->assignee, setne_instruction->destination_register);
+	//Following that we'll need the final movzx instruction
+	instruction_t* movzx_instruction = emit_movzx_instruction(logical_or->assignee, setne_instruction->destination_register);
 
 	//Select this one's size 
 	logical_or->assignee->variable_size = select_variable_size(logical_or->assignee);
 
-	//Now we'll link this one too
-	setne_instruction->next_statement = movzbl_instruction;
-	movzbl_instruction->previous_statement = setne_instruction;
+	//Now we can delete the old logical or instruction
+	delete_statement(logical_or);
 
-	//Now everything is complete, we're able to do the final linkage
-	//If this is the case, we do a normal addition
-	if(logical_or->previous_statement != NULL){
-		//We'll sever the connection and delete 
-		logical_or->previous_statement->next_statement = or_instruction;
-		or_instruction->previous_statement = logical_or->previous_statement;
-	//Otherwise it's the head
-	} else {
-		block->leader_statement = or_instruction;
-	}
+	//First insert the or instruction
+	insert_instruction_before_given(or_instruction, after_logical_or);
 
-	//No matter what this will point to whatever came next
-	movzbl_instruction->next_statement = after_logical_or;
+	//Then we need the setne
+	insert_instruction_before_given(setne_instruction, after_logical_or);
 
-	//Now we'll need to sever the end
-	if(after_logical_or != NULL){
-		after_logical_or->previous_statement = movzbl_instruction;
-	} else {
-		//We know it's the exit block then
-		block->exit_statement = movzbl_instruction;
-	}
+	//And finally we need the movzx
+	insert_instruction_before_given(movzx_instruction, after_logical_or);
 
 	//Reconstruct the window starting at the movzbl
-	reconstruct_window(window, movzbl_instruction);
+	reconstruct_window(window, movzx_instruction);
 }
 
 
@@ -2449,7 +2391,7 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
  * testq t19, 19 <------- Is this 0?
  * setne t34 <------------ If it's not, make it a one
  * andq t33, t34 <---------- let's see if they're both 0, both 1, etc
- * movzbl t34, t32 <---------- store t34 with the result
+ * movzx t34, t32 <---------- store t34 with the result
  *
  * Since this will spawn multiple instructions, it will be invoked from the multiple instruction
  * pattern selector
@@ -2464,9 +2406,6 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	//Preserve this for ourselves
 	instruction_t* after_logical_and = logical_and->next_statement;
 
-	//Grab the block out too
-	basic_block_t* block = logical_and->block_contained_in;
-
 	//Let's first emit our test instruction
 	instruction_t* first_test = emit_test_instruction(logical_and->op1, logical_and->op1);
 
@@ -2476,66 +2415,34 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	//Now we'll need a setne instruction that will set a new temp
 	instruction_t* first_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 	
-	//Link these two
-	first_test->next_statement = first_set;
-	first_set->previous_statement = first_test;
-
 	//Now we'll need the second test
 	instruction_t* second_test = emit_test_instruction(logical_and->op2, logical_and->op2);
-
-	//Link it to the prior
-	first_set->next_statement = second_test;
-	second_test->previous_statement = first_set;
 
 	//Now the second setne
 	instruction_t* second_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 
-	//Link to the prior
-	second_test->next_statement = second_set;
-	second_set->previous_statement = second_test;
-
 	//Now we'll need to ANDx these two values together to see if they're both 1
 	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
 
-	//Again link it
-	second_set->next_statement = and_inst;
-	and_inst->previous_statement = second_set;
-
-	//The final thing that we need is a movzbl
-	instruction_t* final_move = emit_movzbl_instruction(logical_and->assignee, and_inst->destination_register);
+	//The final thing that we need is a movzx
+	instruction_t* movzx_instruction = emit_movzx_instruction(logical_and->assignee, and_inst->destination_register);
 
 	//Select this one's size 
 	logical_and->assignee->variable_size = select_variable_size(logical_and->assignee);
+
+	//We no longer need the logical and statement
+	delete_statement(logical_and);
+
+	//Now we'll insert everything in order
+	insert_instruction_before_given(first_test, after_logical_and);
+	insert_instruction_before_given(first_set, after_logical_and);
+	insert_instruction_before_given(second_test, after_logical_and);
+	insert_instruction_before_given(second_set, after_logical_and);
+	insert_instruction_before_given(and_inst, after_logical_and);
+	insert_instruction_before_given(movzx_instruction, after_logical_and);
 	
-	//Do this one's linkage
-	and_inst->next_statement = final_move;
-	final_move->previous_statement = and_inst;
-	
-	//Now connect it back to the end
-	final_move->next_statement = after_logical_and;
-
-	//Let's now delete the statement
-	//If this is the case, we do a normal addition
-	if(logical_and->previous_statement != NULL){
-		//We'll sever the connection and delete 
-		logical_and->previous_statement->next_statement = first_test;
-		first_test->previous_statement = logical_and->previous_statement;
-	//Otherwise it's the head
-	} else {
-		block->leader_statement = first_test;
-	}
-
-	//If this isn't null we can point back
-	if(after_logical_and != NULL){
-		after_logical_and->previous_statement = final_move;
-	} else {
-		//We know it's the exit block then
-		block->exit_statement = final_move;
-	}
-
 	//Reconstruct the window starting at the final move
-	reconstruct_window(window, final_move);
-
+	reconstruct_window(window, movzx_instruction);
 }
 
 
