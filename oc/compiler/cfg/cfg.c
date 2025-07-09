@@ -3164,7 +3164,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	expr_ret_package_t left_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
 
 	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
-	if(left_hand_temp.assignee->is_temporary == FALSE || is_type_conversion_needed(left_hand_type, left_hand_temp.assignee->type) == TRUE){
+	if(left_hand_temp.assignee->is_temporary == FALSE){
 		//emit the temp assignment
 		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_hand_temp.assignee);
 		//Add it into here
@@ -3194,20 +3194,6 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	package.operator = binary_operator;
 	//Grab this out for convenience
 	op2 = right_hand_temp.assignee;
-
-	//Emit a converting move instruction if we don't have a const assignment as the immediate previous statement
-	if(is_type_conversion_needed(right_hand_type, op2->type) == TRUE){
-		//Emit the temp assignment
-		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(right_hand_type), right_hand_temp.assignee);
-		//Add it into here
-		add_statement(basic_block, temp_assnment);
-		
-		//We can mark that op1 was used
-		add_used_variable(basic_block, right_hand_temp.assignee);
-		
-		//Grab the assignee out
-		op2 = temp_assnment->assignee;
-	}
 
 	//Switch based on whatever operator that we have
 	switch(binary_operator){

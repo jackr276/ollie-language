@@ -1553,7 +1553,16 @@ static void handle_subtraction_instruction(instruction_t* instruction){
 
 	//If we have a register value, we add that
 	if(instruction->op2 != NULL){
-		instruction->source_register = instruction->op2;
+		//Do we need any kind of type conversion here? If so we'll do that now
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			//If this is needed, we'll let the helper do it
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->source_register, instruction->assignee->type);
+
+		//Otherwise let this deal with it
+		} else {
+			instruction->source_register = instruction->op2;
+		}
+
 	} else {
 		//Otherwise grab the immediate source
 		instruction->source_immediate = instruction->op1_const;
@@ -1583,7 +1592,16 @@ static void handle_addition_instruction(instruction_t* instruction){
 
 	//If we have a register value, we add that
 	if(instruction->op2 != NULL){
-		instruction->source_register = instruction->op2;
+		//Do we need a type conversion? If so, we'll do that here
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			//Let the helper function deal with this
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+
+		//Otherwise we'll just do this
+		} else {
+			instruction->source_register = instruction->op2;
+		}
+
 	} else {
 		//Otherwise grab the immediate source
 		instruction->source_immediate = instruction->op1_const;
@@ -1959,6 +1977,7 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 			}
 
 			break;
+
 		case MINUS:
 			//Let the helper do it
 			handle_subtraction_instruction(instruction);
@@ -2113,7 +2132,7 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 	//moving helper
 	if(assignee_is_deref == FALSE && op1_is_deref == FALSE){
 		//Use the helper to get the right sized move instruction
-		instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(instruction->assignee->type));
+		instruction->instruction_type = select_move_instruction(source_size);
 
 	//If the assignee is being dereferenced, we'll need to rely on the souce
 	} else if(assignee_is_deref == TRUE && op1_is_deref == FALSE){
