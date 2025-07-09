@@ -1339,10 +1339,19 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	instruction->destination_register = instruction->assignee;
 	
 	//We can have an immediate value or we can have a register
-	if(instruction->op1_const != NULL){
-		instruction->source_immediate = instruction->op1_const;
+	if(instruction->op2 != NULL){
+		//If we need to convert, we'll do that here
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+
+		//Otherwise it's a direct translation
+		} else {
+			instruction->source_register = instruction->op2;
+		}
+
+	//Otherwise we have an immediate source
 	} else {
-		instruction->source_register = instruction->op2;
+		instruction->source_immediate = instruction->op1_const;
 	}
 }
 
@@ -1392,12 +1401,21 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 
 	//Now we'll move over the operands
 	instruction->destination_register = instruction->assignee;
-	
+
 	//We can have an immediate value or we can have a register
-	if(instruction->op1_const != NULL){
-		instruction->source_immediate = instruction->op1_const;
+	if(instruction->op2 != NULL){
+		//If we need to convert, we'll do that here
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+
+		//Otherwise it's a direct translation
+		} else {
+			instruction->source_register = instruction->op2;
+		}
+
+	//Otherwise we have an immediate source
 	} else {
-		instruction->source_register = instruction->op2;
+		instruction->source_immediate = instruction->op1_const;
 	}
 }
 
@@ -1426,16 +1444,24 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 			break;
 	}
 
-	//Now that we've done that, we'll move over the operands
-	if(instruction->op1_const != NULL){
-		instruction->source_immediate = instruction->op1_const;
-	} else {
-		//Otherwise we have a register source here
-		instruction->source_register = instruction->op2;
-	}
-
 	//And we always have a destination register
 	instruction->destination_register = instruction->assignee;
+
+	//We can have an immediate value or we can have a register
+	if(instruction->op2 != NULL){
+		//If we need to convert, we'll do that here
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+
+		//Otherwise it's a direct translation
+		} else {
+			instruction->source_register = instruction->op2;
+		}
+
+	//Otherwise we have an immediate source
+	} else {
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
@@ -1463,16 +1489,24 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
 			break;
 	}
 
-	//Now that we've done that, we'll move over the operands
-	if(instruction->op1_const != NULL){
-		instruction->source_immediate = instruction->op1_const;
-	} else {
-		//Otherwise we have a register source here
-		instruction->source_register = instruction->op2;
-	}
-
 	//And we always have a destination register
 	instruction->destination_register = instruction->assignee;
+
+	//We can have an immediate value or we can have a register
+	if(instruction->op2 != NULL){
+		//If we need to convert, we'll do that here
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+
+		//Otherwise it's a direct translation
+		} else {
+			instruction->source_register = instruction->op2;
+		}
+
+	//Otherwise we have an immediate source
+	} else {
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
@@ -1500,16 +1534,24 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 			break;
 	}
 	
-	//Now that we've done that, we'll move over the operands
-	if(instruction->op1_const != NULL){
-		instruction->source_immediate = instruction->op1_const;
-	} else {
-		//Otherwise we have a register source here
-		instruction->source_register = instruction->op2;
-	}
-
 	//And we always have a destination register
 	instruction->destination_register = instruction->assignee;
+
+	//We can have an immediate value or we can have a register
+	if(instruction->op2 != NULL){
+		//If we need to convert, we'll do that here
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+
+		//Otherwise it's a direct translation
+		} else {
+			instruction->source_register = instruction->op2;
+		}
+
+	//Otherwise we have an immediate source
+	} else {
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
@@ -1526,11 +1568,25 @@ static void handle_cmp_instruction(instruction_t* instruction){
 	
 	//Since we have a comparison instruction, we don't actually have a destination
 	//register as the registers remain unmodified in this event
-	instruction->source_register = instruction->op1;
+	if(is_type_conversion_needed(instruction->assignee->type, instruction->op1->type) == TRUE){
+		//Let the helper deal with it
+		instruction->source_register = handle_converting_move_operation(instruction, instruction->op1, instruction->assignee->type);
+	} else {
+		//Otherwise we assign directly
+		instruction->source_register = instruction->op1;
+	}
 
 	//If we have op2, we'll use source_register2
 	if(instruction->op2 != NULL){
-		instruction->source_register2 = instruction->op2;
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			//Let the helper deal with it
+			instruction->source_register2 = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+		} else {
+			//Otherwise we assign directly
+			instruction->source_register2 = instruction->op2;
+		}
+
+	//Otherwise we have a constant source
 	} else {
 		//Otherwise we use an immediate value
 		instruction->source_immediate = instruction->op1_const;
@@ -1556,7 +1612,7 @@ static void handle_subtraction_instruction(instruction_t* instruction){
 		//Do we need any kind of type conversion here? If so we'll do that now
 		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
 			//If this is needed, we'll let the helper do it
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->source_register, instruction->assignee->type);
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise let this deal with it
 		} else {
@@ -1733,7 +1789,6 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 	//We'll need to know the variables size
 	variable_size_t size = select_variable_size(instruction->assignee);
 
-
 	//We determine the instruction that we need based on signedness and size
 	switch (size) {
 		case BYTE:
@@ -1756,8 +1811,17 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 
 	//Are we using an immediate or register?
 	if(instruction->op2 != NULL){
-		//This is the case where we have a source register
-		instruction->source_register = instruction->op2;
+		//Do we need a type conversion here?
+		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+			//Let the helper deal with it
+			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+
+		//Otherwise assign directly
+		} else {
+			//This is the case where we have a source register
+			instruction->source_register = instruction->op2;
+		}
+		
 	} else {
 		//In this case we'll have an immediate source
 		instruction->source_immediate = instruction->op1_const;
@@ -2132,7 +2196,7 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 	//moving helper
 	if(assignee_is_deref == FALSE && op1_is_deref == FALSE){
 		//Use the helper to get the right sized move instruction
-		instruction->instruction_type = select_move_instruction(source_size);
+		instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(instruction->assignee->type));
 
 	//If the assignee is being dereferenced, we'll need to rely on the souce
 	} else if(assignee_is_deref == TRUE && op1_is_deref == FALSE){
