@@ -839,7 +839,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		 * NOTE: We know for a fact that modulus only works on basic types that are integers *and*
 		 * enumerations
 		 */
-		case MOD:
 		case L_SHIFT:
 		case R_SHIFT:
 		case SINGLE_AND:
@@ -864,6 +863,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		 */
 		case F_SLASH:
 		case STAR:
+		case MOD:
 			//If a is a floating point, we apply the float conversion to b
 			if((*a)->basic_type->basic_type == FLOAT32 || (*a)->basic_type->basic_type == FLOAT64){
 				integer_to_floating_point(symtab, b);

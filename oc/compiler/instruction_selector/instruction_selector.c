@@ -430,12 +430,12 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
  * Division instructions have no destination that need be written out. They only have two sources - a direct
  * source and an implicit source
  */
-static instruction_t* emit_div_instruction(three_addr_var_t* direct_source, three_addr_var_t* implicit_source, u_int8_t is_signed){
+static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_addr_var_t* direct_source, three_addr_var_t* implicit_source, u_int8_t is_signed){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(direct_source);
+	variable_size_t size = select_variable_size(assignee);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -491,12 +491,12 @@ static instruction_t* emit_div_instruction(three_addr_var_t* direct_source, thre
  *
  * Division instructions have no destination that need be written out. They only have a direct source and an implicit source
  */
-static instruction_t* emit_mod_instruction(three_addr_var_t* direct_source, three_addr_var_t* implicit_source, u_int8_t is_signed){
+static instruction_t* emit_mod_instruction(three_addr_var_t* assignee, three_addr_var_t* direct_source, three_addr_var_t* implicit_source, u_int8_t is_signed){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(direct_source);
+	variable_size_t size = select_variable_size(assignee);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -1739,6 +1739,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	variable_size_t size = select_variable_size(multiplication_instruction->assignee);
 
 	//A temp holder for the final second source variable
+	three_addr_var_t* source;
 	three_addr_var_t* source2;
 
 	//If we need to convert, we'll do that here
@@ -1756,6 +1757,15 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 		//This is just the destination register here
 		source2 = move_to_rax->destination_register;
+	}
+
+	//Let's also check is any conversions are needed for the first source register
+	if(is_type_conversion_needed(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
+		source = handle_converting_move_operation(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
+
+	//Otherwise we'll just assign this to be op1
+	} else {
+		source = multiplication_instruction->op1;
 	}
 
 	
@@ -1777,7 +1787,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	}
 
 	//This is the case where we have two source registers
-	multiplication_instruction->source_register = multiplication_instruction->op1;
+	multiplication_instruction->source_register = source;
 	//The other source register is in RAX
 	multiplication_instruction->source_register2 = source2;
 
@@ -1867,6 +1877,7 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* source;
+	three_addr_var_t* source2;
 
 	//If we need to convert, we'll do that here
 	if(is_type_conversion_needed(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
@@ -1897,8 +1908,17 @@ static void handle_division_instruction(instruction_window_t* window){
 		insert_instruction_before_given(cl_instruction, division_instruction);
 	}
 
+	//Do we need to do a type conversion? If so, we'll do a converting move here
+	if(is_type_conversion_needed(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+		source2 = handle_converting_move_operation(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+
+	//Otherwise source 2 is just the op2
+	} else {
+		source2 = division_instruction->op2;
+	}
+
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(window->instruction1->op2, source, is_signed);
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, source2, source, is_signed);
 
 	//Insert this before the division instruction
 	insert_instruction_before_given(division, division_instruction);
@@ -1944,6 +1964,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* source;
+	three_addr_var_t* source2;
 
 	//If we need to convert, we'll do that here
 	if(is_type_conversion_needed(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
@@ -1974,8 +1995,17 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		insert_instruction_before_given(cl_instruction, modulus_instruction);
 	}
 
+	//Do we need to do a type conversion? If so, we'll do a converting move here
+	if(is_type_conversion_needed(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+		source2 = handle_converting_move_operation(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+
+	//Otherwise source 2 is just the op2
+	} else {
+		source2 = modulus_instruction->op2;
+	}
+
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_mod_instruction(window->instruction1->op2, source, is_signed);
+	instruction_t* division = emit_mod_instruction(modulus_instruction->assignee, source2, source, is_signed);
 	//This is the assignee, we just don't see it
 	division->destination_register = emit_temp_var(modulus_instruction->assignee->type);
 
