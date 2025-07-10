@@ -99,6 +99,7 @@ static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* defer_statement(FILE* fl);
 static generic_ast_node_t* idle_statement(FILE* fl);
+static generic_ast_node_t* ternary_expression(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee);
@@ -1053,8 +1054,8 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  * that will be made. If not, we will simply pass the parent along. An assignment expression will return
  * a reference to the subtree created by it
  *
- * BNF Rule: <assignment-expression> ::= <logical-or-expression> 
- * 									   | <unary-expression> := <logical-or-expression>
+ * BNF Rule: <assignment-expression> ::= <ternary-expression> 
+ * 									   | <unary-expression> := <ternary-expression>
  *
  */
 static generic_ast_node_t* assignment_expression(FILE* fl){
@@ -1105,7 +1106,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//If we didn't find an assignment operator, we just return the logical or expression
 	if(found_asn_op == FALSE){
-		return logical_or_expression(fl);
+		return ternary_expression(fl);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
@@ -1169,8 +1170,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 
 	//Now that we're here we must see a valid conditional expression
-	generic_ast_node_t* expr = logical_or_expression(fl);
-
+	generic_ast_node_t* expr = ternary_expression(fl);
 
 	//Fail case here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3548,7 +3548,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
  *
- * BNF Rule: <logical_or_expression> ? <ternary_expression> : <ternary_expression>
+ * BNF Rule: <logical_or_expression> ? <ternary_expression> # <ternary_expression>
  */
 static generic_ast_node_t* ternary_expression(FILE* fl){
 	//Declare the lookahead token
@@ -3574,12 +3574,44 @@ static generic_ast_node_t* ternary_expression(FILE* fl){
 	}
 
 	//Allocate the ternary expression node
+	generic_ast_node_t* ternary_expression_node = ast_node_alloc(AST_NODE_CLASS_TERNARY_EXPRESSION);
+
+	//The first child is the conditional
+	add_child_node(ternary_expression_node, conditional);
 
 	//Otherwise if we make it here, then we know that we are seeing a ternary expression.
 	//We now must see another valid ternary
+	generic_ast_node_t* if_branch = ternary_expression(fl);
 
-	//TODO FIXME
-	return conditional;
+	//If this is invalid, then we bail out
+	if(if_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
+		return print_and_return_error("Invalid if branch given in ternary operator", parser_line_num);
+	}
+
+	//Otherwise it's fine so we add it and move on
+	add_child_node(ternary_expression_node, if_branch);
+
+	//Once we've seen the if branch, we need to see the colon to separate the else branch
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see an else, we have a failure here
+	if(lookahead.tok != ELSE){
+		return print_and_return_error("else expected between branches in ternary operator", parser_line_num);
+	}
+	
+	//We now must see another valid ternary
+	generic_ast_node_t* else_branch = ternary_expression(fl);
+
+	//If this is invalid, then we bail out
+	if(else_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
+		return print_and_return_error("Invalid else branch given in ternary operator", parser_line_num);
+	}
+
+	//Otherwise it's fine so we add it and move on
+	add_child_node(ternary_expression_node, else_branch);
+
+	//Give back the parent level node
+	return ternary_expression_node;
 }
 
 
@@ -5604,7 +5636,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
  *
  * NOTE: By the time we get here, we will have already consumed the ret keyword
  *
- * BNF Rule: <return-statement> ::= ret {<logical-or-expression>}?;
+ * BNF Rule: <return-statement> ::= ret {<ternary-epxression>}?;
  */
 static generic_ast_node_t* return_statement(FILE* fl){
 	//Lookahead token
@@ -5648,11 +5680,11 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = logical_or_expression(fl);
+	generic_ast_node_t* expr_node = ternary_expression(fl);
 
 	//If this is bad, we fail out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to return statement", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Invalid expression given to return statement", parser_line_num);
 		num_errors++;
 		//It's already an error, so we'll just return it
 		return expr_node;
@@ -7471,7 +7503,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {register | static}? {mut}? <identifier> : <type-specifier> := <conditional-expression>;
+ * BNF Rule: <let-statement> ::= let {register | static}? {mut}? <identifier> : <type-specifier> := <ternary_expression>;
  */
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//The line number
@@ -7624,14 +7656,14 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Otherwise we saw it, so now we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = logical_or_expression(fl);
+	generic_ast_node_t* expr_node = ternary_expression(fl);
 
 	//We now need to complete type checking. Is what we're assigning to the new variable
 	//compatible with what we're given by the logical or expression here?
 
 	//If it fails, we fail out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression given as intializer", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Invalid expression given as intializer", parser_line_num);
 		num_errors++;
 		//It's already an error so just give it back
 		return expr_node;

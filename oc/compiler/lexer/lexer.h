@@ -116,6 +116,7 @@ typedef enum {
 	DOUBLE_COLON,
 	COMMA,
 	SEMICOLON,
+	DOLLAR, /* $ */
 	ARROW,
 	ERROR,
 	DONE,
