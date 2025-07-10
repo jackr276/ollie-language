@@ -3545,6 +3545,45 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 
 
 /**
+ * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
+ * inlined. They can be nested, though this is not recommended
+ *
+ * BNF Rule: <logical_or_expression> ? <ternary_expression> : <ternary_expression>
+ */
+static generic_ast_node_t* ternary_expression(FILE* fl){
+	//Declare the lookahead token
+	lexitem_t lookahead;
+
+	//We are first required to see a valid logical or expression. If we don't see this,
+	//then we fail
+	generic_ast_node_t* conditional = logical_or_expression(fl);
+
+	//If this is an error, then the whole thing is over - we're done here
+	if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
+		return conditional;
+	}
+
+	//Let's now see what comes after this ternary expression
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If this is not a question mark, then we are done here, and we should push this token
+	//back and return the conditional
+	if(lookahead.tok != QUESTION){
+		push_back_token(lookahead);
+		return conditional;
+	}
+
+	//Allocate the ternary expression node
+
+	//Otherwise if we make it here, then we know that we are seeing a ternary expression.
+	//We now must see another valid ternary
+
+	//TODO FIXME
+	return conditional;
+}
+
+
+/**
  * A construct member declares a variable within a struct. Structs have their own tables
  * that store variables within. Because these variables are unique to structs, we don't need to
  * do any validation on duplicates. All references to these variables will be by default
@@ -5591,7 +5630,6 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		}
 
 		//If we get out then we're fine
-		
 		return return_stmt;
 
 	} else {
@@ -5633,7 +5671,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//Figure out what the final type is here
 	generic_type_t* final_type = types_assignable(&(current_function->return_type), &(expr_node->inferred_type));
 
-//If the current function's return type is not compatible with the return type here, we'll bail out
+	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name, current_function->return_type->type_name,
 		  		expr_node->inferred_type->type_name);
