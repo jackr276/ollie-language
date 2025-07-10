@@ -29,7 +29,7 @@ typedef enum{
  */
 struct lex_node_t {
 	lex_node_t* next;
-	Lexer_item l;
+	lexitem_t l;
 };
 
 
@@ -51,7 +51,7 @@ lex_stack_t* lex_stack_alloc();
 /**
  * Push a pointer onto the top of the stack
  */
-void push_token(lex_stack_t* stack, Lexer_item l);
+void push_token(lex_stack_t* stack, lexitem_t l);
 
 /**
  * Is the stack empty or not
@@ -61,13 +61,13 @@ lex_stack_status_t lex_stack_is_empty(lex_stack_t* lex_stack);
 /**
  * Remove the top value of the stack
  */
-Lexer_item pop_token(lex_stack_t* stack);
+lexitem_t pop_token(lex_stack_t* stack);
 
 /**
  * Return the top value of the stack, but do not
  * remove it
  */
-Lexer_item peek_token(lex_stack_t* stack);
+lexitem_t peek_token(lex_stack_t* stack);
 
 /**
  * Destroy the stack with a proper cleanup

@@ -80,8 +80,8 @@ static u_int8_t is_ws(char ch, u_int16_t* line_num, u_int16_t* parser_line_num){
 /**
  * Determines if an identifier is a keyword or some user-written identifier
  */
-static Lexer_item identifier_or_keyword(char* lexeme, u_int16_t line_number){
-	Lexer_item lex_item;
+static lexitem_t identifier_or_keyword(char* lexeme, u_int16_t line_number){
+	lexitem_t lex_item;
 	//Wipe this clean
 	memset(lex_item.lexeme, 0, MAX_TOKEN_LENGTH * sizeof(char));
 
@@ -143,9 +143,9 @@ static void put_back_char(FILE* fl){
  * will simply run through what we have here until we get to that backslash. We'll
  * then pack what we had into a lexer item and send it back to the caller
  */
-Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
+lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 	//We'll be giving this back
-	Lexer_item asm_statement;
+	lexitem_t asm_statement;
 	asm_statement.tok = ASM_STATEMENT;
 
 	//Wipe this while we're at it
@@ -161,7 +161,7 @@ Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 	//First pop off all of the tokens if there are any on the stack
 	while(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
 		//Pop whatever we have off
-		Lexer_item token = pop_token(pushed_back_tokens);
+		lexitem_t token = pop_token(pushed_back_tokens);
 		//Add it in here
 		strcat(asm_statement.lexeme, token.lexeme);
 		//We'll add the length to the lexeme cursor for tracking
@@ -201,7 +201,7 @@ Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 /**
  * Constantly iterate through the file and grab the next token that we have
 */
-Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search){
+lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search){
 	//If this is NULL, we need to make it
 	if(pushed_back_tokens == NULL){
 		pushed_back_tokens = lex_stack_alloc();
@@ -215,7 +215,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 
 
 	//We'll eventually return this
-	Lexer_item lex_item;
+	lexitem_t lex_item;
 	//By default it's an error
 	lex_item.tok = ERROR;
 
@@ -244,7 +244,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 	while((ch = get_next_char(fl)) != EOF){
 		//Check to make sure we aren't overrunning our bounds
 		if(current_state != IN_MULTI_COMMENT && lexeme_cursor - lexeme > MAX_TOKEN_LENGTH-1){
-			Lexer_item l;
+			lexitem_t l;
 			l.tok = ERROR;
 			return l;
 		}
@@ -716,13 +716,13 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 					//Have we seen the hex code?
 					//Fail case here
 					if(seen_hex == 1){
-						Lexer_item err;
+						lexitem_t err;
 						err.tok = ERROR;
 						return err;
 					}
 
 					if(*(lexeme_cursor-1) != '0'){
-						Lexer_item err;
+						lexitem_t err;
 						err.tok = ERROR;
 						return err;
 
@@ -888,7 +888,7 @@ Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t c
 /**
  * Push a token back by moving the seek head back appropriately
  */
-void push_back_token(Lexer_item l){
+void push_back_token(lexitem_t l){
 	//All that we need to do here is push the token onto the stack
 	push_token(pushed_back_tokens, l);
 }
@@ -897,7 +897,7 @@ void push_back_token(Lexer_item l){
 /**
  * Print out a token and it's associated line number
 */
-void print_token(Lexer_item* l){
+void print_token(lexitem_t* l){
 	//Print out with nice formatting
 	printf("TOKEN: %3d, Lexeme: %10s, Line: %4d\n", l->tok, l->lexeme, l->line_num);
 }

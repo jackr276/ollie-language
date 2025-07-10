@@ -13,7 +13,7 @@ int main(int argc, char** argv){
 	}
 
 	FILE* fl;
-	Lexer_item l;
+	lexitem_t l;
 	u_int16_t parser_line_num;
 
 	for(int32_t i = 1; i < argc; i++){

@@ -295,7 +295,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
  */
 static generic_ast_node_t* identifier(FILE* fl){
 	//Grab the next token
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
 	//If we can't find it that's bad
 	if(lookahead.tok != IDENT){
@@ -327,7 +327,7 @@ static generic_ast_node_t* identifier(FILE* fl){
  */
 static generic_ast_node_t* label_identifier(FILE* fl){
 	//Grab the next token
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
 	//If we can't find it that's bad
 	if(lookahead.tok != LABEL_IDENT){
@@ -366,7 +366,7 @@ static generic_ast_node_t* label_identifier(FILE* fl){
  */
 static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We should see one of the 4 constants here
 	lookahead = get_next_token(fl, &parser_line_num, const_search);
@@ -525,7 +525,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 	//The current line num
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//A nicer reference that we'll keep to the function record
 	symtab_function_record_t* function_record;
 	//We'll also keep a nicer reference to the function name
@@ -727,7 +727,7 @@ static generic_ast_node_t* function_call(FILE* fl){
  */
 static generic_ast_node_t* sizeof_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We must then see left parenthesis
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -808,7 +808,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl){
  */
 static generic_ast_node_t* typesize_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We must then see left parenthesis
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -900,7 +900,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Grab the next token, we'll multiplex on this
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -1061,13 +1061,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Did we find the assignment op?
 	u_int8_t found_asn_op = FALSE;
 
 	//Probably way too much, just to be safe
-	Lexer_item items[200];
+	lexitem_t items[200];
 	
 	//How many we have
 	u_int16_t idx = 0;
@@ -1236,7 +1236,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We'll first grab whatever token that we have here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -1348,7 +1348,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
  */
 static generic_ast_node_t* array_accessor(FILE* fl){
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 
@@ -1451,7 +1451,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 
@@ -1823,7 +1823,7 @@ static u_int8_t is_unary_operator(Token tok){
  */
 static generic_ast_node_t* unary_expression(FILE* fl){
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Is this assignable
 	variable_assignability_t is_assignable = ASSIGNABLE;
 	//For folding cases
@@ -2111,7 +2111,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
  */
 static generic_ast_node_t* cast_expression(FILE* fl){
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//If we first see an angle bracket, we know that we are truly doing
 	//a cast. If we do not, then this expression is just a pass through for
@@ -2229,7 +2229,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
  */
 static generic_ast_node_t* multiplicative_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -2258,7 +2258,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 	//As long as we have a multiplication operators(* or % or /) 
 	while(lookahead.tok == MOD || lookahead.tok == STAR || lookahead.tok == F_SLASH){
 		//Save this lexer item
-		Lexer_item op = lookahead;
+		lexitem_t op = lookahead;
 
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
@@ -2366,7 +2366,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
  */
 static generic_ast_node_t* additive_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -2395,7 +2395,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 	//As long as we have a additive operators(+ or -) 
 	while(lookahead.tok == PLUS || lookahead.tok == MINUS){
 		//Save the lookahead
-		Lexer_item op = lookahead;
+		lexitem_t op = lookahead;
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
@@ -2520,7 +2520,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
  */
 static generic_ast_node_t* shift_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -2547,7 +2547,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 	//We can optionally see some shift operators here
 	if(lookahead.tok == L_SHIFT || lookahead.tok == R_SHIFT){
 		//Save the lexer item here
-		Lexer_item op = lookahead;
+		lexitem_t op = lookahead;
 
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
@@ -2654,7 +2654,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
  */
 static generic_ast_node_t* relational_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -2682,7 +2682,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 	//If we have relational operators here
 	if(lookahead.tok == G_THAN || lookahead.tok == L_THAN || lookahead.tok == G_THAN_OR_EQ
 	   || lookahead.tok == L_THAN_OR_EQ){
-		Lexer_item op = lookahead;
+		lexitem_t op = lookahead;
 
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
@@ -2781,7 +2781,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
  */
 static generic_ast_node_t* equality_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -2809,7 +2809,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 	//As long as we have a relational operators(== or !=) 
 	while(lookahead.tok == NOT_EQUALS || lookahead.tok == DOUBLE_EQUALS){
 		//Store this locally
-		Lexer_item op = lookahead;
+		lexitem_t op = lookahead;
 
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
@@ -2909,7 +2909,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
  */
 static generic_ast_node_t* and_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -3037,7 +3037,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
  */
 static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -3164,7 +3164,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
  */
 static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -3293,7 +3293,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
  */
 static generic_ast_node_t* logical_and_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -3426,7 +3426,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
  */
 static generic_ast_node_t* logical_or_expression(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -3556,7 +3556,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  */
 static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Is this mutable? False by default
 	u_int8_t is_mutable = FALSE;
 
@@ -3675,7 +3675,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
  */
 static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Initiate a new variable scope here
 	initialize_variable_scope(variable_symtab);
@@ -3754,7 +3754,7 @@ static u_int8_t construct_definer(FILE* fl){
 	//Freeze the line num
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//The actual type name that we have
 	char type_name[MAX_TYPE_NAME_LENGTH];
 	//The alias name
@@ -4045,7 +4045,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
  */
 static generic_ast_node_t* enum_member_list(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//The enum member current number
 	u_int16_t current_member_val = 0;
 
@@ -4106,7 +4106,7 @@ static u_int8_t enum_definer(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//The actual name of the enum
 	char name[MAX_TYPE_NAME_LENGTH];
 	//The alias name
@@ -4357,7 +4357,7 @@ static u_int8_t enum_definer(FILE* fl){
  */
 static symtab_type_record_t* type_name(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//A temporary holder for the type name
 	char type_name[MAX_TYPE_NAME_LENGTH];
 
@@ -4532,7 +4532,7 @@ static symtab_type_record_t* type_name(FILE* fl){
  */
 static generic_type_t* type_specifier(FILE* fl){
 	//Lookahead var
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has. If the type name function could not
@@ -4713,7 +4713,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//Is it mutable?
 	u_int8_t is_mut = 0;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Let's first create the top level node here
 	generic_ast_node_t* parameter_decl_node;
@@ -4861,7 +4861,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
  */
 static generic_ast_node_t* parameter_list(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Let's now create the parameter list node
 	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST);
@@ -4942,7 +4942,7 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Let's see if we have a semicolon. If we do, we'll just jump right out
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4997,7 +4997,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Let's create the label ident node
 	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT);
@@ -5091,8 +5091,8 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead tokens
-	Lexer_item lookahead;
-	Lexer_item lookahead2;
+	lexitem_t lookahead;
+	lexitem_t lookahead2;
 
 	//Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
 	//will be a child of this statement
@@ -5313,7 +5313,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
  */
 static generic_ast_node_t* jump_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We can off the bat create the jump statement node here
 	generic_ast_node_t* jump_stmt = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT); 
@@ -5372,7 +5372,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
  */
 static generic_ast_node_t* continue_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Once we get here, we've already seen the continue keyword, so we can make the node
 	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_CLASS_CONTINUE_STMT);
@@ -5472,7 +5472,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
  */
 static generic_ast_node_t* break_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Once we get here, we've already seen the break keyword, so we can make the node
 	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_CLASS_BREAK_STMT);
@@ -5569,7 +5569,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
  */
 static generic_ast_node_t* return_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We can create the node now
 	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_CLASS_RET_STMT);
@@ -5697,7 +5697,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//By default we have not found one of these
 	u_int8_t found_default_clause = FALSE;
 
@@ -5926,7 +5926,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  */
 static generic_ast_node_t* while_statement(FILE* fl){
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
@@ -6030,7 +6030,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Let's first create the overall global root node
 	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT);
@@ -6144,7 +6144,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num; 
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_CLASS_FOR_STMT);
@@ -6383,7 +6383,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
  */
 static generic_ast_node_t* statement_in_block(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Let's grab the next item and see what we have here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6496,7 +6496,7 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
  */
 static generic_ast_node_t* switch_compound_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We must first see a left curly
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6582,7 +6582,7 @@ static generic_ast_node_t* switch_compound_statement(FILE* fl){
  */
 static generic_ast_node_t* compound_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We must first see a left curly
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6717,7 +6717,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
  */
 static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	//The next token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We must first see an opening curly
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6804,7 +6804,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
  */
 static generic_ast_node_t* defer_statement(FILE* fl){
 	//For searching
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
@@ -6849,7 +6849,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
  */
 static generic_ast_node_t* idle_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We just need to see a semicolon now
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6890,7 +6890,7 @@ static generic_ast_node_t* idle_statement(FILE* fl){
  */
 static generic_ast_node_t* statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//Let's grab the next item and see what we have here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6989,7 +6989,7 @@ static generic_ast_node_t* statement(FILE* fl){
  */
 static generic_ast_node_t* default_statement(FILE* fl){
 	//Lookaehad token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
@@ -7034,7 +7034,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	
 	//Remember that we've already seen the first "case" keyword here, so now we need
 	//to consume whatever comes after it(constant or enum value)
@@ -7248,7 +7248,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Is it mutable?
 	u_int8_t is_mutable = 0;
 	//The storage class, normal by default
@@ -7439,7 +7439,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//The line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Is it mutable?
 	u_int8_t is_mutable = 0;
 	//The storage class, normal by default
@@ -7688,7 +7688,7 @@ static u_int8_t alias_statement(FILE* fl){
 	//Store the ident name locally
 	char ident_name[MAX_TYPE_NAME_LENGTH];
 	//Our lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We need to first see a valid type specifier
 	generic_type_t* type_spec= type_specifier(fl);
@@ -7813,7 +7813,7 @@ static u_int8_t alias_statement(FILE* fl){
  */
 static u_int8_t definition(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Switch based on what we have
 	if(lookahead.tok == DEFINE){
@@ -7853,7 +7853,7 @@ static u_int8_t definition(FILE* fl){
  */
 static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We will multiplex based on what we see with the lookahead
 	//This rule also consumes the first token that it sees, so all downstream
@@ -7975,7 +7975,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Are we defining something that's already been defined implicitly?
 	u_int8_t defining_prev_implicit = 0;
 	//Is it the main function?
@@ -8439,7 +8439,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
  */
 static u_int8_t replace_statement(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//We've already seen the with statement, now we need to see an
 	//identifier
@@ -8576,7 +8576,7 @@ static u_int8_t replace_statement(FILE* fl){
  */
 static generic_ast_node_t* declaration_partition(FILE* fl){
 	//Lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//The status
 	u_int8_t status;
 
@@ -8657,7 +8657,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
  */
 static generic_ast_node_t* program(FILE* fl){
 	//Freeze the line number
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 
 	//If prog is null we make it here
 	if(prog == NULL){

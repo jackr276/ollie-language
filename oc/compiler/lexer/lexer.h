@@ -105,6 +105,7 @@ typedef enum {
 	R_SHIFT,
 	EQUALS,
 	CARROT,
+	QUESTION, /* ? */
 	DOUBLE_EQUALS, /* == */
 	NOT_EQUALS,
 	G_THAN,
@@ -134,9 +135,11 @@ typedef enum {
 	CHAR,
 } Token;
 
-typedef struct Lexer_item Lexer_item;
+//The lexitem_t struct
+typedef struct lexitem_t lexitem_t;
 
-struct Lexer_item{
+
+struct lexitem_t{
 	//The string(lexeme) that got us this token
 	char lexeme[MAX_TOKEN_LENGTH];
 	//The line number of the source that we found it on
@@ -153,21 +156,21 @@ void reset_file(FILE* fl);
 /**
  * Special case -- hunting for assembly statements
  */
-Lexer_item get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num);
+lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num);
 
 /**
  * Generic token grabbing function
  */
-Lexer_item get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search);
+lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search);
 
 /**
  * Push a token back to the stream
  */
-void push_back_token(Lexer_item l);
+void push_back_token(lexitem_t l);
 
 /**
  * Developer utility for token printing
  */
-void print_token(Lexer_item* l);
+void print_token(lexitem_t* l);
 
 #endif /* LEXER_H */

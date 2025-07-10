@@ -99,7 +99,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//that we'll need it for errors if for some reason we run into an error preprocessing
 	u_int16_t parser_line_num = 0;
 	//The lookahead token
-	Lexer_item lookahead;
+	lexitem_t lookahead;
 	//Keep a running list of what we need to compile
 	dynamic_array_t* dependency_list;
 

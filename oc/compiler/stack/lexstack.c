@@ -27,7 +27,7 @@ lex_stack_t* lex_stack_alloc(){
 /**
  * Push data to the top of the stack
  */
-void push_token(lex_stack_t* stack, Lexer_item l){
+void push_token(lex_stack_t* stack, lexitem_t l){
 	//Just in case
 	if(stack == NULL){
 		printf("ERROR: Stack was never initialized\n");
@@ -64,8 +64,8 @@ lex_stack_status_t lex_stack_is_empty(lex_stack_t* lex_stack){
 /**
  * Pop the head off of the stack and return the data
  */
-Lexer_item pop_token(lex_stack_t* stack){
-	Lexer_item l;
+lexitem_t pop_token(lex_stack_t* stack){
+	lexitem_t l;
 	l.tok = BLANK;
 
 	//Just in case
@@ -85,7 +85,7 @@ Lexer_item pop_token(lex_stack_t* stack){
 	}
 
 	//Grab the data
-	Lexer_item top = stack->top->l;
+	lexitem_t top = stack->top->l;
 	
 	lex_node_t* temp = stack->top;
 
@@ -104,8 +104,8 @@ Lexer_item pop_token(lex_stack_t* stack){
 /**
  * Peek the top of the stack without removing it
  */
-Lexer_item peek_token(lex_stack_t* stack){
-	Lexer_item l;
+lexitem_t peek_token(lex_stack_t* stack){
+	lexitem_t l;
 	l.tok = BLANK;
 
 	//Just in case
