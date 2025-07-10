@@ -478,6 +478,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* direct_source, thre
 
 	//Finally we set the sources
 	instruction->source_register = direct_source;
+	//This implicit source is important for our uses in the register allocator
 	instruction->source_register2 = implicit_source;
 
 	//And now we'll give it back

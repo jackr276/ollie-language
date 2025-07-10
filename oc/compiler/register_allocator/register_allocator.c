@@ -911,21 +911,8 @@ static void pre_color(instruction_t* instruction){
 		case MOVW:
 		case MOVSX:
 		case MOVZX:
-			//If we're moving into something preparing for division, this needs
-			//to be in RAX
-			if(instruction->next_statement != NULL){
-				if((instruction->next_statement->instruction_type == CLTD || instruction->next_statement->instruction_type == CQTO)
-	   				&& instruction->next_statement->next_statement != NULL
-					&& (is_division_instruction(instruction->next_statement->next_statement) == TRUE
-					|| is_modulus_instruction(instruction->next_statement->next_statement) == TRUE)){
-
- 					//This needs to be in RAX
-					instruction->destination_register->associated_live_range->reg = RAX;
-					instruction->destination_register->associated_live_range->is_precolored = TRUE;
-				}
-				
-			//We also need to check for all kinds of paremeter passing
-			} else if(instruction->destination_register->parameter_number > 0){
+			//Let's check for any kind of parameter passing here
+			if(instruction->destination_register->parameter_number > 0){
 				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
 				instruction->destination_register->associated_live_range->carries_function_param = TRUE;
 				instruction->destination_register->associated_live_range->is_precolored = TRUE;
@@ -954,6 +941,10 @@ static void pre_color(instruction_t* instruction){
 		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
+			//The source register for a division must be in RAX
+			instruction->source_register2->associated_live_range->reg = RAX;
+			instruction->source_register2->associated_live_range->is_precolored = TRUE;
+
 			//The destination must be in RAX here
 			instruction->destination_register->associated_live_range->reg = RAX;
 			instruction->destination_register->associated_live_range->is_precolored = TRUE;
@@ -967,6 +958,10 @@ static void pre_color(instruction_t* instruction){
 		case DIVQ_FOR_MOD:
 		case IDIVL_FOR_MOD:
 		case IDIVQ_FOR_MOD:
+			//The source register for a division must be in RAX
+			instruction->source_register2->associated_live_range->reg = RAX;
+			instruction->source_register2->associated_live_range->is_precolored = TRUE;
+
 			//The destination for all division remainders is RDX
 			instruction->destination_register->associated_live_range->reg = RDX;
 			instruction->destination_register->associated_live_range->is_precolored = TRUE;

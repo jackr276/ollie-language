@@ -10,6 +10,7 @@ fn test_subtraction() -> u64 {
 
 	y := y - x;
 	y := y * x;
+	y := y % x;
 	ret y;
 }
 

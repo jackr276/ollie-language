@@ -2736,8 +2736,12 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
+		case DIVB_FOR_MOD:
+		case DIVW_FOR_MOD:
 		case DIVL_FOR_MOD:
 		case DIVQ_FOR_MOD:
+		case IDIVB_FOR_MOD:
+		case IDIVW_FOR_MOD:
 		case IDIVQ_FOR_MOD:
 		case IDIVL_FOR_MOD:
 			print_division_instruction(fl, instruction, mode);
