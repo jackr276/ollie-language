@@ -3112,6 +3112,43 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
 
 
 /**
+ * Emit the abstract machine code for a ternary operation. A ternary operation is really a conditional
+ * movement operation by a different name
+ *
+ * x == 0 ? a : b becomes
+ *
+ * if(x == 0) then {
+ * 		a
+ * } else {
+ * 		b
+ * }
+ *
+ * Which in reality would be something like this:
+ * 	cmpl $0, x
+ * 	cmove a, result
+ * 	cmovne b, result
+ */
+static three_addr_var_t* emit_ternary_operation(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+	//Let's first create the final result variable here
+	three_addr_var_t* result = emit_temp_var(ternary_operation->inferred_type);
+
+	//Grab a cursor to the first child
+	generic_ast_node_t* cursor = ternary_operation->first_child;
+
+	//Let's first process the conditional
+	expr_ret_package_t package = emit_binary_operation(basic_block, cursor, is_branch_ending);
+
+	//The package's assignee is what we base all conditional moves on
+
+
+
+	//Give back the result
+	return result;
+}
+
+
+
+/**
  * Emit the abstract machine code needed for a binary expression. The lowest possible
  * thing that we could have here is a unary expression. If we have that, we just emit the
  * unary expression
@@ -3146,6 +3183,11 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 		//Process a constant, we may have these in here directly
 		case AST_NODE_CLASS_CONSTANT:
 			package.assignee = emit_constant_assignment(basic_block, logical_or_expr, is_branch_ending);
+			return package;
+
+		//We could also have a ternary operation here
+		case AST_NODE_CLASS_TERNARY_EXPRESSION:
+			package.assignee = emit_ternary_operation(basic_block, logical_or_expr, is_branch_ending);
 			return package;
 		
 		//Break out by default
@@ -3340,6 +3382,11 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		//Emit the function call statement
 		ret_package.assignee = emit_function_call(basic_block, expr_node, is_branch_ending);
 		return ret_package;
+
+	//If we make it here, we have found a standalone ternary expression
+	} else if(expr_node->CLASS == AST_NODE_CLASS_TERNARY_EXPRESSION){
+		printf("FOUND TERNARY\n");
+
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		/**
 	 	* This is a very special check where we look for any if(x) kind of statements that just require a

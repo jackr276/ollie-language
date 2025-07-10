@@ -231,6 +231,26 @@ typedef enum{
 
 
 /**
+ * What kind of jump statement do we have?
+ */
+typedef enum{
+	NO_CONDITIONAL_MOVE = 0, //This is the default, and what we get when we have 0
+	CONDITIONAL_MOVE_NE,
+	CONDITIONAL_MOVE_E,
+	CONDITIONAL_MOVE_NZ,
+	CONDITIONAL_MOVE_Z,
+	CONDITIONAL_MOVE_L, // LT(SIGNED)
+	CONDITIONAL_MOVE_G, //GT(SIGNED)
+	CONDITIONAL_MOVE_GE, //GE(SIGNED)
+	CONDITIONAL_MOVE_LE, //LE(SIGNED)
+	CONDITIONAL_MOVE_A, //GT(UNSIGNED)
+	CONDITIONAL_MOVE_AE, //GE(UNSIGNED)
+	CONDITIONAL_MOVE_B, // LT(UNSIGNED)
+	CONDITIONAL_MOVE_BE, //LE(UNSIGNED)
+} conditional_move_type_t;
+
+
+/**
  * What kind of word length do we have -- used for instructions
  */
 typedef enum{
@@ -305,6 +325,8 @@ typedef enum{
 	THREE_ADDR_CODE_RET_STMT,
 	//A jump statement -- used for control flow
 	THREE_ADDR_CODE_JUMP_STMT,
+	//A three address code conditional movement statement
+	THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT,
 	//An indirect jump statement -- used for switch statement jump tables
 	THREE_ADDR_CODE_INDIRECT_JUMP_STMT,
 	//A direct to label jump statement
@@ -502,6 +524,8 @@ struct instruction_t{
 	u_int8_t is_converting_move;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
+	//If this is a conditional move statement, what's the class?
+	conditional_move_type_t move_type;
 	//Memory access type
 	TYPE_CLASS access_class;
 	//What kind of address calculation mode do we have?
@@ -675,6 +699,11 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
  * Emit a statement using two vars and a constant
  */
 instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2); 
+
+/**
+ * Emit a conditional assignment statement
+ */
+instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token prior_operator, u_int8_t is_signed);
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2

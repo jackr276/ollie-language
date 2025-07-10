@@ -3133,6 +3133,81 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 
 
 /**
+ * Emit a conditional assignment instruction
+ */
+instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token prior_operator, u_int8_t is_signed){
+	//First we'll allocate the instruction
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now define the class
+	stmt->CLASS = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
+
+	//Now we'll populate with values
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+
+	//What function are we in
+	stmt->function = current_function;
+
+	//Now let's see what kind of conditional move we have
+	switch(prior_operator){
+		case G_THAN:
+			if(is_signed == TRUE){
+				stmt->move_type = CONDITIONAL_MOVE_G;
+			} else {
+				stmt->move_type = CONDITIONAL_MOVE_A;
+			}
+
+			break;
+
+		case L_THAN:
+			if(is_signed == TRUE){
+				stmt->move_type = CONDITIONAL_MOVE_L;
+			} else {
+				stmt->move_type = CONDITIONAL_MOVE_B;
+			}
+
+			break;
+		case G_THAN_OR_EQ:
+			if(is_signed == TRUE){
+				stmt->move_type = CONDITIONAL_MOVE_GE;
+			} else {
+				stmt->move_type = CONDITIONAL_MOVE_AE;
+			}
+
+			break;
+
+		case L_THAN_OR_EQ:
+			if(is_signed == TRUE){
+				stmt->move_type = CONDITIONAL_MOVE_LE;
+			} else {
+				stmt->move_type = CONDITIONAL_MOVE_BE;
+			}
+
+			break;
+
+		case NOT_EQUALS:
+			//Move if not zero
+			stmt->move_type = CONDITIONAL_MOVE_NE;
+			break;		
+
+		case DOUBLE_EQUALS:
+			//Move if equal
+			stmt->move_type = CONDITIONAL_MOVE_E;
+			break;		
+
+		//By default it's just a not zero move
+		default:
+			stmt->move_type = CONDITIONAL_MOVE_NZ;
+			break;
+	}
+
+	//Give back the statement
+	return stmt;
+}
+
+
+/**
  * Emit a memory address assignment statement
  */
 instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1){

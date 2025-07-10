@@ -3573,13 +3573,20 @@ static generic_ast_node_t* ternary_expression(FILE* fl){
 		return conditional;
 	}
 
+	//Otherwise if we make it here, then we know that we are seeing a ternary expression.
+	
+	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
+	if(is_type_valid_for_conditional(conditional->inferred_type) == FALSE){
+		sprintf(info, "Type %s is invalid to be used in a conditional", conditional->inferred_type->type_name);
+		return print_and_return_error(info, parser_line_num);
+	}
+
 	//Allocate the ternary expression node
 	generic_ast_node_t* ternary_expression_node = ast_node_alloc(AST_NODE_CLASS_TERNARY_EXPRESSION);
 
 	//The first child is the conditional
 	add_child_node(ternary_expression_node, conditional);
 
-	//Otherwise if we make it here, then we know that we are seeing a ternary expression.
 	//We now must see another valid ternary
 	generic_ast_node_t* if_branch = ternary_expression(fl);
 
@@ -3609,6 +3616,9 @@ static generic_ast_node_t* ternary_expression(FILE* fl){
 
 	//Otherwise it's fine so we add it and move on
 	add_child_node(ternary_expression_node, else_branch);
+
+	//Determine the compatibility of these ternary nodes, and coerce it
+	ternary_expression_node->inferred_type = determine_compatibility_and_coerce(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type), QUESTION);
 
 	//Give back the parent level node
 	return ternary_expression_node;
