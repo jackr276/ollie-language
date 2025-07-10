@@ -67,6 +67,16 @@ typedef enum {
 	SINGLE_AND, /* & */
 	SINGLE_OR,
 	COLONEQ, /* := */
+	PLUSEQ, // +=
+	MINUSEQ, // -=
+	STAREQ, // *=
+	SLASHEQ, // /=
+	MODEQ, // %=
+	OREQ, // |=
+	ANDEQ, // &=
+	XOREQ, // ^=
+	LSHIFTEQ, // <<=
+	RSHIFTEQ, // >>=
 	DOT,
 	PLUS,
 	LIB,

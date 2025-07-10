@@ -234,6 +234,7 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 	//Current char we have
 	char ch;
 	char ch2;
+	char ch3;
 	//Store the lexeme
 	char lexeme[MAX_TOKEN_LENGTH];
 
@@ -271,6 +272,13 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						} else if(ch2 == '/'){
 							current_state = IN_SINGLE_COMMENT;
 							break;
+
+						} else if(ch2 == '='){
+							//Prepare the token and return it
+							lex_item.tok = SLASHEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+	
 						} else {
 							//"Put back" the char
 							put_back_char(fl);
@@ -288,6 +296,13 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						if(ch2 == '+'){
 							//Prepare and return
 							lex_item.tok = PLUSPLUS;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						//We could also see +=
+						} else if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = PLUSEQ;
 							lex_item.line_num = line_num;
 							return lex_item;
 						} else {
@@ -312,6 +327,14 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 							lex_item.tok = MINUSMINUS;
 							lex_item.line_num = line_num;
 							return lex_item;
+
+						//We could also see -=
+						} else if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = MINUSMINUS;
+							lex_item.line_num = line_num;
+							return lex_item;
+
 						//We can also have an arrow
 						} else if(ch2 == '>'){
 							//Prepare and return
@@ -356,9 +379,18 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						}
 
 					case '*':
-						lex_item.tok = STAR;
-						lex_item.line_num = line_num;
-						return lex_item;
+						ch2 = get_next_char(fl);
+
+						if(ch2 == '='){
+							lex_item.tok = STAREQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							put_back_char(fl);
+							lex_item.tok = STAR;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
 
 					case '=':
 						ch2 = get_next_char(fl);
@@ -391,6 +423,14 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 							lex_item.tok = DOUBLE_AND;
 							lex_item.line_num = line_num;
 							return lex_item;
+
+						//We could see &=
+						} else if (ch2 == '=') {
+							//Prepare and return
+							lex_item.tok = ANDEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+
 						} else {
 							put_back_char(fl);
 							lex_item.tok = SINGLE_AND;
@@ -404,6 +444,12 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						if(ch2 == '|'){
 							//Prepare and return
 							lex_item.tok = DOUBLE_OR;
+							lex_item.line_num = line_num;
+							return lex_item;
+						//We could also see |=
+						} else if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = OREQ;
 							lex_item.line_num = line_num;
 							return lex_item;
 						} else {
@@ -421,9 +467,18 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						return lex_item;
 
 					case '%':
-						lex_item.tok = MOD;
-						lex_item.line_num = line_num;
-						return lex_item;
+						ch2 = get_next_char(fl);
+
+						//We could see %=
+						if(ch2 == '='){
+							lex_item.tok = MODEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							lex_item.tok = MOD;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
 
 					case ':':
 						ch2 = get_next_char(fl);
@@ -458,9 +513,19 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						return lex_item;
 
 					case '^':
-						lex_item.tok = CARROT;
-						lex_item.line_num = line_num;
-						return lex_item;
+						ch2 = get_next_char(fl);
+
+						if(ch2 == '='){
+							lex_item.tok = XOREQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						} else {
+							put_back_char(fl);
+							lex_item.tok = CARROT;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
 
 					case '{':
 						lex_item.tok = L_CURLY;
@@ -602,9 +667,20 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						//Grab the next char
 						ch2 = get_next_char(fl);
 						if(ch2 == '<'){
-							lex_item.tok = L_SHIFT;
-							lex_item.line_num = line_num;
-							return lex_item;
+							ch3 = get_next_char(fl);
+
+							if(ch3 == '='){
+								lex_item.tok = LSHIFTEQ;
+								lex_item.line_num = line_num;
+								return lex_item;
+
+							} else {
+								put_back_char(fl);
+								lex_item.tok = L_SHIFT;
+								lex_item.line_num = line_num;
+								return lex_item;
+							}
+
 						} else if(ch2 == '=') {
 							lex_item.tok = L_THAN_OR_EQ;
 							lex_item.line_num = line_num;
@@ -621,9 +697,19 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						//Grab the next char
 						ch2 = get_next_char(fl);
 						if(ch2 == '>'){
-							lex_item.tok = R_SHIFT;
-							lex_item.line_num = line_num;
-							return lex_item;
+							ch3 = get_next_char(fl);
+							if(ch3 == '='){
+								lex_item.tok = RSHIFTEQ;
+								lex_item.line_num = line_num;
+								return lex_item;
+
+							} else {
+								put_back_char(fl);
+								lex_item.tok = R_SHIFT;
+								lex_item.line_num = line_num;
+								return lex_item;
+							}
+
 						} else if(ch2 == '=') {
 							lex_item.tok = G_THAN_OR_EQ;
 							lex_item.line_num = line_num;

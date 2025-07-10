@@ -11,7 +11,6 @@
 */
 
 #include "cfg.h"
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -65,6 +64,8 @@ typedef struct {
 
 //Define a package return struct that is used by the binary op expression code
 typedef struct{
+	//The final block we end up with(only used for ternary operators)
+	basic_block_t* final_block;
 	three_addr_var_t* assignee;
 	Token operator;
 } expr_ret_package_t;
@@ -3129,7 +3130,10 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  * 	cmove a, result
  * 	cmovne b, result
  */
-static three_addr_var_t* emit_ternary_operation(basic_block_t** basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+	expr_ret_package_t return_package;
+	return_package.operator = BLANK;
+
 	//The ending block for the whole thing
 	basic_block_t* end_block = basic_block_alloc(1);
 	//The if area block
@@ -3197,8 +3201,11 @@ static three_addr_var_t* emit_ternary_operation(basic_block_t** basic_block, gen
 	//Reassign what the actual block is
 	*basic_block = end_block;
 
+	return_package.final_block = end_block;
+	return_package.assignee = result;
+
 	//Give back the result
-	return result;
+	return return_package;
 }
 
 
@@ -3241,7 +3248,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 
 		//We could also have a ternary operation here
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
-			package.assignee = emit_ternary_operation(&basic_block, logical_or_expr, is_branch_ending);
+			package.assignee = emit_ternary_operation(&basic_block, logical_or_expr, is_branch_ending).assignee;
 			return package;
 		
 		//Break out by default
@@ -3440,7 +3447,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	//If we make it here, we have found a standalone ternary expression
 	} else if(expr_node->CLASS == AST_NODE_CLASS_TERNARY_EXPRESSION){
 		//Emit the ternary expression
-		ret_package.assignee = emit_ternary_operation(&basic_block, expr_node, is_branch_ending);
+		ret_package.assignee = emit_ternary_operation(&basic_block, expr_node, is_branch_ending).assignee;
 		return ret_package;
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
