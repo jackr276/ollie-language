@@ -8,8 +8,8 @@ fn main() -> i32 {
 	let mut a:i32 := 3;
 	let mut b:i32 := 3;
 	
-	x == 0 ? a else b;
+//	let mut test:i32 := x == 0 ? a else b;
 	
 
-	ret 2;//c;
+	ret test;//c;
 }

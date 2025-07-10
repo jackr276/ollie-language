@@ -2254,7 +2254,7 @@ static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u
 	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
 		//Perform the binary operation here
-		package = emit_binary_operation(basic_block, ret_node->first_child, is_branch_ending);
+		package = emit_expr_code(basic_block, ret_node->first_child, is_branch_ending, FALSE);
 
 		//Emit the temp assignment
 		instruction_t* assn_stmt = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
@@ -3380,7 +3380,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		add_assigned_variable(basic_block, left_hand_var);
 
 		//Now emit whatever binary expression code that we have
-		expr_ret_package_t package = emit_binary_operation(basic_block, expr_node->first_child, is_branch_ending);
+		expr_ret_package_t package = emit_expr_code(basic_block, expr_node->first_child, is_branch_ending, FALSE);
 
 		//The actual statement is the assignment of right to left
 		instruction_t* assn_stmt = emit_assignment_instruction(left_hand_var, package.assignee);
@@ -3411,7 +3411,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		cursor = cursor->next_sibling;
 
 		//Now emit the right hand expression
-		expr_ret_package_t package = emit_binary_operation(basic_block, cursor, is_branch_ending);
+		expr_ret_package_t package = emit_expr_code(basic_block, cursor, is_branch_ending, FALSE);
 
 		//Finally we'll construct the whole thing
 		instruction_t* stmt = emit_assignment_instruction(left_hand_var, package.assignee);
