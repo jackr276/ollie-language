@@ -703,7 +703,7 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 /**
  * Emit a conditional assignment statement
  */
-instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token prior_operator, u_int8_t is_signed);
+instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token prior_operator, u_int8_t is_signed, u_int8_t inverse_assignment);
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2

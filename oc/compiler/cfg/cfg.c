@@ -110,7 +110,8 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending);
-
+static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional);
+static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
  * Let's determine if a value is a positive power of 2.
@@ -3129,6 +3130,13 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  * 	cmovne b, result
  */
 static three_addr_var_t* emit_ternary_operation(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+	//The ending block for the whole thing
+	basic_block_t* end_block = basic_block_alloc(1);
+	//The if area block
+	basic_block_t* if_block = basic_block_alloc(1);
+	//And the else area block
+	basic_block_t* else_block = basic_block_alloc(1);
+
 	//Let's first create the final result variable here
 	three_addr_var_t* result = emit_temp_var(ternary_operation->inferred_type);
 
@@ -3139,8 +3147,27 @@ static three_addr_var_t* emit_ternary_operation(basic_block_t* basic_block, gene
 	expr_ret_package_t package = emit_binary_operation(basic_block, cursor, is_branch_ending);
 
 	//The package's assignee is what we base all conditional moves on
+	u_int8_t is_signed = is_type_signed(package.assignee->type); 
 
+	//Now we'll go through and process the two children
+	cursor = cursor->next_sibling;
 
+	//We'll emit this as well
+	expr_ret_package_t if_branch = emit_expr_code(basic_block, cursor, is_branch_ending, TRUE);
+
+	//We'll now create a conditional move for the if branch into the result
+	instruction_t* conditional_if_assignment = emit_conditional_assignment_instruction(result, if_branch.assignee, package.operator, is_signed, FALSE);
+
+	//Process the else branch
+	cursor = cursor->next_sibling;
+
+	//We'll emit this as well
+	expr_ret_package_t else_branch = emit_expr_code(basic_block, cursor, is_branch_ending, TRUE);
+
+	//We'll now create a conditional move for the if branch into the result
+	instruction_t* conditional_else_assignment = emit_conditional_assignment_instruction(result, if_branch.assignee, package.operator, is_signed, FALSE);
+
+	//TODO NOT FINISHED
 
 	//Give back the result
 	return result;
@@ -3385,7 +3412,9 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 	//If we make it here, we have found a standalone ternary expression
 	} else if(expr_node->CLASS == AST_NODE_CLASS_TERNARY_EXPRESSION){
-		printf("FOUND TERNARY\n");
+		//Emit the ternary expression
+		ret_package.assignee = emit_ternary_operation(basic_block, expr_node, is_branch_ending);
+		return ret_package;
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
 		/**
@@ -3393,9 +3422,6 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	 	* left hand temp assignment
 	 	*/
 		if(check_for_coniditional == TRUE && expr_node->first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
-			//For now - just to make sure we aren't using this wrongly
-			printf("========HERE============\n");
-			print_variable_name(expr_node->first_child->variable);
 			//If this is the case, then we need to just emit the temporary value and be done with it
 			ret_package.assignee =  emit_identifier(basic_block, expr_node->first_child, USE_TEMP_VAR, SIDE_TYPE_LEFT, TRUE);
 			//Signedness is irrelevant here because any jumps would just be "je/jne"

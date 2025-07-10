@@ -3135,7 +3135,7 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 /**
  * Emit a conditional assignment instruction
  */
-instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token prior_operator, u_int8_t is_signed){
+instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token prior_operator, u_int8_t is_signed, u_int8_t inverse_assignment){
 	//First we'll allocate the instruction
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3150,58 +3150,114 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
 	stmt->function = current_function;
 
 	//Now let's see what kind of conditional move we have
-	switch(prior_operator){
-		case G_THAN:
-			if(is_signed == TRUE){
-				stmt->move_type = CONDITIONAL_MOVE_G;
-			} else {
-				stmt->move_type = CONDITIONAL_MOVE_A;
-			}
+	if(inverse_assignment == FALSE){
+		switch(prior_operator){
+			case G_THAN:
+				if(is_signed == TRUE){
+					stmt->move_type = CONDITIONAL_MOVE_G;
+				} else {
+					stmt->move_type = CONDITIONAL_MOVE_A;
+				}
 
-			break;
+				break;
 
-		case L_THAN:
-			if(is_signed == TRUE){
-				stmt->move_type = CONDITIONAL_MOVE_L;
-			} else {
-				stmt->move_type = CONDITIONAL_MOVE_B;
-			}
+			case L_THAN:
+				if(is_signed == TRUE){
+					stmt->move_type = CONDITIONAL_MOVE_L;
+				} else {
+					stmt->move_type = CONDITIONAL_MOVE_B;
+				}
 
-			break;
-		case G_THAN_OR_EQ:
-			if(is_signed == TRUE){
-				stmt->move_type = CONDITIONAL_MOVE_GE;
-			} else {
-				stmt->move_type = CONDITIONAL_MOVE_AE;
-			}
+				break;
+			case G_THAN_OR_EQ:
+				if(is_signed == TRUE){
+					stmt->move_type = CONDITIONAL_MOVE_GE;
+				} else {
+					stmt->move_type = CONDITIONAL_MOVE_AE;
+				}
 
-			break;
+				break;
 
-		case L_THAN_OR_EQ:
-			if(is_signed == TRUE){
-				stmt->move_type = CONDITIONAL_MOVE_LE;
-			} else {
-				stmt->move_type = CONDITIONAL_MOVE_BE;
-			}
+			case L_THAN_OR_EQ:
+				if(is_signed == TRUE){
+					stmt->move_type = CONDITIONAL_MOVE_LE;
+				} else {
+					stmt->move_type = CONDITIONAL_MOVE_BE;
+				}
 
-			break;
+				break;
 
-		case NOT_EQUALS:
-			//Move if not zero
-			stmt->move_type = CONDITIONAL_MOVE_NE;
-			break;		
+			case NOT_EQUALS:
+				//Move if not zero
+				stmt->move_type = CONDITIONAL_MOVE_NE;
+				break;		
 
-		case DOUBLE_EQUALS:
-			//Move if equal
-			stmt->move_type = CONDITIONAL_MOVE_E;
-			break;		
+			case DOUBLE_EQUALS:
+				//Move if equal
+				stmt->move_type = CONDITIONAL_MOVE_E;
+				break;		
 
-		//By default it's just a not zero move
-		default:
-			stmt->move_type = CONDITIONAL_MOVE_NZ;
-			break;
+			//By default it's just a not zero move
+			default:
+				stmt->move_type = CONDITIONAL_MOVE_NZ;
+				break;
+		}
+	
+	//Otherwise we're in so called "inverse" mode, where we do everything in reverse
+	} else {
+		switch(prior_operator){
+			case G_THAN:
+				if(is_signed == TRUE){
+					stmt->move_type = CONDITIONAL_MOVE_LE;
+				} else {
+					stmt->move_type = CONDITIONAL_MOVE_BE;
+				}
+
+				break;
+
+			case L_THAN:
+				if(is_signed == TRUE){
+					stmt->move_type = CONDITIONAL_MOVE_GE;
+				} else {
+					stmt->move_type = CONDITIONAL_MOVE_AE;
+				}
+
+				break;
+			case G_THAN_OR_EQ:
+				if(is_signed == TRUE){
+					stmt->move_type = CONDITIONAL_MOVE_L;
+				} else {
+					stmt->move_type = CONDITIONAL_MOVE_B;
+				}
+
+				break;
+
+			case L_THAN_OR_EQ:
+				if(is_signed == TRUE){
+					stmt->move_type = CONDITIONAL_MOVE_G;
+				} else {
+					stmt->move_type = CONDITIONAL_MOVE_A;
+				}
+
+				break;
+
+			case NOT_EQUALS:
+				//Move if not zero
+				stmt->move_type = CONDITIONAL_MOVE_E;
+				break;		
+
+			case DOUBLE_EQUALS:
+				//Move if equal
+				stmt->move_type = CONDITIONAL_MOVE_NE;
+				break;		
+
+			//By default it's just a not zero move
+			default:
+				stmt->move_type = CONDITIONAL_MOVE_Z;
+				break;
+		}
 	}
-
+	
 	//Give back the statement
 	return stmt;
 }
