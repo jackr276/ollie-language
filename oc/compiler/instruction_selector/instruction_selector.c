@@ -22,6 +22,7 @@
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* u64;
+static generic_type_t* u8;
 
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
@@ -1292,6 +1293,24 @@ static void handle_three_instruction_registers_and_offset_only_to_memory_move(in
 
 
 /**
+ * Emit a byte copy of a given source variable. This will be used for the left and right shift instructions
+ * where the shift amount needed is itself a byte
+ */
+static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
+	//We'll want a direct copy of this variable
+	three_addr_var_t* copy = emit_var_copy(source);
+
+	//We'll then want to modify the type and size
+	copy->variable_size = BYTE;
+	//This one's type will be a u8
+	copy->type = u8;
+
+	//Finally give back the copy
+	return copy;
+}
+
+
+/**
  * Handle a left shift operation. In doing a left shift, we account
  * for the possibility that we have a signed value
  */
@@ -1339,14 +1358,8 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
-		//If we need to convert, we'll do that here
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
-
-		//Otherwise it's a direct translation
-		} else {
-			instruction->source_register = instruction->op2;
-		}
+		//We will always emit the byte copy version of the source register here
+		instruction->source_register = emit_byte_copy_of_variable(instruction->op2);
 
 	//Otherwise we have an immediate source
 	} else {
@@ -1403,14 +1416,8 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
-		//If we need to convert, we'll do that here
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
-
-		//Otherwise it's a direct translation
-		} else {
-			instruction->source_register = instruction->op2;
-		}
+		//We will always emit the byte copy version of the source register here
+		instruction->source_register = emit_byte_copy_of_variable(instruction->op2);
 
 	//Otherwise we have an immediate source
 	} else {
@@ -4156,8 +4163,9 @@ static void print_ordered_blocks(basic_block_t* head_block, instruction_printing
  * of code that we print out
  */
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
-	//Grab this first
+	//Grab these two general use types first
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64")->type;
+	u8 = lookup_type_name_only(cfg->type_symtab, "u8")->type;
 
 	//Our very first step in the instruction selector is to order all of the blocks in one 
 	//straight line. This step is also able to recognize and exploit some early optimizations,
