@@ -922,12 +922,6 @@ static void pre_color(instruction_t* instruction){
  					//This needs to be in RAX
 					instruction->destination_register->associated_live_range->reg = RAX;
 					instruction->destination_register->associated_live_range->is_precolored = TRUE;
-
-				//If we have an unsigned multiplication here, we also need to be inside of rax
-				} else if(is_unsigned_multplication_instruction(instruction->next_statement) == TRUE){
-					//This needs to be in RAX
-					instruction->destination_register->associated_live_range->reg = RAX;
-					instruction->destination_register->associated_live_range->is_precolored = TRUE;
 				}
 				
 			//We also need to check for all kinds of paremeter passing
@@ -943,11 +937,14 @@ static void pre_color(instruction_t* instruction){
 		case MULW:
 		case MULL:
 		case MULQ:
+			//When we do an unsigned multiplication, the implicit source register must be in RAX
+			instruction->source_register2->associated_live_range->reg = RAX;
+			instruction->source_register2->associated_live_range->is_precolored = TRUE; 
+
 			//The destination must be in RAX here
 			instruction->destination_register->associated_live_range->reg = RAX;
 			instruction->destination_register->associated_live_range->is_precolored = TRUE;
 			break;
-
 
 		case DIVB:
 		case DIVW:
