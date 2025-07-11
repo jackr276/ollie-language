@@ -1012,6 +1012,23 @@ char* operator_to_string(Token op){
 			return ">>";
 		case RSHIFTEQ:
 			return ">>=";
+		case G_THAN:
+			return ">";
+		case L_THAN:
+			return "<";
+		case G_THAN_OR_EQ:
+			return ">=";
+		case L_THAN_OR_EQ:
+			return "<=";
+		case DOUBLE_EQUALS:
+			return "==";
+		case NOT_EQUALS:
+			return "!=";
+		case B_NOT:
+			return "~";
+		case L_NOT:
+			return "!";
+
 		default:
 			return NULL;
 	}
