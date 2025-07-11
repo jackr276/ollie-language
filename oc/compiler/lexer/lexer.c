@@ -962,6 +962,62 @@ void print_token(lexitem_t* l){
 	printf("TOKEN: %3d, Lexeme: %10s, Line: %4d\n", l->tok, l->lexeme, l->line_num);
 }
 
+
+/**
+ * A utility function for error printing that converts an operator to a string
+ */
+char* operator_to_string(Token op){
+	switch(op){
+		case PLUS:
+			return "+";
+		case MINUS:
+			return "-";
+		case STAR:
+			return "*";
+		case F_SLASH:
+			return "/";
+		case PLUSEQ:
+			return "+=";
+		case MINUSEQ:
+			return "-=";
+		case STAREQ:
+			return "*=";
+		case SLASHEQ:
+			return "/=";
+		case SINGLE_AND:
+			return "&";
+		case ANDEQ:
+			return "&=";
+		case SINGLE_OR:
+			return "|";
+		case OREQ:
+			return "|=";
+		case ARROW_EQ:
+			return "=>";
+		case COLON:
+			return ":";
+		case CARROT:
+			return "^";
+		case XOREQ:
+			return "^=";
+		case DOUBLE_OR:
+			return "||";
+		case DOUBLE_AND:
+			return "&&";
+		case L_SHIFT:
+			return "<<";
+		case LSHIFTEQ:
+			return "<<=";
+		case R_SHIFT:
+			return ">>";
+		case RSHIFTEQ:
+			return ">>=";
+		default:
+			return NULL;
+	}
+}
+
+
 /**
  * Resetting the file allows us to start fresh from
  * the top

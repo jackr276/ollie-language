@@ -184,4 +184,9 @@ void push_back_token(lexitem_t l);
  */
 void print_token(lexitem_t* l);
 
+/**
+ * A utility function for error printing that converts an operator to a string
+ */
+char* operator_to_string(Token op);
+
 #endif /* LEXER_H */

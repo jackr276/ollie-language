@@ -147,6 +147,7 @@ static u_int8_t is_assignment_operator(Token op){
 		case MINUSEQ:
 		case STAREQ:
 		case SLASHEQ:
+		case MODEQ:
 			return TRUE;
 
 		default:
@@ -169,6 +170,8 @@ static Token compressed_assignment_to_binary_op(Token op){
 			return CARROT;
 		case OREQ:
 			return SINGLE_OR;
+		case MODEQ:
+			return MOD;
 		case ANDEQ:
 			return SINGLE_AND;
 		case PLUSEQ:
@@ -445,7 +448,6 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 			const_node->int_val = atoi(lookahead.lexeme);
 
 			//This is signed by default
-			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 			constant_node->inferred_type = generic_signed_int;
 
 			break;
@@ -459,7 +461,6 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_unsigned_int;
-			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "u32")->type;
 
 			break;
 
@@ -472,7 +473,6 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_signed_int;
-			//constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 
 			break;
 
@@ -1100,16 +1100,6 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	}
 }
 
-/**
- * A helper function that will perform any/all desugaring for syntax. This means that we
- * will translate the compressed equality operators(>>=, +=, etc.) into the appropriate binary
- * expressions
- */
-static generic_ast_node_t* desugar_compressed_equality_operators(){
-
-	return NULL;
-}
-
 
 /**
  * An assignment expression can decay into a conditional expression or it
@@ -1290,8 +1280,28 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		
 	//Otherwise, we'll need to perform any needed type coercion
 	} else {
+		//Convert this into the assignment operator
+		Token binary_op = compressed_assignment_to_binary_op(assignment_operator);
+
+		//Let's check if the left is valid
+		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
+			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name, operator_to_string(assignment_operator));
+			return print_and_return_error(info, parser_line_num);
+
+		}
+
+		//We'll also want to create a complete, distinct copy of the subtree here
+		generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_duplicate);
+
 		//Determine type compatibility and perform coercions
-		final_type = determine_compatibility_and_coerce(type_symtab, &left_hand_type, &right_hand_type, compressed_assignment_to_binary_op(assignment_operator));
+		final_type = determine_compatibility_and_coerce(type_symtab, &left_hand_type, &right_hand_type, binary_op);
+
+		//If this fails, that means that we have an invalid operation
+		if(final_type == NULL){
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_type->type_name, right_hand_type->type_name, operator_to_string(assignment_operator));
+			return print_and_return_error(info, parser_line_num);
+		}
+
 
 		//TODO not done
 		return asn_expr_node;
@@ -1678,7 +1688,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 
 	//If it it's invalid, we fail here
 	if(is_valid == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name, lookahead.lexeme);
+		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name, operator_to_string(lookahead.tok));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1977,7 +1987,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 		
@@ -2016,7 +2026,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2048,7 +2058,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2067,7 +2077,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2086,7 +2096,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2105,7 +2115,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, lookahead.lexeme);
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2347,7 +2357,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 
 		//Fail case here
 		if(temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2374,7 +2384,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 
 		//Fail case here
 		if(right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2387,7 +2397,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2483,7 +2493,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		
 		//Fail out here
 		if(left_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2510,7 +2520,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		
 		//Fail out here
 		if(right_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2525,7 +2535,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2553,7 +2563,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2679,7 +2689,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2776,7 +2786,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, op.lexeme); 
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok)); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2798,7 +2808,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, op.lexeme); 
+			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, operator_to_string(op.tok)); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2811,7 +2821,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2903,7 +2913,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 
 		//If this fails, there's no point in going forward
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2925,7 +2935,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 
 		//If this fails, there's no point in going forward
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2941,7 +2951,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, op.lexeme);
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
