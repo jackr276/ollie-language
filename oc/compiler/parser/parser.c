@@ -1305,7 +1305,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		}
 
 		//We'll also want to create a complete, distinct copy of the subtree here
-		generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_duplicate);
+		generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
 
 		//If this is not null, assign the var too
 		if(left_hand_duplicate->variable != NULL && left_hand_duplicate->variable->type_defined_as != left_hand_duplicate->inferred_type){
