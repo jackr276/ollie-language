@@ -1304,39 +1304,53 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We'll also want to create a complete, distinct copy of the subtree here
-		generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
+		//If we don't have a pointer type here - this is the most common case
+		if(left_hand_type->type_class != TYPE_CLASS_POINTER){
+			//We'll also want to create a complete, distinct copy of the subtree here
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
 
-		//If this is not null, assign the var too
-		if(left_hand_duplicate->variable != NULL && left_hand_duplicate->variable->type_defined_as != left_hand_duplicate->inferred_type){
-			update_inferred_type_in_subtree(left_hand_duplicate, left_hand_duplicate->variable, left_hand_duplicate->inferred_type);
-			//Also do this for the other value
-			update_inferred_type_in_subtree(left_hand_unary, left_hand_unary->variable, left_hand_unary->inferred_type);
-		} 
+			//If this is not null, assign the var too
+			if(left_hand_duplicate->variable != NULL && left_hand_duplicate->variable->type_defined_as != left_hand_duplicate->inferred_type){
+				update_inferred_type_in_subtree(left_hand_duplicate, left_hand_duplicate->variable, left_hand_duplicate->inferred_type);
+				//Also do this for the other value
+				update_inferred_type_in_subtree(left_hand_unary, left_hand_unary->variable, left_hand_unary->inferred_type);
+			} 
 
-		//If this is not null, assign the var too
-		if(expr->variable != NULL && expr->variable->type_defined_as != expr->inferred_type){
-			update_inferred_type_in_subtree(expr, expr->variable, expr->inferred_type);
+			//If this is not null, assign the var too
+			if(expr->variable != NULL && expr->variable->type_defined_as != expr->inferred_type){
+				update_inferred_type_in_subtree(expr, expr->variable, expr->inferred_type);
 
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(right_hand_type == generic_unsigned_int || right_hand_type == generic_signed_int){
-			update_constant_type_in_subtree(expr, right_hand_type, expr->inferred_type);
+			//If this is the case, we'll need to propogate all of the types down the chain here
+			} else if(right_hand_type == generic_unsigned_int || right_hand_type == generic_signed_int){
+				update_constant_type_in_subtree(expr, right_hand_type, expr->inferred_type);
+			}
+
+			//By the time that we get here, we know that all coercion has been completed
+			//We can now construct our final result
+			//Allocate the binary expression
+			generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+			//Store the type and operator
+			binary_op_node->inferred_type = final_type;
+			binary_op_node->binary_operator = binary_op;
+
+			//Now we'll add the duplicates in as children
+			add_child_node(binary_op_node, left_hand_duplicate);
+			add_child_node(binary_op_node, expr);
+
+			//This is an overall child of the assignment expression
+			add_child_node(asn_expr_node, binary_op_node);
+
+		//Otherwise we do have a pointer type
+		} else {
+			//We'll also want to create a complete, distinct copy of the subtree here
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
+
+			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
+			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr);
+
+			//This is an overall child of the assignment expression
+			add_child_node(asn_expr_node, pointer_arithmetic);
 		}
-
-		//By the time that we get here, we know that all coercion has been completed
-		//We can now construct our final result
-		//Allocate the binary expression
-		generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
-		//Store the type and operator
-		binary_op_node->inferred_type = final_type;
-		binary_op_node->binary_operator = binary_op;
-
-		//Now we'll add the duplicates in as children
-		add_child_node(binary_op_node, left_hand_duplicate);
-		add_child_node(binary_op_node, expr);
-
-		//This is an overall child of the assignment expression
-		add_child_node(asn_expr_node, binary_op_node);
 
 		//And now we can return this
 		return asn_expr_node;
