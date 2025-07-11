@@ -156,6 +156,37 @@ static u_int8_t is_assignment_operator(Token op){
 
 
 /**
+ * Convert a compressed assignment operator into the equivalent binary 
+ * operation
+ */
+static Token compressed_assignment_to_binary_op(Token op){
+	switch(op){
+		case LSHIFTEQ:
+			return L_SHIFT;
+		case RSHIFTEQ:
+			return R_SHIFT;
+		case XOREQ:
+			return CARROT;
+		case OREQ:
+			return SINGLE_OR;
+		case ANDEQ:
+			return SINGLE_AND;
+		case PLUSEQ:
+			return PLUS;
+		case MINUSEQ:
+			return MINUS;
+		case STAREQ:
+			return STAR;
+		case SLASHEQ:
+			return F_SLASH;
+		//We should never actually reach this
+		default:
+			return BLANK;
+	}
+}
+
+
+/**
  * Print out an error message. This avoids code duplicatoin becuase of how much we do this
  */
 static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t parser_line_num){
@@ -1196,9 +1227,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
 	//Fail case here
-	if(lookahead.tok != COLONEQ){
-		sprintf(info, "Expected := symbol in assignment expression, instead got %s", lookahead.lexeme);
-		printf("%d", lookahead.tok);
+	if(is_assignment_operator(lookahead.tok) == FALSE){
+		sprintf(info, "Expected assignment operator symbol in assignment expression");
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		//Return a special kind of error node
@@ -1220,39 +1250,52 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
 	generic_type_t* right_hand_type = expr->inferred_type;
 
+	//What is our final type?
+	generic_type_t* final_type = NULL;
 
-	/**
-	 * We will make use of the types assignable module here, as the rules are slightly 
-	 * different than the types compatible rule
-	 */
-	generic_type_t* final_type = types_assignable(&left_hand_type, &right_hand_type);
+	//If we have a generic assignment(:=), we can just do the assignability
+	//check
+	if(assignment_operator == COLONEQ){
+		/**
+		 * We will make use of the types assignable module here, as the rules are slightly 
+		 * different than the types compatible rule
+		 */
+		final_type = types_assignable(&left_hand_type, &right_hand_type);
 
-
-	//If they're not, we fail here
-	if(final_type == NULL){
-		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
-	if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-		if(expr->variable->is_mutable == FALSE && left_hand_unary->variable->is_mutable == TRUE){
-			print_parse_message(PARSE_ERROR, "Mutable references to immutable variables are forbidden", parser_line_num);
+		//If they're not, we fail here
+		if(final_type == NULL){
+			sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
 		}
+
+		//If the return type of the logical or expression is an address, is it an address of a mutable variable?
+		if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
+			if(expr->variable->is_mutable == FALSE && left_hand_unary->variable->is_mutable == TRUE){
+				print_parse_message(PARSE_ERROR, "Mutable references to immutable variables are forbidden", parser_line_num);
+				num_errors++;
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			}
+		}
+
+		//Otherwise the overall type is the final type
+		asn_expr_node->inferred_type = final_type;
+
+		//Otherwise we know it worked, so we'll add the expression in as the right child
+		add_child_node(asn_expr_node, expr);
+
+		//Return the reference to the overall node
+		return asn_expr_node;
+		
+	//Otherwise, we'll need to perform any needed type coercion
+	} else {
+		//Determine type compatibility and perform coercions
+		final_type = determine_compatibility_and_coerce(type_symtab, &left_hand_type, &right_hand_type, compressed_assignment_to_binary_op(assignment_operator));
+
+		//TODO not done
+		return asn_expr_node;
 	}
-
-	//Otherwise the overall type is the final type
-	asn_expr_node->inferred_type = final_type;
-
-	//Otherwise we know it worked, so we'll add the conditional in as the right child
-	add_child_node(asn_expr_node, expr);
-
-	//Return the reference to the overall node
-	return asn_expr_node;
 }
 
 
