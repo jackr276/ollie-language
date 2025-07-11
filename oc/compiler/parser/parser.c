@@ -133,6 +133,29 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 
 
 /**
+ * Determine whether or not something is an assignment operator
+ */
+static u_int8_t is_assignment_operator(Token op){
+	switch(op){
+		case COLONEQ:
+		case LSHIFTEQ:
+		case RSHIFTEQ:
+		case XOREQ:
+		case OREQ:
+		case ANDEQ:
+		case PLUSEQ:
+		case MINUSEQ:
+		case STAREQ:
+		case SLASHEQ:
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Print out an error message. This avoids code duplicatoin becuase of how much we do this
  */
 static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t parser_line_num){
@@ -1046,6 +1069,16 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 	}
 }
 
+/**
+ * A helper function that will perform any/all desugaring for syntax. This means that we
+ * will translate the compressed equality operators(>>=, +=, etc.) into the appropriate binary
+ * expressions
+ */
+static generic_ast_node_t* desugar_compressed_equality_operators(){
+
+	return NULL;
+}
+
 
 /**
  * An assignment expression can decay into a conditional expression or it
@@ -1056,6 +1089,15 @@ static generic_ast_node_t* primary_expression(FILE* fl){
  *
  * BNF Rule: <assignment-expression> ::= <ternary-expression> 
  * 									   | <unary-expression> := <ternary-expression>
+ * 									   | <unary-expression> <<= <ternary-expression>
+ * 									   | <unary-expression> >>= <ternary-expression>
+ * 									   | <unary-expression> += <ternary-expression>
+ * 									   | <unary-expression> -= <ternary-expression>
+ * 									   | <unary-expression> *= <ternary-expression>
+ * 									   | <unary-expression> /= <ternary-expression>
+ * 									   | <unary-expression> |= <ternary-expression>
+ * 									   | <unary-expression> &= <ternary-expression>
+ * 									   | <unary-expression> ^= <ternary-expression>
  *
  */
 static generic_ast_node_t* assignment_expression(FILE* fl){
@@ -1064,48 +1106,42 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//Did we find the assignment op?
-	u_int8_t found_asn_op = FALSE;
+	//This will hold onto the assignment operator for us
+	Token assignment_operator = BLANK;
 
 	//Probably way too much, just to be safe
-	lexitem_t items[200];
+	lex_stack_t* stack = lex_stack_alloc();
 	
-	//How many we have
-	u_int16_t idx = 0;
-
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//So long as we don't see a semicolon(end) or an assignment op, or a left or right curly
-	while(lookahead.tok != COLONEQ && lookahead.tok != SEMICOLON && lookahead.tok != L_CURLY && lookahead.tok != R_CURLY){
-		//Put this onto the items we've seen
-		items[idx] = lookahead;
-		idx++;
+	while(is_assignment_operator(lookahead.tok) == FALSE && lookahead.tok != SEMICOLON && lookahead.tok != L_CURLY && lookahead.tok != R_CURLY){
+		//Push lookahead onto the stack
+		push_token(stack, lookahead);
 
 		//Otherwise refresh
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Did we see the coloneq? If not, not an assingment operation
-	if(lookahead.tok == COLONEQ){
-		found_asn_op = TRUE;
-	} else {
-		//Otherwise we did not find it
-		found_asn_op = FALSE;
-	}
+	//Save the assignment operator for later
+	assignment_operator = lookahead.tok;
 
-	//First push back lookahead
+	//First push back lookahead, this won't be on the stack so it's needed that we do this
 	push_back_token(lookahead);
 
 	//Once we get here, we either found the assignment op or we didn't. First though, let's
 	//put everything back where we found it
-	for(int16_t i = idx - 1; i >= 0; i--){
-		//Push these all back
-		push_back_token(items[i]);
+	while(lex_stack_is_empty(stack) == LEX_STACK_NOT_EMPTY){
+		//Pop the token off and put it back
+		push_back_token(pop_token(stack));
 	}
+	
+	//Once we make it here the lexstack has served its purpose, so we can scrap it
+	lex_stack_dealloc(&stack);
 
-	//If we didn't find an assignment operator, we just return the logical or expression
-	if(found_asn_op == FALSE){
+	//If whatever our operator here is is not an assignment operator, we can just use the ternary rule
+	if(is_assignment_operator(assignment_operator) == FALSE){
 		return ternary_expression(fl);
 	}
 
