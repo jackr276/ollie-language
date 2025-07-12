@@ -3,6 +3,17 @@
 * This file is meant to test all compressed equality operators
 */
 
+fn test_unsigned_value() -> i32 {
+	let mut x:i32 := 2;
+	let mut y:u32 := 3;
+
+	//Should trigger an unsigned multiplication
+	x *= y;
+	x := x * y;
+
+	ret x;
+}
+
 fn test_plus() -> i32 {
 	let mut x:i32 := 2;
 	let mut y:i32 := -3;
