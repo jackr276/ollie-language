@@ -102,8 +102,8 @@ static basic_block_t* visit_declaration_statement(generic_ast_node_t* node);
 static basic_block_t* visit_compound_statement(values_package_t* values);
 static basic_block_t* visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
 static statement_result_package_t visit_if_statement(values_package_t* values);
-static basic_block_t* visit_while_statement(values_package_t* values);
-static basic_block_t* visit_do_while_statement(values_package_t* values);
+static statement_result_package_t visit_while_statement(values_package_t* values);
+static statement_result_package_t visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
 static basic_block_t* visit_case_statement(values_package_t* values);
 static basic_block_t* visit_default_statement(values_package_t* values);
@@ -4147,13 +4147,23 @@ static basic_block_t* visit_for_statement(values_package_t* values){
  * A do-while statement is a simple control flow construct. As always, the direct successor path is the path that reliably
  * leads us down and out
  */
-static basic_block_t* visit_do_while_statement(values_package_t* values){
+static statement_result_package_t visit_do_while_statement(values_package_t* values){
+	//First we'll allocate the result block
+	statement_result_package_t result_package;
+
 	//Create our entry block. This in reality will be the compound statement
 	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
 	//The true ending block. We assume that the exit only happens once
 	basic_block_t* do_while_stmt_exit_block = basic_block_alloc(1);
 	//We will explicitly mark that this is an exit block
 	do_while_stmt_exit_block->block_type = BLOCK_TYPE_DO_WHILE_END;
+
+	//We can add these into the result package already
+	result_package.starting_block = do_while_stmt_entry_block;
+	result_package.final_block = do_while_stmt_exit_block;
+	//These are both guaranteed to be null
+	result_package.assignee = NULL;
+	result_package.operator = BLANK;
 
 	//Grab the initial node
 	generic_ast_node_t* do_while_stmt_node = values->initial_node;
@@ -4197,7 +4207,10 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 
 	//If we get this, we can't go forward. Just give it back
 	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
-		return do_while_stmt_entry_block;
+		//Since we have a return block here, we know that everything else is unreachable
+		result_package.final_block = compound_stmt_end;
+		//And give it back
+		return result_package;
 	}
 
 	//Add the conditional check into the end here
@@ -4231,7 +4244,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	}
 
 	//Always return the entry block
-	return do_while_stmt_entry_block;
+	return result_package;
 }
 
 
@@ -4239,13 +4252,24 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
  * A while statement is a very simple control flow construct. As always, the "direct successor" path is the path
  * that reliably leads us down and out
  */
-static basic_block_t* visit_while_statement(values_package_t* values){
+static statement_result_package_t visit_while_statement(values_package_t* values){
+	//Initialize the result package
+	statement_result_package_t result_package;
+
 	//Create our entry block
 	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
 	//And create our exit block. We assume that this executes once
 	basic_block_t* while_statement_end_block = basic_block_alloc(1);
 	//We will specifically mark the end block here as an ending block
 	while_statement_end_block->block_type = BLOCK_TYPE_WHILE_END;
+
+	//We already know what to populate our result package with here
+	result_package.starting_block = while_statement_entry_block;
+	result_package.final_block = while_statement_end_block;
+
+	//This has no assignee/operator
+	result_package.assignee = NULL;
+	result_package.operator = BLANK;
 
 	//For drilling efficiency reasons, we'll want the entry block's direct successor to be the end block
 	while_statement_entry_block->direct_successor = while_statement_end_block;
@@ -4287,7 +4311,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 		add_successor(while_statement_entry_block, while_statement_end_block);
 
 		//We'll just return now
-		return while_statement_entry_block;
+		return result_package;
 	}
 
 
@@ -4333,7 +4357,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	}
 
 	//Now we're done, so
-	return while_statement_entry_block;
+	return result_package;
 }
 
 
@@ -4963,28 +4987,22 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			while_stmt_values.loop_stmt_end = NULL;
 
 			//Visit the while statement
-			basic_block_t* while_stmt_entry_block = visit_while_statement(&while_stmt_values);
+			statement_result_package_t while_results = visit_while_statement(&while_stmt_values);
 
 			//We'll now add it in
 			if(starting_block == NULL){
-				starting_block = while_stmt_entry_block;
-				current_block = starting_block;
+				starting_block = while_results.starting_block;
+				current_block = while_results.final_block;
 			//We never merge these
 			} else {
 				//Add as a successor
-				add_successor(current_block, while_stmt_entry_block);
+				add_successor(current_block, while_results.starting_block);
 				//Emit a direct jump to it
-				emit_jump(current_block, while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, while_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				//And the current block is just the end block
+				current_block = while_results.final_block;
 			}
 
-			//Let's now drill to the bottom
-			current_block = while_stmt_entry_block;
-
-			//So long as we don't see the end
-			while(current_block->block_type != BLOCK_TYPE_WHILE_END){
-				current_block = current_block->direct_successor;
-			}
-	
 		//Handle a do-while statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
 			//Create the values package
@@ -4995,27 +5013,21 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			do_while_values.for_loop_update_block = values->for_loop_update_block;
 
 			//Visit the statement
-			basic_block_t* do_while_stmt_entry_block = visit_do_while_statement(&do_while_values);
+			statement_result_package_t result_package = visit_do_while_statement(&do_while_values);
 
 			//We'll now add it in
 			if(starting_block == NULL){
-				starting_block = do_while_stmt_entry_block;
-				current_block = starting_block;
+				starting_block = result_package.starting_block;
+				current_block = result_package.final_block;
 			//We never merge do-while's, they are strictly successors
 			} else {
-				add_successor(current_block, do_while_stmt_entry_block);
-				emit_jump(current_block, do_while_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				//Add this in as a successor
+				add_successor(current_block, result_package.starting_block);
+				//Emit a jump from the current block to this
+				emit_jump(current_block, result_package.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				//And we now know that the current block is just the end block
+				current_block = result_package.final_block;
 			}
-
-			//Now we'll need to reach the end-point of this statement
-			current_block = do_while_stmt_entry_block;
-
-			//As long as we aren't at the very end
-			while(current_block->direct_successor != NULL && current_block->block_type != BLOCK_TYPE_DO_WHILE_END){
-				current_block = current_block->direct_successor;
-			}
-
-			//Otherwise, we're all set to go to the next iteration
 
 		//Handle a for statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
