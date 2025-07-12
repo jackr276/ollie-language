@@ -933,6 +933,36 @@ static void pre_color(instruction_t* instruction){
 			instruction->destination_register->associated_live_range->is_precolored = TRUE;
 			break;
 
+		/**
+		 * For all shift instructions, if they have a register source, that
+		 * source is required to be in the %cl register
+		 */
+		case SALB:
+		case SALW:
+		case SALL:
+		case SALQ:
+		case SHLB:
+		case SHLW:
+		case SHLL:
+		case SHLQ:
+		case SARB:
+		case SARW:
+		case SARL:
+		case SARQ:
+		case SHRB:
+		case SHRW:
+		case SHRL:
+		case SHRQ:
+			//Do we have a register source?
+			if(instruction->source_register != NULL){
+				//Pre-color to RCX
+				instruction->source_register->associated_live_range->reg = RCX;
+				//Mark that it is precolored
+				instruction->source_register->associated_live_range->is_precolored = TRUE;
+			}
+		
+			break;
+
 		case DIVB:
 		case DIVW:
 		case DIVL:
