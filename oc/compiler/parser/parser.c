@@ -149,7 +149,6 @@ static u_int8_t is_assignment_operator(Token op){
 		case SLASHEQ:
 		case MODEQ:
 			return TRUE;
-
 		default:
 			return FALSE;
 	}

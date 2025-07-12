@@ -331,7 +331,7 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						//We could also see -=
 						} else if(ch2 == '='){
 							//Prepare and return
-							lex_item.tok = MINUSMINUS;
+							lex_item.tok = MINUSEQ;
 							lex_item.line_num = line_num;
 							return lex_item;
 
