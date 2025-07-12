@@ -976,6 +976,8 @@ char* operator_to_string(Token op){
 			return "*";
 		case F_SLASH:
 			return "/";
+		case MOD:
+			return "%";
 		case PLUSEQ:
 			return "+=";
 		case MINUSEQ:
@@ -994,6 +996,8 @@ char* operator_to_string(Token op){
 			return "|=";
 		case ARROW_EQ:
 			return "=>";
+		case MODEQ:
+			return "%=";
 		case COLON:
 			return ":";
 		case CARROT:

@@ -12,6 +12,40 @@ fn bad_type() -> i32 {
 	ret y;
 }
 
+fn invalid_op_type_mod() -> i32 {
+	let mut x:i32 := 3;
+	let mut z:i32 := 32;
+	let mut y:i32* := &x;
+
+	//Pointers cannot be modded
+	y %= x;
+
+	ret *y;
+}
+
+fn invalid_op_divide() -> i32 {
+	let mut x:i32 := 3;
+	let mut z:i32 := 32;
+	let mut y:i32* := &x;
+
+	//Pointers cannot be divided 
+	y /= x;
+
+	ret *y;
+}
+
+fn invalid_op_shift() -> i32 {
+	let mut x:i32 := 3;
+	let mut z:i32 := 32;
+	let mut y:i32* := &x;
+
+	//Pointers cannot be shifted 
+	y <<= x;
+
+	ret *y;
+}
+
+
 fn invalid_op_type() -> i32 {
 	let mut x:i32 := 3;
 	let mut z:i32 := 32;
