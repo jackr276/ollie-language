@@ -65,9 +65,6 @@ typedef enum{
  * We have a basic CFG structure that holds these references to making freeing
  */
 struct cfg_t{
-	//The global variable block. This is where
-	//anything that is not inside of a function is put
-	basic_block_t* global_variables;
 	//This dynamic array contains all of the function
 	//entry blocks for each function that we have
 	dynamic_array_t* function_blocks;
@@ -149,8 +146,6 @@ struct basic_block_t{
 	block_terminal_type_t block_terminal_type;
 	//Does this block contain a marked record?
 	u_int8_t contains_mark;
-	//Is this a global variable block?
-	u_int8_t is_global_var_block;
 	//Was this block visited by traverser?
 	u_int8_t visited;
 };

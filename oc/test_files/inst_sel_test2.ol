@@ -2,8 +2,6 @@
 * Special file for testing the instruction selector
 */
 
-let mut a:i32 := 3;
-
 fn unsigned_shift() -> u32 {
 	let mut z:u32 := 23;
 	let mut x:u32 := z << 3;
@@ -31,7 +29,7 @@ fn modulus() -> u32 {
 
 
 fn main(arg:i32, argv:char**) -> i32 {
-
+	let mut a:i32 := 3;
 	let mut x:i32 := !a;
 	let mut y:i32 := -3;
 

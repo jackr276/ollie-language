@@ -564,49 +564,47 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 	//Only if this is false - global var blocks don't have any of these
-	if(block->is_global_var_block == FALSE){
-		printf("Dominator set: {");
+	printf("Dominator set: {");
 
-		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
-			basic_block_t* printing_block = block->dominator_set->internal_array[i];
+	//Run through and print them all out
+	for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
+		basic_block_t* printing_block = block->dominator_set->internal_array[i];
 
-			//Print the block's ID or the function name
-			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name);
-			} else {
-				printf(".L%d", printing_block->block_id);
-			}
-			//If it isn't the very last one, we need a comma
-			if(i != block->dominator_set->current_index - 1){
-				printf(", ");
-			}
+		//Print the block's ID or the function name
+		if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			printf("%s", printing_block->function_defined_in->func_name);
+		} else {
+			printf(".L%d", printing_block->block_id);
 		}
-
-		//And close it out
-		printf("}\n");
-
-		printf("Postdominator(reverse dominator) Set: {");
-
-		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
-			basic_block_t* postdominator = block->postdominator_set->internal_array[i];
-
-			//Print the block's ID or the function name
-			if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", postdominator->function_defined_in->func_name);
-			} else {
-				printf(".L%d", postdominator->block_id);
-			}
-			//If it isn't the very last one, we need a comma
-			if(i != block->postdominator_set->current_index - 1){
-				printf(", ");
-			}
+		//If it isn't the very last one, we need a comma
+		if(i != block->dominator_set->current_index - 1){
+			printf(", ");
 		}
-
-		//And close it out
-		printf("}\n");
 	}
+
+	//And close it out
+	printf("}\n");
+
+	printf("Postdominator(reverse dominator) Set: {");
+
+	//Run through and print them all out
+	for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
+		basic_block_t* postdominator = block->postdominator_set->internal_array[i];
+
+		//Print the block's ID or the function name
+		if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			printf("%s", postdominator->function_defined_in->func_name);
+		} else {
+			printf(".L%d", postdominator->block_id);
+		}
+		//If it isn't the very last one, we need a comma
+		if(i != block->postdominator_set->current_index - 1){
+			printf(", ");
+		}
+	}
+
+	//And close it out
+	printf("}\n");
 
 	//Now print out the dominator children
 	printf("Dominator Children: {");
@@ -1173,11 +1171,6 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 		//Grab the block out
 		current = dynamic_array_get_at(cfg->created_blocks, i);
 
-		//If it's the global var block we don't care
-		if(current->is_global_var_block == TRUE){
-			continue;
-		}
-
 		//If it's an exit block, then it's postdominator set just has itself
 		if(current->block_type == BLOCK_TYPE_FUNC_EXIT){
 			//If it's an exit block, then this set just contains itself
@@ -1324,11 +1317,6 @@ static void calculate_dominator_sets(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
 		//Grab this out
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
-
-		//If this is a global variable block we don't care
-		if(block->is_global_var_block == TRUE){
-			continue;
-		}
 
 		//We will initialize the block's dominator set to be the entire set of nodes
 		block->dominator_set = clone_dynamic_array(cfg->created_blocks);
@@ -1678,11 +1666,6 @@ static void build_dominator_trees(cfg_t* cfg, u_int8_t build_fresh){
 	for(int16_t _ = cfg->created_blocks->current_index - 1; _ >= 0; _--){
 		//Grab out whatever block we're on
 		current = dynamic_array_get_at(cfg->created_blocks, _);
-
-		//No use in doing any computation for this one
-		if(current->is_global_var_block == TRUE){
-			continue;
-		}
 
 		//We will find this block's "immediate dominator". Once we have that,
 		//we will add this block to the "dominator children" set of said immediate
@@ -2042,11 +2025,6 @@ static void rename_all_variables(cfg_t* cfg){
 	//We will call the rename block function on the first block
 	//for each of our functions. The rename block function is 
 	//recursive, so that should in theory take care of everything for us
-	
-	//If the global variable block is not null, we'll need to rename it
-	if(cfg->global_variables != NULL){
-		rename_block(cfg->global_variables);
-	}
 	
 	//For each function block
 	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
@@ -3567,7 +3545,6 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 
 		//Add it in
 		add_statement(basic_block, assignment);
-	//Otherwise, we'll still have a symbolic return value here
 	} 
 
 	//Give back what we assigned to
@@ -3600,9 +3577,6 @@ static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency)
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
 
-	//Is it a global variable block? Almost always not
-	created->is_global_var_block = FALSE;
-
 	//What is the estimated execution cost of this block?
 	created->estimated_execution_frequency = estimated_execution_frequency;
 
@@ -3621,12 +3595,6 @@ static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency)
  * bfs
  */
 static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
-	//If it's null we won't bother
-	if(cfg->global_variables != NULL){
-		//First we'll print out the global variables block
-		print_block_three_addr_code(cfg->global_variables, print_df);
-	}
-
 	//First, we'll reset every single block here
 	reset_visited_status(cfg, FALSE);
 
@@ -5534,16 +5502,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
  */
 static basic_block_t* visit_declaration_statement(values_package_t* values, variable_scope_type_t scope){
 	//What block are we emitting into?
-	basic_block_t* emitted_block;
-
-	//If we have a global scope, we're emitting into
-	//the global variables block
-	if(scope == VARIABLE_SCOPE_GLOBAL){
-		emitted_block = cfg_ref->global_variables;
-	} else {
-		//Otherwise we've got our own block here
-		emitted_block = basic_block_alloc(1);
-	}
+	basic_block_t* emitted_block = basic_block_alloc(1);
 
 	//Emit the expression code
 	emit_expr_code(emitted_block, values->initial_node, FALSE, FALSE);
@@ -5558,15 +5517,7 @@ static basic_block_t* visit_declaration_statement(values_package_t* values, vari
  */
 static basic_block_t* visit_let_statement(values_package_t* values, variable_scope_type_t scope, u_int8_t is_branch_ending){
 	//What block are we emitting to?
-	basic_block_t* emittance_block;
-
-	//If it's the global scope, then we're adding to the CFG's
-	//global variables block
-	if(scope == VARIABLE_SCOPE_GLOBAL){
-		emittance_block = cfg_ref->global_variables;
-	} else {
-		emittance_block = basic_block_alloc(1);
-	}
+	basic_block_t* emittance_block = basic_block_alloc(1);
 
 	//Add the expresssion into the node
 	emit_expr_code(emittance_block, values->initial_node, is_branch_ending, FALSE);
@@ -5617,13 +5568,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 													NULL, //Exit block of loop
 													NULL); //For loop update block
 
-				//If the cfg's global block is empty, we'll add it in here
-				if(cfg->global_variables == NULL){
-					cfg->global_variables = basic_block_alloc(1);
-					//Mark this as true
-					cfg->global_variables->is_global_var_block = TRUE;
-				}
-
 				//We'll visit the block here
 				basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_GLOBAL, FALSE);
 				
@@ -5637,13 +5581,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 													NULL, //Loop statement start
 													NULL, //Exit block of loop
 													NULL); //For loop update block
-				
-				//If the cfg's global block is empty, we'll add it in here
-				if(cfg->global_variables == NULL){
-					cfg->global_variables = basic_block_alloc(1);
-					//Mark this as true
-					cfg->global_variables->is_global_var_block = TRUE;
-				}
 
 				//We'll visit the block here
 				basic_block_t* decl_block = visit_declaration_statement(&values, VARIABLE_SCOPE_GLOBAL);

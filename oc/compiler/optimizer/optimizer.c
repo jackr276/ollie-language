@@ -860,7 +860,7 @@ static void optimize_compound_logic(cfg_t* cfg){
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
 
 		//If this is the global var block or it has no statements, bail out
-		if(block->is_global_var_block == TRUE || block->leader_statement == NULL){
+		if(block->leader_statement == NULL){
 			continue;
 		}
 
@@ -1104,11 +1104,6 @@ static void sweep(cfg_t* cfg){
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
-
-		//If it's the global var block don't bother with it
-		if(block->is_global_var_block == TRUE){
-			continue;
-		}
 
 		//Grab the statement out
 		instruction_t* stmt = block->leader_statement;

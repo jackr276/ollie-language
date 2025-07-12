@@ -3994,14 +3994,8 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 	//The starting point that all traversals will use
 	basic_block_t* head_block;
 
-	//If the global variables are not null, then these
-	//are the global variables
-	if(cfg->global_variables != NULL){
-		head_block = cfg->global_variables;
-		previous = head_block;
-	} else {
-		previous = head_block = NULL;
-	}
+	//Initialize these to null first
+	previous = head_block = NULL;
 	
 	//We'll need to use a queue every time, we may as well just have one big one
 	heap_queue_t* queue = heap_queue_alloc();
