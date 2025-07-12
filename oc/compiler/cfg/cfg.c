@@ -59,7 +59,7 @@ typedef struct{
 	three_addr_var_t* assignee;
 	//What operator was used, if any
 	Token operator;
-} cfg_info_package_t;
+} statement_result_package_t;
 
 
 //A package of values that each visit function uses
@@ -101,7 +101,7 @@ typedef enum{
 static basic_block_t* visit_declaration_statement(generic_ast_node_t* node);
 static basic_block_t* visit_compound_statement(values_package_t* values);
 static basic_block_t* visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
-static basic_block_t* visit_if_statement(values_package_t* values);
+static statement_result_package_t visit_if_statement(values_package_t* values);
 static basic_block_t* visit_while_statement(values_package_t* values);
 static basic_block_t* visit_do_while_statement(values_package_t* values);
 static basic_block_t* visit_for_statement(values_package_t* values);
@@ -109,12 +109,12 @@ static basic_block_t* visit_case_statement(values_package_t* values);
 static basic_block_t* visit_default_statement(values_package_t* values);
 static basic_block_t* visit_switch_statement(values_package_t* values);
 
-static cfg_info_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
-static cfg_info_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
+static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
+static statement_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending);
-static cfg_info_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional);
+static statement_result_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
@@ -2222,7 +2222,7 @@ static void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t*
  */
 static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
 	//For holding our temporary return variable
-	cfg_info_package_t package;
+	statement_result_package_t package;
 
 	//Is null by default
 	package.assignee = NULL;
@@ -3115,9 +3115,9 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  * 	cmove a, result
  * 	cmovne b, result
  */
-static cfg_info_package_t emit_ternary_expression(basic_block_t* origin_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+static statement_result_package_t emit_ternary_expression(basic_block_t* origin_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
 	//Expression return package that we need
-	cfg_info_package_t return_package;
+	statement_result_package_t return_package;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 
@@ -3135,7 +3135,7 @@ static cfg_info_package_t emit_ternary_expression(basic_block_t* origin_block, g
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
 	//Let's first process the conditional
-	cfg_info_package_t package = emit_binary_expression(origin_block, cursor, is_branch_ending);
+	statement_result_package_t package = emit_binary_expression(origin_block, cursor, is_branch_ending);
 
 	//The package's assignee is what we base all conditional moves on
 	u_int8_t is_signed = is_type_signed(package.assignee->type); 
@@ -3155,7 +3155,7 @@ static cfg_info_package_t emit_ternary_expression(basic_block_t* origin_block, g
 	cursor = cursor->next_sibling;
 
 	//Emit this in our new if block
-	cfg_info_package_t if_branch = emit_expr_code(if_block, cursor, is_branch_ending, TRUE);
+	statement_result_package_t if_branch = emit_expr_code(if_block, cursor, is_branch_ending, TRUE);
 
 	//We'll now create a conditional move for the if branch into the result
 	instruction_t* if_assignment = emit_assignment_instruction(result, if_branch.assignee);
@@ -3170,7 +3170,7 @@ static cfg_info_package_t emit_ternary_expression(basic_block_t* origin_block, g
 	cursor = cursor->next_sibling;
 
 	//Emit this in our else block
-	cfg_info_package_t else_branch = emit_expr_code(else_block, cursor, is_branch_ending, TRUE);
+	statement_result_package_t else_branch = emit_expr_code(else_block, cursor, is_branch_ending, TRUE);
 
 	//We'll now create a conditional move for the else branch into the result
 	instruction_t* else_assignment = emit_assignment_instruction(result, else_branch.assignee);
@@ -3202,9 +3202,9 @@ static cfg_info_package_t emit_ternary_expression(basic_block_t* origin_block, g
  * For each binary expression, we compute
  *
  */
-static cfg_info_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
+static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
 	//The return package here
-	cfg_info_package_t package;
+	statement_result_package_t package;
 	//Operator is blank by default
 	package.operator = BLANK;
 
@@ -3248,7 +3248,7 @@ static cfg_info_package_t emit_binary_expression(basic_block_t* basic_block, gen
 	left_hand_type = cursor->inferred_type;
 	
 	//Emit the binary expression on the left first
-	cfg_info_package_t left_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
+	statement_result_package_t left_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
 
 	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
 	if(left_hand_temp.assignee->is_temporary == FALSE){
@@ -3273,7 +3273,7 @@ static cfg_info_package_t emit_binary_expression(basic_block_t* basic_block, gen
 	right_hand_type = cursor->inferred_type;
 
 	//Then grab the right hand temp
-	cfg_info_package_t right_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
+	statement_result_package_t right_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
 
 	//Let's see what binary operator that we have
 	Token binary_operator = logical_or_expr->binary_operator;
@@ -3330,12 +3330,12 @@ static cfg_info_package_t emit_binary_expression(basic_block_t* basic_block, gen
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static cfg_info_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional){
+static statement_result_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
 	//The return package
-	cfg_info_package_t ret_package;
+	statement_result_package_t ret_package;
 	//By default, last seen op is blank
 	ret_package.operator = BLANK;
 
@@ -3360,7 +3360,7 @@ static cfg_info_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 		cursor = cursor->next_sibling;
 
 		//Now emit the right hand expression
-		cfg_info_package_t package = emit_expr_code(basic_block, cursor, is_branch_ending, FALSE);
+		statement_result_package_t package = emit_expr_code(basic_block, cursor, is_branch_ending, FALSE);
 
 		//Finally we'll construct the whole thing
 		instruction_t* stmt = emit_assignment_instruction(left_hand_var, package.assignee);
@@ -3460,7 +3460,7 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
-		cfg_info_package_t package = emit_expr_code(basic_block, param_cursor, is_branch_ending, FALSE);
+		statement_result_package_t package = emit_expr_code(basic_block, param_cursor, is_branch_ending, FALSE);
 
 		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
 		//registers before a function call
@@ -4027,7 +4027,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	ast_cursor = ast_cursor->next_sibling;
 
 	//The condition block values package
-	cfg_info_package_t condition_block_vals;
+	statement_result_package_t condition_block_vals;
 	//By default, make this blank
 	condition_block_vals.operator = BLANK;
 
@@ -4084,7 +4084,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
 
 	//For our eventual token
-	cfg_info_package_t expression_package;
+	statement_result_package_t expression_package;
 
 	//If it's null, that's actually ok here
 	if(compound_stmt_start == NULL){
@@ -4201,7 +4201,7 @@ static basic_block_t* visit_do_while_statement(values_package_t* values){
 	}
 
 	//Add the conditional check into the end here
-	cfg_info_package_t package = emit_expr_code(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
+	statement_result_package_t package = emit_expr_code(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -4257,7 +4257,7 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
 	//The entry block contains our expression statement
-	cfg_info_package_t package = emit_expr_code(while_statement_entry_block, ast_cursor, TRUE, TRUE);
+	statement_result_package_t package = emit_expr_code(while_statement_entry_block, ast_cursor, TRUE, TRUE);
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -4340,18 +4340,29 @@ static basic_block_t* visit_while_statement(values_package_t* values){
 /**
  * Process the if-statement subtree into CFG form
  */
-static basic_block_t* visit_if_statement(values_package_t* values){
+static statement_result_package_t visit_if_statement(values_package_t* values){
+	//The statement result package for our if statement
+	statement_result_package_t result_package;
+
 	//We always have an entry block and an exit block. We assume initially that
 	//these both happen once
 	basic_block_t* entry_block = basic_block_alloc(1);
 	basic_block_t* exit_block = basic_block_alloc(1);
 	exit_block->block_type = BLOCK_TYPE_IF_STMT_END;
 
+	//Note the starting and final blocks here
+	result_package.starting_block = entry_block;
+	result_package.final_block = exit_block;
+
+	//An if statement has no assignee, and no operator
+	result_package.assignee = NULL;
+	result_package.operator = BLANK;
+
 	//Grab the cursor
 	generic_ast_node_t* cursor = values->initial_node->first_child;
 
 	//Add whatever our conditional is into the starting block
-	cfg_info_package_t package = emit_expr_code(entry_block, cursor, TRUE, TRUE);
+	statement_result_package_t package = emit_expr_code(entry_block, cursor, TRUE, TRUE);
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
@@ -4471,7 +4482,8 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 				emit_jump(else_if_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
 				add_successor(else_if_compound_stmt_exit, exit_block);
-			}	else {
+
+			} else {
 				add_successor(else_if_compound_stmt_exit, exit_block);
 			}
 
@@ -4546,11 +4558,10 @@ static basic_block_t* visit_if_statement(values_package_t* values){
 		emit_jump(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
-	//For our convenience - this makes drilling way faster
 	entry_block->direct_successor = exit_block;
 
-	//give the entry block back
-	return entry_block;
+	//Give back the result package
+	return result_package;
 }
 
 
@@ -4781,7 +4792,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	
 	//The very first thing should be an expression telling us what to switch on
 	//There should be some kind of expression here
-	cfg_info_package_t package1 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
+	statement_result_package_t package1 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
 
 	//Unsigned by default
 	u_int8_t is_signed = is_type_signed(package1.assignee->type);
@@ -4794,7 +4805,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	emit_jump(starting_block, default_block, jump_lower_than, TRUE, FALSE);
 
 	//Due to the way temp assignment works, we actually need to re-emit this whole thing
-	cfg_info_package_t package2 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
+	statement_result_package_t package2 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
 
 	//Next step -> if we're above the maximum, jump to default
 	emit_binary_operation_with_constant(starting_block, package2.assignee, package2.assignee, G_THAN, upper_bound, TRUE);
@@ -4804,7 +4815,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	emit_jump(starting_block, default_block, jump_greater_than, TRUE, FALSE);
 
 	//Due to the way temp assignment works, we actually need to re-emit this whole thing
-	cfg_info_package_t package3 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
+	statement_result_package_t package3 = emit_expr_code(starting_block, expression_node, TRUE, TRUE);
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
@@ -4925,24 +4936,21 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
 
 			//We'll now enter the if statement
-			basic_block_t* if_stmt_start = visit_if_statement(&if_stmt_values);
+			statement_result_package_t if_package = visit_if_statement(&if_stmt_values);
 			
 			//Once we have the if statement start, we'll add it in as a successor
 			if(starting_block == NULL){
-				starting_block = if_stmt_start;
-				current_block = if_stmt_start;
+				//The starting block is the first one here
+				starting_block = if_package.starting_block;
+				//And the final block is the end
+				current_block = if_package.final_block;
 			} else {
 				//Add a successor to the current block
-				add_successor(current_block, if_stmt_start);
+				add_successor(current_block, if_package.starting_block);
 				//Emit a jump from current to the start
-				emit_jump(current_block, if_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
-				current_block = if_stmt_start;
-			}
-
-			//Now we'll find the end of the if statement block
-			//So long as we haven't hit the end and it isn't a return statement
-			while(current_block->block_type != BLOCK_TYPE_IF_STMT_END){
-				current_block = current_block->direct_successor;
+				emit_jump(current_block, if_package.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				//The current block is just whatever is at the end
+				current_block = if_package.final_block;
 			}
 
 		//Handle a while statement
@@ -5083,7 +5091,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Otherwise, we have a conditional continue here
 			} else {
 				//Emit the expression code into the current statement
-				cfg_info_package_t package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
+				statement_result_package_t package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
 				//Decide the appropriate jump statement -- direct path here
 				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
 
@@ -5160,7 +5168,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 				basic_block_t* new_block = basic_block_alloc(1);
 
 				//First let's emit the conditional code
-				cfg_info_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
+				statement_result_package_t ret_package = emit_expr_code(current_block, ast_cursor->first_child, TRUE, TRUE);
 
 				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
@@ -5505,7 +5513,7 @@ static basic_block_t* visit_let_statement(generic_ast_node_t* node, u_int8_t is_
 	add_assigned_variable(emitted_block, left_hand_var);
 
 	//Now emit whatever binary expression code that we have
-	cfg_info_package_t package = emit_expr_code(emitted_block, node->first_child, is_branch_ending, FALSE);
+	statement_result_package_t package = emit_expr_code(emitted_block, node->first_child, is_branch_ending, FALSE);
 
 	//The actual statement is the assignment of right to left
 	instruction_t* assignment_statement = emit_assignment_instruction(left_hand_var, package.assignee);
