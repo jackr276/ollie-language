@@ -49,6 +49,19 @@ u_int64_t stack_offset = 0;
 //For any/all error printing
 char error_info[1500];
 
+//Define a package return struct that is used by the binary op expression code
+typedef struct{
+	//The starting block of what we've made
+	basic_block_t* starting_block;
+	//The final block we end up with(only used for ternary operators)
+	basic_block_t* final_block;
+	//What is the final assignee
+	three_addr_var_t* assignee;
+	//What operator was used, if any
+	Token operator;
+} expr_ret_package_t;
+
+
 //A package of values that each visit function uses
 typedef struct {
 	//The initial node
@@ -60,15 +73,6 @@ typedef struct {
 	//For any time we need to do for-loop operations
 	basic_block_t* for_loop_update_block;
 } values_package_t;
-
-
-//Define a package return struct that is used by the binary op expression code
-typedef struct{
-	//The final block we end up with(only used for ternary operators)
-	basic_block_t* final_block;
-	three_addr_var_t* assignee;
-	Token operator;
-} expr_ret_package_t;
 
 
 //Are we emitting the dominance frontier or not?
@@ -105,11 +109,10 @@ static basic_block_t* visit_case_statement(values_package_t* values);
 static basic_block_t* visit_default_statement(values_package_t* values);
 static basic_block_t* visit_switch_statement(values_package_t* values);
 
-
-//Return a three address code variable
-static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
-static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
+static expr_ret_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
+static expr_ret_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
+static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, temp_selection_t use_temp, side_type_t side, u_int8_t is_branch_ending);
 static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
@@ -561,49 +564,47 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 	//Only if this is false - global var blocks don't have any of these
-	if(block->is_global_var_block == FALSE){
-		printf("Dominator set: {");
+	printf("Dominator set: {");
 
-		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
-			basic_block_t* printing_block = block->dominator_set->internal_array[i];
+	//Run through and print them all out
+	for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
+		basic_block_t* printing_block = block->dominator_set->internal_array[i];
 
-			//Print the block's ID or the function name
-			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name);
-			} else {
-				printf(".L%d", printing_block->block_id);
-			}
-			//If it isn't the very last one, we need a comma
-			if(i != block->dominator_set->current_index - 1){
-				printf(", ");
-			}
+		//Print the block's ID or the function name
+		if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			printf("%s", printing_block->function_defined_in->func_name);
+		} else {
+			printf(".L%d", printing_block->block_id);
 		}
-
-		//And close it out
-		printf("}\n");
-
-		printf("Postdominator(reverse dominator) Set: {");
-
-		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
-			basic_block_t* postdominator = block->postdominator_set->internal_array[i];
-
-			//Print the block's ID or the function name
-			if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", postdominator->function_defined_in->func_name);
-			} else {
-				printf(".L%d", postdominator->block_id);
-			}
-			//If it isn't the very last one, we need a comma
-			if(i != block->postdominator_set->current_index - 1){
-				printf(", ");
-			}
+		//If it isn't the very last one, we need a comma
+		if(i != block->dominator_set->current_index - 1){
+			printf(", ");
 		}
-
-		//And close it out
-		printf("}\n");
 	}
+
+	//And close it out
+	printf("}\n");
+
+	printf("Postdominator(reverse dominator) Set: {");
+
+	//Run through and print them all out
+	for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
+		basic_block_t* postdominator = block->postdominator_set->internal_array[i];
+
+		//Print the block's ID or the function name
+		if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			printf("%s", postdominator->function_defined_in->func_name);
+		} else {
+			printf(".L%d", postdominator->block_id);
+		}
+		//If it isn't the very last one, we need a comma
+		if(i != block->postdominator_set->current_index - 1){
+			printf(", ");
+		}
+	}
+
+	//And close it out
+	printf("}\n");
 
 	//Now print out the dominator children
 	printf("Dominator Children: {");
@@ -1170,11 +1171,6 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 		//Grab the block out
 		current = dynamic_array_get_at(cfg->created_blocks, i);
 
-		//If it's the global var block we don't care
-		if(current->is_global_var_block == TRUE){
-			continue;
-		}
-
 		//If it's an exit block, then it's postdominator set just has itself
 		if(current->block_type == BLOCK_TYPE_FUNC_EXIT){
 			//If it's an exit block, then this set just contains itself
@@ -1321,11 +1317,6 @@ static void calculate_dominator_sets(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
 		//Grab this out
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
-
-		//If this is a global variable block we don't care
-		if(block->is_global_var_block == TRUE){
-			continue;
-		}
 
 		//We will initialize the block's dominator set to be the entire set of nodes
 		block->dominator_set = clone_dynamic_array(cfg->created_blocks);
@@ -1675,11 +1666,6 @@ static void build_dominator_trees(cfg_t* cfg, u_int8_t build_fresh){
 	for(int16_t _ = cfg->created_blocks->current_index - 1; _ >= 0; _--){
 		//Grab out whatever block we're on
 		current = dynamic_array_get_at(cfg->created_blocks, _);
-
-		//No use in doing any computation for this one
-		if(current->is_global_var_block == TRUE){
-			continue;
-		}
 
 		//We will find this block's "immediate dominator". Once we have that,
 		//we will add this block to the "dominator children" set of said immediate
@@ -2039,11 +2025,6 @@ static void rename_all_variables(cfg_t* cfg){
 	//We will call the rename block function on the first block
 	//for each of our functions. The rename block function is 
 	//recursive, so that should in theory take care of everything for us
-	
-	//If the global variable block is not null, we'll need to rename it
-	if(cfg->global_variables != NULL){
-		rename_block(cfg->global_variables);
-	}
 	
 	//For each function block
 	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
@@ -2677,8 +2658,11 @@ static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, gene
 		 	return emit_identifier(basic_block, primary_parent, use_temp, side, is_branch_ending);
 		case AST_NODE_CLASS_CONSTANT:
 			return emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
+		case AST_NODE_CLASS_TERNARY_EXPRESSION:
+			//FOR NOW
+			return emit_ternary_expression(basic_block, primary_parent, is_branch_ending).assignee;
 		case AST_NODE_CLASS_BINARY_EXPR:
-			return emit_binary_operation(basic_block, primary_parent, is_branch_ending).assignee;
+			return emit_binary_expression(basic_block, primary_parent, is_branch_ending).assignee;
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent, is_branch_ending);
 		//Something went wrong here if we're hitting the default rule
@@ -2783,7 +2767,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 		//First of two potentialities is the array accessor
 		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
-			three_addr_var_t* offset = emit_binary_operation(basic_block, cursor->first_child, is_branch_ending).assignee;
+			three_addr_var_t* offset = emit_binary_expression(basic_block, cursor->first_child, is_branch_ending).assignee;
 			
 			//What is the internal type that we're pointing to? This will determine our scale
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
@@ -3119,10 +3103,11 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  *
  * x == 0 ? a : b becomes
  *
+ * declare final_var;
  * if(x == 0) then {
- * 		a
+ * 		final_var =	a
  * } else {
- * 		b
+ * 		final_var = b
  * }
  *
  * Which in reality would be something like this:
@@ -3130,9 +3115,11 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  * 	cmove a, result
  * 	cmovne b, result
  */
-static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+static expr_ret_package_t emit_ternary_expression(basic_block_t* origin_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+	//Expression return package that we need
 	expr_ret_package_t return_package;
-	return_package.operator = BLANK;
+	//Mark that we had a ternary here
+	return_package.operator = QUESTION;
 
 	//The ending block for the whole thing
 	basic_block_t* end_block = basic_block_alloc(1);
@@ -3148,7 +3135,7 @@ static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, ge
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
 	//Let's first process the conditional
-	expr_ret_package_t package = emit_binary_operation(*basic_block, cursor, is_branch_ending);
+	expr_ret_package_t package = emit_binary_expression(origin_block, cursor, is_branch_ending);
 
 	//The package's assignee is what we base all conditional moves on
 	u_int8_t is_signed = is_type_signed(package.assignee->type); 
@@ -3157,12 +3144,12 @@ static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, ge
 	jump_type_t jump = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_signed);
 	
 	//Now we'll emit a jump to the if block and else block
-	emit_jump(*basic_block, if_block, jump, is_branch_ending, FALSE);
-	emit_jump(*basic_block, else_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
+	emit_jump(origin_block, if_block, jump, is_branch_ending, FALSE);
+	emit_jump(origin_block, else_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
 
 	//These are both now successors to the if block
-	add_successor(*basic_block, if_block);
-	add_successor(*basic_block, else_block);
+	add_successor(origin_block, if_block);
+	add_successor(origin_block, else_block);
 
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
@@ -3198,9 +3185,6 @@ static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, ge
 	add_successor(if_block, end_block);
 	add_successor(else_block, end_block);
 
-	//Reassign what the actual block is
-	*basic_block = end_block;
-
 	return_package.final_block = end_block;
 	return_package.assignee = result;
 
@@ -3218,7 +3202,7 @@ static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, ge
  * For each binary expression, we compute
  *
  */
-static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
+static expr_ret_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
 	//The return package here
 	expr_ret_package_t package;
 	//Operator is blank by default
@@ -3248,7 +3232,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 
 		//We could also have a ternary operation here
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
-			package.assignee = emit_ternary_operation(&basic_block, logical_or_expr, is_branch_ending).assignee;
+			package.assignee = emit_ternary_expression(basic_block, logical_or_expr, is_branch_ending).assignee;
 			return package;
 		
 		//Break out by default
@@ -3264,7 +3248,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	left_hand_type = cursor->inferred_type;
 	
 	//Emit the binary expression on the left first
-	expr_ret_package_t left_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
+	expr_ret_package_t left_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
 
 	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
 	if(left_hand_temp.assignee->is_temporary == FALSE){
@@ -3289,7 +3273,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 	right_hand_type = cursor->inferred_type;
 
 	//Then grab the right hand temp
-	expr_ret_package_t right_hand_temp = emit_binary_operation(basic_block, cursor, is_branch_ending);
+	expr_ret_package_t right_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
 
 	//Let's see what binary operator that we have
 	Token binary_operator = logical_or_expr->binary_operator;
@@ -3438,7 +3422,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
 		//Emit the binary expression node
-		return emit_binary_operation(basic_block, expr_node, is_branch_ending);
+		return emit_binary_expression(basic_block, expr_node, is_branch_ending);
 	} else if(expr_node->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
 		//Emit the function call statement
 		ret_package.assignee = emit_function_call(basic_block, expr_node, is_branch_ending);
@@ -3447,7 +3431,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	//If we make it here, we have found a standalone ternary expression
 	} else if(expr_node->CLASS == AST_NODE_CLASS_TERNARY_EXPRESSION){
 		//Emit the ternary expression
-		ret_package.assignee = emit_ternary_operation(&basic_block, expr_node, is_branch_ending).assignee;
+		ret_package.assignee = emit_ternary_expression(basic_block, expr_node, is_branch_ending).assignee;
 		return ret_package;
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
@@ -3561,7 +3545,6 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 
 		//Add it in
 		add_statement(basic_block, assignment);
-	//Otherwise, we'll still have a symbolic return value here
 	} 
 
 	//Give back what we assigned to
@@ -3594,9 +3577,6 @@ static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency)
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
 
-	//Is it a global variable block? Almost always not
-	created->is_global_var_block = FALSE;
-
 	//What is the estimated execution cost of this block?
 	created->estimated_execution_frequency = estimated_execution_frequency;
 
@@ -3615,12 +3595,6 @@ static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency)
  * bfs
  */
 static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
-	//If it's null we won't bother
-	if(cfg->global_variables != NULL){
-		//First we'll print out the global variables block
-		print_block_three_addr_code(cfg->global_variables, print_df);
-	}
-
 	//First, we'll reset every single block here
 	reset_visited_status(cfg, FALSE);
 
@@ -5528,16 +5502,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
  */
 static basic_block_t* visit_declaration_statement(values_package_t* values, variable_scope_type_t scope){
 	//What block are we emitting into?
-	basic_block_t* emitted_block;
-
-	//If we have a global scope, we're emitting into
-	//the global variables block
-	if(scope == VARIABLE_SCOPE_GLOBAL){
-		emitted_block = cfg_ref->global_variables;
-	} else {
-		//Otherwise we've got our own block here
-		emitted_block = basic_block_alloc(1);
-	}
+	basic_block_t* emitted_block = basic_block_alloc(1);
 
 	//Emit the expression code
 	emit_expr_code(emitted_block, values->initial_node, FALSE, FALSE);
@@ -5552,15 +5517,7 @@ static basic_block_t* visit_declaration_statement(values_package_t* values, vari
  */
 static basic_block_t* visit_let_statement(values_package_t* values, variable_scope_type_t scope, u_int8_t is_branch_ending){
 	//What block are we emitting to?
-	basic_block_t* emittance_block;
-
-	//If it's the global scope, then we're adding to the CFG's
-	//global variables block
-	if(scope == VARIABLE_SCOPE_GLOBAL){
-		emittance_block = cfg_ref->global_variables;
-	} else {
-		emittance_block = basic_block_alloc(1);
-	}
+	basic_block_t* emittance_block = basic_block_alloc(1);
 
 	//Add the expresssion into the node
 	emit_expr_code(emittance_block, values->initial_node, is_branch_ending, FALSE);
@@ -5611,13 +5568,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 													NULL, //Exit block of loop
 													NULL); //For loop update block
 
-				//If the cfg's global block is empty, we'll add it in here
-				if(cfg->global_variables == NULL){
-					cfg->global_variables = basic_block_alloc(1);
-					//Mark this as true
-					cfg->global_variables->is_global_var_block = TRUE;
-				}
-
 				//We'll visit the block here
 				basic_block_t* let_block = visit_let_statement(&values, VARIABLE_SCOPE_GLOBAL, FALSE);
 				
@@ -5631,13 +5581,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 													NULL, //Loop statement start
 													NULL, //Exit block of loop
 													NULL); //For loop update block
-				
-				//If the cfg's global block is empty, we'll add it in here
-				if(cfg->global_variables == NULL){
-					cfg->global_variables = basic_block_alloc(1);
-					//Mark this as true
-					cfg->global_variables->is_global_var_block = TRUE;
-				}
 
 				//We'll visit the block here
 				basic_block_t* decl_block = visit_declaration_statement(&values, VARIABLE_SCOPE_GLOBAL);
