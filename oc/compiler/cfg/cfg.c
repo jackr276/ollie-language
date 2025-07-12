@@ -49,6 +49,19 @@ u_int64_t stack_offset = 0;
 //For any/all error printing
 char error_info[1500];
 
+//Define a package return struct that is used by the binary op expression code
+typedef struct{
+	//The starting block of what we've made
+	basic_block_t* starting_block;
+	//The final block we end up with(only used for ternary operators)
+	basic_block_t* final_block;
+	//What is the final assignee
+	three_addr_var_t* assignee;
+	//What operator was used, if any
+	Token operator;
+} expr_ret_package_t;
+
+
 //A package of values that each visit function uses
 typedef struct {
 	//The initial node
@@ -60,15 +73,6 @@ typedef struct {
 	//For any time we need to do for-loop operations
 	basic_block_t* for_loop_update_block;
 } values_package_t;
-
-
-//Define a package return struct that is used by the binary op expression code
-typedef struct{
-	//The final block we end up with(only used for ternary operators)
-	basic_block_t* final_block;
-	three_addr_var_t* assignee;
-	Token operator;
-} expr_ret_package_t;
 
 
 //Are we emitting the dominance frontier or not?
@@ -3119,10 +3123,11 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  *
  * x == 0 ? a : b becomes
  *
+ * declare final_var;
  * if(x == 0) then {
- * 		a
+ * 		final_var =	a
  * } else {
- * 		b
+ * 		final_var = b
  * }
  *
  * Which in reality would be something like this:
@@ -3130,9 +3135,11 @@ static three_addr_var_t* emit_unary_expr_code(basic_block_t* basic_block, generi
  * 	cmove a, result
  * 	cmovne b, result
  */
-static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+static expr_ret_package_t emit_ternary_operation(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+	//Expression return package that we need
 	expr_ret_package_t return_package;
-	return_package.operator = BLANK;
+	//Mark that we had a ternary here
+	return_package.operator = QUESTION;
 
 	//The ending block for the whole thing
 	basic_block_t* end_block = basic_block_alloc(1);
@@ -3148,7 +3155,7 @@ static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, ge
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
 	//Let's first process the conditional
-	expr_ret_package_t package = emit_binary_operation(*basic_block, cursor, is_branch_ending);
+	expr_ret_package_t package = emit_binary_operation(basic_block, cursor, is_branch_ending);
 
 	//The package's assignee is what we base all conditional moves on
 	u_int8_t is_signed = is_type_signed(package.assignee->type); 
@@ -3157,12 +3164,12 @@ static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, ge
 	jump_type_t jump = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_signed);
 	
 	//Now we'll emit a jump to the if block and else block
-	emit_jump(*basic_block, if_block, jump, is_branch_ending, FALSE);
-	emit_jump(*basic_block, else_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
+	emit_jump(basic_block, if_block, jump, is_branch_ending, FALSE);
+	emit_jump(basic_block, else_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
 
 	//These are both now successors to the if block
-	add_successor(*basic_block, if_block);
-	add_successor(*basic_block, else_block);
+	add_successor(basic_block, if_block);
+	add_successor(basic_block, else_block);
 
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
@@ -3199,7 +3206,7 @@ static expr_ret_package_t emit_ternary_operation(basic_block_t** basic_block, ge
 	add_successor(else_block, end_block);
 
 	//Reassign what the actual block is
-	*basic_block = end_block;
+	basic_block = end_block;
 
 	return_package.final_block = end_block;
 	return_package.assignee = result;
@@ -3248,7 +3255,7 @@ static expr_ret_package_t emit_binary_operation(basic_block_t* basic_block, gene
 
 		//We could also have a ternary operation here
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
-			package.assignee = emit_ternary_operation(&basic_block, logical_or_expr, is_branch_ending).assignee;
+			package.assignee = emit_ternary_operation(basic_block, logical_or_expr, is_branch_ending).assignee;
 			return package;
 		
 		//Break out by default
@@ -3447,7 +3454,7 @@ static expr_ret_package_t emit_expr_code(basic_block_t* basic_block, generic_ast
 	//If we make it here, we have found a standalone ternary expression
 	} else if(expr_node->CLASS == AST_NODE_CLASS_TERNARY_EXPRESSION){
 		//Emit the ternary expression
-		ret_package.assignee = emit_ternary_operation(&basic_block, expr_node, is_branch_ending).assignee;
+		ret_package.assignee = emit_ternary_operation(basic_block, expr_node, is_branch_ending).assignee;
 		return ret_package;
 
 	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
