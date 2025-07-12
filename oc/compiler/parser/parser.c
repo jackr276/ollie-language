@@ -1294,35 +1294,35 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		/**
-		 * If we have something like this:
-		 * 				y(i32) += x(i64)
-		 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
-		 * 	As such, we need to check if the types are assignable first
-		 */
-		final_type = types_assignable(&left_hand_type, &right_hand_type);
-
-		//If this fails, that means that we have an invalid operation
-		if(final_type == NULL){
-			sprintf(info, "Types %s cannot be assigned to a variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//We'll also want to create a complete, distinct copy of the subtree here
-		generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
-
-		//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
-		//don't want to mess with the actual type of the variable
-		final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &right_hand_type, binary_op);
-
-		//If this fails, that means that we have an invalid operation
-		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name, right_hand_type->type_name, operator_to_string(assignment_operator));
-			return print_and_return_error(info, parser_line_num);
-		}
-
 		//If we don't have a pointer type here - this is the most common case
 		if(left_hand_type->type_class != TYPE_CLASS_POINTER){
+			/**
+			 * If we have something like this:
+			 * 				y(i32) += x(i64)
+			 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
+			 * 	As such, we need to check if the types are assignable first
+			 */
+			final_type = types_assignable(&left_hand_type, &right_hand_type);
+
+			//If this fails, that means that we have an invalid operation
+			if(final_type == NULL){
+				sprintf(info, "Types %s cannot be assigned to a variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//We'll also want to create a complete, distinct copy of the subtree here
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
+
+			//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
+			//don't want to mess with the actual type of the variable
+			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &right_hand_type, binary_op);
+
+			//If this fails, that means that we have an invalid operation
+			if(final_type == NULL){
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name, right_hand_type->type_name, operator_to_string(assignment_operator));
+				return print_and_return_error(info, parser_line_num);
+			}
+
 			//If this is not null, assign the var too
 			if(left_hand_duplicate->variable != NULL && left_hand_duplicate->variable->type_defined_as != left_hand_duplicate->inferred_type){
 				//We only deal with the duplicate, because we know that 
@@ -1358,6 +1358,15 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			//We'll also want to create a complete, distinct copy of the subtree here
 			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
 
+			//Let's first determine if they're compatible
+			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);
+
+			//If this fails, that means that we have an invalid operation
+			if(final_type == NULL){
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name, right_hand_type->type_name, operator_to_string(binary_op));
+				return print_and_return_error(info, parser_line_num);
+			}
+			
 			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
 			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr);
 

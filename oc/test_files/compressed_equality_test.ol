@@ -8,11 +8,34 @@ fn test_unsigned_value() -> i32 {
 	let mut y:u32 := 3;
 
 	//Should trigger an unsigned multiplication
+	//BUG here
 	x *= y;
 	x := x * y;
 
 	ret x;
 }
+
+fn test_pointer_addition() -> i32 {
+	let mut x:i32 := 3;
+	let mut z:i32 := 5;
+	let mut y:i32* := &x;
+
+	y += z;
+
+	ret *y;
+}
+
+
+fn test_pointer_subtraction() -> i32 {
+	let mut x:i32 := 3;
+	let mut z:i32 := 5;
+	let mut y:i32* := &x;
+
+	y -= z;
+
+	ret *y;
+}
+
 
 fn test_plus() -> i32 {
 	let mut x:i32 := 2;
