@@ -67,6 +67,9 @@ static u_int32_t num_warnings;
 //The current parser line number
 static u_int16_t parser_line_num = 1;
 
+//Are we inside of a defer statement currently? False by default
+static u_int8_t in_defer = FALSE;
+
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
 
@@ -5809,6 +5812,11 @@ static generic_ast_node_t* break_statement(FILE* fl){
  * BNF Rule: <return-statement> ::= ret {<ternary-epxression>}?;
  */
 static generic_ast_node_t* return_statement(FILE* fl){
+	//If we're in a defer statement, we actually cannot do this
+	if(in_defer == TRUE){
+		return print_and_return_error("Ret statements cannot be placed inside of defer blocks", parser_line_num);
+	}
+
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -7043,6 +7051,15 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
  * <defer-statement> ::= defer {<logical-or-expression> | <assembly-inline-statement>};
  */
 static generic_ast_node_t* defer_statement(FILE* fl){
+	//Are we already inside of a defer statement? If we are,
+	//we'll want to fail out here
+	if(in_defer == TRUE){
+		return print_and_return_error("Nested defer statements are forbidden", parser_line_num);
+	}
+
+	//Otherwise we're fine, so set the flag that we're in a defer
+	in_defer = TRUE;
+
 	//For searching
 	lexitem_t lookahead;
 	//Freeze the line number
@@ -7075,6 +7092,9 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 
 	//Otherwise it was valid, so we have another child for this overall deferred statement
 	add_child_node(deferred_stmts_node, compound_stmt_node);
+
+	//Once we're out of here, we need to unset the flag for the future processing
+	in_defer = FALSE;
 
 	//And give back nothing, we're all set
 	return NULL;
