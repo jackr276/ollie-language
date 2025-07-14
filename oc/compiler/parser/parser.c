@@ -1630,15 +1630,22 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	//Peek at the next token
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
-	//Let's just check if we're able to get out immediately
-	if(lookahead.tok != L_BRACKET && lookahead.tok != COLON && lookahead.tok != ARROW_EQ
-	   && lookahead.tok != PLUSPLUS && lookahead.tok != MINUSMINUS){
-		//Put the token back
-		push_back_token(lookahead);
-		//Just return what primary expr gave us
-		return result;
+	//Let's see if we're able to leave immediately or not
+	switch(lookahead.tok){
+		case L_BRACKET:
+		case COLON:
+		case ARROW_EQ:
+		case PLUSPLUS:
+		case MINUSMINUS:
+			//We need to keep going here, so leave
+			break;
+		default:
+			//Push this back
+			push_back_token(lookahead);
+			//Return the result
+			return result;
 	}
-	
+
 	//If we make it down to here, we know that we're trying to access a variable. As such, 
 	//we need to make sure that we don't see a constant here
 	if(result->CLASS == AST_NODE_CLASS_CONSTANT){
