@@ -104,7 +104,7 @@ static basic_block_t* visit_let_statement(generic_ast_node_t* node, u_int8_t is_
 static statement_result_package_t visit_if_statement(values_package_t* values);
 static statement_result_package_t visit_while_statement(values_package_t* values);
 static statement_result_package_t visit_do_while_statement(values_package_t* values);
-static basic_block_t* visit_for_statement(values_package_t* values);
+static statement_result_package_t visit_for_statement(values_package_t* values);
 static basic_block_t* visit_case_statement(values_package_t* values);
 static basic_block_t* visit_default_statement(values_package_t* values);
 static basic_block_t* visit_switch_statement(values_package_t* values);
@@ -3981,13 +3981,23 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  * A for-statement is another kind of control flow construct. As always the direct successor is the path that reliably
  * leads us down and out
  */
-static basic_block_t* visit_for_statement(values_package_t* values){
+static statement_result_package_t visit_for_statement(values_package_t* values){
+	//Initialize the return package
+	statement_result_package_t result_package;
+
 	//Create our entry block. The entry block also only executes once
 	basic_block_t* for_stmt_entry_block = basic_block_alloc(1);
 	//Create our exit block. We assume that the exit only happens once
 	basic_block_t* for_stmt_exit_block = basic_block_alloc(1);
 	//We will explicitly declare that this is an exit here
 	for_stmt_exit_block->block_type = BLOCK_TYPE_FOR_STMT_END;
+
+	//Once we get here, we already know what the start and exit are for this statement
+	result_package.starting_block = for_stmt_entry_block;
+	result_package.final_block = for_stmt_exit_block;
+	//This has no operator and no assignee
+	result_package.assignee = NULL;
+	result_package.operator = BLANK;
 	
 	//Grab the reference to the for statement node
 	generic_ast_node_t* for_stmt_node = values->initial_node;
@@ -4008,7 +4018,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 			default:
 				//Add it's child in as a statement to the entry block
 				emit_expr_code(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
-
 		}
 	}
 
@@ -4066,13 +4075,6 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
 	
-	//If this is not a compound statement, we have a serious error
-	if(ast_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected compound statement in for loop, but did not find one.", for_stmt_node->line_number);
-		//Immediate failure here
-		exit(0);
-	}
-	
 	//Create a copy of our values here
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	condition_block, //Loop statement start -- for loops start at their condition
@@ -4099,7 +4101,7 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 		emit_jump(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
 
 		//And we're done
-		return for_stmt_entry_block;
+		return result_package;
 	}
 
 	//This will always be a successor to the conditional statement
@@ -4138,8 +4140,8 @@ static basic_block_t* visit_for_statement(values_package_t* values){
 	//The direct successor to the entry block is the exit block, for efficiency reasons
 	for_stmt_entry_block->direct_successor = for_stmt_exit_block;
 
-	//Give back the entry block
-	return for_stmt_entry_block;
+	//Give back the result package here
+	return result_package;
 }
 
 
@@ -5039,24 +5041,22 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			for_stmt_values.loop_stmt_end = NULL;
 
 			//First visit the statement
-			basic_block_t* for_stmt_entry_block = visit_for_statement(&for_stmt_values);
+			statement_result_package_t for_results = visit_for_statement(&for_stmt_values);
 
 			//Now we'll add it in
 			if(starting_block == NULL){
-				starting_block = for_stmt_entry_block;
-				current_block = starting_block;
+				starting_block = for_results.starting_block;
+				current_block = for_results.final_block;
 			//We don't merge, we'll add successors
 			} else {
-				add_successor(current_block, for_stmt_entry_block);
-				emit_jump(current_block, for_stmt_entry_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				current_block = for_stmt_entry_block;
+				//Add the start as a successor
+				add_successor(current_block, for_results.starting_block);
+				//We go right to the exit block here
+				emit_jump(current_block, for_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				//Go right to the final block here
+				current_block = for_results.final_block;
 			}
 			
-			//Once we're here the start is in current
-			while(current_block->block_type != BLOCK_TYPE_FOR_STMT_END){
-				current_block = current_block->direct_successor;
-			}
-
 		//Handle a continue statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
 			//Let's first see if we're in a loop or not
