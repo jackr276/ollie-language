@@ -5101,11 +5101,25 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
  * to note that a parameter list may very well be empty, and that this rule will handle that case.
  * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
  *
- * <parameter-list> ::= <parameter-declaration> { ,<parameter-declaration>}*
+ * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
  */
 static generic_ast_node_t* parameter_list(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Now we need to see a valid parentheis
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we didn't find it, no point in going further
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", parser_line_num);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	}
+
+	//Otherwise, we'll push this onto the list to check for later
+	push_token(grouping_stack, lookahead);
 
 	//Let's now create the parameter list node
 	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST);
@@ -5116,14 +5130,39 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 	//done here and we'll just return an empty list
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If it's an R_PAREN, we'll just leave
-	if(lookahead.tok == R_PAREN){
-		//Return the list node
-		push_back_token(lookahead);
-		return param_list_node;
-	} else {
-		//Put it back for the search
-		push_back_token(lookahead);
+	switch(lookahead.tok){
+		//If we see an R_PAREN immediately, we can check and leave
+		case R_PAREN:
+			//If we have a mismatch, we can return these
+			if(pop_token(grouping_stack).tok != L_PAREN){
+				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			//Otherwise we're fine, so return the list node
+			return param_list_node;
+
+		//This is a possibility, we could see (void) as a valid declaration of no parameters
+		case VOID:
+			//We now need to see a closing R_PAREN
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//Fail out if we don't see this
+			if(lookahead.tok != R_PAREN){
+				return print_and_return_error("Closing parenthesis expected after void parameter list declaration", parser_line_num);
+			}
+
+			//Also check for grouping
+			if(pop_token(grouping_stack).tok != L_PAREN){
+				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			//Give back the paremeter list node
+			return param_list_node;
+			
+		//By default just put it back and get out
+		default:
+			push_back_token(lookahead);
+			break;
 	}
 
 	//Keep track of the current function paremeter number
@@ -5165,12 +5204,19 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 	//We keep going as long as we see commas
 	} while(lookahead.tok == COMMA);
 
-	//Once we make it here, we know that we don't have another comma. We'll put it back
-	//for the caller to handle
-	push_back_token(lookahead);
+	//Once we reach here, we need to check for the R_PAREN
+	if(lookahead.tok != R_PAREN){
+		return print_and_return_error("Closing parenthesis expected after parameter list", parser_line_num);
+	}
+
+	//Otherwise it worked, so we need to check matching
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+	}
 
 	//Store the line number
 	param_list_node->line_number = parser_line_num;
+
 	//Now we're done here, so we'll just give the root node back
 	return param_list_node;
 }
@@ -8227,7 +8273,7 @@ static int8_t check_jump_labels(){
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= func {:static}? <identifer> ({<parameter-list>}?) -> <type-specifier>{; | <compound-statement>}
+ * BNF Rule: <function-definition> ::= func {:static}? <identifer> ({<parameter-list> | void}?) -> <type-specifier>{; | <compound-statement>}
  *
  * REMEMBER: By the time we get here, we've already seen the func keyword
  */
@@ -8308,7 +8354,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name); 
 
 	//Fail out if found and it's already been defined
-	if(function_record != NULL && function_record->defined == 1){
+	if(function_record != NULL && function_record->defined == TRUE){
 		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name);
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_function_name(function_record);
@@ -8318,9 +8364,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//This is our interesting case. The function has been defined implicitly, and now we're trying to define it
 	//explicitly. We don't need to do any other checks if this is the case
-	} else if(function_record != NULL && function_record->defined == 0){
+	} else if(function_record != NULL && function_record->defined == FALSE){
 		//Flag this
-		defining_prev_implicit = 1;
+		defining_prev_implicit = TRUE;
 		//Set this as well
 		current_function = function_record;
 
@@ -8375,7 +8421,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Create the call graph node
 		function_record->call_graph_node = create_call_graph_node(function_record);
 		//By default, this function has never been called
-		function_record->called = 0;
+		function_record->called = FALSE;
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -8398,20 +8444,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 	}
 
-	//Now we need to see a valid parentheis
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we didn't find it, no point in going further
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", current_line);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
-	//Otherwise, we'll push this onto the list to check for later
-	push_token(grouping_stack, lookahead);
-
 	//We initialize this scope automatically, even if there is no param list.
 	//It will just be empty if this is the case, no big issue
 	initialize_variable_scope(variable_symtab);
@@ -8429,27 +8461,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return param_list_node;
 	}
 
-	//We'll hold off on addind it as a child until we see valid closing parenthesis
-	
-	//Now we need to see a valid closing parenthesis
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we don't have an R_Paren that's an issue
-	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected after parameter list", current_line);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-	
-	//If this happens, then we have some unmatched parenthesis
-	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis found", current_line);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
-	}
-
 	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
 	//now parse the param_list and store records to it	
 	//Let's first add the param list in as a child
@@ -8459,7 +8470,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	generic_ast_node_t* param_list_cursor = param_list_node->first_child;
 
 	//If we are defining a previously implicit function, we'll need to check the types & order
-	if(defining_prev_implicit == 1){
+	if(defining_prev_implicit == TRUE){
 		//How many params do we have
 		u_int8_t param_count = 0;
 		//The internal function record param
