@@ -100,7 +100,7 @@ typedef enum{
 //We predeclare up here to avoid needing any rearrangements
 static statement_result_package_t visit_declaration_statement(generic_ast_node_t* node);
 static basic_block_t* visit_compound_statement(values_package_t* values);
-static basic_block_t* visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
+static statement_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
 static statement_result_package_t visit_if_statement(values_package_t* values);
 static statement_result_package_t visit_while_statement(values_package_t* values);
 static statement_result_package_t visit_do_while_statement(values_package_t* values);
@@ -4013,7 +4013,8 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 		switch(ast_cursor->first_child->CLASS){
 			//We could have a let statement
 			case AST_NODE_CLASS_LET_STMT:
-				merge_blocks(for_stmt_entry_block, visit_let_statement(ast_cursor->first_child, TRUE));
+				//TODO must be changed for ternary
+				merge_blocks(for_stmt_entry_block, visit_let_statement(ast_cursor->first_child, TRUE).starting_block);
 				break;
 			default:
 				//Add it's child in as a statement to the entry block
@@ -4904,32 +4905,41 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			//Let the helper deal with it
 			statement_result_package_t declaration_results = visit_declaration_statement(ast_cursor);
 
-			//If the start block is null, then this is the start block. Otherwise, we merge it in
-			if(starting_block == NULL){
-				starting_block = declaration_results.starting_block;
-				current_block = declaration_results.final_block;
-			//Just merge with current
-			} else {
+			//If we're adding onto something(common case), we'll go here
+			if(starting_block != NULL){
+				//Merge the two blocks together
 				current_block = merge_blocks(current_block, declaration_results.starting_block); 
 
 				//If these are not equal, we can reassign the current block to be the final block
 				if(declaration_results.starting_block != declaration_results.final_block){
 					current_block = declaration_results.final_block;
 				}
+
+			//Otherwise this is the very first thing
+			} else {
+				starting_block = declaration_results.starting_block;
+				current_block = declaration_results.final_block;
 			}
 
 		//We've found a let statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
 			//We'll visit the block here
-			basic_block_t* let_block = visit_let_statement(ast_cursor, FALSE);
+			statement_result_package_t let_results = visit_let_statement(ast_cursor, FALSE);
 
-			//If the start block is null, then this is the start block. Otherwise, we merge it in
-			if(starting_block == NULL){
-				starting_block = let_block;
-				current_block = let_block;
-			//Just merge with current
+			//If this is not null, then we're just adding onto something
+			if(starting_block != NULL){
+				//Merge the two together
+				current_block = merge_blocks(current_block, let_results.starting_block); 
+
+				//If these are not equal, we can reassign the current block to be the final block
+				if(let_results.starting_block != let_results.final_block){
+					current_block = let_results.final_block;
+				}
+
+			//Otherwise this is the very first thing
 			} else {
-				current_block = merge_blocks(current_block, let_block); 
+				starting_block = let_results.starting_block;
+				current_block = let_results.final_block;
 			}
 
 		//If we have a return statement -- SPECIAL CASE HERE
@@ -5523,9 +5533,20 @@ static statement_result_package_t visit_declaration_statement(generic_ast_node_t
 /**
  * Visit a let statement
  */
-static basic_block_t* visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
+static statement_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
+	//Create the return package here
+	statement_result_package_t let_results;
+
+	//We already know that there is no operator here
+	let_results.operator = BLANK;
+
 	//What block are we emitting to?
-	basic_block_t* emitted_block = basic_block_alloc(1);
+	basic_block_t* lead_block = basic_block_alloc(1);
+
+	//We know that this will be the lead block
+	let_results.starting_block = lead_block;
+	//This is also the final block TODO FIX FOR TERNARY
+	let_results.final_block = lead_block;
 
 	//Let's grab the associated variable record here
 	symtab_variable_record_t* var = node->variable;
@@ -5534,19 +5555,22 @@ static basic_block_t* visit_let_statement(generic_ast_node_t* node, u_int8_t is_
  	three_addr_var_t* left_hand_var = emit_var(var, FALSE);
 
 	//This has been assigned to
-	add_assigned_variable(emitted_block, left_hand_var);
+	add_assigned_variable(lead_block, left_hand_var);
+
+	//The left hand var is our assigned var
+	let_results.assignee = left_hand_var;
 
 	//Now emit whatever binary expression code that we have
-	statement_result_package_t package = emit_expr_code(emitted_block, node->first_child, is_branch_ending, FALSE);
+	statement_result_package_t package = emit_expr_code(lead_block, node->first_child, is_branch_ending, FALSE);
 
 	//The actual statement is the assignment of right to left
 	instruction_t* assignment_statement = emit_assignment_instruction(left_hand_var, package.assignee);
 
 	//Finally we'll add this into the overall block
-	add_statement(emitted_block, assignment_statement);
+	add_statement(lead_block, assignment_statement);
 
 	//Give the block back
-	return emitted_block;
+	return let_results;
 }
 
 
