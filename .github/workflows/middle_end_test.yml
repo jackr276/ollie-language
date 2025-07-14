@@ -2,7 +2,8 @@ name: Middle End Test
 
 on:
   push:
-    branches: [ "main" ]
+    branches: 
+      - '*'
   pull_request:
     branches: [ "main" ]
 
