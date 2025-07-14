@@ -3334,87 +3334,78 @@ static statement_result_package_t emit_expr_code(basic_block_t* basic_block, gen
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
-	//The return package
-	statement_result_package_t ret_package;
-	//By default, last seen op is blank
-	ret_package.operator = BLANK;
+	//Declare and initialize the results
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
-	//An assignment statement
-	if(expr_node->CLASS == AST_NODE_CLASS_ASNMNT_EXPR) {
-		//In our tree, an assignment statement decays into a unary expression
-		//on the left and a binary op expr on the right
-		
-		//This should always be a unary expression
-		cursor = expr_node->first_child;
+	//We'll process based on the class of our expression node
+	switch(expr_node->CLASS){
+		case AST_NODE_CLASS_ASNMNT_EXPR:
+			//In our tree, an assignment statement decays into a unary expression
+			//on the left and a binary op expr on the right
+			
+			//This should always be a unary expression
+			cursor = expr_node->first_child;
 
-		//If it is not one, we fail out
-		if(cursor->CLASS != AST_NODE_CLASS_UNARY_EXPR){
-			print_parse_message(PARSE_ERROR, "Expected unary expression as first child to assignment expression", cursor->line_number);
-			exit(0);
-		}
+			//Emit the left hand unary expression
+			three_addr_var_t* left_hand_var = emit_unary_expr_code(basic_block, cursor, PRESERVE_ORIG_VAR, SIDE_TYPE_LEFT, is_branch_ending);
 
-		//Emit the left hand unary expression
-		three_addr_var_t* left_hand_var = emit_unary_expr_code(basic_block, cursor, PRESERVE_ORIG_VAR, SIDE_TYPE_LEFT, is_branch_ending);
+			//Advance the cursor up
+			cursor = cursor->next_sibling;
 
-		//Advance the cursor up
-		cursor = cursor->next_sibling;
+			//Now emit the right hand expression
+			statement_result_package_t package = emit_expr_code(basic_block, cursor, is_branch_ending, FALSE);
 
-		//Now emit the right hand expression
-		statement_result_package_t package = emit_expr_code(basic_block, cursor, is_branch_ending, FALSE);
+			//Finally we'll construct the whole thing
+			instruction_t* stmt = emit_assignment_instruction(left_hand_var, package.assignee);
+			
+			//Mark this with what was passed through
+			stmt->is_branch_ending = is_branch_ending;
 
-		//Finally we'll construct the whole thing
-		instruction_t* stmt = emit_assignment_instruction(left_hand_var, package.assignee);
-		
-		//Mark this with what was passed through
-		stmt->is_branch_ending = is_branch_ending;
+			//Now add this statement in here
+			add_statement(basic_block, stmt);
 
-		//Now add this statement in here
-		add_statement(basic_block, stmt);
+			//Now pack the return value here
+			result_package.operator = BLANK;
+			result_package.assignee = left_hand_var;
+			
+			//Return what we had
+			return result_package;
+	
+		case AST_NODE_CLASS_BINARY_EXPR:
+			//Emit the binary expression node
+			return emit_binary_expression(basic_block, expr_node, is_branch_ending);
 
-		//Now pack the return value here
-		ret_package.operator = BLANK;
-		ret_package.assignee = left_hand_var;
-		
-		//Return what we had
-		return ret_package;
+		case AST_NODE_CLASS_FUNCTION_CALL:
+			//Emit the function call statement
+			result_package.assignee = emit_function_call(basic_block, expr_node, is_branch_ending);
+			return result_package;
 
-	} else if(expr_node->CLASS == AST_NODE_CLASS_BINARY_EXPR){
-		//Emit the binary expression node
-		return emit_binary_expression(basic_block, expr_node, is_branch_ending);
-	} else if(expr_node->CLASS == AST_NODE_CLASS_FUNCTION_CALL){
-		//Emit the function call statement
-		ret_package.assignee = emit_function_call(basic_block, expr_node, is_branch_ending);
-		return ret_package;
+		case AST_NODE_CLASS_TERNARY_EXPRESSION:
+			//Emit the ternary expression
+			result_package.assignee = emit_ternary_expression(basic_block, expr_node, is_branch_ending).assignee;
+			return result_package;
 
-	//If we make it here, we have found a standalone ternary expression
-	} else if(expr_node->CLASS == AST_NODE_CLASS_TERNARY_EXPRESSION){
-		//Emit the ternary expression
-		ret_package.assignee = emit_ternary_expression(basic_block, expr_node, is_branch_ending).assignee;
-		return ret_package;
+		case AST_NODE_CLASS_UNARY_EXPR:
+			/**
+			* This is a very special check where we look for any if(x) kind of statements that just require a
+			* left hand temp assignment
+			*/
+			if(check_for_coniditional == TRUE && expr_node->first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
+				//If this is the case, then we need to just emit the temporary value and be done with it
+				result_package.assignee =  emit_identifier(basic_block, expr_node->first_child, USE_TEMP_VAR, SIDE_TYPE_LEFT, TRUE);
+				//Signedness is irrelevant here because any jumps would just be "je/jne"
+				return result_package;
+			} else {
+				//Let this rule handle it
+				result_package.assignee = emit_unary_expr_code(basic_block, expr_node, PRESERVE_ORIG_VAR, SIDE_TYPE_RIGHT, is_branch_ending);
+				//Again signedness is irrelevant here because any jumps would just be "je/jne"
+				return result_package;
+			}
 
-	} else if(expr_node->CLASS == AST_NODE_CLASS_UNARY_EXPR){
-		/**
-	 	* This is a very special check where we look for any if(x) kind of statements that just require a
-	 	* left hand temp assignment
-	 	*/
-		if(check_for_coniditional == TRUE && expr_node->first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
-			//If this is the case, then we need to just emit the temporary value and be done with it
-			ret_package.assignee =  emit_identifier(basic_block, expr_node->first_child, USE_TEMP_VAR, SIDE_TYPE_LEFT, TRUE);
-			//Signedness is irrelevant here because any jumps would just be "je/jne"
-			return ret_package;
-		} else {
-			//Let this rule handle it
-			ret_package.assignee = emit_unary_expr_code(basic_block, expr_node, PRESERVE_ORIG_VAR, SIDE_TYPE_RIGHT, is_branch_ending);
-			//Again signedness is irrelevant here because any jumps would just be "je/jne"
-			return ret_package;
-		}
-
-	} else {
-		return ret_package;
-
+		//We should never actually hit this, it's just to stop the compiler from complaining
+		default:
+			return result_package;
 	}
-
-	return ret_package;
 }
 
 
@@ -3518,6 +3509,7 @@ static int32_t increment_and_get(){
 	current_block_id++;
 	return current_block_id;
 }
+
 
 /**
  * Allocate a basic block using calloc. NO data assignment
