@@ -107,7 +107,7 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
 static statement_result_package_t visit_for_statement(values_package_t* values);
 static basic_block_t* visit_case_statement(values_package_t* values);
 static basic_block_t* visit_default_statement(values_package_t* values);
-static basic_block_t* visit_switch_statement(values_package_t* values);
+static statement_result_package_t visit_switch_statement(values_package_t* values);
 
 static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
 static statement_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
@@ -4691,16 +4691,26 @@ static basic_block_t* visit_case_statement(values_package_t* values){
  * the values here will not be reordered at all. Instead, they
  * will be put in the exact orientation that the user wants
  */
-static basic_block_t* visit_switch_statement(values_package_t* values){
+static statement_result_package_t visit_switch_statement(values_package_t* values){
+	//Declare the result package off the bat
+	statement_result_package_t result_package;
+
 	//The starting block for the switch statement - we'll want this in a new
 	//block
 	basic_block_t* starting_block = basic_block_alloc(1);
-	//Mark that this is a switch statement
-	starting_block->block_type = BLOCK_TYPE_SWITCH;
-
 	//We also need to know the ending block here -- Knowing
 	//this is important for break statements
 	basic_block_t* ending_block = basic_block_alloc(1);
+
+	//Mark that this is a switch statement
+	starting_block->block_type = BLOCK_TYPE_SWITCH;
+
+	//We can already fill in the result package
+	result_package.starting_block = starting_block;
+	result_package.final_block = ending_block;
+	//We know that these will both be empty
+	result_package.assignee = NULL;
+	result_package.operator = BLANK;
 
 	//We need a quick reference to the starting block ID
 	u_int16_t starting_block_id = starting_block->block_id;
@@ -4708,11 +4718,13 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//If this is empty, serious issue. The initial node already is
 	//a switch statement. Its first child is the expression inside of it
 	if(values->initial_node->first_child == NULL){
+		//Ensure that the starting block's direct successor is the end block, for convenience
+		starting_block->direct_successor = ending_block;
 		//Print this message
 		print_cfg_message(WARNING, "Empty switch statement detected", values->initial_node->line_number);
 		(*num_warnings_ref)++;
 		//It's just going to be empty
-		return starting_block;
+		return result_package;
 	}
 
 	//Let's also allocate our jump table. We know how large the jump table needs to be from
@@ -4824,7 +4836,7 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	u_int8_t is_signed = is_type_signed(package1.assignee->type);
 
 	//First step -> if we're below the minimum, we jump to default 
-	 emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
+	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
@@ -4862,11 +4874,8 @@ static basic_block_t* visit_switch_statement(values_package_t* values){
 	//Now we'll emit the indirect jump to the address
 	emit_indirect_jump(starting_block, address, JUMP_TYPE_JMP, TRUE);
 
-	//Ensure that the starting block's direct successor is the end block, for convenience
-	starting_block->direct_successor = ending_block;
-
 	//Give back the starting block
-	return starting_block;
+	return result_package;
 }
 
 
@@ -5271,27 +5280,21 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 			values->initial_node = ast_cursor;
 
 			//Visit the switch statement
-			basic_block_t* switch_stmt_entry = visit_switch_statement(values);
+			statement_result_package_t switch_results = visit_switch_statement(values);
 
 			//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
 			//starting block's direct successor
 			if(starting_block == NULL){
-				starting_block = switch_stmt_entry;
+				starting_block = switch_results.starting_block;
 			} else {
 				//Otherwise this is a direct successor
-				add_successor(current_block, switch_stmt_entry);
+				add_successor(current_block, switch_results.starting_block);
 				//We will also emit a jump from the current block to the entry
-				emit_jump(current_block, switch_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, switch_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 
-			//We need to drill to the end
-			//Set this to be current
-			current_block = switch_stmt_entry;
-
-			//Once we're here the start is in current, we'll need to drill to the end
-			while(current_block->direct_successor != NULL){
-				current_block = current_block->direct_successor;
-			}
+			//The current block is always what's directly at the end
+			current_block = switch_results.final_block;
 			
 		//We could also have a compound statement inside of here as well
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
@@ -5332,6 +5335,7 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 
 			//Let the helper handle
 			emit_assembly_inline(current_block, ast_cursor, FALSE);
+
 		//Handle a nop statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IDLE_STMT){
 			//Do we need a new block?
