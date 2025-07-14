@@ -98,7 +98,7 @@ typedef enum{
 
 
 //We predeclare up here to avoid needing any rearrangements
-static basic_block_t* visit_declaration_statement(generic_ast_node_t* node);
+static statement_result_package_t visit_declaration_statement(generic_ast_node_t* node);
 static basic_block_t* visit_compound_statement(values_package_t* values);
 static basic_block_t* visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
 static statement_result_package_t visit_if_statement(values_package_t* values);
@@ -4901,16 +4901,21 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 	while(ast_cursor != NULL){
 		//We've found a declaration statement
 		if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
-			//We'll visit the block here
-			basic_block_t* decl_block = visit_declaration_statement(ast_cursor);
+			//Let the helper deal with it
+			statement_result_package_t declaration_results = visit_declaration_statement(ast_cursor);
 
 			//If the start block is null, then this is the start block. Otherwise, we merge it in
 			if(starting_block == NULL){
-				starting_block = decl_block;
-				current_block = decl_block;
+				starting_block = declaration_results.starting_block;
+				current_block = declaration_results.final_block;
 			//Just merge with current
 			} else {
-				current_block = merge_blocks(current_block, decl_block); 
+				current_block = merge_blocks(current_block, declaration_results.starting_block); 
+
+				//If these are not equal, we can reassign the current block to be the final block
+				if(declaration_results.starting_block != declaration_results.final_block){
+					current_block = declaration_results.final_block;
+				}
 			}
 
 		//We've found a let statement
@@ -5484,7 +5489,7 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 /**
  * Visit a declaration statement
  */
-static basic_block_t* visit_declaration_statement(generic_ast_node_t* node){
+static statement_result_package_t visit_declaration_statement(generic_ast_node_t* node){
 	//What block are we emitting into?
 	basic_block_t* emitted_block = NULL;
 
@@ -5507,8 +5512,11 @@ static basic_block_t* visit_declaration_statement(generic_ast_node_t* node){
 		emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, type_symtab), FALSE);
 	}
 
-	//Give the block back
-	return emitted_block;
+	//Declare the result package
+	statement_result_package_t result_package = {emitted_block, emitted_block, NULL, BLANK};
+
+	//Give the result package back
+	return result_package;
 }
 
 
