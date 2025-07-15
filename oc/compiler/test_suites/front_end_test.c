@@ -102,6 +102,9 @@ int main(int argc, char** argv){
 	//Grab all the options using the helper
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
+	//Print out what we're testing
+	printf("TESTING FILE: %s\n\n", options->file_name);
+
 	//Start the timer
 	clock_t begin = clock();
 
