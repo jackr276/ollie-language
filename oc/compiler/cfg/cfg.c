@@ -2685,7 +2685,7 @@ static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, gene
 /**
  * Handle a postincrement/postdecrement operation
  */
-static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, three_addr_var_t* current_var, Token unary_operator, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, three_addr_var_t* current_var, Token unary_operator, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//This is either a postincrement or postdecrement. Regardless, we emit
 	//a temp var for this because we assign before we mutate
 

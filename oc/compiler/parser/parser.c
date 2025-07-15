@@ -87,22 +87,22 @@ u_int8_t found_main_function = FALSE;
 static char* current_file_name = NULL;
 
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
-static generic_ast_node_t* cast_expression(FILE* fl);
+static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side);
 //What type are we given?
 static generic_type_t* type_specifier(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
-static generic_ast_node_t* unary_expression(FILE* fl);
+static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side);
 static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
-static generic_ast_node_t* logical_or_expression(FILE* fl);
+static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side);
 static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, u_int32_t* values);
 static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* defer_statement(FILE* fl);
 static generic_ast_node_t* idle_statement(FILE* fl);
-static generic_ast_node_t* ternary_expression(FILE* fl);
+static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee);
@@ -200,7 +200,7 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t
 	//Increment the number of errors
 	num_errors++;
 	//Allocate and return an error node
-	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 }
 
 
@@ -293,7 +293,7 @@ static void update_constant_type_in_subtree(generic_ast_node_t* sub_tree_node, g
  * Example:
  * int* + 1 -> int* + 4(an int is 4 bytes), and so on...
  */
-static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, Token op, generic_ast_node_t* operand){
+static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, Token op, generic_ast_node_t* operand, side_type_t side){
 	//Grab the pointer type out
 	pointer_type_t* pointer_type = pointer->inferred_type->pointer_type;
 
@@ -303,7 +303,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	}
 
 	//Write out our constant multplicand
-	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
 	//Grab the constant out
 	constant_ast_node_t* const_node = constant_multiplicand->node;
 	//Mark the type too
@@ -314,7 +314,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
 	//Allocate an adjustment node
-	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 
 	//This is a multiplication node
 	adjustment->binary_operator = STAR;
@@ -326,7 +326,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	add_child_node(adjustment, constant_multiplicand);
 
 	//Generate a binary expression that we'll eventually return
-	generic_ast_node_t* return_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+	generic_ast_node_t* return_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 
 	//Save the operator
 	return_node->binary_operator = op;
@@ -353,7 +353,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
  * BNF "Rule": <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
  * Note all actual string parsing and validation is handled by the lexer
  */
-static generic_ast_node_t* identifier(FILE* fl){
+static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	//Grab the next token
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
@@ -364,7 +364,7 @@ static generic_ast_node_t* identifier(FILE* fl){
 	}
 
 	//Create the identifier node
-	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER); //Add the identifier into the node itself
+	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
 	//Idents are assignable
 	ident_node->is_assignable = ASSIGNABLE;
 	//Copy the string we got into it
@@ -385,7 +385,7 @@ static generic_ast_node_t* identifier(FILE* fl){
  * BNF "Rule": <label-identifier> ::= ${(<letter>) | <digit> | _ | $}*
  * Note all actual string parsing and validation is handled by the lexer
  */
-static generic_ast_node_t* label_identifier(FILE* fl){
+static generic_ast_node_t* label_identifier(FILE* fl, side_type_t side){
 	//Grab the next token
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
@@ -397,7 +397,7 @@ static generic_ast_node_t* label_identifier(FILE* fl){
 	}
 
 	//Create the identifier node
-	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER); //Add the identifier into the node itself
+	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
 	//Copy the string we got into it
 	strcpy(label_ident_node->identifier, lookahead.lexeme);
 	//By default a label identifier is of type u_int64(memory address)
@@ -424,7 +424,7 @@ static generic_ast_node_t* label_identifier(FILE* fl){
  * 						  | <float-constant> 
  * 						  | <char-constant>
  */
-static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
+static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -432,7 +432,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 	lookahead = get_next_token(fl, &parser_line_num, const_search);
 
 	//Create our constant node
-	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
 	//Add the line number
 	constant_node->line_number = parser_line_num;
 
@@ -539,7 +539,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
 				print_parse_message(WARNING, "0 length string given as constant", parser_line_num);
 				num_warnings++;
 				//This will fail out here
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 			}
 
 			//Too long of a string
@@ -578,7 +578,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search){
  *
  * BNF Rule: <function-call> ::= @<identifier>({<logical-or-expression>}?{, <logical-or-expression>}*)
  */
-static generic_ast_node_t* function_call(FILE* fl){
+static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//The current line num
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -593,7 +593,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 	u_int8_t function_num_params;
 	
 	//First grab the ident node
-	generic_ast_node_t* ident = identifier(fl);
+	generic_ast_node_t* ident = identifier(fl, side);
 
 	//We have a general error-probably will be quite uncommon
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -621,7 +621,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 	//If we make it here, we know that our function actually exists. We can now create
 	//the appropriate node that will hold all of our data about it
 	//It is also now safe enough for us to allocate the function node
-	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL);
+	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL, side);
 
 	//Store the function record in the node
 	function_call_node->func_record = function_record;
@@ -682,14 +682,14 @@ static generic_ast_node_t* function_call(FILE* fl){
 			print_function_name(function_record);
 			num_errors++;
 			//Return the error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 		}
 
 		//Grab the current function param
 		current_function_param = function_record->func_params[num_params].associate_var;
 
 		//Parameters are in the form of a conditional expression
-		current_param = logical_or_expression(fl);
+		current_param = logical_or_expression(fl, side);
 
 		//We now have an error of some kind
 		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -710,12 +710,9 @@ static generic_ast_node_t* function_call(FILE* fl){
 		if(final_type == NULL){
 			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". First defined here:",
 		   			function_name, param_type->type_name, num_params, expr_type->type_name);
-			print_parse_message(PARSE_ERROR, info,  parser_line_num);
-			//Print out the actual function record as well
-			print_function_name(function_record);
-			num_errors++;
-			//Return the error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+
+			//Use the helper to return this
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Otherwise it worked
@@ -758,7 +755,7 @@ static generic_ast_node_t* function_call(FILE* fl){
 		print_function_name(function_record);
 		num_errors++;
 		//Error out
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 	}
 
 	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
@@ -782,7 +779,7 @@ static generic_ast_node_t* function_call(FILE* fl){
  *
  * NOTE: By the time we get here, we have already seen and consumed the sizeof token
  */
-static generic_ast_node_t* sizeof_statement(FILE* fl){
+static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -791,10 +788,8 @@ static generic_ast_node_t* sizeof_statement(FILE* fl){
 
 	//Fail case here
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected after sizeof call", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		//Use the helper for the error
+		return print_and_return_error("Left parenthesis expected after sizeof call", parser_line_num);
 	}
 
 	//Otherwise we'll push to the stack for checking
@@ -803,7 +798,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl){
 	//We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
 	//actual expression result will be unused. It's important to note that we will not actually evaluate the expression here at
 	//all - sall we can about is the return type
-	generic_ast_node_t* expr_node = logical_or_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl, side);
 	
 	//If it's an error
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -818,18 +813,12 @@ static generic_ast_node_t* sizeof_statement(FILE* fl){
 
 	//Fail out here if we don't see it
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression", parser_line_num);
-		num_errors++;
-		//Create and return the error
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Right parenthesis expected after expression", parser_line_num);
 	}
 
 	//We can also fail if we somehow see unmatched parenthesis
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
-		num_errors++;
-		//Create and return the error
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected in typesize expression", parser_line_num);
 	}
 
 	//Now we know that we have an entirely syntactically valid call to sizeof. Let's now extract the 
@@ -837,7 +826,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl){
 	generic_type_t* return_type = expr_node->inferred_type;
 
 	//Create a constant node
-	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
 	//Extract this here to avoid repeated casting
 	constant_ast_node_t* constant = const_node->node;
 
@@ -863,7 +852,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl){
  *
  * NOTE: by the time we get here, we have already seen and consumed the typesize token
  */
-static generic_ast_node_t* typesize_statement(FILE* fl){
+static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -872,10 +861,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl){
 
 	//Fail case here
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected after typesize call", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left parenthesis expected after typesize call", parser_line_num);
 	}
 
 	//Otherwise we'll push to the stack for checking
@@ -888,10 +874,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl){
 
 	//If it's an error
 	if(type_spec == NULL){
-		print_parse_message(PARSE_ERROR, "Unable to use typesize on undefined type",  parser_line_num);
-		num_errors++;
-		//It's already an error, so give it back that way
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unable to use typesize on undefined type",  parser_line_num);
 	}
 
 	//Once we've done this, we can grab the actual size of the type-specifier
@@ -904,22 +887,16 @@ static generic_ast_node_t* typesize_statement(FILE* fl){
 
 	//Fail out here if we don't see it
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected after type specifer", parser_line_num);
-		num_errors++;
-		//Create and return the error
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Right parenthesis expected after type specifer", parser_line_num);
 	}
 
 	//We can also fail if we somehow see unmatched parenthesis
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in typesize expression", parser_line_num);
-		num_errors++;
-		//Create and return the error
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected in typesize expression", parser_line_num);
 	}
 
 	//Create a constant node
-	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT);
+	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
 	//Extract the constant area for convenience
 	constant_ast_node_t* constant = const_node->node;
 
@@ -950,7 +927,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl){
  * 									| typesize(<type-name>)
  * 									| <function-call>
  */
-static generic_ast_node_t* primary_expression(FILE* fl){
+static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 	//For the function call rule if we make it there
 	generic_ast_node_t* func_call;
 
@@ -975,7 +952,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			//We will let the identifier rule actually grab the ident. In this case
 			//the identifier will be a variable of some sort, that we'll need to check
 			//against the symbol table
-			generic_ast_node_t* ident = identifier(fl);
+			generic_ast_node_t* ident = identifier(fl, side);
 
 			//If there was a failure of some kind, we'll allow it to propogate up
 			if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1033,7 +1010,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			push_back_token(lookahead);
 
 			//Call the constant rule to grab the constant node
-			generic_ast_node_t* constant_node = constant(fl, SEARCHING_FOR_CONSTANT);
+			generic_ast_node_t* constant_node = constant(fl, SEARCHING_FOR_CONSTANT, side);
 
 			//Give back the constant node - if it's an error, the parent will handle
 			return constant_node;
@@ -1041,7 +1018,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//We can see a sizeof call
 		case SIZEOF:
 			//Let the helper handle this
-			return sizeof_statement(fl);
+			return sizeof_statement(fl, side);
 
 		//If we see the typesize keyword, we are locked in to the typesize rule
 		//The typesize rule is a compiler only directive. Since we know the size of all
@@ -1049,7 +1026,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//size here
 		case TYPESIZE:
 			//Let the helper deal with this
-			return typesize_statement(fl);
+			return typesize_statement(fl, side);
 
 		//We could see a case where we have a parenthesis in an expression
 		case L_PAREN:
@@ -1057,7 +1034,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 			push_token(grouping_stack, lookahead);
 
 			//We are now required to see a valid logical or expression expression
-			generic_ast_node_t* expr = logical_or_expression(fl);
+			generic_ast_node_t* expr = logical_or_expression(fl, side);
 
 			//If it's an error, just give the node back
 			if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1085,7 +1062,7 @@ static generic_ast_node_t* primary_expression(FILE* fl){
 		//We could see a function call
 		case AT:
 			//We will let this rule handle the function call
-			func_call = function_call(fl);
+			func_call = function_call(fl, side);
 
 			//If we failed here
 			if(func_call->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1170,7 +1147,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//If we make it here however, that means that we did see the assign keyword. Since
 	//this is the case, we'll make a new assignment node and take the appropriate actions here 
-	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_CLASS_ASNMNT_EXPR);	
+	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_CLASS_ASNMNT_EXPR, SIDE_TYPE_LEFT);
 	//Add in the line number
 	asn_expr_node->line_number = current_line;
 
@@ -1178,20 +1155,16 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//will itself be the assignment expression node
 	
 	//We'll let this rule handle it
-	generic_ast_node_t* left_hand_unary = unary_expression(fl);
+	generic_ast_node_t* left_hand_unary = unary_expression(fl, SIDE_TYPE_LEFT);
 
 	//Fail out here
 	if(left_hand_unary->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid left hand side given to assignment expression", current_line);
-		//Return the erroneous node as we fail up the tree
-		return left_hand_unary;
+		return print_and_return_error("Invalid left hand side given to assignment expression", current_line);
 	}
 	
 	//If it isn't assignable, we also fail
 	if(left_hand_unary->is_assignable == NOT_ASSIGNABLE){
-		print_parse_message(PARSE_ERROR, "Expression is not assignable", left_hand_unary->line_number);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
 	//Otherwise it worked, so we'll add it in as the left child
@@ -1201,10 +1174,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//this assignment is illegal
 	if(current_var->initialized == TRUE && current_var->is_mutable == FALSE){
 		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(current_var);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//If it was already intialized, this means that it's been "assigned to"
@@ -1221,21 +1191,15 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Fail case here
 	if(is_assignment_operator(lookahead.tok) == FALSE){
 		sprintf(info, "Expected assignment operator symbol in assignment expression");
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Return a special kind of error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now that we're here we must see a valid conditional expression
-	generic_ast_node_t* expr = ternary_expression(fl);
+	generic_ast_node_t* expr = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Fail case here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid right hand side given to assignment expression", current_line);
-		num_errors++;
-		//The conditional is already an error, so we'll just return it
-		return expr;
+		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
 	}
 
 	//Let's now see if we have compatible types
@@ -1257,17 +1221,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//If they're not, we fail here
 		if(final_type == NULL){
 			sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 		if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
 			if(expr->variable->is_mutable == FALSE && left_hand_unary->variable->is_mutable == TRUE){
-				print_parse_message(PARSE_ERROR, "Mutable references to immutable variables are forbidden", parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
 			}
 		}
 
@@ -1344,7 +1304,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			//By the time that we get here, we know that all coercion has been completed
 			//We can now construct our final result
 			//Allocate the binary expression
-			generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+			generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, SIDE_TYPE_RIGHT);
 			//Store the type and operator
 			binary_op_node->inferred_type = final_type;
 			binary_op_node->binary_operator = binary_op;
@@ -1371,7 +1331,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			}
 			
 			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
-			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr);
+			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr, SIDE_TYPE_RIGHT);
 
 			//This is an overall child of the assignment expression
 			add_child_node(asn_expr_node, pointer_arithmetic);
@@ -1395,7 +1355,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  * BNF Rule: <construct-accessor> ::= => <variable-identifier> 
  * 								    | : <variable-identifier>
  */
-static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_type){
+static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -1405,7 +1365,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Otherwise we'll now make the node here
-	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR);
+	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR, side);
 	//Add the line number
 	const_access_node->line_number = current_line;
 
@@ -1427,7 +1387,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 		}
 
 		//We can now pick out what type we're referencing(should be construct)
@@ -1439,7 +1399,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, referenced_type));
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 		}
 
 	//Otherwise we know that we have some kind of non-pointer here(or so we hope)
@@ -1450,7 +1410,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 		}
 
 		//If we make it here we know that working type is a struct
@@ -1459,7 +1419,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	}
 
 	//Now we are required to see a valid variable identifier.
-	generic_ast_node_t* ident = identifier(fl); 
+	generic_ast_node_t* ident = identifier(fl, side); 
 
 	//For now we're just doing error checking
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1478,9 +1438,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	//If we can't find it we're out
 	if(var_record == NULL){
 		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, referenced_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 	
 	//Add the variable record into the node
@@ -1509,7 +1467,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
  * BNF Rule: <array-accessor> ::= [ <logical-or-expression> ]
  *
  */
-static generic_ast_node_t* array_accessor(FILE* fl){
+static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Freeze the current line
@@ -1520,10 +1478,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	
 	//If we didn't see it, that's some weird internal error
 	if(lookahead.tok != L_BRACKET){
-		print_parse_message(PARSE_ERROR, "Opening bracket expected for array access", current_line);
-		num_errors++;
-		//Fail out here
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Opening bracket expected for array access", current_line);
 	}
 
 	//Otherwise it all went well, so we'll push this onto the stack
@@ -1531,14 +1486,11 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 
 	//Now we are required to see a valid constant expression representing what
 	//the actual index is.
-	generic_ast_node_t* expr = logical_or_expression(fl);
+	generic_ast_node_t* expr = logical_or_expression(fl, side);
 
 	//If we fail, automatic exit here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to array accessor", current_line);
-		num_errors++;
-		//It's already an error so we'll just return it
-		return expr;
+		return print_and_return_error("Invalid conditional expression given to array accessor", current_line);
 	}
 
 	//Let's first check to see if this can be used in an array at all
@@ -1559,9 +1511,7 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 	//Let's make sure that this is an int
 	if(final_type == NULL){
 		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//If this is the case, we'll need to propogate all of the types down the chain here
@@ -1574,22 +1524,16 @@ static generic_ast_node_t* array_accessor(FILE* fl){
 
 	//If wedon't see a right bracket, we'll fail out
 	if(lookahead.tok != R_BRACKET){
-		print_parse_message(PARSE_ERROR, "Right bracket expected at the end of array accessor", parser_line_num);
-		num_errors++;
-		//Give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Right bracket expected at the end of array accessor", parser_line_num);
 	}
 
 	//We also must check for matching with the brackets
 	if(pop_token(grouping_stack).tok != L_BRACKET){
-		print_parse_message(PARSE_ERROR, "Unmatched brackets detected in array accessor", current_line);
-		num_errors++;
-		//Again give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched brackets detected in array accessor", current_line);
 	}
 
 	//Now that we've done all of our checks have been done, we can create the actual node
-	generic_ast_node_t* array_acc_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_ACCESSOR);
+	generic_ast_node_t* array_acc_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_ACCESSOR, side);
 	//Add the line number
 	array_acc_node->line_number = current_line;
 
@@ -1612,14 +1556,14 @@ static generic_ast_node_t* array_accessor(FILE* fl){
  * <postfix-expression> ::= <primary-expression> 
  *						  | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
  */ 
-static generic_ast_node_t* postfix_expression(FILE* fl){
+static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 
 	//No matter what, we have to first see a valid primary expression
-	generic_ast_node_t* result = primary_expression(fl);
+	generic_ast_node_t* result = primary_expression(fl, side);
 
 	//If we fail, then we're bailing out here
 	if(result->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1649,16 +1593,14 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 	//If we make it down to here, we know that we're trying to access a variable. As such, 
 	//we need to make sure that we don't see a constant here
 	if(result->CLASS == AST_NODE_CLASS_CONSTANT){
-		print_parse_message(PARSE_ERROR, "Constants are not assignable", current_line);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Constants are not assignable", current_line);
 	}
 
 	//Otherwise we at least know that it isn't a constant
 
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
 	//post operation, so we can make the node for it
-	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_CLASS_POSTFIX_EXPR);
+	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_CLASS_POSTFIX_EXPR, side);
 	//Add the line number
 	postfix_expr_node->line_number = current_line;
 
@@ -1689,18 +1631,15 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 				//Print it out
 				print_type_name(lookup_type(type_symtab, current_type));
 				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 			}
 
 			//Let the array accessor handle it
-			generic_ast_node_t* array_acc = array_accessor(fl);
+			generic_ast_node_t* array_acc = array_accessor(fl, side);
 			
 			//Let's see if it actually worked
 			if(array_acc->CLASS == AST_NODE_CLASS_ERR_NODE){
-				print_parse_message(PARSE_ERROR, "Invalid array accessor found in postfix expression", current_line);
-				num_errors++;
-				//It's already an error, so we'll just give it back
-				return array_acc;
+				return print_and_return_error("Invalid array accessor found in postfix expression", current_line);
 			}
 
 			//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
@@ -1724,14 +1663,11 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 			push_back_token(lookahead);
 
 			//Let's have the rule do it.
-			generic_ast_node_t* constr_acc = construct_accessor(fl, current_type);
+			generic_ast_node_t* constr_acc = construct_accessor(fl, current_type, side);
 
 			//We have our fail case here
 			if(constr_acc->CLASS == AST_NODE_CLASS_ERR_NODE){
-				print_parse_message(PARSE_ERROR, "Invalid construct accessor found in postfix expression", current_line);
-				num_errors++;
-				//It's already an error so send it up
-				return constr_acc;
+				return print_and_return_error("Invalid construct accessor found in postfix expression", current_line);
 			}
 
 			//Update the current type to be whatever came out of here
@@ -1781,7 +1717,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl){
 
 	//Otherwise if we get here we know that we either have post inc or dec
 	//Create the unary operator node
-	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
+	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR, side);
 
 	//Store the token
 	unary_post_op->unary_operator = lookahead.tok;
@@ -1991,7 +1927,7 @@ static u_int8_t is_unary_operator(Token tok){
  * 								| ++ 
  * 								| --
  */
-static generic_ast_node_t* unary_expression(FILE* fl){
+static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this assignable
@@ -2009,10 +1945,10 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		//Push it back
 		push_back_token(lookahead);
 		//We'll still make a top level tree here to avoid ambiguity
-		generic_ast_node_t* unary_expr_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+		generic_ast_node_t* unary_expr_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR, side);
 
 		//Let this handle the heavy lifting
-		generic_ast_node_t* postfix_expr_node = postfix_expression(fl);
+		generic_ast_node_t* postfix_expr_node = postfix_expression(fl, side);
 
 		//If this is NULL, just send it up the chain
 		if(postfix_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2039,12 +1975,12 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	//Otherwise, if we get down here we know that we have a unary operator
 	
 	//We'll first create the unary operator node for ourselves here
-	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR);
+	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR, side);
 	//Assign the operator to this
 	unary_op->unary_operator = lookahead.tok;
 
 	//Following this, we are required to see a valid cast expression
-	generic_ast_node_t* cast_expr = cast_expression(fl);
+	generic_ast_node_t* cast_expr = cast_expression(fl, side);
 
 	//Let's check for errors
 	if(cast_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2075,9 +2011,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 			//Otherwise if we made it here, we only have one final tripping point
 			//Ensure that we aren't trying to deref a null pointer
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->pointer_type->is_void_pointer == TRUE){
-				print_parse_message(PARSE_ERROR, "Attempt to derefence void*, you must cast before derefencing", parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 			}
 
 			//Otherwise our dereferencing worked, so the return type will be whatever this points to
@@ -2097,9 +2031,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 		case SINGLE_AND:
 			//Is there an attempt to take the address of a constant
 			if(cast_expr->CLASS == AST_NODE_CLASS_CONSTANT){
-				print_parse_message(PARSE_ERROR, "The address of a constant cannot be taken", parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return print_and_return_error("The address of a constant cannot be taken", parser_line_num);
 			}
 
 			//Check to see if it's valid
@@ -2249,7 +2181,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
 	}
 
 	//One we get here, we have both nodes that we need
-	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR);
+	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR, side);
 	
 	//The unary operator always comes first
 	add_child_node(unary_node, unary_op);
@@ -2279,7 +2211,7 @@ static generic_ast_node_t* unary_expression(FILE* fl){
  * BNF Rule: <cast-expression> ::= <unary-expression> 
  * 						    	| < <type-specifier> > <unary-expression>
  */
-static generic_ast_node_t* cast_expression(FILE* fl){
+static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 
@@ -2293,7 +2225,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 		push_back_token(lookahead);
 
 		//Let this handle it
-		return unary_expression(fl);
+		return unary_expression(fl, side);
 	}
 
 	//Push onto the stack for matching
@@ -2304,10 +2236,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 
 	//If it's an error, we'll print and propagate it up
 	if(type_spec == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier given to cast expression", parser_line_num);
-		num_errors++;
-		//It is the error, so we can return it
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Invalid type specifier given to cast expression", parser_line_num);
 	}
 
 	//We now have to see the closing braces that we need
@@ -2315,23 +2244,17 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 
 	//If we didn't see a match
 	if(lookahead.tok != G_THAN){
-		print_parse_message(PARSE_ERROR, "Expected closing > at end of cast", parser_line_num);
-		num_errors++;
-		//Create and give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Expected closing > at end of cast", parser_line_num);
 	}
 
 	//Make sure we match
 	if(pop_token(grouping_stack).tok != L_THAN){
-		print_parse_message(PARSE_ERROR, "Unmatched angle brackets given to cast statement", parser_line_num);
-		num_errors++;
-		//Create and give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched angle brackets given to cast statement", parser_line_num);
 	}
 
 	//Now we have to see a valid unary expression. This is our last potential fail case in the chain
 	//The unary expression will handle this for us
-	generic_ast_node_t* right_hand_unary = unary_expression(fl);
+	generic_ast_node_t* right_hand_unary = unary_expression(fl, side);
 
 	//If it's an error we'll jump out
 	if(right_hand_unary->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2347,24 +2270,18 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	//You can never cast a "void" to anything
 	if(being_casted_type->type_class == TYPE_CLASS_BASIC && being_casted_type->basic_type->basic_type == VOID){
 		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Likewise, you can never cast anything to void
 	if(casting_to_type->type_class == TYPE_CLASS_BASIC && casting_to_type->basic_type->basic_type == VOID){
 		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name, casting_to_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//You can never cast anything to be a construct
 	if(casting_to_type->type_class == TYPE_CLASS_CONSTRUCT){
-		print_parse_message(PARSE_ERROR, "No type can be casted to a construct type", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("No type can be casted to a construct type", parser_line_num);
 	}
 
 	/**
@@ -2375,9 +2292,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
 	//This is our fail case
 	if(return_type == NULL){
 		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name, casting_to_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//These types are now inferenced
@@ -2397,7 +2312,7 @@ static generic_ast_node_t* cast_expression(FILE* fl){
  *
  * BNF Rule: <multiplicative-expression> ::= <cast-expression>{ (* | / | %) <cast-expression>}*
  */
-static generic_ast_node_t* multiplicative_expression(FILE* fl){
+static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -2412,7 +2327,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid cast expression expression
-	generic_ast_node_t* sub_tree_root = cast_expression(fl);
+	generic_ast_node_t* sub_tree_root = cast_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2443,7 +2358,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2452,7 +2367,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid cast expression again
-		right_child = cast_expression(fl);
+		right_child = cast_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2534,7 +2449,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl){
  *
  * BNF Rule: <additive-expression> ::= <multiplicative-expression>{ (+ | -) <multiplicative-expression>}*
  */
-static generic_ast_node_t* additive_expression(FILE* fl){
+static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -2549,7 +2464,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid multiplicative expression
-	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl);
+	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2579,7 +2494,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2588,7 +2503,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid multiplicative expression again
-		right_child = multiplicative_expression(fl);
+		right_child = multiplicative_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2649,7 +2564,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
 			}
 
 			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
-			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child);
+			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
 
 			//Once we're done here, the right child is the pointer arithmetic
 			right_child = pointer_arithmetic;
@@ -2688,7 +2603,7 @@ static generic_ast_node_t* additive_expression(FILE* fl){
  *								 |  <additive-expression> << <additive-expression> 
  *								 |  <additive-expression> >> <additive-expression>
  */
-static generic_ast_node_t* shift_expression(FILE* fl){
+static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -2701,7 +2616,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid additive expression
-	generic_ast_node_t* sub_tree_root = additive_expression(fl);
+	generic_ast_node_t* sub_tree_root = additive_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2732,7 +2647,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2741,7 +2656,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid additive expression again
-		right_child = additive_expression(fl);
+		right_child = additive_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2822,7 +2737,7 @@ static generic_ast_node_t* shift_expression(FILE* fl){
  * 						     | <shift-expression> >= <shift-expression> 
  * 						     | <shift-expression> <= <shift-expression>
  */
-static generic_ast_node_t* relational_expression(FILE* fl){
+static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -2836,7 +2751,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 
 
 	//No matter what, we do need to first see a valid shift expression
-	generic_ast_node_t* sub_tree_root = shift_expression(fl);
+	generic_ast_node_t* sub_tree_root = shift_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2858,7 +2773,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2876,7 +2791,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid shift again
-		right_child = shift_expression(fl);
+		right_child = shift_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2949,7 +2864,7 @@ static generic_ast_node_t* relational_expression(FILE* fl){
  *
  * BNF Rule: <equality-expression> ::= <relational-expression>{ (==|!=) <relational-expression> }*
  */
-static generic_ast_node_t* equality_expression(FILE* fl){
+static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -2963,7 +2878,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 
 
 	//No matter what, we do need to first see a valid relational expression
-	generic_ast_node_t* sub_tree_root = relational_expression(fl);
+	generic_ast_node_t* sub_tree_root = relational_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -2985,7 +2900,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3003,7 +2918,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid relational expression again
-		right_child = relational_expression(fl);
+		right_child = relational_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3077,7 +2992,7 @@ static generic_ast_node_t* equality_expression(FILE* fl){
  *
  * BNF Rule: <and-expression> ::= <equality-expression>{& <equality-expression>}* 
  */
-static generic_ast_node_t* and_expression(FILE* fl){
+static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -3091,7 +3006,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 
 
 	//No matter what, we do need to first see a valid equality expression
-	generic_ast_node_t* sub_tree_root = equality_expression(fl);
+	generic_ast_node_t* sub_tree_root = equality_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3110,7 +3025,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3128,7 +3043,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid equality expression again
-		right_child = equality_expression(fl);
+		right_child = equality_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3205,7 +3120,7 @@ static generic_ast_node_t* and_expression(FILE* fl){
  *
  * BNF Rule: <exclusive-or-expression> ::= <and-expression>{^ <and-expression}*
  */
-static generic_ast_node_t* exclusive_or_expression(FILE* fl){
+static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -3219,7 +3134,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 
 
 	//No matter what, we do need to first see a valid and expression
-	generic_ast_node_t* sub_tree_root = and_expression(fl);
+	generic_ast_node_t* sub_tree_root = and_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3238,7 +3153,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3256,7 +3171,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid and expression again
-		right_child = and_expression(fl);
+		right_child = and_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3332,7 +3247,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl){
  *
  * BNF rule: <inclusive-or-expression> ::= <exclusive-or-expression>{ | <exclusive-or-expression>}*
  */
-static generic_ast_node_t* inclusive_or_expression(FILE* fl){
+static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -3345,7 +3260,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid exclusive or expression
-	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl);
+	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3364,7 +3279,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3382,7 +3297,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid exclusive or expression again
-		right_child = exclusive_or_expression(fl);
+		right_child = exclusive_or_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3461,7 +3376,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl){
  *
  * BNF Rule: <logical-and-expression> ::= <inclusive-or-expression>{&&<inclusive-or-expression>}*
  */
-static generic_ast_node_t* logical_and_expression(FILE* fl){
+static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -3475,7 +3390,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 
 
 	//No matter what, we do need to first see a valid inclusive or expression
-	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl);
+	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3494,7 +3409,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3512,7 +3427,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid inclusive or expression again
-		right_child = inclusive_or_expression(fl);
+		right_child = inclusive_or_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3594,7 +3509,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl){
  *
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
-static generic_ast_node_t* logical_or_expression(FILE* fl){
+static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Temp holder for our use
@@ -3607,7 +3522,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a logical and expression
-	generic_ast_node_t* sub_tree_root = logical_and_expression(fl);
+	generic_ast_node_t* sub_tree_root = logical_and_expression(fl, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3626,7 +3541,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR);
+		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3644,7 +3559,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
 		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid logical and expression again
-		right_child = logical_and_expression(fl);
+		right_child = logical_and_expression(fl, side);
 
 		//If it's an error, just fail out
 		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3720,13 +3635,13 @@ static generic_ast_node_t* logical_or_expression(FILE* fl){
  *
  * BNF Rule: <logical_or_expression> ? <ternary_expression> # <ternary_expression>
  */
-static generic_ast_node_t* ternary_expression(FILE* fl){
+static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//Declare the lookahead token
 	lexitem_t lookahead;
 
 	//We are first required to see a valid logical or expression. If we don't see this,
 	//then we fail
-	generic_ast_node_t* conditional = logical_or_expression(fl);
+	generic_ast_node_t* conditional = logical_or_expression(fl, side);
 
 	//If this is an error, then the whole thing is over - we're done here
 	if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3752,13 +3667,13 @@ static generic_ast_node_t* ternary_expression(FILE* fl){
 	}
 
 	//Allocate the ternary expression node
-	generic_ast_node_t* ternary_expression_node = ast_node_alloc(AST_NODE_CLASS_TERNARY_EXPRESSION);
+	generic_ast_node_t* ternary_expression_node = ast_node_alloc(AST_NODE_CLASS_TERNARY_EXPRESSION, side);
 
 	//The first child is the conditional
 	add_child_node(ternary_expression_node, conditional);
 
 	//We now must see another valid ternary
-	generic_ast_node_t* if_branch = ternary_expression(fl);
+	generic_ast_node_t* if_branch = ternary_expression(fl, side);
 
 	//If this is invalid, then we bail out
 	if(if_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3777,7 +3692,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl){
 	}
 	
 	//We now must see another valid ternary
-	generic_ast_node_t* else_branch = ternary_expression(fl);
+	generic_ast_node_t* else_branch = ternary_expression(fl, side);
 
 	//If this is invalid, then we bail out
 	if(else_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3805,7 +3720,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl){
  *
  * BNF Rule: <construct-member> ::= {mut}? <identifier> : <type-specifier> 
  */
-static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
+static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this mutable? False by default
@@ -3824,7 +3739,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
 
 	//Otherwise we know that it worked here
 	//Now we need to see a valid ident and check it for duplication
-	generic_ast_node_t* ident = identifier(fl);	
+	generic_ast_node_t* ident = identifier(fl, side);	
 
 	//Let's make sure it actually worked
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3924,7 +3839,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct){
  *
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
-static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
+static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -3940,7 +3855,7 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
 		push_back_token(lookahead);
 
 		//We must first see a valid construct member
-		u_int8_t status = construct_member(fl, construct);
+		u_int8_t status = construct_member(fl, construct, side);
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
@@ -3997,11 +3912,9 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct){
  *
  * This rule also handles everything with identifiers to avoid excessive confusion
  *
- * TODO: constructs need their own separate construct table. This will be stored alongside it in the type system
- *
  * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
-static u_int8_t construct_definer(FILE* fl){
+static u_int8_t construct_definer(FILE* fl, side_type_t side){
 	//Freeze the line num
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
@@ -4015,7 +3928,7 @@ static u_int8_t construct_definer(FILE* fl){
 	strcpy(type_name, "construct ");
 
 	//We are now required to see a valid identifier
-	generic_ast_node_t* ident = identifier(fl);
+	generic_ast_node_t* ident = identifier(fl, side);
 
 	//Fail case
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4064,7 +3977,7 @@ static u_int8_t construct_definer(FILE* fl){
 	generic_type_t* construct_type = create_constructed_type(type_name, current_line);
 
 	//We are now required to see a valid construct member list
-	u_int8_t success = construct_member_list(fl, construct_type);
+	u_int8_t success = construct_member_list(fl, construct_type, side);
 
 	//Automatic fail case here
 	if(success == FAILURE){
@@ -4117,7 +4030,7 @@ static u_int8_t construct_definer(FILE* fl){
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
 	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
-	generic_ast_node_t* alias_ident = identifier(fl);
+	generic_ast_node_t* alias_ident = identifier(fl, side);
 
 	//If it was invalid
 	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4203,9 +4116,9 @@ static u_int8_t construct_definer(FILE* fl){
  *
  * BNF Rule: <enum-member> ::= <identifier>
  */
-static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
+static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, side_type_t side){
 	//We really just need to see a valid identifier here
-	generic_ast_node_t* ident = identifier(fl);
+	generic_ast_node_t* ident = identifier(fl, side);
 
 	//If it fails, we'll blow the whole thing up
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4230,7 +4143,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
 		print_function_name(found_func);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -4244,7 +4157,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
 		print_variable_name(found_var);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -4258,7 +4171,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 	}
 
 	//Once we make it all the way down here, we know that we don't have any duplication
@@ -4276,7 +4189,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
 	insert_variable(variable_symtab,  enum_record);
 
 	//Finally, we'll construct the node that holds this item and send it out
-	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER);
+	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER, side);
 	//Store the record in this for ease of access/modification
 	enum_member->variable = enum_record;
 	//Add the identifier as the child of this node
@@ -4294,19 +4207,19 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val){
  *
  * BNF Rule: <enum-member-list> ::= <enum-member>{, <enum-member>}*
  */
-static generic_ast_node_t* enum_member_list(FILE* fl){
+static generic_ast_node_t* enum_member_list(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 	//The enum member current number
 	u_int16_t current_member_val = 0;
 
 	//We will first create the list node
-	generic_ast_node_t* enum_list_node = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER_LIST);
+	generic_ast_node_t* enum_list_node = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER_LIST, side);
 
 	//Now, we can see as many enumerators as we'd like here, each separated by a comma
 	do{
 		//First we need to see a valid enum member
-		generic_ast_node_t* member = enum_member(fl, current_member_val);
+		generic_ast_node_t* member = enum_member(fl, current_member_val, side);
 		//Increment this
 		current_member_val++;
 
@@ -4330,10 +4243,7 @@ static generic_ast_node_t* enum_member_list(FILE* fl){
 	//Once we make it out here, we know that we didn't see a comma. We know that we really need to see an
 	//R_CURLY when we get here, so if we didn't we can give a more helpful error message here
 	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Enum members must be separated by commas in defintion", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Enum members must be separated by commas in defintion", parser_line_num);
 	}
 	
 	//Otherwise if we end up here all went well. We'll let the caller do the final checking with the R_CURLY so 
@@ -4367,7 +4277,7 @@ static u_int8_t enum_definer(FILE* fl){
 	strcpy(name, "enum ");
 
 	//We now need to see a valid identifier to round out the name
-	generic_ast_node_t* ident = identifier(fl);
+	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//Fail case here
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4412,7 +4322,7 @@ static u_int8_t enum_definer(FILE* fl){
 	push_token(grouping_stack, lookahead);
 	
 	//Now we must see a valid enum member list
-	generic_ast_node_t* member_list = enum_member_list(fl);
+	generic_ast_node_t* member_list = enum_member_list(fl, SIDE_TYPE_LEFT);
 
 	//If it failed, we bail out
 	if(member_list->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4500,7 +4410,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
 	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
-	generic_ast_node_t* alias_ident = identifier(fl);
+	generic_ast_node_t* alias_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it was invalid
 	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4639,7 +4549,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		strcpy(type_name, "enum ");
 
 		//It is required that we now see a valid identifier
-		generic_ast_node_t* type_ident = identifier(fl);
+		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 		//If we fail, we'll bail out
 		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4680,7 +4590,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		strcpy(type_name, "construct ");
 
 		//It is required that we now see a valid identifier
-		generic_ast_node_t* type_ident = identifier(fl);
+		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 		//If we fail, we'll bail out
 		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4721,7 +4631,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		push_back_token(lookahead);
 
 		//We will let the identifier rule handle it
-		generic_ast_node_t* type_ident = identifier(fl);
+		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 		//If we fail, we'll bail out
 		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4848,7 +4758,7 @@ static generic_type_t* type_specifier(FILE* fl){
 	while(lookahead.tok == L_BRACKET){
 		//The next thing that we absolutely must see is a constant. If we don't, we're
 		//done here
-		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT);
+		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
 
 		//If it failed, then we're done here
 		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4975,12 +4885,12 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//Is this parameter constant? If so we'll just set a flag for later
 	if(lookahead.tok == DOTDOTDOT){
 		//This is a special elaborative param
-		parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_ELABORATIVE_PARAM);
+		parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_ELABORATIVE_PARAM, SIDE_TYPE_LEFT);
 		//We're done here
 		return parameter_decl_node;
 	} else {
 		//Otherwise we have a regular param node
-		parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_PARAM_DECL);
+		parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_PARAM_DECL, SIDE_TYPE_LEFT);
 	}
 
 	if(lookahead.tok == MUT){
@@ -4992,7 +4902,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 
 	//Following the valid type specifier declaration, we are required to to see a valid variable. This
 	//takes the form of an ident
-	generic_ast_node_t* ident = identifier(fl);
+	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it didn't work we fail immediately
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5017,7 +4927,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		print_function_name(found_func);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -5031,7 +4941,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		print_variable_name(found_var);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -5045,7 +4955,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Now we need to see a colon
@@ -5055,7 +4965,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	if(lookahead.tok != COLON){
 		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//We are now required to see a valid type specifier node
@@ -5066,7 +4976,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		print_parse_message(PARSE_ERROR, "Invalid type specifier gien to function parameter", parser_line_num);
 		num_errors++;
 		//It's already an error, just propogate it up
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Once we get here, we have actually seen an entire valid parameter 
@@ -5119,17 +5029,14 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 
 	//If we didn't find it, no point in going further
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left parenthesis expected before parameter list", parser_line_num);
 	}
 
 	//Otherwise, we'll push this onto the list to check for later
 	push_token(grouping_stack, lookahead);
 
 	//Let's now create the parameter list node
-	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST);
+	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST, SIDE_TYPE_LEFT);
 	//Initially no params
 	param_list_node->num_params = 0;
 
@@ -5268,10 +5175,7 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 
 	//Empty expression, we're done here
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after statement", current_line);
-		num_errors++;
-		//Create and send back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon expected after statement", current_line);
 	}
 
 	//Otherwise we're all set
@@ -5297,12 +5201,12 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//Let's create the label ident node
-	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT);
+	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT, SIDE_TYPE_LEFT);
 	//Save our line number
 	label_stmt->line_number = parser_line_num;
 
 	//Let's see if we can find one
-	generic_ast_node_t* label_ident = label_identifier(fl);
+	generic_ast_node_t* label_ident = label_identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it's bad we'll fail out here
 	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5317,10 +5221,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 	//If we don't see one, we need to scrap it
 	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required after label statement", current_line);
-		num_errors++;
-		//Error node return
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Colon required after label statement", current_line);
 	}
 	//Otherwise we are all good syntactically here
 
@@ -5337,7 +5238,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		print_variable_name(found);
 		num_errors++;
 		//give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Grab the label type
@@ -5346,9 +5247,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 	//Sanity check here
 	if(label_type == NULL){
-		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Basic type label was not found", parser_line_num);
-		//Get out if this happens
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Fatal internal compiler error. Basic type label was not found", parser_line_num);
 	}
 
 	//Now that we know we didn't find it, we'll create it
@@ -5393,7 +5292,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
 	//will be a child of this statement
-	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_CLASS_IF_STMT);
+	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_CLASS_IF_STMT, SIDE_TYPE_LEFT);
 
 	//Remember, we've already seen the if token, so now we just need to see an L_PAREN
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5403,14 +5302,14 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Left parenthesis expected after if statement", current_line);
 		num_errors++;
 		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Push onto the stack for matching later
 	push_token(grouping_stack, lookahead);
 	
 	//We now need to see a valid conditional expression
-	generic_ast_node_t* expression_node = logical_or_expression(fl);
+	generic_ast_node_t* expression_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one
 	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5431,18 +5330,12 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//If we don't see the R_Paren
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in if statement", current_line);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Right parenthesis expected after expression in if statement", current_line);
 	}
 
 	//Now let's check the stack, we need to have matching ones here
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected", current_line);
 	}
 
 	//If we make it to this point, we need to see the THEN keyword
@@ -5450,10 +5343,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//Fail out if bad
 	if(lookahead.tok != THEN){
-		print_parse_message(PARSE_ERROR, "then keyword expected following expression in if statement", current_line);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("then keyword expected following expression in if statement", current_line);
 	}
 
 	//If we make it here, we can add this in as the first child to the root node
@@ -5479,31 +5369,25 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	//So long as we see "else if's", we will keep repeating this process
 	while(lookahead.tok == ELSE && lookahead2.tok == IF){
 		//We've found one - let's create our fresh else if node
-		generic_ast_node_t* else_if_node = ast_node_alloc(AST_NODE_CLASS_ELSE_IF_STMT);
+		generic_ast_node_t* else_if_node = ast_node_alloc(AST_NODE_CLASS_ELSE_IF_STMT, SIDE_TYPE_LEFT);
 
 		//Remember, we've already seen the if token, so now we just need to see an L_PAREN
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 		//Fail out if we don't have it
 		if(lookahead.tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Left parenthesis expected after else if statement", current_line);
-			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Left parenthesis expected after else if statement", current_line);
 		}
 
 		//Push onto the stack for matching later
 		push_token(grouping_stack, lookahead);
 	
 		//We now need to see a valid conditional expression
-		generic_ast_node_t* else_if_expression_node = logical_or_expression(fl);
+		generic_ast_node_t* else_if_expression_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 		//If we see an invalid one
 		if(else_if_expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression given as else if statement condition", current_line);
-			num_errors++;
-			//It's already an error so just return it
-			return else_if_expression_node;
+			return print_and_return_error("Invalid conditional expression given as else if statement condition", current_line);
 		}
 
 		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
@@ -5517,18 +5401,12 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 		//If we don't see the R_Paren
 		if(lookahead.tok != R_PAREN){
-			print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in else-if statement", current_line);
-			num_errors++;
-			//Return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Right parenthesis expected after expression in else-if statement", current_line);
 		}
 
 		//Now let's check the stack, we need to have matching ones here
 		if(pop_token(grouping_stack).tok != L_PAREN){
-			print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-			num_errors++;
-			//Return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Unmatched parenthesis detected", current_line);
 		}
 
 		//If we make it to this point, we need to see the THEN keyword
@@ -5536,10 +5414,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 		//Fail out if bad
 		if(lookahead.tok != THEN){
-			print_parse_message(PARSE_ERROR, "then keyword expected following expression in else if statement", current_line);
-			num_errors++;
-			//Return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("then keyword expected following expression in else if statement", current_line);
 		}
 
 		//If we make it here, we should be safe to add the conditional as an expression
@@ -5613,10 +5488,10 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//We can off the bat create the jump statement node here
-	generic_ast_node_t* jump_stmt = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT); 
+	generic_ast_node_t* jump_stmt = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT); 
 
 	//Once we've made it, we need to see a valid label identifier
-	generic_ast_node_t* label_ident = label_identifier(fl);
+	generic_ast_node_t* label_ident = label_identifier(fl, SIDE_TYPE_LEFT);
 
 	//If this failed, we're done
 	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5631,10 +5506,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 
 	//If we don't see a semicolon we bail
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required after jump statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon required after jump statement", parser_line_num);
 	}
 	
 	//Otherwise if we get here we know that it is a valid label and valid syntax
@@ -5672,7 +5544,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//Once we get here, we've already seen the continue keyword, so we can make the node
-	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_CLASS_CONTINUE_STMT);
+	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_CLASS_CONTINUE_STMT, SIDE_TYPE_LEFT);
 	//Store the line number
 	continue_stmt->line_number = parser_line_num;
 
@@ -5689,7 +5561,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Semicolon expected after continue statement", parser_line_num);
 		num_errors++;
 		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 	
 	//If we get down here, we know that we are seeing a continue when statement
@@ -5701,14 +5573,14 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Parenthesis expected after continue when keywords", parser_line_num);
 		num_errors++;
 		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Push to the stack for grouping
 	push_token(grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = logical_or_expression(fl);
+	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
