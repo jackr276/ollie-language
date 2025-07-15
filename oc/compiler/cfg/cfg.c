@@ -2038,6 +2038,11 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 	temp_assignment->is_branch_ending = is_branch_ending;
 
+	//If the assignee is not temporary, it counts as used
+	if(assignee->is_temporary == FALSE){
+		add_used_variable(basic_block, assignee);
+	}
+
 	//Add this to the block
 	add_statement(basic_block, temp_assignment);
 
@@ -2107,6 +2112,9 @@ static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, th
 		//Create the statement
 		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(offset->type), offset);
 
+		//This counts as a used variable
+		add_used_variable(basic_block, offset);
+
 		//Add it to the block
 		add_statement(basic_block, temp_assignment);
 
@@ -2117,9 +2125,15 @@ static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, th
 	//Now we emit the offset multiplication
 	three_addr_var_t* total_offset = emit_binary_operation_with_constant(basic_block, offset, offset, STAR, type_size, is_branch_ending);
 
+
 	//Once we have the total offset, we add it to the base address
 	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), base_addr, PLUS, total_offset);
 	
+	//if the base address is not temporary, it also counts as used
+	if(base_addr->is_temporary == FALSE){
+		add_used_variable(basic_block, base_addr);
+	}
+
 	//Add this into the block
 	add_statement(basic_block, result);
 
@@ -2142,6 +2156,11 @@ static three_addr_var_t* emit_construct_address_calculation(basic_block_t* basic
 
 	//Now we leverage the helper to emit this
 	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, base_addr, PLUS, offset);
+
+	//If the base address is not temporary, then it is used
+	if(base_addr->is_temporary == FALSE){
+		add_used_variable(basic_block, base_addr);
+	}
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
