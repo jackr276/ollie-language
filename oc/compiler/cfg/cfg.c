@@ -1794,8 +1794,6 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						//If we make it here that means that we don't already have one, so we'll add it
 						//This function only emits the skeleton of a phi function
 						instruction_t* phi_stmt = emit_phi_function(record, record->type_defined_as);
-						//This counts as being assigned
-						add_assigned_variable(df_node, phi_stmt->assignee);
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
@@ -2078,6 +2076,11 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 		add_used_variable(basic_block, base_addr);
 	}
 
+	//If the offset is not temporary, it also counts as used
+	if(offset->is_temporary == FALSE){
+		add_used_variable(basic_block, offset);
+	}
+
 	//Now we leverage the helper to emit this
 	instruction_t* stmt = emit_lea_instruction(assignee, base_addr, offset, base_type->type_size);
 
@@ -2235,6 +2238,12 @@ static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u
 
 		//Emit the temp assignment
 		instruction_t* assn_stmt = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+		//If this isn't temporary, then it's being used
+		if(package.assignee->is_temporary == FALSE){
+			add_used_variable(basic_block, package.assignee);
+		}
+
 		//Add it into the block
 		add_statement(basic_block, assn_stmt);
 		//The return variable is now what was assigned
@@ -3049,6 +3058,9 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 			assignment = emit_memory_address_assignment(emit_temp_var(unary_expr_parent->inferred_type), assignee);
 			assignment->is_branch_ending = is_branch_ending;
 
+			//We will count the assignee here as a used variable
+			add_used_variable(basic_block, assignee);
+
 			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
 			assignee->linked_var->must_be_spilled = TRUE;
 
@@ -3303,24 +3315,32 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 			break;
 	}
 	
+	//Add the assignee here
+	package.assignee = assignee;
+	
 	//Emit the binary operator expression using our helper
 	instruction_t* stmt = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
-	package.assignee = assignee;
+
+	//If this isn't temporary, it's being assigned
+	if(assignee->is_temporary == FALSE){
+		add_assigned_variable(basic_block, assignee);
+	}
+
+	//If these are not temporary, they're being used
+	if(op1->is_temporary == FALSE){
+		add_used_variable(basic_block, op1);
+	}
+
+	//Same deal with this one
+	if(op2->is_temporary == FALSE){
+		add_used_variable(basic_block, op2);
+	}
 
 	//Mark this with what we have
 	stmt->is_branch_ending = is_branch_ending;
 
 	//Add this statement to the block
 	add_statement(basic_block, stmt);
-
-	//If these are not temporary, they also count as live
-	if(left_hand_temp.assignee->is_temporary == FALSE){
-		add_used_variable(basic_block, left_hand_temp.assignee);
-	}
-
-	if(right_hand_temp.assignee->is_temporary == FALSE){
-		add_used_variable(basic_block, right_hand_temp.assignee);
-	}
 
 	//Return the temp variable that we assigned to
 	return package;
@@ -5512,6 +5532,9 @@ static statement_result_package_t visit_declaration_statement(generic_ast_node_t
 
 		//Now we emit the variable for the array base address
 		three_addr_var_t* base_addr = emit_var(node->variable, FALSE);
+
+		//This var is an assigned variable
+		add_assigned_variable(emitted_block, base_addr);
 
 		//Add this variable into the current function's stack. This is what we'll use
 		//to store the address
