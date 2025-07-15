@@ -1794,6 +1794,8 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						//If we make it here that means that we don't already have one, so we'll add it
 						//This function only emits the skeleton of a phi function
 						instruction_t* phi_stmt = emit_phi_function(record, record->type_defined_as);
+						//This counts as being assigned
+						add_assigned_variable(df_node, phi_stmt->assignee);
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
@@ -2394,9 +2396,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Let's first create the assignment statement
 		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
 
-		//This variable has been used
-		add_used_variable(basic_block, non_temp_var);
-
 		//Carry this through
 		temp_assignment->is_branch_ending = is_branch_ending;
 
@@ -2414,29 +2413,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Give our variable back
 		return returned_variable;
 	}
-
-
-	/*
-	//Just give back the name
-	if(use_temp == PRESERVE_ORIG_VAR || side == SIDE_TYPE_RIGHT){
-		//Emit the variable
-		three_addr_var_t* var = emit_var(ident_node->variable, FALSE);
-
-		//This variable has been assigned to, so we'll add that too
-		if(side == SIDE_TYPE_LEFT){
-			//We only do this if it's the LHS
-			add_assigned_variable(basic_block, var);
-		} else {
-			//Add it as a live variable to the block, because we've used it
-			add_used_variable(basic_block, var);
-		}
-
-		//Give it back
-		return var;
-
-	} else {
-			}
-	*/
 }
 
 
@@ -2902,7 +2878,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				current_address = NULL;
 
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-				if(temp_assignment_required == TRUE){
+				if(temp_assignment_required == FALSE){
 					//Emit the indirection for this one
 					current_var = emit_mem_code(basic_block, address);
 					//It's a write
