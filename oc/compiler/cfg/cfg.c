@@ -2631,16 +2631,16 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
 	//We need to emit a temp assignment for the negation
 	instruction_t* temp_assingment = emit_assignment_instruction(emit_temp_var(negated->type), negated);
 
+	//If negated isn't temp, it also counts as a read
+	if(negated->is_temporary == FALSE){
+		add_used_variable(basic_block, negated);
+	}
+
 	//Add this into the block
 	add_statement(basic_block, temp_assingment);
 
 	//This will always overwrite the other value
 	instruction_t* stmt = emit_logical_not_instruction(temp_assingment->assignee, temp_assingment->assignee);
-	
-	//If negated isn't temp, it also counts as a read
-	if(negated->is_temporary == FALSE){
-		add_used_variable(basic_block, negated);
-	}
 
 	//Mark this with its branch ending status
 	stmt->is_branch_ending = is_branch_ending;
@@ -3502,6 +3502,11 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
 		//registers before a function call
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+		//If the package's assignee is not temporary, then this counts as a use
+		if(package.assignee->is_temporary == FALSE){
+			add_used_variable(basic_block, package.assignee);
+		}
 
 		//Add this to the block
 		add_statement(basic_block, assignment);
@@ -5606,6 +5611,11 @@ static statement_result_package_t visit_let_statement(generic_ast_node_t* node, 
 
 	//The actual statement is the assignment of right to left
 	instruction_t* assignment_statement = emit_assignment_instruction(left_hand_var, package.assignee);
+
+	//If this is not temporary, then it counts as used
+	if(package.assignee->is_temporary == FALSE){
+		add_used_variable(lead_block, package.assignee);
+	}
 
 	//Finally we'll add this into the overall block
 	add_statement(lead_block, assignment_statement);
