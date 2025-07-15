@@ -106,7 +106,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 static statement_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
-static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, side_type_t side, u_int8_t is_branch_ending);
+static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
 static statement_result_package_t emit_expr_code(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
@@ -2372,7 +2372,7 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
-static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//If we have an enum, we can handle this rright here
 	if(ident_node->inferred_type->type_class == TYPE_CLASS_ENUMERATED) {
 		//Look up the type
@@ -2384,7 +2384,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 
 	//Let's go based on what the side type is. If we're emitting on the left hand side, we don't need to 
 	//have a temp assignment take place. If we're on the right hande side, we do not a temp assignment
-	if(side == SIDE_TYPE_RIGHT){
+	if(temp_assignment_required == TRUE){
 		//First we'll create the non-temp var here
 		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
 
@@ -2392,19 +2392,19 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		add_used_variable(basic_block, non_temp_var);
 
 		//Let's first create the assignment statement
-		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
 
 		//This variable has been used
 		add_used_variable(basic_block, non_temp_var);
 
 		//Carry this through
-		temp_assnment->is_branch_ending = is_branch_ending;
+		temp_assignment->is_branch_ending = is_branch_ending;
 
 		//Add the statement in
-		add_statement(basic_block, temp_assnment);
+		add_statement(basic_block, temp_assignment);
 
 		//Just give back the temp var here
-		return temp_assnment->assignee;
+		return temp_assignment->assignee;
 
 	//We have a left hand side type
 	} else {
@@ -2654,11 +2654,11 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
-static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->CLASS){
 		case AST_NODE_CLASS_IDENTIFIER:
-		 	return emit_identifier(basic_block, primary_parent, side, is_branch_ending);
+		 	return emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
 		case AST_NODE_CLASS_CONSTANT:
 			return emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
@@ -2729,12 +2729,12 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
  * that we could see. The two that we'll need to be concerned about are construct
  * and array access
  */
-static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//We'll first want a cursor
 	generic_ast_node_t* cursor = postfix_parent->first_child;
 
 	//We should always have a primary expression first. We'll first call the primary expression
-	three_addr_var_t* current_var = emit_primary_expr_code(basic_block, cursor, side, is_branch_ending);
+	three_addr_var_t* current_var = emit_primary_expr_code(basic_block, cursor, temp_assignment_required, is_branch_ending);
 
 	//Move the cursor along
 	cursor = cursor->next_sibling;
@@ -2748,7 +2748,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 	//handle it and then bail
 	} else if(cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
 		//Let the helper do it
-		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, side, is_branch_ending);
+		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 	}
 
 	//If we get here we know that we have at least one construct/array access statement
@@ -2816,7 +2816,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				current_address = NULL;
 
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-				if(side == SIDE_TYPE_LEFT){
+				if(temp_assignment_required == FALSE){
 					//Emit the indirection for this one
 					current_var = emit_mem_code(basic_block, address);
 					//It's a write
@@ -2902,7 +2902,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				current_address = NULL;
 
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-				if(side == SIDE_TYPE_LEFT){
+				if(temp_assignment_required == TRUE){
 					//Emit the indirection for this one
 					current_var = emit_mem_code(basic_block, address);
 					//It's a write
@@ -2945,7 +2945,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
 	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
 		//Let the helper do it
-		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, side, is_branch_ending);
+		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 	} else {
 		return current_var;
 	}
@@ -2955,7 +2955,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 /**
  * Handle a unary operator, in whatever form it may be
  */
-static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Top level declarations to avoid using them in the switch statement
 	three_addr_var_t* dereferenced;
 	instruction_t* assignment;
@@ -2969,7 +2969,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 		//Handle the case of a preincrement
 		case PLUSPLUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, side, is_branch_ending);
+			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
 
 			//If the assignee is not a pointer, we'll handle the normal case
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
@@ -2984,7 +2984,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 		//Handle the case of a predecrement
 		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, side, is_branch_ending);
+			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
 
 			//If we have a basic type, we can use the regular process
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
@@ -2999,13 +2999,13 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 		//Handle a dereference
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, side, is_branch_ending);
+			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
 
 			//Get the dereferenced variable
 			dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expr_parent->inferred_type);
 
 			//If we're on the right hand side, we need to have a temp assignment
-			if(side == SIDE_TYPE_RIGHT){
+			if(temp_assignment_required == TRUE){
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
@@ -3023,7 +3023,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 		//Bitwise not operator
 		case B_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, side, is_branch_ending);
+			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
 
 			//Let the helper handle it
 			return emit_bitwise_not_expr_code(basic_block, assignee, is_branch_ending);
@@ -3031,7 +3031,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 		//Logical not operator
 		case L_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, side, is_branch_ending);
+			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
 
 			//Let the helper deal with it
 			return emit_logical_neg_stmt_code(basic_block, assignee, is_branch_ending);
@@ -3047,7 +3047,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 		 */
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, side, is_branch_ending);
+			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
@@ -3066,7 +3066,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 			 * this unary expression as if it is on the left hand side. We cannot have temporary
 			 * variables in this assignee
 			 */
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, SIDE_TYPE_LEFT, is_branch_ending);
+			assignee = emit_unary_expression(basic_block, first_child->next_sibling, FALSE, is_branch_ending);
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
@@ -3095,7 +3095,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, side_type_t side, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//The last two instances return a constant node. If that's the case, we'll just emit a constant node here
 	if(unary_expr_parent->CLASS == AST_NODE_CLASS_CONSTANT){
 		//Let the helper deal with it
@@ -3110,15 +3110,15 @@ static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, gener
 	switch(first_child->CLASS){
 		//Leverage the helper for this method
 		case AST_NODE_CLASS_POSTFIX_EXPR:
-			return emit_postfix_expr_code(basic_block, first_child, side, is_branch_ending);
+			return emit_postfix_expr_code(basic_block, first_child, temp_assignment_required, is_branch_ending);
 
 		//We can also see a unary operator here. In this case, we'll let the unary operator helper function take care of it
 		case AST_NODE_CLASS_UNARY_OPERATOR:
-			return emit_unary_operation(basic_block, unary_expr_parent, side, is_branch_ending);
+			return emit_unary_operation(basic_block, unary_expr_parent, temp_assignment_required, is_branch_ending);
 				
 		//By defualt, emit a primary expression
 		default:
-			return emit_primary_expr_code(basic_block, first_child, side, is_branch_ending);
+			return emit_primary_expr_code(basic_block, first_child, temp_assignment_required, is_branch_ending);
 	}
 }
 
@@ -3248,7 +3248,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 		//Process a unary expression(these are usually idents)
 		case AST_NODE_CLASS_UNARY_EXPR:
 			//Return the temporary character from here
-			package.assignee = emit_unary_expression(basic_block, logical_or_expr, SIDE_TYPE_RIGHT, is_branch_ending);
+			package.assignee = emit_unary_expression(basic_block, logical_or_expr, FALSE, is_branch_ending);
 			return package;
 
 		//Process a constant, we may have these in here directly
@@ -3373,7 +3373,7 @@ static statement_result_package_t emit_expr_code(basic_block_t* basic_block, gen
 			cursor = expr_node->first_child;
 
 			//Emit the left hand unary expression
-			three_addr_var_t* left_hand_var = emit_unary_expression(basic_block, cursor, SIDE_TYPE_LEFT, is_branch_ending);
+			three_addr_var_t* left_hand_var = emit_unary_expression(basic_block, cursor, FALSE, is_branch_ending);
 
 			//Advance the cursor up
 			cursor = cursor->next_sibling;
@@ -3423,12 +3423,12 @@ static statement_result_package_t emit_expr_code(basic_block_t* basic_block, gen
 			*/
 			if(check_for_coniditional == TRUE && expr_node->first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
 				//If this is the case, then we need to just emit the temporary value and be done with it
-				result_package.assignee =  emit_identifier(basic_block, expr_node->first_child, SIDE_TYPE_RIGHT, TRUE);
+				result_package.assignee =  emit_identifier(basic_block, expr_node->first_child, TRUE, TRUE);
 				//Signedness is irrelevant here because any jumps would just be "je/jne"
 				return result_package;
 			} else {
 				//Let this rule handle it
-				result_package.assignee = emit_unary_expression(basic_block, expr_node, SIDE_TYPE_RIGHT, is_branch_ending);
+				result_package.assignee = emit_unary_expression(basic_block, expr_node, FALSE, is_branch_ending);
 				//Again signedness is irrelevant here because any jumps would just be "je/jne"
 				return result_package;
 			}
