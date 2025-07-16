@@ -536,10 +536,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 
 			//If it's empty throw a warning
 			if(length == 0){
-				print_parse_message(WARNING, "0 length string given as constant", parser_line_num);
-				num_warnings++;
-				//This will fail out here
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+				return print_and_return_error("0 length string given as constant", parser_line_num);
 			}
 
 			//Too long of a string
@@ -693,10 +690,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 		//We now have an error of some kind
 		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Bad parameter passed to function call", current_line);
-			num_errors++;
-			//Return the error node -- it will propogate up the chain
-			return current_param;
+			return print_and_return_error("Bad parameter passed to function call", current_line);
 		}
 	
 		//Let's grab these to check for compatibility
@@ -1423,10 +1417,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 
 	//For now we're just doing error checking
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Construct accessor could not find valid identifier", current_line);
-		num_errors++;
-		//It already is an error node so we'll return it
-		return ident;
+		return print_and_return_error("Construct accessor could not find valid identifier", current_line);
 	}
 
 	//Grab this for nicety
@@ -1984,9 +1975,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 	//Let's check for errors
 	if(cast_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid cast expression given after unary operator", parser_line_num);
-		//If it is bad, we'll just propogate it up the chain
-		return cast_expr;
+		return print_and_return_error("Invalid cast expression given after unary operator", parser_line_num);
 	}
 
 	//Holder for our return type
@@ -4122,10 +4111,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 
 	//If it fails, we'll blow the whole thing up
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given as enum member", parser_line_num);
-		num_errors++;
-		//It's already an error, so we'll just send it back
-		return ident;
+		return print_and_return_error("Invalid identifier given as enum member", parser_line_num);
 	}
 
 	//Now if we make it here, we'll need to check and make sure that it isn't a duplicate of anything else
@@ -4225,10 +4211,7 @@ static generic_ast_node_t* enum_member_list(FILE* fl, side_type_t side){
 
 		//If the member is bad, we bail right out
 		if(member->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid member given in enum definition", parser_line_num);
-			num_errors++;
-			//It's already an error so we'll just send it up the chain
-			return member;
+			return print_and_return_error("Invalid member given in enum definition", parser_line_num);
 		}
 
 		//We can now add this in as a child of the enum list
@@ -4906,10 +4889,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 
 	//If it didn't work we fail immediately
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid name given to parameter in function definition", parser_line_num);
-		num_errors++;
-		//It's already an error, so just return it
-		return ident;
+		return print_and_return_error("Invalid name given to parameter in function definition", parser_line_num);
 	}
 
 	//Now we must perform all needed duplication checks for the name
@@ -5210,10 +5190,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 	//If it's bad we'll fail out here
 	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid label identifier given as label ident statement", current_line);
-		num_errors++;
-		//Return the label ident, it's already an error
-		return label_ident;
+		return print_and_return_error("Invalid label identifier given as label ident statement", current_line);
 	}
 		
 	//Let's also verify that we have the colon right now
@@ -5299,10 +5276,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//Fail out if we don't have it
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected after if statement", current_line);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Left parenthesis expected after if statement", current_line);
 	}
 
 	//Push onto the stack for matching later
@@ -5313,10 +5287,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//If we see an invalid one
 	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression given as if statement condition", current_line);
-		num_errors++;
-		//It's already an error so just return it
-		return expression_node;
+		return print_and_return_error("Invalid conditional expression given as if statement condition", current_line);
 	}
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
@@ -5495,10 +5466,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 
 	//If this failed, we're done
 	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid label given to jump statement", parser_line_num);
-		num_errors++;
-		//It's already an error, just give it back
-		return label_ident;
+		return print_and_return_error("Invalid label given to jump statement", parser_line_num);
 	}
 
 	//One last tripping point befor we create the node, we do need to see a semicolon
@@ -5751,10 +5719,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If this is bad, we fail out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid expression given to return statement", parser_line_num);
-		num_errors++;
-		//It's already an error, so we'll just return it
-		return expr_node;
+		return print_and_return_error("Invalid expression given to return statement", parser_line_num);
 	}
 
 	//Let's do some type checking here
@@ -6237,10 +6202,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 		//If it fails, we also fail
 		if(let_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid let statement given to for loop", current_line);
-			num_errors++;
-			//It's already an error, so just give it back
-			return let_stmt;
+			return print_and_return_error("Invalid let statement given to for loop", current_line);
 		}
 
 		//Create the wrapper node for CFG creation later on
@@ -6830,9 +6792,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 
 	//If this fails, we bail
 	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid compound statement given to defer statement", current_line);
-		num_errors++;
-		return compound_stmt_node;
+		return print_and_return_error("Invalid compound statement given to defer statement", current_line);
 	}
 
 	//Following this, we do need to see a semicolon
@@ -7113,10 +7073,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 		//If this fails, the whole thing is over
 		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid constant found in switch statment", current_line);
-			num_errors++;
-			//It's already an error, so we'll just give it back
-			return const_node;
+			return print_and_return_error("Invalid constant found in switch statment", current_line);
 		}
 
 		//If we have an integer constant here, we need to make sure that it is not negative. Negative values
@@ -7131,10 +7088,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		   || const_inner_node->constant_type == INT_CONST_FORCE_U){
 			//Fail case here
 			if(const_inner_node->int_val < 0){
-				print_parse_message(PARSE_ERROR, "Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-				num_errors++;
-				//It's already an error, so we'll just give it back
-				return const_node;
+				return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
 			}
 			
 			//Assign the value here
@@ -7144,10 +7098,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		} else if(const_inner_node->constant_type == LONG_CONST || const_inner_node->constant_type == LONG_CONST_FORCE_U){
 			//Fail case here
 			if(const_inner_node->long_val < 0){
-				print_parse_message(PARSE_ERROR, "Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-				num_errors++;
-				//It's already an error, so we'll just give it back
-				return const_node;
+				return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
 			}
 		} else if(const_inner_node->constant_type == CHAR_CONST){
 			//Just assign the char value here
@@ -7270,10 +7221,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given in declaration", parser_line_num);
-		num_errors++;
-		//It's already an error, just give it back
-		return ident_node;
+		return print_and_return_error("Invalid identifier given in declaration", parser_line_num);
 	}
 
 	//Let's get a pointer to the name for convenience
@@ -7282,9 +7230,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
 		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
@@ -7350,9 +7296,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required between identifier and type specifier in declare statement", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Colon required between identifier and type specifier in declare statement", parser_line_num);
 	}
 	
 	//Now we are required to see a valid type specifier
@@ -7360,26 +7304,19 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 	//If this fails, the whole thing is bunk
 	if(type_spec == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier given in declaration", parser_line_num);
-		//It's already an error, so we'll just send it back up
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Invalid type specifier given in declaration", parser_line_num);
 	}
 
 	//One thing here, we aren't allowed to see void
 	if(strcmp(type_spec->type_name, "void") == 0){
-		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
 	//The last thing that we are required to see before final assembly is a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required at the end of declaration statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Semicolon required at the end of declaration statement", parser_line_num);
 	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
@@ -7462,10 +7399,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given in let statement", parser_line_num);
-		num_errors++;
-		//It's already an error, just give it back
-		return ident_node;
+		return print_and_return_error("Invalid identifier given in let statement", parser_line_num);
 	}
 
 	//Let's get a pointer to the name for convenience
@@ -7474,9 +7408,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
 		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
@@ -7540,9 +7472,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Expected colon between identifier and type specifier in let statement", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Expected colon between identifier and type specifier in let statement", parser_line_num);
 	}
 
 	//Now we are required to see a valid type specifier
@@ -7550,16 +7480,12 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//If this fails, the whole thing is bunk
 	if(type_spec == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier given in let statement", parser_line_num);
-		//It's already an error, so we'll just send it back up
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Invalid type specifier given in let statement", parser_line_num);
 	}
 	
 	//One thing here, we aren't allowed to see void
 	if(type_spec->type_class == TYPE_CLASS_BASIC && type_spec->basic_type->basic_type == VOID){
-		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
 
@@ -7567,10 +7493,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	if(lookahead.tok != COLONEQ){
-		print_parse_message(PARSE_ERROR, "Assignment operator(:=) required after identifier in let statement", parser_line_num);
-		num_errors++;
-		//Create and return an error
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Assignment operator(:=) required after identifier in let statement", parser_line_num);
 	}
 
 	//Otherwise we saw it, so now we need to see a valid conditional expression
@@ -7581,10 +7504,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//If it fails, we fail out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid expression given as intializer", parser_line_num);
-		num_errors++;
-		//It's already an error so just give it back
-		return expr_node;
+		return print_and_return_error("Invalid expression given as intializer", parser_line_num);
 	}
 
 	//Otherwise it worked, so we'll add it in as a child

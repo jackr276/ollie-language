@@ -2412,8 +2412,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), type, is_branch_ending);
 	}
 
-	//Let's go based on what the side type is. If we're emitting on the left hand side, we don't need to 
-	//have a temp assignment take place. If we're on the right hande side, we do not a temp assignment
+	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
 	if(temp_assignment_required == TRUE){
 		//First we'll create the non-temp var here
 		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
@@ -2433,7 +2432,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Just give back the temp var here
 		return temp_assignment->assignee;
 
-	//We have a left hand side type
+	//Otherwise, the temporary assignment is not required. This usually means that we're on the left
+	//hand side of an equation
 	} else {
 		//Create our variable
 		three_addr_var_t* returned_variable = emit_var(ident_node->variable, FALSE);
