@@ -2403,8 +2403,8 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * to move an identifier to some temporary location
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
-	//If we have an enum, we can handle this rright here
-	if(ident_node->inferred_type->type_class == TYPE_CLASS_ENUMERATED) {
+	//Handle an enumerated type right here
+	if(ident_node->variable->is_enumeration_member == TRUE) {
 		//Look up the type
 		symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, "u8");
 		generic_type_t* type = type_record->type;
@@ -3012,7 +3012,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 			dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expr_parent->inferred_type);
 
 			//If we're on the right hand side, we need to have a temp assignment
-			if(temp_assignment_required == TRUE){
+			if(first_child->side == SIDE_TYPE_RIGHT){
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
