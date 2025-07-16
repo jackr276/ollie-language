@@ -1142,7 +1142,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//If whatever our operator here is is not an assignment operator, we can just use the ternary rule
 	if(is_assignment_operator(assignment_operator) == FALSE){
-		return ternary_expression(fl);
+		return ternary_expression(fl, SIDE_TYPE_RIGHT);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
@@ -3914,7 +3914,7 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct, side_
  *
  * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
-static u_int8_t construct_definer(FILE* fl, side_type_t side){
+static u_int8_t construct_definer(FILE* fl){
 	//Freeze the line num
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
@@ -3928,7 +3928,7 @@ static u_int8_t construct_definer(FILE* fl, side_type_t side){
 	strcpy(type_name, "construct ");
 
 	//We are now required to see a valid identifier
-	generic_ast_node_t* ident = identifier(fl, side);
+	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//Fail case
 	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3977,7 +3977,7 @@ static u_int8_t construct_definer(FILE* fl, side_type_t side){
 	generic_type_t* construct_type = create_constructed_type(type_name, current_line);
 
 	//We are now required to see a valid construct member list
-	u_int8_t success = construct_member_list(fl, construct_type, side);
+	u_int8_t success = construct_member_list(fl, construct_type, SIDE_TYPE_LEFT);
 
 	//Automatic fail case here
 	if(success == FAILURE){
@@ -4030,7 +4030,7 @@ static u_int8_t construct_definer(FILE* fl, side_type_t side){
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
 	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
-	generic_ast_node_t* alias_ident = identifier(fl, side);
+	generic_ast_node_t* alias_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it was invalid
 	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5558,10 +5558,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 
 	//Otherwise, it has to have been a when keyword, so if it's not we have an error
 	if(lookahead.tok != WHEN){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after continue statement", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Semicolon expected after continue statement", parser_line_num);
 	}
 	
 	//If we get down here, we know that we are seeing a continue when statement
@@ -5570,10 +5567,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 
 	//If we don't have one, it's an instant fail
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Parenthesis expected after continue when keywords", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return print_and_return_error("Parenthesis expected after continue when keywords", parser_line_num);
 	}
 
 	//Push to the stack for grouping
@@ -5584,10 +5578,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 
 	//If it failed, we also fail
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to continue when statement", parser_line_num);
-		num_errors++;
-		//It's already an error so we'll just give it back
-		return expr_node;
+		return print_and_return_error("Invalid conditional expression given to continue when statement", parser_line_num);
 	}
 
 	//If this worked, we add it under the continue node
@@ -5598,28 +5589,19 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 
 	//If we don't see it fail out
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Closing paren expected after when clause",  parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Closing paren expected after when clause",  parser_line_num);
 	}
 
 	//Check for matching next
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
 	//Finally if we make it all the way down here, we need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after statement", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon expected after statement", parser_line_num);
 	}
 
 	//If we make it all the way down here, it worked so we can return the root node
@@ -5644,7 +5626,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//Once we get here, we've already seen the break keyword, so we can make the node
-	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_CLASS_BREAK_STMT);
+	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_CLASS_BREAK_STMT, SIDE_TYPE_LEFT);
 	//Store the line number
 	break_stmt->line_number = parser_line_num;
 
@@ -5658,10 +5640,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
 
 	//Otherwise, it has to have been a when keyword, so if it's not we have an error
 	if(lookahead.tok != WHEN){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after break statement", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon expected after break statement", parser_line_num);
 	}
 	
 	//If we get down here, we know that we are seeing a break when statement
@@ -5670,24 +5649,18 @@ static generic_ast_node_t* break_statement(FILE* fl){
 
 	//If we don't have one, it's an instant fail
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Parenthesis expected after break when keywords", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Parenthesis expected after break when keywords", parser_line_num);
 	}
 
 	//Push to the stack for grouping
 	push_token(grouping_stack, lookahead);
 
 	//Now we need to see a valid expression
-	generic_ast_node_t* expr_node = logical_or_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression given to break when statement", parser_line_num);
-		num_errors++;
-		//It's already an error so we'll just give it back
-		return expr_node;
+		return print_and_return_error("Invalid conditional expression given to break when statement", parser_line_num);
 	}
 
 	//This is the first child of the if statement node
@@ -5698,28 +5671,19 @@ static generic_ast_node_t* break_statement(FILE* fl){
 
 	//If we don't see it fail out
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Closing paren expected after when clause",  parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Closing paren expected after when clause",  parser_line_num);
 	}
 
 	//Check for matching next
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
 	//Finally if we make it all the way down here, we need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after statement", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon expected after statement", parser_line_num);
 	}
 
 	//If we make it all the way down here, it worked so we can return the root node
@@ -5746,7 +5710,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//We can create the node now
-	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_CLASS_RET_STMT);
+	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_CLASS_RET_STMT, SIDE_TYPE_LEFT);
 
 	//Now we can optionally see the semicolon immediately. Let's check if we have that
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5761,7 +5725,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 			//Also print the function name
 			print_function_name(current_function);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//If we get out then we're fine
@@ -5776,14 +5740,14 @@ static generic_ast_node_t* return_statement(FILE* fl){
 			//Also print the function name
 			print_function_name(current_function);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 		//Put it back if no
 		push_back_token(lookahead);
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(fl);
+	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5795,9 +5759,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//Let's do some type checking here
 	if(current_function == NULL){
-		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
 	}
 
 	//Grab the old type out here
@@ -5814,7 +5776,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		//Also print out the function
 		print_function_name(current_function);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//If this is the case, we'll need to propogate all of the types down the chain here
@@ -5830,10 +5792,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//Fail case
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after return statement", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon expected after return statement", parser_line_num);
 	}
 
 	//Add in the line number
@@ -5879,14 +5838,11 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Fail case
 	if(lookahead.tok != ON){
-		print_parse_message(PARSE_ERROR, "on keyword expected after switch in switch statement", current_line);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("on keyword expected after switch in switch statement", current_line);
 	}
 
 	//Once we get here, we can allocate the root level node
-	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_CLASS_SWITCH_STMT);
+	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_CLASS_SWITCH_STMT, SIDE_TYPE_LEFT);
 
 	//We will find these throughout our search
 	//Set the upper bound to be int_min
@@ -5899,24 +5855,18 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Fail case
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected after on keyword", current_line);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left parenthesis expected after on keyword", current_line);
 	}
 
 	//Push to stack for later matching
 	push_token(grouping_stack, lookahead);
 
 	//Now we must see a valid conditional expression
-	generic_ast_node_t* expr_node = logical_or_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one we fail right out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid conditional expression provided to switch on", current_line);
-		num_errors++;
-		//It's already an error, so just send this up
-		return expr_node;
+		return print_and_return_error("Invalid conditional expression provided to switch on", current_line);
 	}
 	
 	//For a switch statement, we need an enum or some other kind of numeric type to switch based on. We cannot switch on
@@ -5930,10 +5880,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		//Error out here
 		if(type->type_class != TYPE_CLASS_ENUMERATED){
 			sprintf(info, "Type \"%s\" cannot be switched", type->type_name);
-			print_parse_message(PARSE_ERROR, info, expr_node->line_number);
-			num_errors++;
-			//Fail out
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error(info, expr_node->line_number);
 		}
 	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
 	} else {
@@ -5943,10 +5890,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		//It needs to be an int or char
 		if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
 			sprintf(info, "Type \"%s\" cannot be switched", type->type_name);
-			print_parse_message(PARSE_ERROR, info, expr_node->line_number);
-			num_errors++;
-			//Fail out
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error(info, expr_node->line_number);
 		}
 	}
 
@@ -5961,18 +5905,12 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Fail case
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected after expression in switch statement", current_line);
-		num_errors++;
-		//Create and return an error
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Right parenthesis expected after expression in switch statement", current_line);
 	}
 
 	//Check to make sure that the parenthesis match up
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", current_line);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected", current_line);
 	}
 
 	//Now we must see an lcurly to begin the actual block
@@ -5980,10 +5918,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Fail case
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Left curly brace expected after expression", current_line);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left curly brace expected after expression", current_line);
 	}
 
 	//Push to stack for later matching
@@ -6046,9 +5981,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 			//Fail out here -- something went wrong
 			default:
-				print_parse_message(PARSE_ERROR, "\"case\" or \"default\" keywords expected", parser_line_num);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return print_and_return_error("\"case\" or \"default\" keywords expected", parser_line_num);
 		}
 
 		//If we get here we know it worked, so we can add it in as a child
@@ -6059,26 +5992,19 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//If we haven't found a default clause, it's a failure
 	if(found_default_clause == FALSE){
-		print_parse_message(PARSE_ERROR, "Switch statements are required to have a \"default\" clause", current_line);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Switch statements are required to have a \"default\" clause", current_line);
 	}	
 
 	//If we have an entirely empty switch statement
 	if(is_empty == TRUE){
-		print_parse_message(PARSE_ERROR, "Switch statements with no cases are not allowed", current_line);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
 	}
 
 	
 	//By the time we reach this, we should have seen a right curly
 	//However, we could still have matching issues, so we'll check for that here
 	if(pop_token(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", current_line);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched curly braces detected", current_line);
 	}
 
 	//Return the line number
@@ -6104,31 +6030,25 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 
 	//First create the actual node
-	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_CLASS_WHILE_STMT);
+	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_CLASS_WHILE_STMT, SIDE_TYPE_LEFT);
 
 	//We already have seen the while keyword, so now we need to see parenthesis surrounding a conditional expression
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
 	//Fail out if we don't see
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected after while keyword", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left parenthesis expected after while keyword", parser_line_num);
 	}
 
 	//Push it to the stack for later matching
 	push_token(grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* conditional_expr = logical_or_expression(fl);
+	generic_ast_node_t* conditional_expr = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
 	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid expression in while statement",  parser_line_num);
-		num_errors++;
-		//It's already an error so just give this back
-		return conditional_expr;
+		return print_and_return_error("Invalid expression in while statement",  parser_line_num);
 	}
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
@@ -6145,18 +6065,12 @@ static generic_ast_node_t* while_statement(FILE* fl){
 
 	//Fail if we don't see it
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Expected right parenthesis after conditional expression",  parser_line_num);
-		num_errors++;
-		//Create and give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Expected right parenthesis after conditional expression",  parser_line_num);
 	}
 
 	//We also need to check for matching
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
 	//Now that we've made it all the way here, we need to see the do keyword
@@ -6164,10 +6078,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 
 	//Instant fail if not
 	if(lookahead.tok != DO){
-		print_parse_message(PARSE_ERROR, "Do keyword expected before compound expression in while statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Do keyword expected before compound expression in while statement", parser_line_num);
 	}
 
 	//Following this, we need to see a valid compound statement, and then we're done
@@ -6175,10 +6086,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 
 	//If this is invalid we fail
 	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid compound statement in while expression", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Invalid compound statement in while expression", parser_line_num);
 	}
 
 	//Otherwise we'll add it in as a child
@@ -6206,7 +6114,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//Let's first create the overall global root node
-	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT);
+	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT, SIDE_TYPE_LEFT);
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
@@ -6214,10 +6122,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 
 	//If we fail, then we are done here
 	if(compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid compound statement given to do-while statement", current_line);
-		num_errors++;
-		//It's already an error, so just give it back
-		return compound_stmt;
+		return print_and_return_error("Invalid compound statement given to do-while statement", current_line);
 	}
 
 	//Otherwise we know that it was valid, so we can add it in as a child of the root
@@ -6228,10 +6133,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 
 	//If we don't see it, instant failure
 	if(lookahead.tok != WHILE){
-		print_parse_message(PARSE_ERROR, "Expected while keyword after block in do-while statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Expected while keyword after block in do-while statement", parser_line_num);
 	}
 	
 	//Once we've made it here, we now need to see a left paren
@@ -6239,24 +6141,18 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	
 	//Fail out if we don't see
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected after while keyword", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left parenthesis expected after while keyword", parser_line_num);
 	}
 
 	//Push it to the stack for later matching
 	push_token(grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* expr_node = logical_or_expression(fl);
+	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid expression in while part of do-while statement",  parser_line_num);
-		num_errors++;
-		//It's already an error so just give this back
-		return expr_node;
+		return print_and_return_error("Invalid expression in while part of do-while statement",  parser_line_num);
 	}
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
@@ -6273,18 +6169,12 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 
 	//Fail if we don't see it
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Expected right parenthesis after conditional expression",  parser_line_num);
-		num_errors++;
-		//Create and give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Expected right parenthesis after conditional expression",  parser_line_num);
 	}
 
 	//We also need to check for matching
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
 	//Finally we need to see a semicolon
@@ -6292,10 +6182,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 
 	//If we don't see one, final chance to fail
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of do while statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon expected at the end of do while statement", parser_line_num);
 	}
 	//Store the line number
 	do_while_stmt_node->line_number = current_line;
@@ -6320,17 +6207,14 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//We've already seen the for keyword, so let's create the root level node
-	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_CLASS_FOR_STMT);
+	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_CLASS_FOR_STMT, SIDE_TYPE_LEFT);
 
 	//We now need to first see a left paren
  	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we don't see it, instantly fail out
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected after for keyword", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left parenthesis expected after for keyword", parser_line_num);
 	}
 
 	//Push to the stack for later matching
@@ -6360,7 +6244,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		}
 
 		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		//Add this in as a child
 		add_child_node(for_loop_cond_node, let_stmt);
 
@@ -6380,21 +6264,16 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 		//If it fails, we fail too
 		if(asn_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid assignment expression given to for loop", current_line);
-			num_errors++;
-			//It's already an error, so just give it back
-			return asn_expr;
+			return print_and_return_error("Invalid assignment expression given to for loop", current_line);
 		}
 
 		//This actually must be an assignment expression, so if it isn't we fail 
 		if(asn_expr->CLASS != AST_NODE_CLASS_ASNMNT_EXPR){
-			print_parse_message(PARSE_ERROR, "Invalid assignment expression given to for loop", current_line);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Invalid assignment expression given to for loop", current_line);
 		}
 
 		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		//Add this in as a child
 		add_child_node(for_loop_cond_node, asn_expr);
 
@@ -6406,15 +6285,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 		//The assignment expression won't check semicols for us, so we'll do it here
 		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected in for statement declaration", parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Semicolon expected in for statement declaration", parser_line_num);
 		}
 
 	//Just add in a blank node as a placeholder
 	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
@@ -6427,18 +6303,15 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		push_back_token(lookahead);
 
 		//Let this rule handle it
-		generic_ast_node_t* expr_node = logical_or_expression(fl);
+		generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 		//If it fails, we fail too
 		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression in for loop middle", parser_line_num);
-			num_errors++;
-			//It's already an error, so just send it up
-			return expr_node;
+			return print_and_return_error("Invalid conditional expression in for loop middle", parser_line_num);
 		}
 
 		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		//Add this in as a child
 		add_child_node(for_loop_cond_node, expr_node);
 
@@ -6450,17 +6323,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	
 		//If it isn't one, we fail out
 		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Semicolon expected after conditional expression in for loop", parser_line_num);
-			num_errors++;
-			//Return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Semicolon expected after conditional expression in for loop", parser_line_num);
 		}
+
 	//Create a blank node as a placeholder
 	} else {
-		print_parse_message(PARSE_ERROR, "For loops must have the second condition occupied", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("For loops must have the second condition occupied", parser_line_num);
 	}
 
 	//Once we make it here, we know that either the inside was blank and we saw a semicolon or it wasn't and we saw a valid conditional 
@@ -6479,14 +6347,11 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 		//If it fails, we fail too
 		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid conditional expression in for loop", parser_line_num);
-			num_errors++;
-			//It's already an error, so just send it up
-			return expr_node;
+			return print_and_return_error("Invalid conditional expression in for loop", parser_line_num);
 		}
 
 		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		//Add this in as a child
 		add_child_node(for_loop_cond_node, expr_node);
 
@@ -6497,24 +6362,18 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	//Create a blank node here as a placeholder
 	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
 	//Now if we make it down here no matter what it must be an R_Paren
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis expected after for loop declaration", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Right parenthesis expected after for loop declaration", parser_line_num);
 	}
 
 	//Now check for matching
 	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 	
 	//Now we need to see the do keyword
@@ -6522,10 +6381,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 	//If it isn't a do keyword, we fail here
 	if(lookahead.tok != DO){
-		print_parse_message(PARSE_ERROR, "Do keyword expected after for loop declaration", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Do keyword expected after for loop declaration", parser_line_num);
 	}
 
 	//Now that we're all done, we need to see a valid compound statement
@@ -6605,16 +6461,12 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 
 		//This will give an error
 		case SWITCH:
-			print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested switch statements", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Ollie language does not allow for nested switch statements", parser_line_num);
 
 		//These will also error
 		case CASE:
 		case DEFAULT:
-			print_parse_message(PARSE_ERROR, "Ollie language does not allow for nested case or default statements", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Ollie language does not allow for nested case or default statements", parser_line_num);
 
 		//If statement
 		case IF:
@@ -6624,9 +6476,7 @@ static generic_ast_node_t* statement_in_block(FILE* fl){
 		//Break and continue
 		case BREAK:
 		case CONTINUE:
-			print_parse_message(PARSE_ERROR, "Ollie language does not allow continue or break in switch statments", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Ollie language does not allow continue or break in switch statments", parser_line_num);
 
 		//Jump/return
 		case JUMP:
@@ -6676,17 +6526,14 @@ static generic_ast_node_t* switch_compound_statement(FILE* fl){
 	
 	//If we don't see one, we fail out
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Left curly brace required at beginning of compound statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left curly brace required at beginning of compound statement", parser_line_num);
 	}
 
 	//Push onto the grouping stack so we can check matching
 	push_token(grouping_stack, lookahead);
 
 	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
+	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT, SIDE_TYPE_LEFT);
 	//Store the line number here
 	compound_stmt_node->line_number = parser_line_num;
 
@@ -6723,11 +6570,7 @@ static generic_ast_node_t* switch_compound_statement(FILE* fl){
 	//is an R_CURLY
 	//We still must check for matching
 	if(pop_token(grouping_stack).tok != L_CURLY){
-		printf("%d\n", lookahead.tok);
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
 	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
@@ -6762,17 +6605,14 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 	
 	//If we don't see one, we fail out
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Left curly brace required at beginning of compound statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Left curly brace required at beginning of compound statement", parser_line_num);
 	}
 
 	//Push onto the grouping stack so we can check matching
 	push_token(grouping_stack, lookahead);
 
 	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT);
+	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT, SIDE_TYPE_LEFT);
 	//Store the line number here
 	compound_stmt_node->line_number = parser_line_num;
 
@@ -6820,7 +6660,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 				//If we fail here we'll throw an error
 				if(status == FAILURE){
 					//Return an error node
-					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 				}
 				
 				break;
@@ -6859,11 +6699,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 	//is an R_CURLY
 	//We still must check for matching
 	if(pop_token(grouping_stack).tok != L_CURLY){
-		printf("%d\n", lookahead.tok);
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
 	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
@@ -6897,16 +6733,14 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 
 	//If we don't see one, we fail
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Assembly insertion statements must be wrapped in curly braces({})", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Assembly insertion statements must be wrapped in curly braces({})", parser_line_num);
 	}
 
 	//Let's warn the user. Assembly inline statements are a great way to shoot yourself in the foot
 	print_parse_message(INFO, "Assembly inline statements are not analyzed by OC. Whatever is written will be executed verbatim. Please double check your assembly statements.", parser_line_num);
 
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
-	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT);
+	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
 	//Store this too
 	assembly_ast_node_t->line_number = parser_line_num;
 
@@ -6926,9 +6760,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 
 		//If it's an error, we'll fail out here
 		if(lookahead.tok == ERROR){
-			print_parse_message(PARSE_ERROR, "Unable to parse assembly statement. Did you enclose the whole block in curly braces({})?", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Unable to parse assembly statement. Did you enclose the whole block in curly braces({})?", parser_line_num);
 		}
 
 		//Otherwise it worked, so we'll need to add the statement in here
@@ -6958,9 +6790,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Expected semicolon after assembly statement", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Expected semicolon after assembly statement", parser_line_num);
 	}
 
 	//Once we escape out here, we've seen the whole thing, so we're done
@@ -6992,7 +6822,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 
 	//Now if we see that this is NULL, we'll allocate here
 	if(deferred_stmts_node == NULL){
-		deferred_stmts_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT);
+		deferred_stmts_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT, SIDE_TYPE_LEFT);
 	}
 
 	//We now expect to see a compound statement
@@ -7010,9 +6840,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 
 	//Fail case here
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after defer statement", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon expected after defer statement", parser_line_num);
 	}
 
 	//Otherwise it was valid, so we have another child for this overall deferred statement
@@ -7041,13 +6869,11 @@ static generic_ast_node_t* idle_statement(FILE* fl){
 
 	//If it isn't a semicolon, we error out
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required after idle keyword", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon required after idle keyword", parser_line_num);
 	}
 
 	//Create and populate the node
-	generic_ast_node_t* idle_statement = ast_node_alloc(AST_NODE_CLASS_IDLE_STMT);
+	generic_ast_node_t* idle_statement = ast_node_alloc(AST_NODE_CLASS_IDLE_STMT, SIDE_TYPE_LEFT);
 	idle_statement->line_number = parser_line_num;
 
 	//We'll create and return an idle statement
@@ -7155,9 +6981,7 @@ static generic_ast_node_t* statement(FILE* fl){
 		
 		//Replace statement is an error here
 		case REPLACE:
-			print_parse_message(PARSE_ERROR, "Replace statements have global effects, and therefore must be declared in the global scope", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Replace statements have global effects, and therefore must be declared in the global scope", parser_line_num);
 
 		//By default push this back and return an expression statement
 		default:
@@ -7179,17 +7003,14 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 
 	//If we see default, we can just make the default node
-	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT);
+	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT, SIDE_TYPE_LEFT);
 
 	//All that we need to see now is a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we don't see one, we need to scrap it
 	if(lookahead.tok != ARROW){
-		print_parse_message(PARSE_ERROR, "Arrow required after default statement", current_line);
-		num_errors++;
-		//Error node return
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Arrow required after default statement", current_line);
 	}
 
 	//We now need to see a valid switch compound statement
@@ -7225,7 +7046,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//to consume whatever comes after it(constant or enum value)
 	
 	//Create the node
-	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT);
+	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT, SIDE_TYPE_LEFT);
 	
 	//Let's now lookahead and see if we have a valid constant or not
 	lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
@@ -7236,7 +7057,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		push_back_token(lookahead);
 
 		//Let the subrule handle it
-		generic_ast_node_t* enum_ident_node = identifier(fl);
+		generic_ast_node_t* enum_ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 		//If it's invalid fail out
 		if(enum_ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7252,17 +7073,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//If we somehow couldn't find it
 		if(enum_record == NULL){
 			sprintf(info, "Identifier \"%s\" has never been declared", name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//If we could find it, but it isn't an enum
 		if(enum_record->is_enumeration_member == 0){
 			sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);	
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Otherwise we know that it is good, but is it the right type
@@ -7273,9 +7090,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
 						  switch_stmt_node->inferred_type->type_name, enum_ident_node->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Store this for later processing
@@ -7294,7 +7109,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		push_back_token(lookahead);
 	
 		//We are now required to see a valid constant
-		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT);
+		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
 
 		//If this fails, the whole thing is over
 		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7347,17 +7162,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
 						  switch_stmt_node->inferred_type->type_name, const_node->inferred_type->type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//We already have the value -- so this doesn't need to be a child node
 
 	} else {
-		print_parse_message(PARSE_ERROR, "Enum member or constant required as argument to case statement", current_line);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Enum member or constant required as argument to case statement", current_line);
 	}
 
 	//If it's higher than the upper bound, it now is the upper bound
@@ -7374,18 +7185,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//we hit this, there's no point in going on
 	if(switch_stmt_node->upper_bound - switch_stmt_node->lower_bound >= MAX_SWITCH_RANGE){
 		sprintf(info, "Range from %d to %d exceeds %d, too large for a switch statement. Use a compound if statement instead", switch_stmt_node->lower_bound, switch_stmt_node->upper_bound, MAX_SWITCH_RANGE);
-		print_parse_message(PARSE_ERROR, info, current_line);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, current_line);
 	}
 
 	//Now let's see if we have any duplicates. If there are, we error out
 	if(values[case_stmt->case_statement_value % MAX_SWITCH_RANGE] == TRUE){
 		sprintf(info, "Value %ld is duplicated in the switch statement", case_stmt->case_statement_value);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Error out
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Let's now store it for the future
@@ -7396,10 +7202,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 	//If we don't see one, we need to scrap it
 	if(lookahead.tok != ARROW){
-		print_parse_message(PARSE_ERROR, "Arrow required after case statement", current_line);
-		num_errors++;
-		//Error node return
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Arrow required after case statement", current_line);
 	}
 
 	//We'll let the helper deal with it
@@ -7440,7 +7243,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
 	//Let's first declare the root node
-	generic_ast_node_t* decl_node = ast_node_alloc(AST_NODE_CLASS_DECL_STMT);
+	generic_ast_node_t* decl_node = ast_node_alloc(AST_NODE_CLASS_DECL_STMT, SIDE_TYPE_LEFT);
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7464,7 +7267,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//The last thing before we perform checks is for us to see a valid identifier
-	generic_ast_node_t* ident_node = identifier(fl);
+	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given in declaration", parser_line_num);
@@ -7497,7 +7300,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		print_function_name(found_func);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -7511,7 +7314,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -7526,7 +7329,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		print_variable_name(found_var);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Let's see if we've already named a constant this
@@ -7539,7 +7342,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		//Also print out the original declaration
 		print_constant_name(found_const);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	
@@ -7549,7 +7352,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	if(lookahead.tok != COLON){
 		print_parse_message(PARSE_ERROR, "Colon required between identifier and type specifier in declare statement", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 	
 	//Now we are required to see a valid type specifier
@@ -7559,14 +7362,14 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	if(type_spec == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given in declaration", parser_line_num);
 		//It's already an error, so we'll just send it back up
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//One thing here, we aren't allowed to see void
 	if(strcmp(type_spec->type_name, "void") == 0){
 		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//The last thing that we are required to see before final assembly is a semicolon
@@ -7576,7 +7379,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		print_parse_message(PARSE_ERROR, "Semicolon required at the end of declaration statement", parser_line_num);
 		num_errors++;
 		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
@@ -7631,7 +7434,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
 	//Let's first declare the root node
-	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_CLASS_LET_STMT);
+	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_CLASS_LET_STMT, SIDE_TYPE_LEFT);
 
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7656,7 +7459,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//The last thing before we perform checks is for us to see a valid identifier
-	generic_ast_node_t* ident_node = identifier(fl);
+	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given in let statement", parser_line_num);
@@ -7689,7 +7492,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		print_function_name(found_func);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -7703,7 +7506,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -7717,7 +7520,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Let's see if we've already named a constant this
@@ -7730,7 +7533,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		//Also print out the original declaration
 		print_constant_name(found_const);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Now we need to see a colon
@@ -7739,7 +7542,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	if(lookahead.tok != COLON){
 		print_parse_message(PARSE_ERROR, "Expected colon between identifier and type specifier in let statement", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Now we are required to see a valid type specifier
@@ -7749,14 +7552,14 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	if(type_spec == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given in let statement", parser_line_num);
 		//It's already an error, so we'll just send it back up
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 	
 	//One thing here, we aren't allowed to see void
 	if(type_spec->type_class == TYPE_CLASS_BASIC && type_spec->basic_type->basic_type == VOID){
 		print_parse_message(PARSE_ERROR, "\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 
@@ -7767,11 +7570,11 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		print_parse_message(PARSE_ERROR, "Assignment operator(:=) required after identifier in let statement", parser_line_num);
 		num_errors++;
 		//Create and return an error
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Otherwise we saw it, so now we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(fl);
+	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//We now need to complete type checking. Is what we're assigning to the new variable
 	//compatible with what we're given by the logical or expression here?
@@ -7792,10 +7595,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Last possible tripping point
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required at the end of let statement", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Semicolon required at the end of let statement", parser_line_num);
 	}
 
 	//Extract the two types here
@@ -7807,18 +7607,14 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(expr_node->inferred_type->type_class == TYPE_CLASS_POINTER){
 		if(expr_node->variable != NULL && expr_node->variable->is_mutable == 0 && is_mutable == 1){
-			print_parse_message(PARSE_ERROR, "Mutable references to immutable variables are forbidden", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
 		}
 	}
 
 	//Will be null if we have a failure
 	if(return_type == NULL){
 		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Store this just in case--most likely won't use
@@ -7900,7 +7696,7 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Otherwise we've made it, so now we need to see a valid identifier
-	generic_ast_node_t* ident_node = identifier(fl);
+	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it's bad, we're also done here
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -8054,10 +7850,7 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 	//Otherwise we have some weird error here
 	} else {
 		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		//Return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 }
 
@@ -8176,7 +7969,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//We also have the AST function node, this will be intialized immediately
 	//It also requires a symtab record of the function, but this will be assigned
 	//later once we have it
-	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF);
+	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF, SIDE_TYPE_LEFT);
 
 	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8188,9 +7981,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//This is our fail case here
 		if(lookahead.tok != STATIC){
-			print_parse_message(PARSE_ERROR, "Static keyword expected after colon in function definition", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Static keyword expected after colon in function definition", parser_line_num);
 		}
 
 		//Otherwise, we know that we have a static storage class
@@ -8204,14 +7995,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	}
 
 	//Now we must see a valid identifier as the name
-	generic_ast_node_t* ident_node = identifier(fl);
+	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If we have a failure here, we're done for
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid name given as function name", current_line);
-		num_errors++;
-		//It's already an error, so just give it back
-		return ident_node;
+		return print_and_return_error("Invalid name given as function name", current_line);
 	}
 
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
@@ -8221,9 +8009,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Array bounds checking real quick
 	if(strlen(function_name) > MAX_TYPE_NAME_LENGTH){
 		sprintf(info, "Function names may only be at most 200 characters long, was given: %s", function_name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Let's now do all of our checks for duplication before we go any further. This can
@@ -8239,7 +8025,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		print_function_name(function_record);
 		num_errors++;
 		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 
 	//This is our interesting case. The function has been defined implicitly, and now we're trying to define it
 	//explicitly. We don't need to do any other checks if this is the case
@@ -8261,7 +8047,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_variable_name(found_variable);
 			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Check for duplicated type names
@@ -8274,7 +8060,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_type_name(found_type);
 			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Let's see if we've already named a constant this
@@ -8287,7 +8073,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//Also print out the original declaration
 			print_constant_name(found_const);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
@@ -8365,7 +8151,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 				//Print the function out too
 				print_function_name(function_record);
 				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 			//Grab this out for reference
@@ -8376,9 +8162,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//Let's now compare the types here
 			if(types_assignable(&(func_param->type_defined_as), &(param_rec->type_defined_as)) == NULL){
 				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				print_function_name(function_record);
-				num_errors++;
+				return print_and_return_error(info, parser_line_num);
 			}
 
 			//Otherwise it's fine, so we'll overwrite the entire thing in the record
@@ -8396,10 +8180,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		while(param_list_cursor != NULL){
 			//For dev use--sanity check
 			if(param_list_cursor->CLASS != AST_NODE_CLASS_PARAM_DECL){
-				print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Expected declaration node in parameter list", parser_line_num);
-				num_errors++;
-				//Return an error node
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return print_and_return_error("Fatal internal compiler error. Expected declaration node in parameter list", parser_line_num);
 			}
 
 			//The variable record for this param node
@@ -8425,10 +8206,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//If it isn't an arrow, we're out of here
 	if(lookahead.tok != ARROW){
-		print_parse_message(PARSE_ERROR, "Arrow(->) required after parameter-list in function", parser_line_num);
-		num_errors++;
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Arrow(->) required after parameter-list in function", parser_line_num);
 	}
 
 	//Now if we get here, we must see a valid type specifier
@@ -8437,10 +8215,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//If we failed, bail out
 	if(return_type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
-		num_errors++;
-		//It's already an error, just send it back
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return print_and_return_error("Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
 	}
 
 	//Grab the type record. A reference to this will be stored in the function symbol table. Make sure
@@ -8451,16 +8226,12 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	if(is_main_function == 1){
 		//If it's not a basic type we fail
 		if(type->type_class != TYPE_CLASS_BASIC){
-			print_parse_message(PARSE_ERROR, "The main function must return a type of i32.", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("The main function must return a type of i32.", parser_line_num);
 		}
 
 		//Now we know that it is a basic type, but is it an s_int32?
 		if(type->basic_type->basic_type != S_INT32){
-			print_parse_message(PARSE_ERROR, "The main function must return a type of i32.", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("The main function must return a type of i32.", parser_line_num);
 		}
 		//Otherwise it's fine
 	}
@@ -8472,7 +8243,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 	}
 
@@ -8492,7 +8263,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_parse_message(PARSE_ERROR, "The main function may not be defined implicitly. Implicit definition here:", parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//If we're for some reason defining a previous implicit function
@@ -8501,7 +8272,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Otherwise it should be ok
@@ -8557,7 +8328,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//We now need to check and see if our jump statements are actually valid
 			if(check_jump_labels() == FAILURE){
 				//If this fails, we fail out here too
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 		} else {
 			sprintf(info, "Function %s has no body", function_record->func_name);
@@ -8593,7 +8364,7 @@ static u_int8_t replace_statement(FILE* fl){
 
 	//We've already seen the with statement, now we need to see an
 	//identifier
-	generic_ast_node_t* ident_node = identifier(fl);
+	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If we failed, we're done here
 	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -8679,7 +8450,7 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Otherwise it worked, so now we need to see a constant of some kind
-	generic_ast_node_t* constant_node = constant(fl, SEARCHING_FOR_CONSTANT);
+	generic_ast_node_t* constant_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
 
 	//If this fails, then we are done
 	if(constant_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -8736,7 +8507,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 	if(lookahead.tok == ERROR){
 		print_parse_message(PARSE_ERROR, "Fatal error. Found error token\n", lookahead.line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Switch based on the token
@@ -8757,7 +8528,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 			//Otherwise we'll just return null, the caller will know what to do with it
@@ -8770,7 +8541,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 			//Otherwise we'll just return null, the caller will know what to do with it
@@ -8778,15 +8549,11 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 
 		//This is an error. The #dependencies directive must be the very first thing in a file
 		case DEPENDENCIES:
-			print_parse_message(PARSE_ERROR, "The #dependencies section must be the very first thing in a file", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("The #dependencies section must be the very first thing in a file", parser_line_num);
 
 		//This is out of place if we see it here
 		case REQUIRE:
-			print_parse_message(PARSE_ERROR, "Any require statements must be nested in a top level #dependencies block", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Any require statements must be nested in a top level #dependencies block", parser_line_num);
 
 		default:
 			//Put the token back
@@ -8812,7 +8579,7 @@ static generic_ast_node_t* program(FILE* fl){
 	//If prog is null we make it here
 	if(prog == NULL){
 		//Create the ROOT of the tree
-		prog = ast_node_alloc(AST_NODE_CLASS_PROG);
+		prog = ast_node_alloc(AST_NODE_CLASS_PROG, SIDE_TYPE_LEFT);
 	}
 
 	//Let's lookahead to see what we have
@@ -8833,9 +8600,7 @@ static generic_ast_node_t* program(FILE* fl){
 
 		//If we get to the DONE, we error out
 		if(lookahead.tok == DONE){
-			print_parse_message(PARSE_ERROR, "Unmatched #dependencies region detected", parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE);
+			return print_and_return_error("Unmatched #dependencies region detected", parser_line_num);
 		}
 
 	} else {
