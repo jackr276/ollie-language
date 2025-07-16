@@ -137,6 +137,8 @@ struct generic_ast_node_t{
 	char* identifier;
 	//Is this assignable?
 	variable_assignability_t is_assignable;
+	//What side is this node on
+	side_type_t side;
 	//What kind of node is it?
 	ast_node_class_t CLASS;
 	//Is this a deferred node?
@@ -179,7 +181,7 @@ struct asm_inline_stmt_ast_node_t{
 /**
  * Global node allocation function
  */
-generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS);
+generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side);
 
 /**
  * A utility function for node duplication

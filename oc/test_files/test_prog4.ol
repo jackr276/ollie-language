@@ -51,16 +51,6 @@ fn my_fn(mut argc:u32, mut argv:char**)->i32{
 	}
 	
 
-	/*
-	for(let mut i:u32 := 3; i < 232; i := i + 1) do{
-		idle;
-		a := a + 1;
-		//continue when (a == 32);
-		//break when(a == 32);
-		let masdfasdf:u32 := 232;
-	}
-	*/
-
 	@my_func(i+2, j);
 
 	let j_copy:u32 := -i * 32 - 322;

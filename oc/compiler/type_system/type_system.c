@@ -1333,8 +1333,6 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  */
 generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members){
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
-	//The array bounds string
-	char array_bound_str[50];
 
 	//Array type class
 	type->type_class = TYPE_CLASS_ARRAY;

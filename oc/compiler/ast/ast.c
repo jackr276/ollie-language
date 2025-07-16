@@ -95,7 +95,7 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
  * that they want to use. It is assumed that the user already knows the proper type and takes appropriate action based
  * on that
 */
-generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
+generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
 	//A pointer for referencing the asm inline statement
@@ -141,6 +141,10 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS){
 			break;
 	}
 
+	//Assign the side of the node
+	node->side = side;
+
+	//And give it back
 	return node;
 }
 
