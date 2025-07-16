@@ -2736,6 +2736,9 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
 static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//We'll first want a cursor
 	generic_ast_node_t* cursor = postfix_parent->first_child;
+	
+	//Extract the side for later use here
+	side_type_t postfix_expr_side = cursor->side;
 
 	//We should always have a primary expression first. We'll first call the primary expression
 	three_addr_var_t* current_var = emit_primary_expr_code(basic_block, cursor, temp_assignment_required, is_branch_ending);
@@ -2820,7 +2823,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				current_address = NULL;
 
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-				if(temp_assignment_required == FALSE){
+				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
 					current_var = emit_mem_code(basic_block, address);
 					//It's a write
@@ -2906,7 +2909,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				current_address = NULL;
 
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-				if(temp_assignment_required == FALSE){
+				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
 					current_var = emit_mem_code(basic_block, address);
 					//It's a write
