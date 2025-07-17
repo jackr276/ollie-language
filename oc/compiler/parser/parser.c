@@ -5323,6 +5323,11 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	//If we make it here, we can add this in as the first child to the root node
 	add_child_node(if_stmt, expression_node);
 
+	//Save the old nesting level
+	Token old_nesting_level = nesting_level;
+	//Flag that this is an if 
+	nesting_level = IF;
+
 	//Now following this, we need to see a valid compound statement
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
@@ -5436,6 +5441,9 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		//Otherwise there was no else token, so put it back
 		push_back_token(lookahead);
 	}
+
+	//Reset the nesting level here
+	nesting_level = old_nesting_level;
 	
 	//Store the line number
 	if_stmt->line_number = current_line;
@@ -6807,7 +6815,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//Are we already inside of a defer statement? If we are,
 	//we'll want to fail out here
 	if(nesting_level != FN){
-		return print_and_return_error("Defer statements must be place at the top level lexical scope in a function", parser_line_num);
+		return print_and_return_error("Defer statements must be placed at the top level lexical scope in a function", parser_line_num);
 	}
 
 	//Set this to be clear that we're in a defer
