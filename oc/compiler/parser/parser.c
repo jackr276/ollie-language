@@ -1979,6 +1979,35 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			return print_and_return_error("Fatal internal compiler error: invalid unary operation", parser_line_num);
 	}
 
+	//If we have a constant here, we have a chance to do some optimizations
+	if(cast_expr->CLASS == AST_NODE_CLASS_CONSTANT){
+		//Go based on this
+		switch (unary_op_tok) {
+			case MINUS:
+				negate_constant_value(cast_expr);
+				return cast_expr;
+
+			case MINUSMINUS:
+				decrement_constant_value(cast_expr);
+				return cast_expr;
+
+			case PLUSPLUS:
+				increment_constant_value(cast_expr);
+				return cast_expr;
+
+			case L_NOT:
+				logical_not_constant_value(cast_expr);
+				return cast_expr;
+
+			case B_NOT:
+				bitwise_not_constant_value(cast_expr);
+				return cast_expr;
+			//Just do nothing
+			default:
+				break;
+		}
+	}
+
 	//One we get here, we have both nodes that we need
 	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR, side);
 	
