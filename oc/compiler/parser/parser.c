@@ -1730,149 +1730,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 }
 
 
-/**
- * This helper function negates a constant node's value
- */
-static void negate_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
-	//Switch based on the value here
-	switch(const_node->constant_type){
-		//Negate these accordingly
-		case INT_CONST_FORCE_U:
-		case INT_CONST:
-			const_node->int_val = const_node->int_val * -1;
-			break;
-		case FLOAT_CONST:
-			const_node->float_val = const_node->float_val * -1;
-			break;
-		case CHAR_CONST:
-			const_node->char_val = const_node->char_val * -1;
-		case LONG_CONST_FORCE_U:
-		case LONG_CONST:
-			const_node->long_val = const_node->long_val * -1;
-		//This should never happen
-		default:
-			print_parse_message(PARSE_ERROR, "Attempt to negate an invalid value", constant_node->line_number);
-			exit(0);
-	}
-}
-
-
-/**
- * This helper function decrements a constant node's value
- */
-static void decrement_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
-	//Switch based on the value here
-	switch(const_node->constant_type){
-		//Negate these accordingly
-		case INT_CONST_FORCE_U:
-		case INT_CONST:
-			const_node->int_val = const_node->int_val - 1;
-			break;
-		case FLOAT_CONST:
-			const_node->float_val = const_node->float_val - 1;
-			break;
-		case CHAR_CONST:
-			const_node->char_val = const_node->char_val - 1;
-		case LONG_CONST_FORCE_U:
-		case LONG_CONST:
-			const_node->long_val = const_node->long_val - 1;
-		//This should never happen
-		default:
-			print_parse_message(PARSE_ERROR, "Attempt to decrement an invalid value", constant_node->line_number);
-			exit(0);
-	}
-}
-
-
-/**
- * This helper function increments a constant node's value
- */
-static void increment_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
-	//Switch based on the value here
-	switch(const_node->constant_type){
-		//Negate these accordingly
-		case INT_CONST_FORCE_U:
-		case INT_CONST:
-			const_node->int_val = const_node->int_val + 1;
-			break;
-		case FLOAT_CONST:
-			const_node->float_val = const_node->float_val + 1;
-			break;
-		case CHAR_CONST:
-			const_node->char_val = const_node->char_val + 1;
-		case LONG_CONST_FORCE_U:
-		case LONG_CONST:
-			const_node->long_val = const_node->long_val + 1;
-		//This should never happen
-		default:
-			print_parse_message(PARSE_ERROR, "Attempt to increment an invalid value", constant_node->line_number);
-			exit(0);
-	}
-}
-
-
-/**
- * This helper function will logically not a consant node's value
- */
-static void logical_not_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
-	//Switch based on the value here
-	switch(const_node->constant_type){
-		//Negate these accordingly
-		case INT_CONST_FORCE_U:
-		case INT_CONST:
-			const_node->int_val = !(const_node->int_val);
-			break;
-		case CHAR_CONST:
-			const_node->char_val = !(const_node->char_val);
-		case LONG_CONST_FORCE_U:
-		case LONG_CONST:
-			const_node->long_val = !(const_node->long_val);
-		//This should never happen
-		default:
-			print_parse_message(PARSE_ERROR, "Attempt to logically not an invalid value", constant_node->line_number);
-			exit(0);
-	}
-}
-
-
-/**
- * This helper function will logically not a consant node's value
- */
-static void bitwise_not_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
-	//Switch based on the value here
-	switch(const_node->constant_type){
-		//Negate these accordingly
-		case INT_CONST_FORCE_U:
-		case INT_CONST:
-			const_node->int_val = ~(const_node->int_val);
-			break;
-		case CHAR_CONST:
-			const_node->char_val = ~(const_node->char_val);
-		case LONG_CONST_FORCE_U:
-		case LONG_CONST:
-			const_node->long_val = ~(const_node->long_val);
-		//This should never happen
-		default:
-			print_parse_message(PARSE_ERROR, "Attempt to bitwise not an invalid value", constant_node->line_number);
-			exit(0);
-	}
-}
-
 
 /**
  * Is a given token a unary operator
@@ -2104,7 +1961,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//This counts as mutation -- unless it's a constant
 			if(cast_expr->variable != NULL){
-				cast_expr->variable->assigned_to = 1;
+				cast_expr->variable->assigned_to = TRUE;
 			}
 
 			//This is only not assignable if we have a basic variable
@@ -2120,31 +1977,6 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 		//In reality, we should never reach here
 		default:
 			return print_and_return_error("Fatal internal compiler error: invalid unary operation", parser_line_num);
-	}
-
-	//If we have a constant here, we have a chance to do some optimizations
-	if(cast_expr->first_child->CLASS == AST_NODE_CLASS_CONSTANT){
-		//Go based on this
-		switch (unary_op_tok) {
-			case MINUS:
-				negate_constant_value(cast_expr->first_child);
-				return cast_expr;
-			case MINUSMINUS:
-				decrement_constant_value(cast_expr->first_child);
-				return cast_expr;
-			case PLUSPLUS:
-				increment_constant_value(cast_expr->first_child);
-				return cast_expr;
-			case L_NOT:
-				logical_not_constant_value(cast_expr->first_child);
-				return cast_expr;
-			case B_NOT:
-				bitwise_not_constant_value(cast_expr->first_child);
-				return cast_expr;
-			//Just do nothing
-			default:
-				break;
-		}
 	}
 
 	//One we get here, we have both nodes that we need

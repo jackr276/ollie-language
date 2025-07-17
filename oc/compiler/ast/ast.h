@@ -179,6 +179,31 @@ struct asm_inline_stmt_ast_node_t{
 };
 
 /**
+ * This helper function negates a constant node's value
+ */
+void negate_constant_value(generic_ast_node_t* constant_node);
+
+/**
+ * This helper function decrements a constant node's value
+ */
+void decrement_constant_value(generic_ast_node_t* constant_node);
+
+/**
+ * This helper function increments a constant node's value
+ */
+void increment_constant_value(generic_ast_node_t* constant_node);
+
+/**
+ * This helper function will logically not a consant node's value
+ */
+void bitwise_not_constant_value(generic_ast_node_t* constant_node);
+
+/**
+ * This helper function will logically not a consant node's value
+ */
+void logical_not_constant_value(generic_ast_node_t* constant_node);
+
+/**
  * Global node allocation function
  */
 generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side);
