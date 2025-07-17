@@ -1926,44 +1926,19 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	lexitem_t lookahead;
 	//Is this assignable
 	variable_assignability_t is_assignable = ASSIGNABLE;
-	//For folding cases
-	Token unary_op_tok = BLANK;
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	//Save this for searching
-	unary_op_tok = lookahead.tok;
+	Token unary_op_tok = lookahead.tok;
 
 	//If this is not a unary operator, we don't need to go any more
 	if(is_unary_operator(unary_op_tok) == FALSE){
 		//Push it back
 		push_back_token(lookahead);
-		//We'll still make a top level tree here to avoid ambiguity
-		generic_ast_node_t* unary_expr_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR, side);
 
 		//Let this handle the heavy lifting
-		generic_ast_node_t* postfix_expr_node = postfix_expression(fl, side);
-
-		//If this is NULL, just send it up the chain
-		if(postfix_expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return postfix_expr_node;
-		}
-
-		//Otherwise he is the unary expression node here
-		add_child_node(unary_expr_node, postfix_expr_node);
-
-		//Carry the var through
-		unary_expr_node->variable = postfix_expr_node->variable;
-
-		//This type info is also sent up
-		unary_expr_node->inferred_type = postfix_expr_node->inferred_type;
-		//Store the line number
-		unary_expr_node->line_number = parser_line_num;
-		//Duplicate the assignability
-		unary_expr_node->is_assignable = postfix_expr_node->is_assignable;
-
-		//Postfix already has type inference built in
-		return unary_expr_node;
+		return postfix_expression(fl, side);
 	}
 
 	//Otherwise, if we get down here we know that we have a unary operator
@@ -2182,8 +2157,6 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	add_child_node(unary_node, cast_expr);
 
 	//Store the type that we have here
-	unary_node->inferred_type = return_type;
-	//Store this down the chain as well
 	unary_node->inferred_type = return_type;
 	//Store the line number
 	unary_node->line_number = parser_line_num;
