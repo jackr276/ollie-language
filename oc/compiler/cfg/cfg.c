@@ -2734,6 +2734,11 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
  * and array access
  */
 static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//If this is itself not a postfix expression, we need to lose it here
+	if(postfix_parent->CLASS != AST_NODE_CLASS_POSTFIX_EXPR){
+		return emit_primary_expr_code(basic_block, postfix_parent, temp_assignment_required, is_branch_ending);
+	}
+
 	//We'll first want a cursor
 	generic_ast_node_t* cursor = postfix_parent->first_child;
 	
