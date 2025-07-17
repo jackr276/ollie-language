@@ -67,8 +67,11 @@ static u_int32_t num_warnings;
 //The current parser line number
 static u_int16_t parser_line_num = 1;
 
-//Are we inside of a defer statement currently? False by default
-static u_int8_t in_defer = FALSE;
+//Are we in a defer statement or not?
+u_int8_t in_defer = FALSE;
+
+//The last nesting level
+static Token nesting_level = BLANK;
 
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
@@ -5909,6 +5912,10 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Handle our statement here
 	generic_ast_node_t* stmt;
 
+	//Set this nesting level for searching
+	Token old_nesting_level = nesting_level;
+	nesting_level = SWITCH;
+
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
 		//Switch by the lookahead
@@ -5954,6 +5961,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
+
+	//Now that we're done here we can reset it
+	nesting_level = old_nesting_level;
 
 	//If we haven't found a default clause, it's a failure
 	if(found_default_clause == FALSE){
@@ -6046,6 +6056,12 @@ static generic_ast_node_t* while_statement(FILE* fl){
 		return print_and_return_error("Do keyword expected before compound expression in while statement", parser_line_num);
 	}
 
+	//Save this for later
+	Token old_nesting_level = nesting_level;
+
+	//The nesting level here is in a for loop
+	nesting_level = WHILE;
+
 	//Following this, we need to see a valid compound statement, and then we're done
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
@@ -6053,6 +6069,9 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		return print_and_return_error("Invalid compound statement in while expression", parser_line_num);
 	}
+
+	//Reset the nesting level afterwards
+	nesting_level = old_nesting_level;
 
 	//Otherwise we'll add it in as a child
 	add_child_node(while_stmt_node, compound_stmt_node);
@@ -6081,9 +6100,17 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	//Let's first create the overall global root node
 	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT, SIDE_TYPE_LEFT);
 
+	//Save the old nesting level
+	Token old_nesting_level = nesting_level;
+	//Set this to be in a do while
+	nesting_level = DO;
+
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
 	generic_ast_node_t* compound_stmt = compound_statement(fl);
+
+	//Now reset this
+	nesting_level = old_nesting_level;
 
 	//If we fail, then we are done here
 	if(compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -6346,6 +6373,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		return print_and_return_error("Do keyword expected after for loop declaration", parser_line_num);
 	}
 
+	//Save this for later
+	Token old_nesting_level = nesting_level;
+
+	//The nesting level here is in a for loop
+	nesting_level = FOR;
+
 	//Now that we're all done, we need to see a valid compound statement
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
@@ -6354,6 +6387,9 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		//No error message, just pass the failure up
 		return compound_stmt_node;
 	}
+
+	//This is now back to the original nesting level
+	nesting_level = old_nesting_level;
 
 	//Otherwise if we make it here, we know that it worked so we'll add it as a child
 	add_child_node(for_stmt_node, compound_stmt_node);
@@ -6770,11 +6806,14 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 static generic_ast_node_t* defer_statement(FILE* fl){
 	//Are we already inside of a defer statement? If we are,
 	//we'll want to fail out here
-	if(in_defer == TRUE){
-		return print_and_return_error("Nested defer statements are forbidden", parser_line_num);
+	if(nesting_level != FN){
+		return print_and_return_error("Defer statements must be place at the top level lexical scope in a function", parser_line_num);
 	}
 
-	//Otherwise we're fine, so set the flag that we're in a defer
+	//Set this to be clear that we're in a defer
+	nesting_level = DEFER;
+
+	//Set this flag to be true
 	in_defer = TRUE;
 
 	//For searching
@@ -6807,6 +6846,9 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	add_child_node(deferred_stmts_node, compound_stmt_node);
 
 	//Once we're out of here, we need to unset the flag for the future processing
+	nesting_level = FN;
+
+	//Unset this flag too
 	in_defer = FALSE;
 
 	//And give back nothing, we're all set
@@ -8179,7 +8221,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//If it's a semicolon, we're done
 	if(lookahead.tok == SEMICOLON){
 		//The main function may not be defined implicitly
-		if(is_main_function == 1){
+		if(is_main_function == TRUE){
 			print_parse_message(PARSE_ERROR, "The main function may not be defined implicitly. Implicit definition here:", parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
@@ -8187,7 +8229,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//If we're for some reason defining a previous implicit function
-		if(defining_prev_implicit == 1){
+		if(defining_prev_implicit == TRUE){
 			sprintf(info, "Function \"%s\" was already defined implicitly here:", function_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
@@ -8203,7 +8245,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		finalize_variable_scope(variable_symtab);
 		
 		//This function was not defined
-		function_record->defined = 0;
+		function_record->defined = FALSE;
 		
 		//Return NULL here
 		return NULL;
@@ -8215,6 +8257,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Some housekeeping, if there were previously deferred statements, we want them out
 		deferred_stmts_node = NULL;
 
+		//Set the root level indicator to function
+		nesting_level = FN;
+
 		//We are finally required to see a valid compound statement
 		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
@@ -8224,7 +8269,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 	
 		//This function was defined
-		function_record->defined = 1;
+		function_record->defined = TRUE;
 
 		//Where was this function defined
 		function_record->line_number = current_line;
@@ -8264,6 +8309,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Store the line number
 		function_node->line_number = current_line;
+
+		//Reset the nesting level
+		nesting_level = BLANK;
 
 		//All good so we can get out
 		return function_node;
