@@ -17,6 +17,145 @@ static generic_ast_node_t* current_ast_node = NULL;
 
 
 /**
+ * This helper function negates a constant node's value
+ */
+void negate_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = const_node->int_val * -1;
+			break;
+		case FLOAT_CONST:
+			const_node->float_val = const_node->float_val * -1;
+			break;
+		case CHAR_CONST:
+			const_node->char_val = const_node->char_val * -1;
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = const_node->long_val * -1;
+		//This should never happen
+		default:
+			return;
+	}
+}
+
+
+/**
+ * This helper function decrements a constant node's value
+ */
+void decrement_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = const_node->int_val - 1;
+			break;
+		case FLOAT_CONST:
+			const_node->float_val = const_node->float_val - 1;
+			break;
+		case CHAR_CONST:
+			const_node->char_val = const_node->char_val - 1;
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = const_node->long_val - 1;
+		//This should never happen
+		default:
+			return;
+	}
+}
+
+
+/**
+ * This helper function increments a constant node's value
+ */
+void increment_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = const_node->int_val + 1;
+			break;
+		case FLOAT_CONST:
+			const_node->float_val = const_node->float_val + 1;
+			break;
+		case CHAR_CONST:
+			const_node->char_val = const_node->char_val + 1;
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = const_node->long_val + 1;
+		//This should never happen
+		default:
+			return;
+	}
+}
+
+
+/**
+ * This helper function will logically not a consant node's value
+ */
+void logical_not_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = !(const_node->int_val);
+			break;
+		case CHAR_CONST:
+			const_node->char_val = !(const_node->char_val);
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = !(const_node->long_val);
+		//This should never happen
+		default:
+			return;
+	}
+}
+
+
+/**
+ * This helper function will logically not a consant node's value
+ */
+void bitwise_not_constant_value(generic_ast_node_t* constant_node){
+	//Grab the constant node out
+	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
+
+	//Switch based on the value here
+	switch(const_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+		case INT_CONST:
+			const_node->int_val = ~(const_node->int_val);
+			break;
+		case CHAR_CONST:
+			const_node->char_val = ~(const_node->char_val);
+		case LONG_CONST_FORCE_U:
+		case LONG_CONST:
+			const_node->long_val = ~(const_node->long_val);
+		//This should never happen
+		default:
+			return;
+	}
+}
+
+
+/**
  * A utility function for duplicating nodes
  */
 generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
