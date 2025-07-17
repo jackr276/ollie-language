@@ -107,7 +107,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* basic_b
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
-static statement_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional);
+static statement_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
@@ -3351,7 +3351,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static statement_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t check_for_coniditional){
+static statement_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
@@ -3391,7 +3391,6 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			add_statement(basic_block, stmt);
 
 			//Now pack the return value here
-			result_package.operator = BLANK;
 			result_package.assignee = left_hand_var;
 			
 			//Return what we had
@@ -3411,23 +3410,18 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			result_package.assignee = emit_ternary_expression(basic_block, expr_node, is_branch_ending).assignee;
 			return result_package;
 
+		//Default is a unary expression
 		default:
 			/**
-			* This is a very special check where we look for any if(x) kind of statements that just require a
-			* left hand temp assignment
-			* TODO THIS MAY NO LONGER WORK
+			 * The "is_condition" variable will be set to true when this expresssion is part of the condition in
+			 * an if/for/while/do-while/switch etc. If this is true, then we will be passing in true to the
+			 * "is_temp_needed" variable which will force a temp assignment to happen at a root level rule. This
+			 * ensures that we have a conditional to read even if a user puts something like if(x)
 			*/
-			if(check_for_coniditional == TRUE && expr_node->first_child != NULL && expr_node->first_child->CLASS == AST_NODE_CLASS_IDENTIFIER){
-				//If this is the case, then we need to just emit the temporary value and be done with it
-				result_package.assignee =  emit_identifier(basic_block, expr_node->first_child, TRUE, TRUE);
-				//Signedness is irrelevant here because any jumps would just be "je/jne"
-				return result_package;
-			} else {
-				//Let this rule handle it
-				result_package.assignee = emit_unary_expression(basic_block, expr_node, FALSE, is_branch_ending);
-				//Again signedness is irrelevant here because any jumps would just be "je/jne"
-				return result_package;
-			}
+			//Let this rule handle it
+			result_package.assignee = emit_unary_expression(basic_block, expr_node, is_condition, is_branch_ending);
+			//Again signedness is irrelevant here because any jumps would just be "je/jne"
+			return result_package;
 	}
 }
 
@@ -4003,7 +3997,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  */
 static statement_result_package_t visit_for_statement(values_package_t* values){
 	//Initialize the return package
-	statement_result_package_t result_package;
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our entry block. The entry block also only executes once
 	basic_block_t* for_stmt_entry_block = basic_block_alloc(1);
@@ -4015,9 +4009,6 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	//Once we get here, we already know what the start and exit are for this statement
 	result_package.starting_block = for_stmt_entry_block;
 	result_package.final_block = for_stmt_exit_block;
-	//This has no operator and no assignee
-	result_package.assignee = NULL;
-	result_package.operator = BLANK;
 	
 	//Grab the reference to the for statement node
 	generic_ast_node_t* for_stmt_node = values->initial_node;
@@ -4034,7 +4025,7 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 			//We could have a let statement
 			case AST_NODE_CLASS_LET_STMT:
 				//TODO must be changed for ternary
-				merge_blocks(for_stmt_entry_block, visit_let_statement(ast_cursor->first_child, TRUE).starting_block);
+				merge_blocks(for_stmt_entry_block, visit_let_statement(ast_cursor->first_child, FALSE).starting_block);
 				break;
 			default:
 				//Add it's child in as a statement to the entry block
@@ -4057,19 +4048,7 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	ast_cursor = ast_cursor->next_sibling;
 
 	//The condition block values package
-	statement_result_package_t condition_block_vals;
-	//By default, make this blank
-	condition_block_vals.operator = BLANK;
-
-	//If the second one is not blank
-	if(ast_cursor->first_child != NULL){
-		//This is always the first part of the repeating block
-		condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE, TRUE);
-	//It is impossible for the second one to be blank
-	} else {
-		print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Should not have gotten here if blank", for_stmt_node->line_number);
-		exit(0);
-	}
+	statement_result_package_t condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE, TRUE);
 
 	//We'll use our inverse jumping("jump out") strategy here. We'll need this jump for later
 	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE, is_type_signed(condition_block_vals.assignee->type));
@@ -4193,12 +4172,6 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
 
 	//Grab a cursor for walking the subtree
 	generic_ast_node_t* ast_cursor = do_while_stmt_node->first_child;
-
-	//If this is not a compound statement, something here is very wrong
-	if(ast_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		print_cfg_message(PARSE_ERROR, "Expected compound statement in do-while, but did not find one", do_while_stmt_node->line_number);
-		exit(0);
-	}
 
 	//Create a copy of our values here
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
