@@ -2847,6 +2847,12 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 
 					//We will perform the deref here, as we can't do it in the lea 
 					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+
+					//If the current var isn't temp, it's been used
+					if(current_var->is_temporary == FALSE){
+						add_used_variable(basic_block, current_var);
+					}
+
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
@@ -2933,6 +2939,12 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 
 					//We will perform the deref here, as we can't do it in the lea 
 					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+
+					//If the current var isn't temp, it's been used
+					if(current_var->is_temporary == FALSE){
+						add_used_variable(basic_block, current_var);
+					}
+
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
