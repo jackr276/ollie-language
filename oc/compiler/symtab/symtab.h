@@ -384,7 +384,7 @@ void add_all_basic_types(type_symtab_t* symtab);
 /**
  * Initialize the global stack pointer variable for us to use
  */
-symtab_variable_record_t* initialize_stack_pointer(variable_symtab_t* symtab, type_symtab_t* types);
+symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types);
 
 /**
  * Lookup a function name in the symtab

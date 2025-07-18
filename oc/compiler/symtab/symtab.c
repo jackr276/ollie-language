@@ -519,7 +519,7 @@ void add_all_basic_types(type_symtab_t* symtab){
 /** 
  * Create the stack pointer(rsp) variable for us to use throughout
  */
-symtab_variable_record_t* initialize_stack_pointer(variable_symtab_t* symtab, type_symtab_t* types){
+symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	symtab_variable_record_t* stack_pointer = create_variable_record("stack_pointer", STORAGE_CLASS_NORMAL);
 	//Set this type as a label(address)
 	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;

@@ -3278,15 +3278,15 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
 	if(left_hand_temp.assignee->is_temporary == FALSE){
 		//emit the temp assignment
-		instruction_t* temp_assnment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_hand_temp.assignee);
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_hand_temp.assignee);
 		//Add it into here
-		add_statement(basic_block, temp_assnment);
+		add_statement(basic_block, temp_assignment);
 		
 		//We can mark that op1 was used
 		add_used_variable(basic_block, left_hand_temp.assignee);
 		
 		//Grab the assignee out
-		op1 = temp_assnment->assignee;
+		op1 = temp_assignment->assignee;
 
 	//Otherwise the left hand temp assignee is just fine for us
 	} else {
@@ -3394,6 +3394,11 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			//If this is not a temp var, then we can flag it as being assigned
 			if(left_hand_var->is_temporary == FALSE){
 				add_assigned_variable(basic_block, left_hand_var);
+			}
+
+			//If the package's assignee is not temp, it counts as used
+			if(package.assignee->is_temporary == FALSE){
+				add_used_variable(basic_block, package.assignee);
 			}
 			
 			//Mark this with what was passed through
@@ -5772,7 +5777,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	current_function = NULL;
 
 	//Create the stack pointer
-	stack_pointer = initialize_stack_pointer(results->variable_symtab, results->type_symtab);
+	stack_pointer = initialize_stack_pointer(results->type_symtab);
 	//Initialize the variable to
 	stack_pointer_var = emit_var(stack_pointer, FALSE);
 	//Mark it
