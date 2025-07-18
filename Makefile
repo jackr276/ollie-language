@@ -214,6 +214,12 @@ dynamic_array_test.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 dynamic_array_testd.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATh)/dynamic_array_test.c -o $(OUT_LOCAL)/dynamic_array_testd.o
 
+dynamic_string_test.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_LOCAL)/dynamic_string_test.o
+
+dynamic_string_testd.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
+	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_LOCAL)/dynamic_string_test.o
+
 dynamic_array_test: dynamic_array_test.o dynamic_array.o
 	$(CC) -o $(OUT_LOCAL)/dynamic_array_test $(OUT_LOCAL)/dynamic_array_test.o $(OUT_LOCAL)/dynamic_array.o
 
@@ -421,6 +427,9 @@ symtab_test-CI.o: $(TEST_SUITE_PATH)/symtab_test.c
 
 dynamic_array_test-CI.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_array_test.c -o $(OUT_CI)/dynamic_array_test.o
+
+dynamic_string_test-CI.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_CI)/dynamic_string_test.o
 
 dynamic_array_test-CI: dynamic_array_test-CI.o dynamic_array-CI.o
 	$(CC) -o $(OUT_CI)/dynamic_array_test $(OUT_CI)/dynamic_array_test.o $(OUT_CI)/dynamic_array.o
