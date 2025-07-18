@@ -17,6 +17,7 @@ OPTIMIZER_PATH = ./oc/compiler/optimizer
 PREPROC_PATH = ./oc/compiler/preprocessor
 DEPENDENCY_TREE_PATH = ./oc/compiler/dependency_tree
 DYNAMIC_ARRAY_PATH = ./oc/compiler/dynamic_array
+DYNAMIC_STRING_PATH = ./oc/compiler/dynamic_string
 INSTRUCTION_PATH = ./oc/compiler/instruction
 INSTRUCTION_SELECTOR_PATH = ./oc/compiler/instruction_selector
 INSTRUCTION_SCHEDULER_PATH = ./oc/compiler/instruction_scheduler
@@ -86,6 +87,12 @@ lightstack.o: $(STACK_PATH)/lightstack.c
 
 lightstackd.o: $(STACK_PATH)/lightstack.c
 	$(CC) $(CFLAGS) -g $(STACK_PATH)/lightstack.c -o $(OUT_LOCAL)/lightstackd.o
+
+dynamic_string.o: $(DYNAMIC_STRING_PATH)/dynamic_string.c
+	$(CC) $(CFLAGS) $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_LOCAL)/dynamic_string.o
+
+dynamic_stringd.o: $(DYNAMIC_STRING_PATH)/dynamic_string.c
+	$(CC) $(CFLAGS) -g $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_LOCAL)/dynamic_string.o
 
 ast.o: $(AST_PATH)/ast.c
 	$(CC) $(CFLAGS) $(AST_PATH)/ast.c -o $(OUT_LOCAL)/ast.o
@@ -342,6 +349,9 @@ heap_queue-CI.o: $(QUEUE_PATH)/heap_queue.c
 
 dynamic_array-CI.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
 	$(CC) $(CFLAGS) $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT_CI)/dynamic_array.o
+
+dynamic_string-CI.o: $(DYNAMIC_STRING_PATH)/dynamic_string.c
+	$(CC) $(CFLAGS) $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_CI)/dynamic_string.o
 
 priority_queue-CI.o: $(QUEUE_PATH)/priority_queue.c
 	$(CC) $(CFLAGS) $(QUEUE_PATH)/priority_queue.c -o $(OUT_CI)/priority_queue.o
