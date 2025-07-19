@@ -5146,14 +5146,6 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		return print_and_return_error("Unmatched parenthesis detected", current_line);
 	}
 
-	//If we make it to this point, we need to see the THEN keyword
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Fail out if bad
-	if(lookahead.tok != THEN){
-		return print_and_return_error("then keyword expected following expression in if statement", current_line);
-	}
-
 	//If we make it here, we can add this in as the first child to the root node
 	add_child_node(if_stmt, expression_node);
 
@@ -5220,14 +5212,6 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		//Now let's check the stack, we need to have matching ones here
 		if(pop_token(grouping_stack).tok != L_PAREN){
 			return print_and_return_error("Unmatched parenthesis detected", current_line);
-		}
-
-		//If we make it to this point, we need to see the THEN keyword
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Fail out if bad
-		if(lookahead.tok != THEN){
-			return print_and_return_error("then keyword expected following expression in else if statement", current_line);
 		}
 
 		//If we make it here, we should be safe to add the conditional as an expression
@@ -5643,14 +5627,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//By default we have not found one of these
 	u_int8_t found_default_clause = FALSE;
 
-	//We've already seen the switch keyword, so now we have to see the on keyword
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Fail case
-	if(lookahead.tok != ON){
-		return print_and_return_error("on keyword expected after switch in switch statement", current_line);
-	}
-
 	//Once we get here, we can allocate the root level node
 	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_CLASS_SWITCH_STMT, SIDE_TYPE_LEFT);
 
@@ -5838,7 +5814,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
  *
  * NOTE: By the time that we make it here, we assume that we have already seen the while keyword
  *
- * BNF Rule: <while-statement> ::= while( <logical-or-expression> ) do <compound-statement> 
+ * BNF Rule: <while-statement> ::= while( <logical-or-expression> ) <compound-statement> 
  */
 static generic_ast_node_t* while_statement(FILE* fl){
 	//The lookahead token
@@ -5888,14 +5864,6 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	//We also need to check for matching
 	if(pop_token(grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-	}
-
-	//Now that we've made it all the way here, we need to see the do keyword
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Instant fail if not
-	if(lookahead.tok != DO){
-		return print_and_return_error("Do keyword expected before compound expression in while statement", parser_line_num);
 	}
 
 	//Save this for later
@@ -6032,7 +6000,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; <logical-or-expression> ; {<assignment-expression>}? ) do <compound-statement>
+ * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; <logical-or-expression> ; {<assignment-expression>}? ) <compound-statement>
  */
 static generic_ast_node_t* for_statement(FILE* fl){
 	//Freeze the current line number
@@ -6207,14 +6175,6 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 	
-	//Now we need to see the do keyword
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If it isn't a do keyword, we fail here
-	if(lookahead.tok != DO){
-		return print_and_return_error("Do keyword expected after for loop declaration", parser_line_num);
-	}
-
 	//Save this for later
 	Token old_nesting_level = nesting_level;
 

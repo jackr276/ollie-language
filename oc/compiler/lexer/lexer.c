@@ -21,7 +21,7 @@
 #include "../stack/lexstack.h"
 
 //Total number of keywords
-#define KEYWORD_COUNT 50
+#define KEYWORD_COUNT 48
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -43,17 +43,17 @@ u_int16_t line_num = 0;
 static lex_stack_t* pushed_back_tokens = NULL;
 
 //Token array, we will index using their enum values
-const Token tok_array[] = {IF, THEN, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+const Token tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
 					STATIC, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
-					U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM, ON,
+					U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE};
 
 //Direct one to one mapping
-const char* keyword_array[] = {"if", "then", "else", "do", "while", "for", "fn", "ret", "jump",
+const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
 						 "require", "#replace", "static", "external", "u8", "i8", "u16",
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
-						  "char", "define", "enum", "on", "register", "constant",
+						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
 						  "with", "lib", "idle"};

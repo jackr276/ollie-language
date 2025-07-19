@@ -34,7 +34,6 @@ typedef enum {
 	ASM,
 	ASM_STATEMENT,
 	IF,
-	THEN,
 	REPLACE,
 	//For expansion of func params
 	DOTDOTDOT,
@@ -90,7 +89,6 @@ typedef enum {
 	STAR,
 	F_SLASH,
 	MOD,
-	ON,
 	L_NOT,
 	B_NOT,
 	IDENT,
