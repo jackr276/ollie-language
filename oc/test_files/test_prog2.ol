@@ -7,11 +7,11 @@ fn test_func() -> i32 {
 	i++;
 	};
 
-	while(i >= 232) do{
-		if(i == 2) then{ 
+	while(i >= 232) {
+		if(i == 2) { 
 			i := i + 2;
 			ret i;
-		} else if(i == 3) then {
+		} else if(i == 3)  {
 			i := 32;
 			//ret i;
 		} else {
@@ -24,7 +24,7 @@ fn test_func() -> i32 {
 	i++;
 	}; 
 
-	while(i >= 0) do{
+	while(i >= 0) {
 		i--;
 
 		//break when(i < 0);
@@ -39,9 +39,9 @@ fn test_func() -> i32 {
 	} while (i < 232);
 
 	let sample:u32 := 2232;
-	for(let i:u32 := 0; i < 2323; i++) do {
+	for(let i:u32 := 0; i < 2323; i++) {
 		@test_func();
-		if(i == -1) then{
+		if(i == -1) {
 			ret -1;
 		}
 
@@ -59,13 +59,13 @@ fn main(argc:u32, argv:char**)->i32{
 	let j:u32 := 0;
 	let sadf:u32 := 0;
 
-	if(i == 0) then {
-		if(j == a) then{
+	if(i == 0)  {
+		if(j == a) {
 			a := 3;	
-		} else if (j > a) then {
+		} else if (j > a)  {
 			ret j;
 		}
-	} else if( i == 1) then{
+	} else if( i == 1) {
 		let i_copy:u32 := i;
 	} else {
 		@test_func();

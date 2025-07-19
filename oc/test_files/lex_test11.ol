@@ -14,7 +14,7 @@ fn main(argc:i32, argv:char**) -> i32 {
 	let mut argc:u32 := 14;
 	//let mut example:u32 := 2;
 
-	while(argc > 0) do {
+	while(argc > 0) {
 		argc--;
 	}
 

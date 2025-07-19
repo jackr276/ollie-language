@@ -12,7 +12,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	//Assign B a start
 	let mut b:i32 := 33;
 
-	for(let a:u32 := 0; b != 0 || a < 33; a++) do{
+	for(let a:u32 := 0; b != 0 || a < 33; a++) {
 		b--;
 		x := x - 5;
 	}

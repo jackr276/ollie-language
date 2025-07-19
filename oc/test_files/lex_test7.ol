@@ -12,10 +12,10 @@ define construct con{
 
 fn main(argc:u32, argv:char**) -> i32
 {
-	if(argv) then {
+	if(argv) {
 		let i:str := "hi";
-	} else if(argc >= 2) then {
-		if(argc == 3) then {
+	} else if(argc >= 2) {
+		if(argc == 3) {
 			let i:str := "hi";
 		}
 	}

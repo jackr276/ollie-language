@@ -68,7 +68,7 @@ fn main() -> i32{
 		@tester();
 	};
 	
-	if(!x) then {
+	if(!x) {
 		++x;
 	} else {
 		--x;
@@ -80,7 +80,7 @@ fn main() -> i32{
 	let f:f32 := 23.2;
 
 	//Empty case statement testing
-	switch on(x){
+	switch(x){
 		case 3 ->
 			{
 			x := x + 3;

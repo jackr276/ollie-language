@@ -18,7 +18,7 @@ fn main() -> i32{
 
 	let b:i32 := arr[3][2];
 
-	while(a < 32) do{
+	while(a < 32){
 		a--;
 		break when(@tester(a) == 32);
 	}

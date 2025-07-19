@@ -13,7 +13,7 @@ fn main(arg:i32, argv:char**) -> i32 {
 
 	let mut i:i32 := 3;
 	
-	if(arg == 2) then {
+	if(arg == 2) {
 		arr[x][1] := 3;
 	} else {
 		i := arr[0][0];

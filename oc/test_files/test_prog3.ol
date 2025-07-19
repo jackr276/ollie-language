@@ -20,9 +20,9 @@ fn:static test(argv:char**) -> i32{
 	a := (a+b) & (b << 2) * (c+d);
 
 
-	if(a >= 2) then{
+	if(a >= 2) {
 		a := a + 3;
-	} else if (a == 2) then{
+	} else if (a == 2) {
 		a := a + 2;
 	} else {
 		a := a + 1;
@@ -30,8 +30,8 @@ fn:static test(argv:char**) -> i32{
 
 
 	//do{
-	//while(d >= 32) do{
-	for(let mut i:u32 := 0; i < 323; i++) do{
+	//while(d >= 32) {
+	for(let mut i:u32 := 0; i < 323; i++) {
 		declare a:u32;
 		declare b:u32;
 		declare c:u32;

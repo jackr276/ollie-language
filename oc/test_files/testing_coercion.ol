@@ -8,7 +8,7 @@ fn main(argc:u32, argv:char**) -> i32 {
 	let mut a:u64 := x;
 	let mut y:i8 := 'a';
 
-	if( x > y ) then {
+	if( x > y ) {
 		ret y;
 	}
 

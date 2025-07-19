@@ -7,16 +7,16 @@ fn main() -> i32{
 
 	x := 3222;
 
-	if(x <= 32) then{
-		if(x == 70) then{
+	if(x <= 32) {
+		if(x == 70) {
 			x := x + -1;
 		}
-	} else if(x == 77) then	{
+	} else if(x == 77) 	{
 		ret x - 4;
-	} else if(x == 3232323) then{
+	} else if(x == 3232323) {
 		ret x + 4555;
 	} else {
-		//if(x > 32) then {
+		//if(x > 32) {
 			x := x - 22222222;
 		//}
 	}

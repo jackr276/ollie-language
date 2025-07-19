@@ -18,10 +18,10 @@ fn:static main(argc:i32, argv:char**) -> i32 {
 	let l:u32 := 0;
 	declare float_arr:f32[10];
 
-	if(i == 0) then {
+	if(i == 0) {
 		i := 2;
 	} else {
-		if(i == 3) then {
+		if(i == 3) {
 			i := 3;
 		}
 	}

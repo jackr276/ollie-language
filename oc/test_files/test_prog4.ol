@@ -28,14 +28,14 @@ fn my_fn(mut argc:u32, mut argv:char**)->i32{
 	--argv;
 	
 	
-	while(a <= 32) do {
+	while(a <= 32) {
 		idle;
 		idle;
-		if(i <= 0) then {
+		if(i <= 0)  {
 			a := a + 1;
-		} else if( i == 1) then{
+		} else if( i == 1) {
 			a := 23232;
-			if(a == 3232) then{
+			if(a == 3232) {
 				a := a + 1;
 			} else {
 				a := a + 2;

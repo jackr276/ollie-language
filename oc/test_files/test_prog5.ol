@@ -75,7 +75,7 @@ fn main() -> i32{
 		x + 3;	
 	};
 	
-	if(!x) then {
+	if(!x)  {
 
 		$label1:
 		++x;

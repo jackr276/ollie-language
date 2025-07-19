@@ -7,7 +7,7 @@
 fn main(void) -> i32{
 	let mut x:i32 := 32;
 
-	switch on(x){
+	switch(x){
 		case 2 -> {
 			x := 32;
 		}
@@ -28,10 +28,7 @@ fn main(void) -> i32{
 		}
 	}
 
-	idle;
-	
-	
-	switch on(x){
+	switch(x){
 		default -> {
 			let i:i32 := 2;
 		}

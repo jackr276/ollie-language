@@ -21,9 +21,9 @@ fn main(arg:i32, argv:char**) -> i32{
 	};
 
 	
-	if(arg < x && x != 1) then{
+	if(arg < x && x != 1){
 		x := x - 3;
-	} else if(x < 2 && (x != 1 || x != 2)) then {
+	} else if(x < 2 && (x != 1 || x != 2)) {
 		x := x * 2;
 	} else {
 	 	x := x + 3;

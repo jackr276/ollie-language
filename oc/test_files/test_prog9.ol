@@ -10,7 +10,7 @@ fn main() -> i32{
 	
 	let mut a:i32 := 23;
 	
-	if(a == 32) then{
+	if(a == 32) {
 		let k:i32 := 232332222;
 	} else {
 		let p:i32 := -2322;

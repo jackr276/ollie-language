@@ -12,7 +12,7 @@ fn main() -> i32{
 
 	x := 3222;
 
-	if(x <= 32) then{
+	if(x <= 32) {
 		x := x + 22;
 	} else {
 		x := x - 3;

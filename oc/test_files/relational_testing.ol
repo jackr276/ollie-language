@@ -9,7 +9,7 @@ fn main() -> i32{
 
 	let z:i32 := x >= y;
 
-	if(x <= y) then {
+	if(x <= y) {
 		ret 2;
 	}
 

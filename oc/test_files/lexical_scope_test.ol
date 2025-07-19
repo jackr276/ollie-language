@@ -7,7 +7,7 @@ fn main() -> i32 {
 	let mut y:i32 := 5;
 	let mut z:i32 := 3;
 
-	if( x == 0) then {
+	if( x == 0) {
 		let mut x:i32 := 35;
 		let mut y:i32 := 55;
 

@@ -11,7 +11,7 @@ let glog_y:i32 := -232;
 	let mut l:i32 := 33;
 	let mut j:i32 := 3232;
 
-	if(l == 32) then {
+	if(l == 32) {
 		l := l + 3222;
 		j := 323;
 		let mut iii:i32 := -2;

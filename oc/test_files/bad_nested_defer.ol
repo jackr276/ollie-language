@@ -8,7 +8,7 @@ fn main() -> i32 {
 	let mut y:i32 := 0;
 	let mut z:i32 := 0;
 
-	while ( x <= 3) do {
+	while ( x <= 3) {
 		x++;
 		defer {
 			y--;
@@ -26,7 +26,7 @@ fn main() -> i32 {
 	} while ( x < 3);
 
 	//For loop
-	for(let mut i:i32 := 0; i < 89; i++) do{
+	for(let mut i:i32 := 0; i < 89; i++) {
 		x++;
 
 		defer {
@@ -35,8 +35,8 @@ fn main() -> i32 {
 	}
 
 	//Double nest
-	if (x == 0) then {
-		if ( y == 0) then {
+	if (x == 0)  {
+		if ( y == 0)  {
 			defer {
 				x--;
 			};

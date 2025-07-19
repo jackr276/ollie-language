@@ -30,7 +30,7 @@ fn not_main(arg:i32, argv:char**) -> i64 {
 	struct_ptr=>lch := 'b';
 	struct_ptr=>y := 5;
 
-	if(arg == 0) then {
+	if(arg == 0) {
 		struct_ptr=>x := 2;
 		struct_ptr=>y := 1;
 		struct_ptr=>lch := 'c';

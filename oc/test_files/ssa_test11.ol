@@ -6,7 +6,7 @@ fn main() -> i32{
 	let mut x:i32 := 33;
 	let mut y:i32 := 3232;
 
-	while(x <= 32) do{
+	while(x <= 32){
 		x := x * 3 + x;
 	}
 

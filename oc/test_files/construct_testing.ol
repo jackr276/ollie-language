@@ -18,7 +18,7 @@ fn not_main(arg:i32, argv:char**) -> i64 {
 	structure:lch := 'b';
 	structure:y := 5;
 
-	if(arg == 0) then {
+	if(arg == 0) {
 		structure:x := 2;
 		structure:y := 1;
 		structure:lch := 'c';

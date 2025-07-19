@@ -6,7 +6,7 @@ fn main(argc:u32, argv:char**) -> i32 {
 
 	let mut x:u64 := 1;
 	
-	switch on(x){
+	switch(x){
 		case 1 -> {
 			declare i : u32;
 			i := 32;

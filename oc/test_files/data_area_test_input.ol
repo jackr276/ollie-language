@@ -23,7 +23,7 @@ fn main(mut arg:i32, argv:char**) -> i32{
 	structure:lch := 'b';
 	structure:y := 5;
 
-	if(arg == 0) then {
+	if(arg == 0) {
 		structure:x := 2;
 		structure:y := 1;
 		structure:lch := 'c';
@@ -52,7 +52,7 @@ fn main(mut arg:i32, argv:char**) -> i32{
 	//j := j + 1;
 	arr[i][2] := 333;
 	
-	if(arg == 2) then {
+	if(arg == 2) {
 		arr[x][i] := arr[2][x];
 	} else {
 		i := arr[0][0];

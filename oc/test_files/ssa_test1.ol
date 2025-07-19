@@ -7,7 +7,7 @@
 fn tester() -> i32 {
 	let mut x:u32 := 232;
 
-	if(x == 327) then {
+	if(x == 327) {
 		ret x;
 	}
 
@@ -24,10 +24,10 @@ fn main() -> i32{
 	let mut z:i32 := 322;
 
 	//Statically known use - the goal of SSA
-	if(x > 4) then{
+	if(x > 4) {
 		y := x - 2;
 		ret y;
-	} else if (x == 4) then {
+	} else if (x == 4) {
 		y := x + 9;
 	} else {
 		y := x + 12;
@@ -38,13 +38,13 @@ fn main() -> i32{
 
 	
 	/*
-	for(let i:u32 := 0; i <= 322; ++i) do{
+	for(let i:u32 := 0; i <= 322; ++i){
 		//declare w:i32;
 		//w := w + 3;
 	}
 	*/
 
-	while(w != x - y) do {
+	while(w != x - y) {
 		w++;
 	}
 

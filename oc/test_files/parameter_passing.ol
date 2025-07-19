@@ -22,10 +22,10 @@ fn parameter_pass3(a:i32) -> i32 {
 }
 
 fn pcount_r(mut x:u64) -> u64 {
-	if( x == 0) then {
+	if( x == 0) {
 		ret (x & 1) + @pcount_r(x >> 1);
-	} else if (x == 1) then{
-		if(x > 3) then {
+	} else if (x == 1) {
+		if(x > 3) {
 			ret 1;
 		}
 
@@ -57,7 +57,7 @@ fn main() -> i32{
 	let mut c:i32 := y % k + cc + ee + ff;
 
 	//Testing complexities
-	if(k == 0) then {
+	if(k == 0) {
 		ret @parameter_pass2(k+ 5, c * 3, z - 22, 'a', b + 'd', ch) + @parameter_pass(x, y, aa + bb, 'a', b, ch);
 	} else {
 		ret x + y - aa * bb;

@@ -71,7 +71,7 @@ fn main() -> i32{
 		x++;	
 	};
 	
-	if(!x) then {
+	if(!x) {
 		++x;
 	} else {
 		--x;

@@ -7,20 +7,20 @@ define construct my_struct {
 
 
 fn my_func(mut args:u32) -> u32{
-	if(args == 2) then{
+	if(args == 2) {
 		ret 3;
 	} else {
 		args++;
 	}
 
 	
-	if(args == 0) then {
+	if(args == 0)  {
 		ret args;
-	} else if(args > 0) then {
+	} else if(args > 0)  {
 		args++;
 	} 
 
-	for(let mut i:u32 := 0; i < 232; i++) do{
+	for(let mut i:u32 := 0; i < 232; i++){
 		i--;
 		let j:i32 := 32;
 		continue when (i == 32);
@@ -50,7 +50,7 @@ fn main(argc:i32, argv:char**) -> i32{
 
 	let mut idx:u32 := 0;
 
-	while(idx < 15) do{
+	while(idx < 15){
 		let bab:u32 := @my_func(idx);
 		idx++;
 	}
@@ -61,7 +61,7 @@ fn main(argc:i32, argv:char**) -> i32{
 		idx--;
 		@test_func(idx);
 
-		if(idx == 12) then {
+		if(idx == 12)  {
 			ret idx;
 			idx := 23;
 		}
@@ -69,7 +69,7 @@ fn main(argc:i32, argv:char**) -> i32{
 	} while (idx > 0);
 
 	//Example for loop
-	for(let mut i:u32 := 0; i <= 234; i := i + 2) do{
+	for(let mut i:u32 := 0; i <= 234; i := i + 2){
 		@test_func(i);
 	}
 

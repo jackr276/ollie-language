@@ -8,7 +8,7 @@ fn main() -> i32{
 		x++;
 	};
 
-	if( x == 3222) then{
+	if( x == 3222){
 		ret x;
 	}
 	

@@ -20,14 +20,14 @@ fn main() -> i32{
 	}; 
 
 	//100% useless
-	if(abc == 3) then {
+	if(abc == 3)  {
 		abc := 2;
 	} else {
 		abc := 3;
 		x := 3;
 	}
 
-	if(x == 32) then {
+	if(x == 32)  {
 		x := x + 3222;
 		y := 323;
 	} else {
