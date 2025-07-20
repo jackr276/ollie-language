@@ -1268,21 +1268,32 @@ generic_type_t* create_basic_type(char* type_name, Token basic_type){
 	type->basic_type->basic_type = basic_type;
 
 	//Now we can immediately determine the size based on what the actual type is
-	if(basic_type == CHAR || basic_type == S_INT8 || basic_type == U_INT8){
-		//1 BYTE
-		type->type_size = 1;
-	} else if(basic_type == S_INT16 || basic_type == U_INT16){
-		//2 BYTES
-		type->type_size = 2;
-	} else if(basic_type == U_INT32 || basic_type == S_INT32 || basic_type == FLOAT32){
-		//4 BYTES
-		type->type_size = 4;
-	} else if(basic_type == VOID){
-		//0 BYTES - special case
-		type->type_size = 0;
-	} else {
-		//Otheriwse is 8 BYTES
-		type->type_size = 8;
+	switch(basic_type){
+		case CHAR:
+		case S_INT8:
+		case U_INT8:
+			//1 BYTE
+			type->type_size = 1;
+			break;
+		case S_INT16:
+		case U_INT16:
+			//2 BYTES
+			type->type_size = 2;
+			break;
+		case S_INT32:
+		case U_INT32:
+		case FLOAT32:
+			//4 BYTES
+			type->type_size = 4;
+			break;
+		case VOID:
+			//Special case -- 0 bytes
+			type->type_size = 0;
+			break;
+		default:
+			//Otheriwse is 8 BYTES
+			type->type_size = 8;
+			break;
 	}
 
 	//Give back the pointer, it will need to be freed eventually

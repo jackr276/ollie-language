@@ -4313,158 +4313,168 @@ static symtab_type_record_t* type_name(FILE* fl){
 	lexitem_t lookahead;
 	//A temporary holder for the type name
 	char type_name[MAX_TYPE_NAME_LENGTH];
+	//Hold the record we get
+	symtab_type_record_t* record;
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//These are all of our basic types
-	if(lookahead.tok == VOID || lookahead.tok == U_INT8 || lookahead.tok == S_INT8 || lookahead.tok == U_INT16
-	   || lookahead.tok == S_INT16 || lookahead.tok == U_INT32 || lookahead.tok == S_INT32 || lookahead.tok == U_INT64
-	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == FLOAT64 || lookahead.tok == CHAR){
 
-		//We will now grab this record from the symtable to make our life easier
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
+	switch(lookahead.tok){
+		case VOID:
+		case U_INT8:
+		case S_INT8:
+		case U_INT16:
+		case S_INT16:
+		case U_INT32:
+		case S_INT32:
+		case FLOAT32:
+		case U_INT64:
+		case S_INT64:
+		case FLOAT64:
+		case CHAR:
+			//We will now grab this record from the symtable to make our life easier
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
 
-		//Sanity check, if this is null something is very wrong
-		if(record == NULL){
-			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
-			//Create and give back an error node
-			return NULL;
-		}
+			//Sanity check, if this is null something is very wrong
+			if(record == NULL){
+				print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
+				//Create and give back an error node
+				return NULL;
+			}
 
-		//This one is now all set to send up. We will not store any children if this is the case
-		return record;
-
-	//There's also a chance that we see an enum type
-	} else if(lookahead.tok == ENUM){
-		//We know that this keyword is in the name, so we'll add it in
-		strcpy(type_name, "enum ");
-
-		//It is required that we now see a valid identifier
-		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
-
-		//If we fail, we'll bail out
-		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
-			//It's already an error so just give it back
-			return NULL;
-		}
-
-		//Array bounds checking
-		if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-		strcat(type_name, type_ident->identifier.string);
-
-		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
-
-		//If we didn't find it it's an instant fail
-		if(record == NULL){
-			sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return NULL;
-		}
-
-		//Once we make it here, we should be all set to get out
-		return record;
-
-	//Construct names are pretty much the same as enumerated names
-	} else if(lookahead.tok == CONSTRUCT){
-		//We know that this keyword is in the name, so we'll add it in
-		strcpy(type_name, "construct ");
-
-		//It is required that we now see a valid identifier
-		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
-
-		//If we fail, we'll bail out
-		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid identifier given as construct type name", parser_line_num);
-			//It's already an error so just give it back
-			return NULL;
-		}
-
-		//Array bounds checking
-		if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-		strcat(type_name, type_ident->identifier.string);
-
-		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
-
-		//If we didn't find it it's an instant fail
-		if(record == NULL){
-			sprintf(info, "Construct %s was never defined. Types must be defined before use", type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return NULL;
-		}
-
-		//Once we make it here, we should be all set to get out
-		return record;
-
-	//If this is the case then we have to see some user defined name, which is an ident
-	} else {
-		//Put the token back for the ident rule
-		push_back_token(lookahead);
-
-		//We will let the identifier rule handle it
-		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
-
-		//If we fail, we'll bail out
-		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
-			//Error increase here
-			num_errors++;
-			//It's already an error so just give it back
-			return NULL;
-		}
-
-		//Array bounds checking
-		if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Grab a pointer for it for convenience
-		char* temp_name = type_ident->identifier.string;
-
-		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, temp_name);
-
-		//If we didn't find it it's an instant fail
-		if(record == NULL){
-			sprintf(info, "Type %s was never defined. Types must be defined before use", temp_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return NULL;
-		}
+			//This one is now all set to send up. We will not store any children if this is the case
+			return record;
 		
-		//Dealias the type here
-		generic_type_t* dealiased_type = dealias_type(record->type);
+		//Enumerated type
+		case ENUM:
+			//We know that this keyword is in the name, so we'll add it in
+			strcpy(type_name, "enum ");
 
-		//The true type record
-		symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name.string);
+			//It is required that we now see a valid identifier
+			generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
-		//Once we make it here, we should be all set to get out
-		return true_type;
+			//If we fail, we'll bail out
+			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
+				//It's already an error so just give it back
+				return NULL;
+			}
+
+			//Array bounds checking
+			if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
+			strcat(type_name, type_ident->identifier.string);
+
+			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
+
+			//If we didn't find it it's an instant fail
+			if(record == NULL){
+				sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				//Create and return an error node
+				return NULL;
+			}
+
+			//Once we make it here, we should be all set to get out
+			return record;
+
+		//Construct type
+		case CONSTRUCT:
+			//We know that this keyword is in the name, so we'll add it in
+			strcpy(type_name, "construct ");
+
+			//It is required that we now see a valid identifier
+			type_ident = identifier(fl, SIDE_TYPE_LEFT);
+
+			//If we fail, we'll bail out
+			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as construct type name", parser_line_num);
+				//It's already an error so just give it back
+				return NULL;
+			}
+
+			//Array bounds checking
+			if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
+			strcat(type_name, type_ident->identifier.string);
+
+			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+			record = lookup_type_name_only(type_symtab, type_name);
+
+			//If we didn't find it it's an instant fail
+			if(record == NULL){
+				sprintf(info, "Construct %s was never defined. Types must be defined before use", type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				//Create and return an error node
+				return NULL;
+			}
+
+			//Once we make it here, we should be all set to get out
+			return record;
+
+		//Some user defined name
+		default:
+			//Put the token back for the ident rule
+			push_back_token(lookahead);
+
+			//We will let the identifier rule handle it
+			type_ident = identifier(fl, SIDE_TYPE_LEFT);
+
+			//If we fail, we'll bail out
+			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
+				//Error increase here
+				num_errors++;
+				//It's already an error so just give it back
+				return NULL;
+			}
+
+			//Array bounds checking
+			if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//Grab a pointer for it for convenience
+			char* temp_name = type_ident->identifier.string;
+
+			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+			record = lookup_type_name_only(type_symtab, temp_name);
+
+			//If we didn't find it it's an instant fail
+			if(record == NULL){
+				sprintf(info, "Type %s was never defined. Types must be defined before use", temp_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				//Create and return an error node
+				return NULL;
+			}
+			
+			//Dealias the type here
+			generic_type_t* dealiased_type = dealias_type(record->type);
+
+			//The true type record
+			symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name.string);
+
+			//Once we make it here, we should be all set to get out
+			return true_type;
 	}
 }
 
