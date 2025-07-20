@@ -3611,7 +3611,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node){
 	stmt->CLASS = THREE_ADDR_CODE_ASM_INLINE_STMT;
 
 	//Copy this over
-	stmt->inlined_assembly = asm_inline_node->asm_inline_statements;
+	stmt->inlined_assembly = clone_dynamic_string(&(asm_inline_node->asm_inline_statements));
 
 	//What function are we in
 	stmt->function = current_function;

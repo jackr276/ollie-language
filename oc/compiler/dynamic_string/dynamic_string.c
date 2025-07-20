@@ -49,7 +49,7 @@ dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string){
  * will dynamically resize said string if what is passed
  * through is too big
  */
-dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_string, char* string){
+void dynamic_string_set(dynamic_string_t* dynamic_string, char* string){
 	//Measure the length of this string *with* the null character included
 	u_int16_t paramter_length = strlen(string) + 1;
 
@@ -80,9 +80,6 @@ dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_string, char* str
 
 	//Copy the string over
 	strncpy(dynamic_string->string, string, paramter_length);
-
-	//For convenience we return the string pointer, but the user need not use it
-	return dynamic_string;
 }
 
 
@@ -90,7 +87,7 @@ dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_string, char* str
  * Add a char to a dynamic string - this is really targeted at
  * how our lexer works
  */
-dynamic_string_t* dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch){
+void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch){
 	//Dynamic resize if needed
 	if(dynamic_string->current_length + 1 >= dynamic_string->length){
 		//Double the length
@@ -108,15 +105,13 @@ dynamic_string_t* dynamic_string_add_char_to_back(dynamic_string_t* dynamic_stri
 
 	//Null terminate the string
 	dynamic_string->string[dynamic_string->current_length] = '\0';
-
-	//We return this for the user's convenience, but they don't need to use it
-	return dynamic_string;
 }
+
 
 /**
  * Concatenate a string to the end of our dynamic string
  */
-dynamic_string_t* dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
+void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
 	//Grab the string length here
 	u_int16_t additional_length = strlen(string) + 1;
 
@@ -146,10 +141,7 @@ dynamic_string_t* dynamic_string_concatenate(dynamic_string_t* dynamic_string, c
 	strncat(dynamic_string->string, string, additional_length);
 
 	//Store the new length
-	dynamic_string->current_length = new_length;
-
-	//We return this for the user's convenience, but they do not need to use it
-	return dynamic_string;
+	dynamic_string->current_length = new_length - 1;
 }
 
 

@@ -45,18 +45,18 @@ dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string);
  * will dynamically resize said string if what is passed
  * through is too big
  */
-dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_string, char* string);
+void dynamic_string_set(dynamic_string_t* dynamic_string, char* string);
 
 /**
  * Add a char to a dynamic string - this is really targeted at
  * how our lexer works
  */
-dynamic_string_t* dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch);
+void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch);
 
 /**
  * Concatenate a string to the end of our dynamic string
  */
-dynamic_string_t* dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string);
+void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string);
 
 /**
  * Deallocate a dynamic string from the heap

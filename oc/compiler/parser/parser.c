@@ -6506,13 +6506,13 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	print_parse_message(INFO, "Assembly inline statements are not analyzed by OC. Whatever is written will be executed verbatim. Please double check your assembly statements.", parser_line_num);
 
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
-	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
 
 	//Allocate the dynamic string in here
-	dynamic_string_alloc(&(assembly_ast_node_t->asm_inline_statements));
+	dynamic_string_alloc(&(assembly_node->asm_inline_statements));
 
 	//Store this too
-	assembly_ast_node_t->line_number = parser_line_num;
+	assembly_node->line_number = parser_line_num;
 
 	//We keep going here as long as we don't see the closing curly brace
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6531,10 +6531,12 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		}
 
 		//Concatenate this in
-		dynamic_string_concatenate(&(assembly_ast_node_t->asm_inline_statements), lookahead.lexeme.string);
+		dynamic_string_concatenate(&(assembly_node->asm_inline_statements), lookahead.lexeme.string);
+		
+		printf("%s\n", lookahead.lexeme.string);
 
 		//Add the newline character for readability
-		dynamic_string_add_char_to_back(&(assembly_ast_node_t->asm_inline_statements), '\n');
+		dynamic_string_add_char_to_back(&(assembly_node->asm_inline_statements), '\n');
 
 		//Now we'll refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6547,8 +6549,11 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		return print_and_return_error("Expected semicolon after assembly statement", parser_line_num);
 	}
 
+	printf("%s\n", assembly_node->asm_inline_statements.string);
+	
+
 	//Once we escape out here, we've seen the whole thing, so we're done
-	return assembly_ast_node_t;
+	return assembly_node;
 }
 
 

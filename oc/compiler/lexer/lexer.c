@@ -153,7 +153,7 @@ lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 	asm_statement.tok = ASM_STATEMENT;
 
 	//The dynamic string for our assembly statement
-	dynamic_string_t asm_string = {NULL, 0, 0};
+	dynamic_string_t asm_string;
 
 	//We'll allocate it here
 	dynamic_string_alloc(&asm_string);
@@ -161,12 +161,11 @@ lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 	//Searching char
 	char ch;
 
-	u_int16_t lexeme_index = 0;
-
 	//First pop off all of the tokens if there are any on the stack
 	while(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
 		//Pop whatever we have off
 		lexitem_t token = pop_token(pushed_back_tokens);
+
 		//Concatenate the string here
 		dynamic_string_concatenate(&asm_string, token.lexeme.string);
 	}
@@ -176,21 +175,12 @@ lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 
 	//So long as we don't see this move along, adding ch into 
 	//our lexeme
-	while(ch != '\\' && lexeme_index < MAX_TOKEN_LENGTH){
-		//Whitespace tracking
-		is_ws(ch, &line_num, parser_line_num);
-
+	while(ch != '\\'){
 		//In this case we'll add the char to the back
 		dynamic_string_add_char_to_back(&asm_string, ch);
 
 		//Refresh the char
 		ch = get_next_char(fl);
-	}
-
-	//If for some reason we overran the length, we give back an error
-	if(lexeme_index >= MAX_TOKEN_LENGTH){
-		asm_statement.tok = ERROR;
-		return asm_statement;
 	}
 	
 	//Store the asm string as the lexeme

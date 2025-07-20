@@ -69,7 +69,7 @@ int main(){
 	//Recreate the string
 	dynamic_string_alloc(&string);
 
-	dynamic_string_set(&string, "I am a string before concatenation.");
+	dynamic_string_concatenate(&string, "I am a string before concatenation.");
 
 	printf("%s\n", string.string);
 
@@ -87,6 +87,13 @@ int main(){
 	dynamic_string_concatenate(&string, "Now there is a fourth concatenation on top of the original.");
 
 	printf("%s\n", string.string);
+
+	//Add char by char
+	for(u_int16_t i = 0; i < length; i++){
+		dynamic_string_add_char_to_back(&string, addition_string[i]);
+		
+		printf("%s\n", string.string);
+	}
 
 	//Destroy it
 	dynamic_string_dealloc(&string);
