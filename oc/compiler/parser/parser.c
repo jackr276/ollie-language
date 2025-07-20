@@ -307,12 +307,10 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 
 	//Write out our constant multplicand
 	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
-	//Grab the constant out
-	constant_ast_node_t* const_node = constant_multiplicand->node;
 	//Mark the type too
-	const_node->constant_type = LONG_CONST;
+	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
-	const_node->long_val = pointer_type->points_to->type_size;
+	constant_multiplicand->int_long_val = pointer_type->points_to->type_size;
 	//Ensure that we give this a type
 	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
@@ -440,18 +438,15 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 	//Add the line number
 	constant_node->line_number = parser_line_num;
 
-	//The constant node
-	constant_ast_node_t* const_node = constant_node->node;
-
 	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
 		//Regular signed int
 		case INT_CONST:
 			//Mark what it is
-			const_node->constant_type = INT_CONST;
+			constant_node->constant_type = INT_CONST;
 
 			//Store the integer value
-			const_node->int_val = atoi(lookahead.lexeme.string);
+			constant_node->int_long_val = atoi(lookahead.lexeme.string);
 
 			//This is signed by default
 			constant_node->inferred_type = generic_signed_int;
@@ -461,9 +456,9 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//Forced unsigned
 		case INT_CONST_FORCE_U:
 			//Mark what it is
-			const_node->constant_type = INT_CONST;
+			constant_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			const_node->int_val = atoi(lookahead.lexeme.string);
+			constant_node->int_long_val = atoi(lookahead.lexeme.string);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_unsigned_int;
@@ -473,9 +468,9 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//Hex constants are really just integers
 		case HEX_CONST:
 			//Mark what it is 
-			const_node->constant_type = INT_CONST;
+			constant_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			const_node->int_val = strtol(lookahead.lexeme.string, NULL, 0);
+			constant_node->int_long_val = strtol(lookahead.lexeme.string, NULL, 0);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_signed_int;
@@ -485,10 +480,10 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//Regular signed long constant
 		case LONG_CONST:
 			//Store the type
-			const_node->constant_type = LONG_CONST;
+			constant_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			const_node->long_val = atol(lookahead.lexeme.string);
+			constant_node->int_long_val = atol(lookahead.lexeme.string);
 
 			//This is a signed i64
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
@@ -498,10 +493,10 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//Unsigned long constant
 		case LONG_CONST_FORCE_U:
 			//Store the type
-			const_node->constant_type = LONG_CONST;
+			constant_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			const_node->long_val = atol(lookahead.lexeme.string);
+			constant_node->int_long_val = atol(lookahead.lexeme.string);
 
 			//By default, int constants are of type s_int64 
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
@@ -509,37 +504,37 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			break;
 
 		case FLOAT_CONST:
-			const_node->constant_type = FLOAT_CONST;
+			constant_node->constant_type = FLOAT_CONST;
 			//Grab the float val
 			float float_val = atof(lookahead.lexeme.string);
 
 			//Store the float value we were given
-			const_node->float_val = float_val;
+			constant_node->float_val = float_val;
 
 			//By default, float constants are of type float32
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f32")->type;
 			break;
 
 		case CHAR_CONST:
-			const_node->constant_type = CHAR_CONST;
+			constant_node->constant_type = CHAR_CONST;
 			//Grab the char val
 			char char_val = *(lookahead.lexeme.string);
 
 			//Store the char value that we were given
-			const_node->char_val = char_val;
+			constant_node->char_val = char_val;
 
 			//Char consts are of type char(obviously)
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "char")->type;
 			break;
 
 		case STR_CONST:
-			const_node->constant_type = STR_CONST;
+			constant_node->constant_type = STR_CONST;
 			//Let's find the type if it's in the symtab
 			symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, "char*");
 			constant_node->inferred_type = found_type->type;
 			
-			//Clone the dynamic string in
-			const_node->string_val = clone_dynamic_string(&(lookahead.lexeme));
+			//The dynamic string is our value
+			constant_node->string_val = lookahead.lexeme;
 
 			break;
 
@@ -808,13 +803,11 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 
 	//Create a constant node
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
-	//Extract this here to avoid repeated casting
-	constant_ast_node_t* constant = const_node->node;
 
 	//This will be an int const
-	constant->constant_type = INT_CONST;
+	const_node->constant_type = INT_CONST;
 	//Store the actual value of the type size
-	constant->int_val = return_type->type_size;
+	const_node->int_long_val = return_type->type_size;
 	//Grab and store type info
 	//This will always end up as a generic signed int
 	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
@@ -878,15 +871,13 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 
 	//Create a constant node
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
-	//Extract the constant area for convenience
-	constant_ast_node_t* constant = const_node->node;
 
 	//Add the line number
 	const_node->line_number = parser_line_num;
 	//Add the constant
-	constant->constant_type = INT_CONST;
+	const_node->constant_type = INT_CONST;
 	//Store the actual value
-	constant->int_val = type_size;
+	const_node->int_long_val = type_size;
 	//Grab and store type info
 	//These will be generic signed ints
 	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
@@ -6525,6 +6516,9 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
 	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
+
+	//Allocate the dynamic string in here
+	dynamic_string_alloc(&(assembly_ast_node_t->asm_inline_statements));
 
 	//Store this too
 	assembly_ast_node_t->line_number = parser_line_num;
