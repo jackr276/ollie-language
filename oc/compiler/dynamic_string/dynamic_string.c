@@ -55,7 +55,7 @@ dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_string, char* str
 	dynamic_string->current_length = new_length;
 
 	//Copy the string over
-	strncpy(string, dynamic_string->string, paramter_length - 1);
+	strncpy(dynamic_string->string, string, paramter_length);
 
 	//For convenience we return the string pointer, but the user need not use it
 	return dynamic_string;

@@ -92,7 +92,7 @@ dynamic_string.o: $(DYNAMIC_STRING_PATH)/dynamic_string.c
 	$(CC) $(CFLAGS) $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_LOCAL)/dynamic_string.o
 
 dynamic_stringd.o: $(DYNAMIC_STRING_PATH)/dynamic_string.c
-	$(CC) $(CFLAGS) -g $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_LOCAL)/dynamic_string.o
+	$(CC) $(CFLAGS) -g $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_LOCAL)/dynamic_stringd.o
 
 ast.o: $(AST_PATH)/ast.c
 	$(CC) $(CFLAGS) $(AST_PATH)/ast.c -o $(OUT_LOCAL)/ast.o
@@ -218,7 +218,13 @@ dynamic_string_test.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_LOCAL)/dynamic_string_test.o
 
 dynamic_string_testd.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
-	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_LOCAL)/dynamic_string_test.o
+	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_LOCAL)/dynamic_string_testd.o
+
+dynamic_string_test: dynamic_string_test.o dynamic_string.o
+	$(CC) -o $(OUT_LOCAL)/dynamic_string_test $(OUT_LOCAL)/dynamic_string_test.o $(OUT_LOCAL)/dynamic_string.o
+
+dynamic_string_testd: dynamic_string_testd.o dynamic_stringd.o
+	$(CC) -o $(OUT_LOCAL)/dynamic_string_testd $(OUT_LOCAL)/dynamic_string_testd.o $(OUT_LOCAL)/dynamic_stringd.o
 
 dynamic_array_test: dynamic_array_test.o dynamic_array.o
 	$(CC) -o $(OUT_LOCAL)/dynamic_array_test $(OUT_LOCAL)/dynamic_array_test.o $(OUT_LOCAL)/dynamic_array.o
@@ -319,6 +325,8 @@ front_test: front_end_test
 middle_test: middle_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
 
+string_test: dynamic_string_test
+	$(OUT_LOCAL)/dynamic_string_test
 
 compiler_test: oc
 	@for input in $(inputs); do \
@@ -431,6 +439,9 @@ dynamic_array_test-CI.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 dynamic_string_test-CI.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_CI)/dynamic_string_test.o
 
+dynamic_string_test_CI: dynamic_string_test-CI.o dynamic_string-CI.o
+	$(CC) -o $(OUT_CI)/dynamic_string_test $(OUT_CI)/dynamic_string_test.o $(OUT_CI)/dynamic_string.o
+
 dynamic_array_test-CI: dynamic_array_test-CI.o dynamic_array-CI.o
 	$(CC) -o $(OUT_CI)/dynamic_array_test $(OUT_CI)/dynamic_array_test.o $(OUT_CI)/dynamic_array.o
 
@@ -493,6 +504,9 @@ compiler_test-CI: oc-CI
 
 array_test-CI: dynamic_array_test-CI
 	$(OUT_CI)/dynamic_array_test
+
+string_test-CI: dynamic_string_test-CI
+	$(OUT_CI)/dynamic_string_test
 
 interference_graph_test-CI: interference_graph_tester-CI
 	$(OUT_CI)/interference_graph_test
