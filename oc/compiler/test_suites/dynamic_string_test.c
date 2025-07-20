@@ -115,4 +115,33 @@ int main(){
 
 	//Destroy it
 	dynamic_string_dealloc(&string);
+
+	printf("=========== Testing functionality after clone ============\n");
+
+	//Recreate the string
+	dynamic_string_alloc(&string);
+
+	//Set it
+	dynamic_string_set(&string, "I have been set");
+
+	//Clone into it
+	dynamic_string_t string2 = clone_dynamic_string(&string);
+	
+	//Add char by char
+	for(u_int16_t i = 0; i < length; i++){
+		dynamic_string_add_char_to_back(&string2, addition_string[i]);
+		
+		printf("%s\n", string2.string);
+	}
+
+	//Clone into it
+	dynamic_string_t string3 = clone_dynamic_string(&string);
+
+	dynamic_string_concatenate(&string3, "added after clone");
+
+	printf("%s\n", string3.string);
+
+	//Destroy them both
+	dynamic_string_dealloc(&string);
+	dynamic_string_dealloc(&string2);
 }
