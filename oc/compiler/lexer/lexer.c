@@ -757,7 +757,7 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					}
 
 					//If we haven't seen the 0 here it's bad
-					if(lexeme.string[lexeme.current_length] != '0'){
+					if(*(lexeme.string) != '0'){
 						lexitem_t err;
 						err.tok = ERROR;
 						return err;
