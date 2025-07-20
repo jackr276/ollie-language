@@ -4573,27 +4573,18 @@ static generic_type_t* type_specifier(FILE* fl){
 			return NULL;
 		}
 
-		//Grab this guy out for convenience
-		constant_ast_node_t* constant_value = const_node->node;
-
-		//If it's not a certain kind of constant, we also don't want it
-		if(constant_value->constant_type == FLOAT_CONST || constant_value->constant_type == CHAR_CONST ||
-			constant_value->constant_type == STR_CONST){
-			print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
-			num_errors++;
-			return NULL;
-		} 
+		switch(const_node->constant_type){
+			case FLOAT_CONST:
+			case STR_CONST:
+				print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+				num_errors++;
+				return NULL;
+			default:
+				break;
+		}
 
 		//The constant value
-		int64_t constant_numeric_value;
-
-		//What is the value of our constant here
-		if(constant_value->constant_type == INT_CONST || constant_value->constant_type == INT_CONST_FORCE_U){
-			constant_numeric_value = constant_value->int_val;
-		//We know it's a long if we get here
-		} else {
-			constant_numeric_value = constant_value->long_val;
-		}
+		int64_t constant_numeric_value = const_node->int_long_val;
 
 		//What if this is a negative or zero?
 		//If it's negative we fail like this
@@ -4667,7 +4658,7 @@ static generic_type_t* type_specifier(FILE* fl){
  */
 static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
 	//Is it mutable?
-	u_int8_t is_mut = 0;
+	u_int8_t is_mut = FALSE;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -4689,7 +4680,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	}
 
 	if(lookahead.tok == MUT){
-		is_mut = 1;
+		is_mut = TRUE;
 	} else {
 		//Put it back and move on
 		push_back_token(lookahead);
@@ -6886,30 +6877,25 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//If we have an integer constant here, we need to make sure that it is not negative. Negative values
 		//would mess with the jump table logic. Ollie langauge does not support GCC-style "switch-to-if" conversions
 		//if the user does this
+		switch(const_node->constant_type){
+			case INT_CONST:
+			case INT_CONST_FORCE_U:
+			case LONG_CONST:
+			case LONG_CONST_FORCE_U:
+				if(const_node->int_long_val < 0){
+					return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
+				}
 
-		//Grab a reference to the constant node
-		constant_ast_node_t* const_inner_node = (constant_ast_node_t*)(const_node->node);
+				//Store the value
+				case_stmt->case_statement_value = const_node->int_long_val;
+				break;
 
-		//If it's an int, make sure it isn't negative
-		if(const_inner_node->constant_type == INT_CONST 
-		   || const_inner_node->constant_type == INT_CONST_FORCE_U){
-			//Fail case here
-			if(const_inner_node->int_val < 0){
-				return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-			}
-			
-			//Assign the value here
-			case_stmt->case_statement_value = const_inner_node->int_val;
+			case CHAR_CONST:
+				//Just assign the char value here
+				case_stmt->case_statement_value = const_node->char_val;
 
-		//Same thing here as well
-		} else if(const_inner_node->constant_type == LONG_CONST || const_inner_node->constant_type == LONG_CONST_FORCE_U){
-			//Fail case here
-			if(const_inner_node->long_val < 0){
-				return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-			}
-		} else if(const_inner_node->constant_type == CHAR_CONST){
-			//Just assign the char value here
-			case_stmt->case_statement_value = const_inner_node->char_val;
+			default:
+				return print_and_return_error("Illegal type given as case statement value", parser_line_num);
 		}
 
 		//Otherwise we know that it is good, but is it the right type
