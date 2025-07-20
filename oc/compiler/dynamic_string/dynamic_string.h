@@ -11,7 +11,7 @@
 #include <sys/types.h>
 
 //Default length of the string is 60 characters
-#define DEFAULT_START_LENGTH 60
+#define DEFAULT_STRING_LENGTH 60
 
 typedef struct dynamic_string_t dynamic_string_t;
 
@@ -28,9 +28,10 @@ struct dynamic_string_t {
 
 
 /**
- * Allocate a dynamic string on the heap
+ * Allocate a dynamic string on the heap. The actual structure itself
+ * will be stack allocated
  */
-dynamic_string_t* dynamic_string_alloc();
+void dynamic_string_alloc(dynamic_string_t* dynamic_string);
 
 /**
  * Set the value of a dynamic string. The function
@@ -48,6 +49,6 @@ dynamic_string_t* dynamic_string_add_char_to_back(dynamic_string_t* dynamic_stri
 /**
  * Deallocate a dynamic string from the heap
  */
-dynamic_string_t* dynamic_string_dealloc(dynamic_string_t* dynamic_string);
+void dynamic_string_dealloc(dynamic_string_t* dynamic_string);
 
 #endif /* DYNAMIC_STRING_H */
