@@ -685,7 +685,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
 			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". First defined here:",
-		   			function_name, param_type->type_name, num_params, expr_type->type_name);
+		   			function_name, param_type->type_name.string, num_params, expr_type->type_name.string);
 
 			//Use the helper to return this
 			return print_and_return_error(info, parser_line_num);
@@ -1192,7 +1192,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 		//If they're not, we fail here
 		if(final_type == NULL){
-			sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+			sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1219,13 +1219,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name, operator_to_string(assignment_operator));
+			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name.string, operator_to_string(assignment_operator));
 			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Let's also see if the right hand type is valid
 		if(is_binary_operation_valid_for_type(right_hand_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", right_hand_type->type_name, operator_to_string(assignment_operator));
+			sprintf(info, "Type %s is invalid for operation %s", right_hand_type->type_name.string, operator_to_string(assignment_operator));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1241,7 +1241,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){
-				sprintf(info, "Types %s cannot be assigned to a variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+				sprintf(info, "Types %s cannot be assigned to a variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1254,7 +1254,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name, right_hand_type->type_name, operator_to_string(assignment_operator));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(assignment_operator));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1298,7 +1298,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name, right_hand_type->type_name, operator_to_string(binary_op));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(binary_op));
 				return print_and_return_error(info, parser_line_num);
 			}
 			
@@ -1355,7 +1355,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 		//We need to specifically see a pointer to a struct for the current type
 		//If it's something else, we fail out here
 		if(working_type->type_class != TYPE_CLASS_POINTER){
-			sprintf(info, "Type \"%s\" cannot be accessed with the => operator. First defined here:", working_type->type_name);
+			sprintf(info, "Type \"%s\" cannot be accessed with the => operator. First defined here:", working_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
@@ -1367,7 +1367,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 
 		//Now we know that its a pointer, but what does it point to?
 		if(referenced_type->type_class != TYPE_CLASS_CONSTRUCT){
-			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name);
+			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, referenced_type));
 			num_errors++;
@@ -1378,7 +1378,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	} else {
 		//We need to specifically see a struct here
 		if(working_type->type_class != TYPE_CLASS_CONSTRUCT){
-			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name);
+			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
@@ -1406,7 +1406,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, referenced_type->type_name);
+		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, referenced_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 	
@@ -1465,7 +1465,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 	//Let's first check to see if this can be used in an array at all
 	//If we can't we'll fail out here
 	if(is_type_valid_for_memory_addressing(expr->inferred_type) == FALSE){
-		sprintf(info, "Type %s cannot be used as an array index", expr->inferred_type->type_name);
+		sprintf(info, "Type %s cannot be used as an array index", expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1479,7 +1479,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
-		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name);
+		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1595,7 +1595,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
 			if(current_type->type_class != TYPE_CLASS_ARRAY && current_type->type_class != TYPE_CLASS_POINTER){
-				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name);
+				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Print it out
 				print_type_name(lookup_type(type_symtab, current_type));
@@ -1674,7 +1674,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 	//If it it's invalid, we fail here
 	if(is_valid == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name, operator_to_string(lookahead.tok));
+		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name.string, operator_to_string(lookahead.tok));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1803,7 +1803,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 		
@@ -1838,7 +1838,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1870,7 +1870,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1889,7 +1889,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1908,7 +1908,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1927,7 +1927,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2070,13 +2070,13 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 
 	//You can never cast a "void" to anything
 	if(being_casted_type->type_class == TYPE_CLASS_BASIC && being_casted_type->basic_type->basic_type == VOID){
-		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name);
+		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Likewise, you can never cast anything to void
 	if(casting_to_type->type_class == TYPE_CLASS_BASIC && casting_to_type->basic_type->basic_type == VOID){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name, casting_to_type->type_name);
+		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -2092,7 +2092,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 
 	//This is our fail case
 	if(return_type == NULL){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name, casting_to_type->type_name);
+		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -2154,7 +2154,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 		//Fail case here
 		if(temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2181,7 +2181,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 		//Fail case here
 		if(right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2194,7 +2194,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2290,7 +2290,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		
 		//Fail out here
 		if(left_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2317,7 +2317,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		
 		//Fail out here
 		if(right_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2332,7 +2332,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2360,7 +2360,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2443,7 +2443,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 		
 		//Fail out here
 		if(is_left_type_shiftable == FALSE){
-			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name); 
+			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2470,7 +2470,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 		
 		//Fail out here
 		if(is_right_type_shiftable == FALSE){
-			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name); 
+			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2486,7 +2486,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2583,7 +2583,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok)); 
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok)); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2605,7 +2605,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, operator_to_string(op.tok)); 
+			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_to_string(op.tok)); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2618,7 +2618,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2710,7 +2710,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 
 		//If this fails, there's no point in going forward
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2732,7 +2732,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 
 		//If this fails, there's no point in going forward
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2748,7 +2748,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2835,7 +2835,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the & operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the & operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2857,7 +2857,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the & operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the & operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2873,7 +2873,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2963,7 +2963,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the ^ operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the ^ operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2985,7 +2985,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 		
@@ -3001,7 +3001,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "^");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "^");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3089,7 +3089,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the | operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3111,7 +3111,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3127,7 +3127,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "^");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "^");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3219,7 +3219,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the && operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3241,7 +3241,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3257,7 +3257,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&&");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&&");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3351,7 +3351,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the || operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the || operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3373,7 +3373,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3389,7 +3389,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "||");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "||");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3463,7 +3463,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(conditional->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid to be used in a conditional", conditional->inferred_type->type_name);
+		sprintf(info, "Type %s is invalid to be used in a conditional", conditional->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -3566,7 +3566,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_
 
 	//Is this a duplicate? If so, we fail out
 	if((duplicate = get_construct_member(construct->construct_type, name)) != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate->variable);
 		num_errors++;
@@ -3720,13 +3720,14 @@ static u_int8_t construct_definer(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
 	lexitem_t lookahead;
-	//The actual type name that we have
-	char type_name[MAX_TYPE_NAME_LENGTH];
-	//The alias name
-	char alias_name[MAX_TYPE_NAME_LENGTH];
-	
-	//We already know that the type name will have enumerated in it
-	strcpy(type_name, "construct ");
+	dynamic_string_t type_name;
+
+	//Allocate it
+	dynamic_string_alloc(&type_name);
+
+	//Set it
+	dynamic_string_set(&type_name, "construct ");
+
 
 	//We are now required to see a valid identifier
 	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
@@ -3740,18 +3741,18 @@ static u_int8_t construct_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Otherwise, we'll now add this identifier into the type name
-	strcat(type_name, ident->identifier.string);	
+	//Add the name on the end
+	dynamic_string_concatenate(&type_name, ident->identifier.string);
 
 	//Once we have this, the actual node is useless so we'll free it
 
 	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
 	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
-	symtab_type_record_t* found = lookup_type_name_only(type_symtab, type_name);
+	symtab_type_record_t* found = lookup_type_name_only(type_symtab, type_name.string);
 
 	//This means that we are attempting to redefine a type
 	if(found != NULL){
-		sprintf(info, "Type with name \"%s\" was already defined. First defined here:", type_name);
+		sprintf(info, "Type with name \"%s\" was already defined. First defined here:", type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the type
 		print_type_name(found);
@@ -3842,7 +3843,7 @@ static u_int8_t construct_definer(FILE* fl){
 	}
 
 	//Let's grab the actual name out
-	strcpy(alias_name, alias_ident->identifier.string);
+	char* alias_name = alias_ident->identifier.string;
 
 	//Once we have this, the alias ident is of no use to us
 
@@ -3900,7 +3901,7 @@ static u_int8_t construct_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_name, construct_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_ident->identifier, construct_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -4063,13 +4064,13 @@ static u_int8_t enum_definer(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//The actual name of the enum
-	char name[MAX_TYPE_NAME_LENGTH];
-	//The alias name
-	char alias_name[MAX_TYPE_NAME_LENGTH];
+	dynamic_string_t type_name;
 
-	//We already know that it will have this in the name
-	strcpy(name, "enum ");
+	//Allocate it
+	dynamic_string_alloc(&type_name);
+
+	//Add the enum intro in
+	dynamic_string_set(&type_name, "enum ");
 
 	//We now need to see a valid identifier to round out the name
 	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
@@ -4083,17 +4084,15 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now if we get here we know that we found a valid ident, so we'll add it to the name
-	strcat(name, ident->identifier.string);
-
-	//Once we have this, we no longer need the ident node
+	dynamic_string_concatenate(&type_name, ident->identifier.string);
 
 	//Now we need to check that this name isn't already currently in use. We only need to check against the
 	//type symtable, because nothing else could have enum in the name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, type_name.string);
 
 	//If we found something, that's an illegal redefintion
 	if(found_type != NULL){
-		sprintf(info, "Type \"%s\" has already been defined. First defined here:", name); 
+		sprintf(info, "Type \"%s\" has already been defined. First defined here:", type_name.string); 
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Print out the actual type too
 		print_type_name(found_type);
@@ -4146,7 +4145,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now that we know everything here has worked, we can finally create the enum type
-	generic_type_t* enum_type = create_enumerated_type(name, current_line);
+	generic_type_t* enum_type = create_enumerated_type(type_name, current_line);
 
 	//Now we will crawl through all of the types that we had and add their references into this enum type's list
 	//This should in theory be an enum member node
@@ -4216,10 +4215,8 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Extract the alias name
-	strcpy(alias_name, alias_ident->identifier.string);
+	char* alias_name = alias_ident->identifier.string;
 
-	//Now that we're here we don't need the node anymore
-	
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -4274,7 +4271,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_ident->identifier, enum_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -4464,7 +4461,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		generic_type_t* dealiased_type = dealias_type(record->type);
 
 		//The true type record
-		symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name);
+		symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name.string);
 
 		//Once we make it here, we should be all set to get out
 		return true_type;
@@ -4642,7 +4639,7 @@ static generic_type_t* type_specifier(FILE* fl){
 	//We're done with it, so deallocate
 	lightstack_dealloc(&lightstack);
 
-	printf("Type size of %s is %d\n", current_type_record->type->type_name, current_type_record->type->type_size);
+	printf("Type size of %s is %d\n", current_type_record->type->type_name.string, current_type_record->type->type_size);
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
@@ -5095,7 +5092,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name);
+		sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -5163,7 +5160,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 		if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
-			sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name);
+			sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -5483,7 +5480,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		//If this is the case, the return type had better be void
 		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
 			&& current_function->return_type->basic_type->basic_type != VOID){
-			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name);
+			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
@@ -5530,8 +5527,8 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
-		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name,
-		  		expr_node->inferred_type->type_name);
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name.string,
+		  		expr_node->inferred_type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function
 		print_function_name(current_function);
@@ -5631,7 +5628,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	if(type->type_class != TYPE_CLASS_BASIC){
 		//Error out here
 		if(type->type_class != TYPE_CLASS_ENUMERATED){
-			sprintf(info, "Type \"%s\" cannot be switched", type->type_name);
+			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
 			return print_and_return_error(info, expr_node->line_number);
 		}
 	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
@@ -5641,7 +5638,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 		//It needs to be an int or char
 		if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
-			sprintf(info, "Type \"%s\" cannot be switched", type->type_name);
+			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
 			return print_and_return_error(info, expr_node->line_number);
 		}
 	}
@@ -5812,7 +5809,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(conditional_expr->inferred_type) == FALSE){
-		sprintf(info, "Type %s is not valid for a conditional", conditional_expr->inferred_type->type_name);
+		sprintf(info, "Type %s is not valid for a conditional", conditional_expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -5925,7 +5922,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(expr_node->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid for a conditional", expr_node->inferred_type->type_name);
+		sprintf(info, "Type %s is invalid for a conditional", expr_node->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -6847,7 +6844,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  switch_stmt_node->inferred_type->type_name, enum_ident_node->inferred_type->type_name);
+						  switch_stmt_node->inferred_type->type_name.string, enum_ident_node->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6905,7 +6902,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  switch_stmt_node->inferred_type->type_name, const_node->inferred_type->type_name);
+						  switch_stmt_node->inferred_type->type_name.string, const_node->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7101,7 +7098,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//One thing here, we aren't allowed to see void
-	if(strcmp(type_spec->type_name, "void") == 0){
+	if(strcmp(type_spec->type_name.string, "void") == 0){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
@@ -7326,7 +7323,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Will be null if we have a failure
 	if(return_type == NULL){
-		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -7429,8 +7426,6 @@ static u_int8_t alias_statement(FILE* fl){
 	//Let's extract the name
 	strcpy(ident_name, ident_node->identifier.string);
 
-	//Once we have the ident name, we no longer need the ident node
-
 	//Let's do our last syntax check--the semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -7485,7 +7480,7 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//If we get here, we know that it actually worked, so we can create the alias
-	generic_type_t* aliased_type = create_aliased_type(ident_name, type_spec, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(ident_node->identifier, type_spec, parser_line_num);
 
 	//Let's now create the aliased record
 	symtab_type_record_t* aliased_record = create_type_record(aliased_type);
@@ -7768,7 +7763,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Fail out if duplicate has been found
 		if(found_type != NULL){
-			sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name);
+			sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			print_type_name(found_type);
 			num_errors++;
@@ -7814,9 +7809,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		 */
 		if(strcmp("main", function_name) == 0){
 			//By default, this function has been called
-			function_record->called = 1;
+			function_record->called = TRUE;
 			//It is the main function
-			is_main_function = 1;
+			is_main_function = TRUE;
 			//And furthermore, it was called by the os
 			call_function(os, function_record->call_graph_node);
 		}
@@ -7874,7 +7869,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 			//Let's now compare the types here
 			if(types_assignable(&(func_param->type_defined_as), &(param_rec->type_defined_as)) == NULL){
-				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name);
+				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -7951,8 +7946,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(defining_prev_implicit == 1){
-		if(strcmp(type->type_name, function_record->return_type->type_name) != 0){
-			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name);
+		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
+			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;

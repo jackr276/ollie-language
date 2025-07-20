@@ -206,7 +206,7 @@ static u_int16_t hash(char* name){
 static u_int16_t hash_type(generic_type_t* type){
 	u_int32_t key = 37;
 	
-	char* cursor = type->type_name;
+	char* cursor = type->type_name.string;
 	//Two primes(this should be good enough for us)
 	u_int32_t a = 54059;
 	u_int32_t b = 76963;
@@ -716,7 +716,7 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name, name) == 0){
+			if(strcmp(records_cursor->type->type_name.string, name) == 0){
 				return records_cursor;
 			}
 			//Advance it
@@ -760,7 +760,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name, type->type_name) == 0){
+			if(strcmp(records_cursor->type->type_name.string, type->type_name.string) == 0){
 				//If we have an array type, we must compare bounds and they must match
 				if(type->type_class == TYPE_CLASS_ARRAY
 					&& type->array_type->num_members != records_cursor->type->array_type->num_members){
@@ -830,7 +830,7 @@ void print_type_record(symtab_type_record_t* record){
 	}
 
 	printf("Record: {\n");
-	printf("Name: %s,\n", record->type->type_name);
+	printf("Name: %s,\n", record->type->type_name.string);
 	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("}\n");
@@ -854,7 +854,7 @@ void print_function_name(symtab_function_record_t* record){
 			printf("mut ");
 		}
 
-		printf("%s : %s", record->func_params[i].associate_var->var_name.string, record->func_params[i].associate_var->type_defined_as->type_name);
+		printf("%s : %s", record->func_params[i].associate_var->var_name.string, record->func_params[i].associate_var->type_defined_as->type_name.string);
 		//Comma if needed
 		if(i < record->number_of_params-1){
 			printf(", ");
@@ -862,7 +862,11 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Final closing paren and return type
-	printf(") -> %s", record->return_type->type_name);
+	if(record->return_type != NULL){
+		printf(") -> %s", record->return_type->type_name.string);
+	} else {
+		printf(") -> (null)");
+	}
 
 	//If it was defined implicitly, we'll print a semicol
 	if(record->defined == 0){
@@ -886,7 +890,7 @@ void print_variable_name(symtab_variable_record_t* record){
 		return;
 	} else if(record->is_enumeration_member == TRUE || record->is_construct_member == TRUE){
 		//The var name
-		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name);
+		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
 	} else {
 		//Line num
 		printf("\n---> %d | ", record->line_number);
@@ -903,7 +907,7 @@ void print_variable_name(symtab_variable_record_t* record){
 		printf("%s : ", record->var_name.string);
 
 		//The type name
-		printf("%s ", record->type_defined_as->type_name);
+		printf("%s ", record->type_defined_as->type_name.string);
 		
 		//We'll print out some abbreviated stuff with the let record
 		if(record->declare_or_let == 1){
@@ -964,7 +968,7 @@ static void print_generic_type(generic_type_t* type){
 	}
 
 	//Then print out the name
-	printf("%s", type->type_name);
+	printf("%s", type->type_name.string);
 }
 
 
@@ -981,7 +985,7 @@ void print_type_name(symtab_type_record_t* record){
 	}
 
 	//Then print out the name
-	printf("%s\n\n", record->type->type_name);
+	printf("%s\n\n", record->type->type_name.string);
 }
 
 

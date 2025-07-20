@@ -3,7 +3,6 @@
 */
 
 #include "type_system.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -117,7 +116,7 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 
 	//Now that we know they are in the same class, we need to check if they're the exact same
 	//If they are the exact same, return 1. Otherwise, return 0
-	if(strcmp(typeA->type_name, typeB->type_name) == 0){
+	if(strcmp(typeA->type_name.string, typeB->type_name.string) == 0){
 		return TRUE;
 	}
 
@@ -294,7 +293,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 			}
 
 			//Now let's check to see if they're the exact same type
-			if(strcmp(deref_source_type->type_name, deref_source_type->type_name) != 0){
+			if(strcmp(deref_source_type->type_name.string, deref_source_type->type_name.string) != 0){
 				return NULL;
 			} else {
 				//We'll give back the destination type if they are the same
@@ -306,7 +305,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 			//If we have an enumerated type here as well
 			if(deref_destination_type->type_class == TYPE_CLASS_ENUMERATED){
 				//These need to be the exact same, otherwise this will not work
-				if(strcmp(deref_source_type->type_name, deref_destination_type->type_name) == 0){
+				if(strcmp(deref_source_type->type_name.string, deref_destination_type->type_name.string) == 0){
 					return deref_destination_type;
 				} else {
 					return NULL;
@@ -1255,8 +1254,16 @@ generic_type_t* create_basic_type(char* type_name, Token basic_type){
 	//Allocate a basic type, all other pointers will be null
 	type->basic_type = calloc(1, sizeof(basic_type_t));
 	
-	//Copy the type name
-	strcpy(type->type_name, type_name);
+	//Create and allocate the name
+	dynamic_string_t name;
+	dynamic_string_alloc(&name);
+
+	//Set it to be our given name
+	dynamic_string_set(&name, type_name);
+
+	//Set the name 
+	type->type_name = name;
+
 	//Assign the type in
 	type->basic_type->basic_type = basic_type;
 
@@ -1296,12 +1303,11 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	//Where was it declared
 	type->line_number = line_number;
 
+	//Clone the string
+	type->type_name = clone_dynamic_string(&(points_to->type_name));
 
-	//Let's first copy the type name in
-	strcpy(type->type_name, points_to->type_name);
-
-	//And then we add a pointer onto the end of it
-	strcat(type->type_name, "*");
+	//Add the star at the end
+	dynamic_string_add_char_to_back(&(type->type_name), '*');
 
 	//Now we'll make the actual pointer type
 	type->pointer_type = calloc(1, sizeof(pointer_type_t));
@@ -1340,11 +1346,11 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Where was it declared
 	type->line_number = line_number;
 
-	//Let's first copy the type name in
-	strcpy(type->type_name, points_to->type_name);
+	//Clone the string
+	type->type_name = clone_dynamic_string(&(points_to->type_name));
 
-	//Concatenate it to the name of it
-	sprintf(type->type_name, "%s[]", points_to->type_name);
+	//Add the star at the end
+	dynamic_string_concatenate(&(type->type_name), "[]");
 
 	//Now we'll make the actual pointer type
 	type->array_type = calloc(1, sizeof(array_type_t));
@@ -1365,7 +1371,7 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 /**
  * Dynamically allocate and create an enumerated type
  */
-generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number){
+generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
@@ -1374,8 +1380,7 @@ generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number){
 	//Where is the declaration?
 	type->line_number = line_number;
 
-	//Copy the name
-	strcpy(type->type_name, type_name);
+	type->type_name = type_name;
 
 	//Reserve space for this
 	type->enumerated_type = calloc(1, sizeof(enumerated_type_t));
@@ -1387,7 +1392,7 @@ generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number){
 /**
  * Dynamically allocate and create a constructed type
  */
-generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number){
+generic_type_t* create_constructed_type(dynamic_string_t type_name, u_int32_t line_number){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
@@ -1396,8 +1401,7 @@ generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number){
 	//Where is the declaration?
 	type->line_number = line_number;
 
-	//Copy the name
-	strcpy(type->type_name, type_name);
+	type->type_name = type_name;
 
 	//Reserve space for this
 	type->construct_type = calloc(1, sizeof(constructed_type_t));
@@ -1568,7 +1572,7 @@ void finalize_construct_alignment(generic_type_t* type){
 /**
  * Dynamically allocate and create an aliased type
  */
-generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_type, u_int32_t line_number){
+generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
@@ -1578,7 +1582,7 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 	type->line_number = line_number;
 
 	//Copy the name
-	strcpy(type->type_name, type_name);
+	type->type_name = type_name;
 
 	//Dynamically allocate the aliased type record
 	type->aliased_type = calloc(1, sizeof(aliased_type_t));
