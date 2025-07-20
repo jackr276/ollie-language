@@ -206,8 +206,6 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
-	//A pointer for referencing the asm inline statement
-	asm_inline_stmt_ast_node_t* asm_node;
 
 	//If we have the very first node
 	if(head_node == NULL){

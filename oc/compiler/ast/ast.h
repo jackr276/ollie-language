@@ -22,8 +22,6 @@
 
 //A generic AST node can be any AST node
 typedef struct generic_ast_node_t generic_ast_node_t;
-//An AST node for assembly inline statements
-typedef struct asm_inline_stmt_ast_node_t asm_inline_stmt_ast_node_t;
 
 /**
  * Is this an assignable variable?

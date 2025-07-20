@@ -455,6 +455,8 @@ struct three_addr_const_t{
  * A generic struct that encapsulates most of our instructions
  */
 struct instruction_t{
+	//Store inlined assembly in a string
+	dynamic_string_t inlined_assembly;
 	//What block holds this?
 	void* block_contained_in;
 	//For linked list properties -- the next statement
@@ -492,8 +494,6 @@ struct instruction_t{
 	symtab_variable_record_t* var_record;
 	//What function are we currently in?
 	symtab_function_record_t* function;
-	//Very special case, only for inlined assembly
-	char* inlined_assembly;
 	//The phi function parameters - stored in a dynamic array
 	void* phi_function_parameters;
 	//The list of temp variable parameters at most 6
@@ -805,7 +805,7 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
  * by any future optimizations
  */
-instruction_t* emit_asm_inline_instruction(asm_inline_stmt_ast_node_t* asm_inline_node);
+instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node);
 
 /**
  * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler

@@ -1501,7 +1501,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 	//Display an assembly inline statement
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
 		//Should already have a trailing newline
-		fprintf(fl, "%s", stmt->inlined_assembly);
+		fprintf(fl, "%s", stmt->inlined_assembly.string);
 	} else if(stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
 		//Just print a nop
 		fprintf(fl, "nop\n");
@@ -2682,7 +2682,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "jbe .L%d\n", jumping_to_block->block_id);
 			break;
 		case ASM_INLINE:
-			fprintf(fl, "%s", instruction->inlined_assembly);
+			fprintf(fl, "%s", instruction->inlined_assembly.string);
 			break;
 		case CALL:
 			fprintf(fl, "call %s", instruction->called_function->func_name);
@@ -3001,39 +3001,36 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	constant->next_created = emitted_consts;
 	emitted_consts = constant;
 
-	//Grab a reference to the const node for convenience
-	constant_ast_node_t* const_node_raw = (constant_ast_node_t*)(const_node->node);
-
 	//Now we'll assign the appropriate values
-	constant->const_type = const_node_raw->constant_type; 
+	constant->const_type = const_node->constant_type; 
 	constant->type = const_node->inferred_type;
 
 	//Now based on what type we have we'll make assignments
 	switch(constant->const_type){
 		case CHAR_CONST:
-			constant->char_const = const_node_raw->char_val;
+			constant->char_const = const_node->char_val;
 			//Set the 0 flag if true
-			if(const_node_raw->char_val == 0){
+			if(const_node->char_val == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case INT_CONST:
-			constant->int_const = const_node_raw->int_val;
+			constant->int_const = const_node->int_long_val;
 			//Set the 0 flag if true
-			if(const_node_raw->int_val == 0){
+			if(const_node->int_long_val == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case FLOAT_CONST:
-			constant->float_const = const_node_raw->float_val;
+			constant->float_const = const_node->float_val;
 			break;
 		case STR_CONST:
-			strcpy(constant->str_const, const_node_raw->string_val);
+			strcpy(constant->str_const, const_node->string_val.string);
 			break;
 		case LONG_CONST:
-			constant->long_const = const_node_raw->long_val;
+			constant->long_const = const_node->int_long_val;
 			//Set the 0 flag if 
-			if(const_node_raw->long_val == 0){
+			if(const_node->int_long_val == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
@@ -3606,18 +3603,16 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
  * by any future optimizations
  */
-instruction_t* emit_asm_inline_instruction(asm_inline_stmt_ast_node_t* asm_inline_node){
+instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Store the class
 	stmt->CLASS = THREE_ADDR_CODE_ASM_INLINE_STMT;
 
-	//Then we'll allocate the needed space for the string holding the assembly
-	stmt->inlined_assembly = calloc(asm_inline_node->max_length, sizeof(char));
+	//Copy this over
+	stmt->inlined_assembly = asm_inline_node->asm_inline_statements;
 
-	//Copy the assembly over
-	strncpy(stmt->inlined_assembly, asm_inline_node->asm_line_statements, asm_inline_node->length);
 	//What function are we in
 	stmt->function = current_function;
 
@@ -3705,7 +3700,7 @@ instruction_t* copy_instruction(instruction_t* copied){
 	
 	//Null these out, better safe than sorry
 	copy->phi_function_parameters = NULL;
-	copy->inlined_assembly = NULL;
+	copy->inlined_assembly = copied->inlined_assembly;
 	copy->next_statement = NULL;
 	copy->previous_statement = NULL;
 	
@@ -4065,12 +4060,6 @@ void instruction_dealloc(instruction_t* stmt){
 	//If the statement is null we bail out
 	if(stmt == NULL){
 		return;
-	}
-
-	//If we have an asm inline statement
-	if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
-		//We must also free the pointer in here
-		free(stmt->inlined_assembly);
 	}
 
 	//If we have a phi function, deallocate the dynamic array

@@ -916,18 +916,15 @@ void print_constant_name(symtab_constant_record_t* record){
 	//First the record
 	printf("\n---> %d | replace %s with ", record->line_number, record->name);
 	
-	//Grab the constant node out for convenience
-	constant_ast_node_t* const_node = (constant_ast_node_t*)(((generic_ast_node_t*)record->constant_node)->node);
+	generic_ast_node_t* const_node = record->constant_node;
 
 	//We'll now switch based on what kind of constant that we have
 	switch (const_node->constant_type) {
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
-			printf("%d", const_node->int_val);
-			break;
 		case LONG_CONST_FORCE_U:
 		case LONG_CONST:
-			printf("%ld", const_node->long_val);
+			printf("%ld", const_node->int_long_val);
 			break;
 		case CHAR_CONST:
 			printf("%d", const_node->char_val);
@@ -938,9 +935,9 @@ void print_constant_name(symtab_constant_record_t* record){
 		case FLOAT_CONST:
 			printf("%f", const_node->float_val);
 			break;
+		//We should never get here
 		default:
-			printf("FATAL INTERNAL COMPILER ERROR\n");
-			exit(1);
+			break;
 	}
 
 	//Now print out the semicolon
