@@ -40,8 +40,8 @@ all: $(PROGS)
 ltest: lexer_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/lexer_test
 
-lexer_test: lexer.o lexer_test.o lexstack.o
-	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/lexstack.o
+lexer_test: lexer.o lexer_test.o lexstack.o dynamic_string.o
+	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/dynamic_string.o
 
 lexer_test.o: $(TEST_SUITE_PATH)/lexer_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT_LOCAL)/lexer_test.o
@@ -346,8 +346,8 @@ interference_graph_test: interference_graph_tester
 ltest-CI: lexer_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/lexer_test
 
-lexer_test-CI: lexer-CI.o lexer_test-CI.o lexstack-CI.o
-	$(CC) -o $(OUT_CI)/lexer_test $(OUT_CI)/lexer_test.o $(OUT_CI)/lexer.o $(OUT_CI)/lexstack.o
+lexer_test-CI: lexer-CI.o lexer_test-CI.o lexstack-CI.o dynamic_string-CI.o
+	$(CC) -o $(OUT_CI)/lexer_test $(OUT_CI)/lexer_test.o $(OUT_CI)/lexer.o $(OUT_CI)/lexstack.o $(OUT_CI)/dynamic_string.o
 
 lexer_test-CI.o: $(TEST_SUITE_PATH)/lexer_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT_CI)/lexer_test.o

@@ -152,21 +152,23 @@ lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 	lexitem_t asm_statement;
 	asm_statement.tok = ASM_STATEMENT;
 
+	//The dynamic string for our assembly statement
+	dynamic_string_t asm_string = {NULL, 0, 0};
+
+	//We'll allocate it here
+	dynamic_string_alloc(&asm_string);
+
 	//Searching char
 	char ch;
 
-	//For lexeme concatenation
-	char* lexeme_cursor = asm_statement.lexeme;
 	u_int16_t lexeme_index = 0;
 
 	//First pop off all of the tokens if there are any on the stack
 	while(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
 		//Pop whatever we have off
 		lexitem_t token = pop_token(pushed_back_tokens);
-		//Add it in here
-		strcat(asm_statement.lexeme, token.lexeme);
-		//We'll add the length to the lexeme cursor for tracking
-		lexeme_cursor += strlen(token.lexeme);
+		//Concatenate the string here
+		dynamic_string_concatenate(&asm_string, token.lexeme.string);
 	}
 
 	//So long as we don't see a backslash, we keep going
@@ -178,11 +180,8 @@ lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 		//Whitespace tracking
 		is_ws(ch, &line_num, parser_line_num);
 
-		//Add it in
-		*lexeme_cursor = ch;
-		lexeme_cursor++;
-		//Add one more to this too
-		lexeme_index++;
+		//In this case we'll add the char to the back
+		dynamic_string_add_char_to_back(&asm_string, ch);
 
 		//Refresh the char
 		ch = get_next_char(fl);
@@ -193,6 +192,9 @@ lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 		asm_statement.tok = ERROR;
 		return asm_statement;
 	}
+	
+	//Store the asm string as the lexeme
+	asm_statement.lexeme = asm_string;
 
 	//Otherwise we're done
 	return asm_statement;
@@ -217,11 +219,12 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 
 	//We'll eventually return this
 	lexitem_t lex_item;
+
 	//By default it's an error
 	lex_item.tok = ERROR;
 
 	//Have we seen hexadecimal?
-	u_int8_t seen_hex = 0;
+	u_int8_t seen_hex = FALSE;
 
 	//If we're at the start -- added to avoid overcounts
 	if(ftell(fl) == 0){
@@ -240,6 +243,8 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 	//Store the lexeme in a dynamically resizing string. It will only be allocated
 	//by the lexer at the instance when we need it
 	dynamic_string_t lexeme = {NULL, 0, 0};
+	//Store this completely blank copy in here at first
+	lex_item.lexeme = lexeme;
 
 	//We'll run through character by character until we hit EOF
 	while((ch = get_next_char(fl)) != EOF){
@@ -928,8 +933,13 @@ void push_back_token(lexitem_t l){
  * Print out a token and it's associated line number
 */
 void print_token(lexitem_t* l){
-	//Print out with nice formatting
-	printf("TOKEN: %3d, Lexeme: %10s, Line: %4d\n", l->tok, l->lexeme.string, l->line_num);
+	if(l->lexeme.string == NULL){
+		//Print out with nice formatting
+		printf("TOKEN: %3d, Lexeme %15s, Line: %4d\n", l->tok, "NONE", l->line_num);
+	} else {
+		//Print out with nice formatting
+		printf("TOKEN: %3d, Lexeme: %15s, Line: %4d\n", l->tok, l->lexeme.string, l->line_num);
+	}
 }
 
 
