@@ -108,7 +108,7 @@ static generic_ast_node_t* idle_statement(FILE* fl);
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
-static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee);
+static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
 
 
 /**
@@ -307,12 +307,10 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 
 	//Write out our constant multplicand
 	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
-	//Grab the constant out
-	constant_ast_node_t* const_node = constant_multiplicand->node;
 	//Mark the type too
-	const_node->constant_type = LONG_CONST;
+	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
-	const_node->long_val = pointer_type->points_to->type_size;
+	constant_multiplicand->int_long_val = pointer_type->points_to->type_size;
 	//Ensure that we give this a type
 	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
@@ -362,7 +360,7 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	
 	//If we can't find it that's bad
 	if(lookahead.tok != IDENT){
-		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme);
+		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -370,8 +368,9 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
 	//Idents are assignable
 	ident_node->is_assignable = ASSIGNABLE;
-	//Copy the string we got into it
-	strcpy(ident_node->identifier, lookahead.lexeme);
+	//Clone the string in
+	ident_node->identifier = clone_dynamic_string(&(lookahead.lexeme));
+
 	//Default identifier type is s_int32
 	ident_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 	//Add the line number
@@ -394,15 +393,15 @@ static generic_ast_node_t* label_identifier(FILE* fl, side_type_t side){
 	
 	//If we can't find it that's bad
 	if(lookahead.tok != LABEL_IDENT){
-		sprintf(info, "String %s is not a valid label identifier", lookahead.lexeme);
+		sprintf(info, "String %s is not a valid label identifier", lookahead.lexeme.string);
 		//Create and return an error node that will be sent up the chain
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Create the identifier node
 	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
-	//Copy the string we got into it
-	strcpy(label_ident_node->identifier, lookahead.lexeme);
+	//Clone the string in
+	label_ident_node->identifier = clone_dynamic_string(&(lookahead.lexeme));
 	//By default a label identifier is of type u_int64(memory address)
 	label_ident_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 	//Add the line number
@@ -439,18 +438,15 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 	//Add the line number
 	constant_node->line_number = parser_line_num;
 
-	//The constant node
-	constant_ast_node_t* const_node = constant_node->node;
-
 	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
 		//Regular signed int
 		case INT_CONST:
 			//Mark what it is
-			const_node->constant_type = INT_CONST;
+			constant_node->constant_type = INT_CONST;
 
 			//Store the integer value
-			const_node->int_val = atoi(lookahead.lexeme);
+			constant_node->int_long_val = atoi(lookahead.lexeme.string);
 
 			//This is signed by default
 			constant_node->inferred_type = generic_signed_int;
@@ -460,9 +456,9 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//Forced unsigned
 		case INT_CONST_FORCE_U:
 			//Mark what it is
-			const_node->constant_type = INT_CONST;
+			constant_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			const_node->int_val = atoi(lookahead.lexeme);
+			constant_node->int_long_val = atoi(lookahead.lexeme.string);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_unsigned_int;
@@ -472,9 +468,9 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//Hex constants are really just integers
 		case HEX_CONST:
 			//Mark what it is 
-			const_node->constant_type = INT_CONST;
+			constant_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			const_node->int_val = strtol(lookahead.lexeme, NULL, 0);
+			constant_node->int_long_val = strtol(lookahead.lexeme.string, NULL, 0);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_signed_int;
@@ -484,10 +480,10 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//Regular signed long constant
 		case LONG_CONST:
 			//Store the type
-			const_node->constant_type = LONG_CONST;
+			constant_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			const_node->long_val = atol(lookahead.lexeme);
+			constant_node->int_long_val = atol(lookahead.lexeme.string);
 
 			//This is a signed i64
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
@@ -497,10 +493,10 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//Unsigned long constant
 		case LONG_CONST_FORCE_U:
 			//Store the type
-			const_node->constant_type = LONG_CONST;
+			constant_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			const_node->long_val = atol(lookahead.lexeme);
+			constant_node->int_long_val = atol(lookahead.lexeme.string);
 
 			//By default, int constants are of type s_int64 
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
@@ -508,55 +504,38 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			break;
 
 		case FLOAT_CONST:
-			const_node->constant_type = FLOAT_CONST;
+			constant_node->constant_type = FLOAT_CONST;
 			//Grab the float val
-			float float_val = atof(lookahead.lexeme);
+			float float_val = atof(lookahead.lexeme.string);
 
 			//Store the float value we were given
-			const_node->float_val = float_val;
+			constant_node->float_val = float_val;
 
 			//By default, float constants are of type float32
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f32")->type;
 			break;
 
 		case CHAR_CONST:
-			const_node->constant_type = CHAR_CONST;
+			constant_node->constant_type = CHAR_CONST;
 			//Grab the char val
-			char char_val = *(lookahead.lexeme);
+			char char_val = *(lookahead.lexeme.string);
 
 			//Store the char value that we were given
-			const_node->char_val = char_val;
+			constant_node->char_val = char_val;
 
 			//Char consts are of type char(obviously)
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "char")->type;
 			break;
 
 		case STR_CONST:
-			const_node->constant_type = STR_CONST;
-			//String contants are of a char[] type. We will determine what the size of this char[] is here
-			//Let's first find the string length
-			u_int32_t length = strlen(lookahead.lexeme + 1);
-
-			//If it's empty throw a warning
-			if(length == 0){
-				return print_and_return_error("0 length string given as constant", parser_line_num);
-			}
-
-			//Too long of a string
-			if(length > 499){
-				return print_and_return_error("String literals may be at most 500 characters in length", parser_line_num);
-			}
-
-			//Increment 1 to account for the null terminator
-			length++;
-
+			constant_node->constant_type = STR_CONST;
 			//Let's find the type if it's in the symtab
 			symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, "char*");
 			constant_node->inferred_type = found_type->type;
 			
-			//By the time we make it down here, the type has been accounted for
-			//We'll now copy the lexeme in
-			strcpy(const_node->string_val, lookahead.lexeme);
+			//The dynamic string is our value
+			constant_node->string_val = lookahead.lexeme;
+
 			break;
 
 		default:
@@ -602,7 +581,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	}
 
 	//Grab the function name out for convenience
-	function_name = ident->identifier;
+	function_name = ident->identifier.string;
 
 	//Let's now look up the function name in the function symtab
 	function_record = lookup_function(function_symtab, function_name);
@@ -653,7 +632,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		
 		//If we don't see this it's bad
 		if(lookahead.tok != R_PAREN){
-			sprintf(info, "Function \"%s\" expects no parameters First declared here:", function_record->func_name);
+			sprintf(info, "Function \"%s\" expects no parameters First declared here:", function_record->func_name.string);
 			return print_and_return_error(info, current_line);
 		}
 		
@@ -706,7 +685,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
 			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". First defined here:",
-		   			function_name, param_type->type_name, num_params, expr_type->type_name);
+		   			function_name, param_type->type_name.string, num_params, expr_type->type_name.string);
 
 			//Use the helper to return this
 			return print_and_return_error(info, parser_line_num);
@@ -747,7 +726,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	 * error
 	 */
 	if(num_params != function_num_params){
-		sprintf(info, "Function %s expectects %d parameters, but was only given %d", function_record->func_name, function_num_params, num_params);
+		sprintf(info, "Function %s expectects %d parameters, but was only given %d", function_record->func_name.string, function_num_params, num_params);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_function_name(function_record);
 		num_errors++;
@@ -824,13 +803,11 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 
 	//Create a constant node
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
-	//Extract this here to avoid repeated casting
-	constant_ast_node_t* constant = const_node->node;
 
 	//This will be an int const
-	constant->constant_type = INT_CONST;
+	const_node->constant_type = INT_CONST;
 	//Store the actual value of the type size
-	constant->int_val = return_type->type_size;
+	const_node->int_long_val = return_type->type_size;
 	//Grab and store type info
 	//This will always end up as a generic signed int
 	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
@@ -894,15 +871,13 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 
 	//Create a constant node
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
-	//Extract the constant area for convenience
-	constant_ast_node_t* constant = const_node->node;
 
 	//Add the line number
 	const_node->line_number = parser_line_num;
 	//Add the constant
-	constant->constant_type = INT_CONST;
+	const_node->constant_type = INT_CONST;
 	//Store the actual value
-	constant->int_val = type_size;
+	const_node->int_long_val = type_size;
 	//Grab and store type info
 	//These will be generic signed ints
 	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
@@ -958,7 +933,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			}
 
 			//Grab this out for convenience
-			char* var_name = ident->identifier;
+			char* var_name = ident->identifier.string;
 
 			//We have a few options here, we could find a constant that has been declared
 			//like this. If so, we'll return a duplicate of the constant node that we have
@@ -1071,7 +1046,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 
 		//If we get here we fail
 		default:
-			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme);
+			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme.string);
 			return print_and_return_error(info, current_line);
 	}
 }
@@ -1170,7 +1145,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
 	//this assignment is illegal
 	if(current_var->initialized == TRUE && current_var->is_mutable == FALSE){
-		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name);
+		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1217,7 +1192,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 		//If they're not, we fail here
 		if(final_type == NULL){
-			sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+			sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1244,13 +1219,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name, operator_to_string(assignment_operator));
+			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name.string, operator_to_string(assignment_operator));
 			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Let's also see if the right hand type is valid
 		if(is_binary_operation_valid_for_type(right_hand_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", right_hand_type->type_name, operator_to_string(assignment_operator));
+			sprintf(info, "Type %s is invalid for operation %s", right_hand_type->type_name.string, operator_to_string(assignment_operator));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1266,7 +1241,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){
-				sprintf(info, "Types %s cannot be assigned to a variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+				sprintf(info, "Types %s cannot be assigned to a variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1279,7 +1254,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name, right_hand_type->type_name, operator_to_string(assignment_operator));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(assignment_operator));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1323,7 +1298,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name, right_hand_type->type_name, operator_to_string(binary_op));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(binary_op));
 				return print_and_return_error(info, parser_line_num);
 			}
 			
@@ -1380,7 +1355,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 		//We need to specifically see a pointer to a struct for the current type
 		//If it's something else, we fail out here
 		if(working_type->type_class != TYPE_CLASS_POINTER){
-			sprintf(info, "Type \"%s\" cannot be accessed with the => operator. First defined here:", working_type->type_name);
+			sprintf(info, "Type \"%s\" cannot be accessed with the => operator. First defined here:", working_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
@@ -1392,7 +1367,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 
 		//Now we know that its a pointer, but what does it point to?
 		if(referenced_type->type_class != TYPE_CLASS_CONSTRUCT){
-			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name);
+			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, referenced_type));
 			num_errors++;
@@ -1403,7 +1378,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	} else {
 		//We need to specifically see a struct here
 		if(working_type->type_class != TYPE_CLASS_CONSTRUCT){
-			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name);
+			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
@@ -1424,14 +1399,14 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	}
 
 	//Grab this for nicety
-	char* member_name = ident->identifier;
+	char* member_name = ident->identifier.string;
 
 	//Let's see if we can look this up inside of the type
 	symtab_variable_record_t* var_record = get_construct_member(referenced_type->construct_type, member_name)->variable;
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, referenced_type->type_name);
+		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, referenced_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 	
@@ -1490,7 +1465,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 	//Let's first check to see if this can be used in an array at all
 	//If we can't we'll fail out here
 	if(is_type_valid_for_memory_addressing(expr->inferred_type) == FALSE){
-		sprintf(info, "Type %s cannot be used as an array index", expr->inferred_type->type_name);
+		sprintf(info, "Type %s cannot be used as an array index", expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1504,7 +1479,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
-		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name);
+		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1620,7 +1595,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
 			if(current_type->type_class != TYPE_CLASS_ARRAY && current_type->type_class != TYPE_CLASS_POINTER){
-				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name);
+				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Print it out
 				print_type_name(lookup_type(type_symtab, current_type));
@@ -1699,7 +1674,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 	//If it it's invalid, we fail here
 	if(is_valid == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name, operator_to_string(lookahead.tok));
+		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name.string, operator_to_string(lookahead.tok));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1828,7 +1803,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 		
@@ -1863,7 +1838,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1895,7 +1870,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1914,7 +1889,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1933,7 +1908,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1952,7 +1927,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name, operator_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2095,13 +2070,13 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 
 	//You can never cast a "void" to anything
 	if(being_casted_type->type_class == TYPE_CLASS_BASIC && being_casted_type->basic_type->basic_type == VOID){
-		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name);
+		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Likewise, you can never cast anything to void
 	if(casting_to_type->type_class == TYPE_CLASS_BASIC && casting_to_type->basic_type->basic_type == VOID){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name, casting_to_type->type_name);
+		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -2117,7 +2092,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 
 	//This is our fail case
 	if(return_type == NULL){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name, casting_to_type->type_name);
+		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -2179,7 +2154,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 		//Fail case here
 		if(temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2206,7 +2181,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 		//Fail case here
 		if(right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2219,7 +2194,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2315,7 +2290,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		
 		//Fail out here
 		if(left_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2342,7 +2317,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		
 		//Fail out here
 		if(right_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2357,7 +2332,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2385,7 +2360,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2468,7 +2443,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 		
 		//Fail out here
 		if(is_left_type_shiftable == FALSE){
-			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name); 
+			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2495,7 +2470,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 		
 		//Fail out here
 		if(is_right_type_shiftable == FALSE){
-			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name); 
+			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2511,7 +2486,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2608,7 +2583,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok)); 
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok)); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2630,7 +2605,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, operator_to_string(op.tok)); 
+			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_to_string(op.tok)); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2643,7 +2618,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2735,7 +2710,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 
 		//If this fails, there's no point in going forward
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2757,7 +2732,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 
 		//If this fails, there's no point in going forward
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2773,7 +2748,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, operator_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2860,7 +2835,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the & operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the & operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2882,7 +2857,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the & operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the & operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2898,7 +2873,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2988,7 +2963,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the ^ operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the ^ operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3010,7 +2985,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 		
@@ -3026,7 +3001,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "^");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "^");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3114,7 +3089,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the | operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3136,7 +3111,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3152,7 +3127,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "^");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "^");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3244,7 +3219,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the && operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3266,7 +3241,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3282,7 +3257,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "&&");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&&");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3376,7 +3351,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the || operator", temp_holder->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the || operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3398,7 +3373,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name);
+			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3414,7 +3389,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name, right_child->inferred_type->type_name, "||");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "||");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3488,7 +3463,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(conditional->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid to be used in a conditional", conditional->inferred_type->type_name);
+		sprintf(info, "Type %s is invalid to be used in a conditional", conditional->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -3576,7 +3551,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_
 	}
 
 	//Grab this for convenience
-	char* name = ident->identifier;
+	char* name = ident->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
@@ -3591,7 +3566,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_
 
 	//Is this a duplicate? If so, we fail out
 	if((duplicate = get_construct_member(construct->construct_type, name)) != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate->variable);
 		num_errors++;
@@ -3638,7 +3613,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_
 	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record
-	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* member_record = create_variable_record(ident->identifier, STORAGE_CLASS_NORMAL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Mark that this is a construct member
@@ -3745,13 +3720,14 @@ static u_int8_t construct_definer(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
 	lexitem_t lookahead;
-	//The actual type name that we have
-	char type_name[MAX_TYPE_NAME_LENGTH];
-	//The alias name
-	char alias_name[MAX_TYPE_NAME_LENGTH];
-	
-	//We already know that the type name will have enumerated in it
-	strcpy(type_name, "construct ");
+	dynamic_string_t type_name;
+
+	//Allocate it
+	dynamic_string_alloc(&type_name);
+
+	//Set it
+	dynamic_string_set(&type_name, "construct ");
+
 
 	//We are now required to see a valid identifier
 	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
@@ -3765,18 +3741,18 @@ static u_int8_t construct_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Otherwise, we'll now add this identifier into the type name
-	strcat(type_name, ident->identifier);	
+	//Add the name on the end
+	dynamic_string_concatenate(&type_name, ident->identifier.string);
 
 	//Once we have this, the actual node is useless so we'll free it
 
 	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
 	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
-	symtab_type_record_t* found = lookup_type_name_only(type_symtab, type_name);
+	symtab_type_record_t* found = lookup_type_name_only(type_symtab, type_name.string);
 
 	//This means that we are attempting to redefine a type
 	if(found != NULL){
-		sprintf(info, "Type with name \"%s\" was already defined. First defined here:", type_name);
+		sprintf(info, "Type with name \"%s\" was already defined. First defined here:", type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the type
 		print_type_name(found);
@@ -3867,7 +3843,7 @@ static u_int8_t construct_definer(FILE* fl){
 	}
 
 	//Let's grab the actual name out
-	strcpy(alias_name, alias_ident->identifier);
+	char* alias_name = alias_ident->identifier.string;
 
 	//Once we have this, the alias ident is of no use to us
 
@@ -3925,7 +3901,7 @@ static u_int8_t construct_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_name, construct_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_ident->identifier, construct_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -3953,7 +3929,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 
 	//Now if we make it here, we'll need to check and make sure that it isn't a duplicate of anything else
 	//Grab this for convenience
-	char* name = ident->identifier;
+	char* name = ident->identifier.string;
 
 	//Check that it isn't some duplicated function name
 	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
@@ -3999,7 +3975,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 
 	//Once we make it all the way down here, we know that we don't have any duplication
 	//We can now make the record of the enum
-	symtab_variable_record_t* enum_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* enum_record = create_variable_record(ident->identifier, STORAGE_CLASS_NORMAL);
 	//Store the current value
 	enum_record->enum_member_value = current_member_val;
 	//It is an enum member
@@ -4088,13 +4064,13 @@ static u_int8_t enum_definer(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//The actual name of the enum
-	char name[MAX_TYPE_NAME_LENGTH];
-	//The alias name
-	char alias_name[MAX_TYPE_NAME_LENGTH];
+	dynamic_string_t type_name;
 
-	//We already know that it will have this in the name
-	strcpy(name, "enum ");
+	//Allocate it
+	dynamic_string_alloc(&type_name);
+
+	//Add the enum intro in
+	dynamic_string_set(&type_name, "enum ");
 
 	//We now need to see a valid identifier to round out the name
 	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
@@ -4108,17 +4084,15 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now if we get here we know that we found a valid ident, so we'll add it to the name
-	strcat(name, ident->identifier);
-
-	//Once we have this, we no longer need the ident node
+	dynamic_string_concatenate(&type_name, ident->identifier.string);
 
 	//Now we need to check that this name isn't already currently in use. We only need to check against the
 	//type symtable, because nothing else could have enum in the name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, type_name.string);
 
 	//If we found something, that's an illegal redefintion
 	if(found_type != NULL){
-		sprintf(info, "Type \"%s\" has already been defined. First defined here:", name); 
+		sprintf(info, "Type \"%s\" has already been defined. First defined here:", type_name.string); 
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Print out the actual type too
 		print_type_name(found_type);
@@ -4171,7 +4145,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now that we know everything here has worked, we can finally create the enum type
-	generic_type_t* enum_type = create_enumerated_type(name, current_line);
+	generic_type_t* enum_type = create_enumerated_type(type_name, current_line);
 
 	//Now we will crawl through all of the types that we had and add their references into this enum type's list
 	//This should in theory be an enum member node
@@ -4241,10 +4215,8 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Extract the alias name
-	strcpy(alias_name, alias_ident->identifier);
+	char* alias_name = alias_ident->identifier.string;
 
-	//Now that we're here we don't need the node anymore
-	
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -4299,7 +4271,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_ident->identifier, enum_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -4341,158 +4313,168 @@ static symtab_type_record_t* type_name(FILE* fl){
 	lexitem_t lookahead;
 	//A temporary holder for the type name
 	char type_name[MAX_TYPE_NAME_LENGTH];
+	//Hold the record we get
+	symtab_type_record_t* record;
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//These are all of our basic types
-	if(lookahead.tok == VOID || lookahead.tok == U_INT8 || lookahead.tok == S_INT8 || lookahead.tok == U_INT16
-	   || lookahead.tok == S_INT16 || lookahead.tok == U_INT32 || lookahead.tok == S_INT32 || lookahead.tok == U_INT64
-	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == FLOAT64 || lookahead.tok == CHAR){
 
-		//We will now grab this record from the symtable to make our life easier
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, lookahead.lexeme);
+	switch(lookahead.tok){
+		case VOID:
+		case U_INT8:
+		case S_INT8:
+		case U_INT16:
+		case S_INT16:
+		case U_INT32:
+		case S_INT32:
+		case FLOAT32:
+		case U_INT64:
+		case S_INT64:
+		case FLOAT64:
+		case CHAR:
+			//We will now grab this record from the symtable to make our life easier
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
 
-		//Sanity check, if this is null something is very wrong
-		if(record == NULL){
-			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
-			//Create and give back an error node
-			return NULL;
-		}
+			//Sanity check, if this is null something is very wrong
+			if(record == NULL){
+				print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
+				//Create and give back an error node
+				return NULL;
+			}
 
-		//This one is now all set to send up. We will not store any children if this is the case
-		return record;
-
-	//There's also a chance that we see an enum type
-	} else if(lookahead.tok == ENUM){
-		//We know that this keyword is in the name, so we'll add it in
-		strcpy(type_name, "enum ");
-
-		//It is required that we now see a valid identifier
-		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
-
-		//If we fail, we'll bail out
-		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
-			//It's already an error so just give it back
-			return NULL;
-		}
-
-		//Array bounds checking
-		if(strlen(type_ident->identifier) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-		strcat(type_name, type_ident->identifier);
-
-		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
-
-		//If we didn't find it it's an instant fail
-		if(record == NULL){
-			sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return NULL;
-		}
-
-		//Once we make it here, we should be all set to get out
-		return record;
-
-	//Construct names are pretty much the same as enumerated names
-	} else if(lookahead.tok == CONSTRUCT){
-		//We know that this keyword is in the name, so we'll add it in
-		strcpy(type_name, "construct ");
-
-		//It is required that we now see a valid identifier
-		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
-
-		//If we fail, we'll bail out
-		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid identifier given as construct type name", parser_line_num);
-			//It's already an error so just give it back
-			return NULL;
-		}
-
-		//Array bounds checking
-		if(strlen(type_ident->identifier) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-		strcat(type_name, type_ident->identifier);
-
-		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
-
-		//If we didn't find it it's an instant fail
-		if(record == NULL){
-			sprintf(info, "Construct %s was never defined. Types must be defined before use", type_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return NULL;
-		}
-
-		//Once we make it here, we should be all set to get out
-		return record;
-
-	//If this is the case then we have to see some user defined name, which is an ident
-	} else {
-		//Put the token back for the ident rule
-		push_back_token(lookahead);
-
-		//We will let the identifier rule handle it
-		generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
-
-		//If we fail, we'll bail out
-		if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
-			//Error increase here
-			num_errors++;
-			//It's already an error so just give it back
-			return NULL;
-		}
-
-		//Array bounds checking
-		if(strlen(type_ident->identifier) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Grab a pointer for it for convenience
-		char* temp_name = type_ident->identifier;
-
-		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, temp_name);
-
-		//If we didn't find it it's an instant fail
-		if(record == NULL){
-			sprintf(info, "Type %s was never defined. Types must be defined before use", temp_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			num_errors++;
-			//Create and return an error node
-			return NULL;
-		}
+			//This one is now all set to send up. We will not store any children if this is the case
+			return record;
 		
-		//Dealias the type here
-		generic_type_t* dealiased_type = dealias_type(record->type);
+		//Enumerated type
+		case ENUM:
+			//We know that this keyword is in the name, so we'll add it in
+			strcpy(type_name, "enum ");
 
-		//The true type record
-		symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name);
+			//It is required that we now see a valid identifier
+			generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
-		//Once we make it here, we should be all set to get out
-		return true_type;
+			//If we fail, we'll bail out
+			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
+				//It's already an error so just give it back
+				return NULL;
+			}
+
+			//Array bounds checking
+			if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
+			strcat(type_name, type_ident->identifier.string);
+
+			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
+
+			//If we didn't find it it's an instant fail
+			if(record == NULL){
+				sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				//Create and return an error node
+				return NULL;
+			}
+
+			//Once we make it here, we should be all set to get out
+			return record;
+
+		//Construct type
+		case CONSTRUCT:
+			//We know that this keyword is in the name, so we'll add it in
+			strcpy(type_name, "construct ");
+
+			//It is required that we now see a valid identifier
+			type_ident = identifier(fl, SIDE_TYPE_LEFT);
+
+			//If we fail, we'll bail out
+			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as construct type name", parser_line_num);
+				//It's already an error so just give it back
+				return NULL;
+			}
+
+			//Array bounds checking
+			if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
+			strcat(type_name, type_ident->identifier.string);
+
+			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+			record = lookup_type_name_only(type_symtab, type_name);
+
+			//If we didn't find it it's an instant fail
+			if(record == NULL){
+				sprintf(info, "Construct %s was never defined. Types must be defined before use", type_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				//Create and return an error node
+				return NULL;
+			}
+
+			//Once we make it here, we should be all set to get out
+			return record;
+
+		//Some user defined name
+		default:
+			//Put the token back for the ident rule
+			push_back_token(lookahead);
+
+			//We will let the identifier rule handle it
+			type_ident = identifier(fl, SIDE_TYPE_LEFT);
+
+			//If we fail, we'll bail out
+			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
+				//Error increase here
+				num_errors++;
+				//It's already an error so just give it back
+				return NULL;
+			}
+
+			//Array bounds checking
+			if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//Grab a pointer for it for convenience
+			char* temp_name = type_ident->identifier.string;
+
+			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+			record = lookup_type_name_only(type_symtab, temp_name);
+
+			//If we didn't find it it's an instant fail
+			if(record == NULL){
+				sprintf(info, "Type %s was never defined. Types must be defined before use", temp_name);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				//Create and return an error node
+				return NULL;
+			}
+			
+			//Dealias the type here
+			generic_type_t* dealiased_type = dealias_type(record->type);
+
+			//The true type record
+			symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name.string);
+
+			//Once we make it here, we should be all set to get out
+			return true_type;
 	}
 }
 
@@ -4598,27 +4580,18 @@ static generic_type_t* type_specifier(FILE* fl){
 			return NULL;
 		}
 
-		//Grab this guy out for convenience
-		constant_ast_node_t* constant_value = const_node->node;
-
-		//If it's not a certain kind of constant, we also don't want it
-		if(constant_value->constant_type == FLOAT_CONST || constant_value->constant_type == CHAR_CONST ||
-			constant_value->constant_type == STR_CONST){
-			print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
-			num_errors++;
-			return NULL;
-		} 
+		switch(const_node->constant_type){
+			case FLOAT_CONST:
+			case STR_CONST:
+				print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+				num_errors++;
+				return NULL;
+			default:
+				break;
+		}
 
 		//The constant value
-		int64_t constant_numeric_value;
-
-		//What is the value of our constant here
-		if(constant_value->constant_type == INT_CONST || constant_value->constant_type == INT_CONST_FORCE_U){
-			constant_numeric_value = constant_value->int_val;
-		//We know it's a long if we get here
-		} else {
-			constant_numeric_value = constant_value->long_val;
-		}
+		int64_t constant_numeric_value = const_node->int_long_val;
 
 		//What if this is a negative or zero?
 		//If it's negative we fail like this
@@ -4676,7 +4649,7 @@ static generic_type_t* type_specifier(FILE* fl){
 	//We're done with it, so deallocate
 	lightstack_dealloc(&lightstack);
 
-	printf("Type size of %s is %d\n", current_type_record->type->type_name, current_type_record->type->type_size);
+	printf("Type size of %s is %d\n", current_type_record->type->type_name.string, current_type_record->type->type_size);
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
@@ -4692,7 +4665,7 @@ static generic_type_t* type_specifier(FILE* fl){
  */
 static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
 	//Is it mutable?
-	u_int8_t is_mut = 0;
+	u_int8_t is_mut = FALSE;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -4714,7 +4687,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	}
 
 	if(lookahead.tok == MUT){
-		is_mut = 1;
+		is_mut = TRUE;
 	} else {
 		//Put it back and move on
 		push_back_token(lookahead);
@@ -4731,7 +4704,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 
 	//Now we must perform all needed duplication checks for the name
 	//Grab this for convenience
-	char* name = ident->identifier;
+	char* name = ident->identifier.string;
 
 	//Check that it isn't some duplicated function name
 	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
@@ -4801,11 +4774,11 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//symbol table
 	
 	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* param_record = create_variable_record(ident->identifier, STORAGE_CLASS_NORMAL);
 	//It is a function parameter
-	param_record->is_function_paramater = 1;
+	param_record->is_function_paramater = TRUE;
 	//We assume that it was initialized
-	param_record->initialized = 1;
+	param_record->initialized = TRUE;
 	//Add the line number
 	param_record->line_number = parser_line_num;
 	//If it is mutable
@@ -5040,7 +5013,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Otherwise we are all good syntactically here
 
 	//Grab the name out for convenience
-	char* label_name = label_ident->identifier;
+	char* label_name = label_ident->identifier.string;
 
 	//We now need to make sure that it isn't a duplicate
 	symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, label_name);
@@ -5065,7 +5038,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	}
 
 	//Now that we know we didn't find it, we'll create it
-	found = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
+	found = create_variable_record(label_ident->identifier, STORAGE_CLASS_NORMAL);
 	//Store the type
 	found->type_defined_as = label_type->type;
 	//Store the fact that it is a label
@@ -5129,7 +5102,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name);
+		sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -5197,7 +5170,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 		if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
-			sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name);
+			sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -5517,7 +5490,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		//If this is the case, the return type had better be void
 		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
 			&& current_function->return_type->basic_type->basic_type != VOID){
-			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name, current_function->return_type->type_name);
+			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
@@ -5532,7 +5505,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		//If we get here, but we do expect a void return, then this is an issue
 		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
 			&& current_function->return_type->basic_type->basic_type == VOID){
-			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name);
+			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
@@ -5564,8 +5537,8 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
-		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name, current_function->return_type->type_name,
-		  		expr_node->inferred_type->type_name);
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name.string,
+		  		expr_node->inferred_type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function
 		print_function_name(current_function);
@@ -5665,7 +5638,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	if(type->type_class != TYPE_CLASS_BASIC){
 		//Error out here
 		if(type->type_class != TYPE_CLASS_ENUMERATED){
-			sprintf(info, "Type \"%s\" cannot be switched", type->type_name);
+			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
 			return print_and_return_error(info, expr_node->line_number);
 		}
 	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
@@ -5675,7 +5648,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 		//It needs to be an int or char
 		if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
-			sprintf(info, "Type \"%s\" cannot be switched", type->type_name);
+			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
 			return print_and_return_error(info, expr_node->line_number);
 		}
 	}
@@ -5846,7 +5819,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(conditional_expr->inferred_type) == FALSE){
-		sprintf(info, "Type %s is not valid for a conditional", conditional_expr->inferred_type->type_name);
+		sprintf(info, "Type %s is not valid for a conditional", conditional_expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -5959,7 +5932,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(expr_node->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid for a conditional", expr_node->inferred_type->type_name);
+		sprintf(info, "Type %s is invalid for a conditional", expr_node->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -6540,12 +6513,13 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	print_parse_message(INFO, "Assembly inline statements are not analyzed by OC. Whatever is written will be executed verbatim. Please double check your assembly statements.", parser_line_num);
 
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
-	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
-	//Store this too
-	assembly_ast_node_t->line_number = parser_line_num;
+	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
 
-	//For quick reference, grab out the assembly node in here
-	asm_inline_stmt_ast_node_t* asm_node_ref = assembly_ast_node_t->node;
+	//Allocate the dynamic string in here
+	dynamic_string_alloc(&(assembly_node->asm_inline_statements));
+
+	//Store this too
+	assembly_node->line_number = parser_line_num;
 
 	//We keep going here as long as we don't see the closing curly brace
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6563,24 +6537,11 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 			return print_and_return_error("Unable to parse assembly statement. Did you enclose the whole block in curly braces({})?", parser_line_num);
 		}
 
-		//Otherwise it worked, so we'll need to add the statement in here
-		//Let's check -- we may be overrunning our allocate bounds
-		if(asm_node_ref->length + strlen(lookahead.lexeme) + 1 >= asm_node_ref->max_length){
-			//We'll realloc here and update the max length by doubling it
-			asm_node_ref->max_length *= 2;
+		//Concatenate this in
+		dynamic_string_concatenate(&(assembly_node->asm_inline_statements), lookahead.lexeme.string);
 
-			//Realloc as needed to keep enough space
-			asm_node_ref->asm_line_statements = realloc(asm_node_ref->asm_line_statements, asm_node_ref->max_length);
-		}
-
-		//Now we can add whatever the assembly statement that we had before is in
-		strcat(asm_node_ref->asm_line_statements, lookahead.lexeme);
-
-		//For readability
-		strcat(asm_node_ref->asm_line_statements, "\n");
-
-		//Update the length too
-		asm_node_ref->length += strlen(lookahead.lexeme) + 1;
+		//Add the newline character for readability
+		dynamic_string_add_char_to_back(&(assembly_node->asm_inline_statements), '\n');
 
 		//Now we'll refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6594,7 +6555,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	}
 
 	//Once we escape out here, we've seen the whole thing, so we're done
-	return assembly_ast_node_t;
+	return assembly_node;
 }
 
 
@@ -6869,7 +6830,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		}
 
 		//Extract the name
-		char* name = enum_ident_node->identifier;
+		char* name = enum_ident_node->identifier.string;
 
 		//If it's an identifier, then it has to be an enum
 		symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, name);
@@ -6893,7 +6854,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  switch_stmt_node->inferred_type->type_name, enum_ident_node->inferred_type->type_name);
+						  switch_stmt_node->inferred_type->type_name.string, enum_ident_node->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6923,30 +6884,25 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//If we have an integer constant here, we need to make sure that it is not negative. Negative values
 		//would mess with the jump table logic. Ollie langauge does not support GCC-style "switch-to-if" conversions
 		//if the user does this
+		switch(const_node->constant_type){
+			case INT_CONST:
+			case INT_CONST_FORCE_U:
+			case LONG_CONST:
+			case LONG_CONST_FORCE_U:
+				if(const_node->int_long_val < 0){
+					return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
+				}
 
-		//Grab a reference to the constant node
-		constant_ast_node_t* const_inner_node = (constant_ast_node_t*)(const_node->node);
+				//Store the value
+				case_stmt->case_statement_value = const_node->int_long_val;
+				break;
 
-		//If it's an int, make sure it isn't negative
-		if(const_inner_node->constant_type == INT_CONST 
-		   || const_inner_node->constant_type == INT_CONST_FORCE_U){
-			//Fail case here
-			if(const_inner_node->int_val < 0){
-				return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-			}
-			
-			//Assign the value here
-			case_stmt->case_statement_value = const_inner_node->int_val;
+			case CHAR_CONST:
+				//Just assign the char value here
+				case_stmt->case_statement_value = const_node->char_val;
 
-		//Same thing here as well
-		} else if(const_inner_node->constant_type == LONG_CONST || const_inner_node->constant_type == LONG_CONST_FORCE_U){
-			//Fail case here
-			if(const_inner_node->long_val < 0){
-				return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-			}
-		} else if(const_inner_node->constant_type == CHAR_CONST){
-			//Just assign the char value here
-			case_stmt->case_statement_value = const_inner_node->char_val;
+			default:
+				return print_and_return_error("Illegal type given as case statement value", parser_line_num);
 		}
 
 		//Otherwise we know that it is good, but is it the right type
@@ -6956,7 +6912,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//If this fails, they're incompatible
 		if(case_stmt->inferred_type == NULL){
 			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  switch_stmt_node->inferred_type->type_name, const_node->inferred_type->type_name);
+						  switch_stmt_node->inferred_type->type_name.string, const_node->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7069,7 +7025,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->identifier;
+	char* name = ident_node->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
@@ -7152,7 +7108,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//One thing here, we aren't allowed to see void
-	if(strcmp(type_spec->type_name, "void") == 0){
+	if(strcmp(type_spec->type_name.string, "void") == 0){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
@@ -7166,7 +7122,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(ident_node->identifier, storage_class);
 	//Store its constant status
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
@@ -7247,7 +7203,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->identifier;
+	char* name = ident_node->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
@@ -7377,7 +7333,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Will be null if we have a failure
 	if(return_type == NULL){
-		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name, left_hand_type->type_name);
+		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -7387,7 +7343,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(ident_node->identifier, storage_class);
 	//Store it's mutability status
 	declared_var->is_mutable = is_mutable;
 	//Store the type
@@ -7470,17 +7426,15 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Array bounds checking real quick
-	if(strlen(ident_node->identifier) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Type names may only be at most 200 characters long, was given: %s", (ident_node->identifier));
+	if(strlen(ident_node->identifier.string) > MAX_TYPE_NAME_LENGTH){
+		sprintf(info, "Type names may only be at most 200 characters long, was given: %s", (ident_node->identifier.string));
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
 
 	//Let's extract the name
-	strcpy(ident_name, ident_node->identifier);
-
-	//Once we have the ident name, we no longer need the ident node
+	strcpy(ident_name, ident_node->identifier.string);
 
 	//Let's do our last syntax check--the semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7536,7 +7490,7 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//If we get here, we know that it actually worked, so we can create the alias
-	generic_type_t* aliased_type = create_aliased_type(ident_name, type_spec, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(ident_node->identifier, type_spec, parser_line_num);
 
 	//Let's now create the aliased record
 	symtab_type_record_t* aliased_record = create_type_record(aliased_type);
@@ -7613,7 +7567,7 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 		return let_statement(fl, is_global);
 	//Otherwise we have some weird error here
 	} else {
-		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme);
+		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 }
@@ -7624,7 +7578,7 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
  * are logical expressions, we will perform a deep copy to create an entirely new
  * chain of deferred statements
  */
-static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee){
+static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee){
 	//Base case here -- although in theory we shouldn't make it here
 	if(duplicatee == NULL){
 		return NULL;
@@ -7673,7 +7627,7 @@ static int8_t check_jump_labels(){
 		generic_ast_node_t* label_ident_node = current_jump_statement->first_child;
 
 		//Let's grab out the name for convenience
-		char* name = label_ident_node->identifier;
+		char* name = label_ident_node->identifier.string;
 
 		//We now need to lookup the name in here. We use a special function that allows
 		//us to look deeper into the scopes 
@@ -7688,8 +7642,8 @@ static int8_t check_jump_labels(){
 		}
 
 		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
-		if(strcmp(current_function->func_name, label->function_declared_in->func_name) != 0){
-			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name);
+		if(strcmp(current_function->func_name.string, label->function_declared_in->func_name.string) != 0){
+			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			return FAILURE;
 		}
@@ -7768,7 +7722,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
 	//Grab a reference for convenience
-	char* function_name = ident_node->identifier;
+	char* function_name = ident_node->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(function_name) > MAX_TYPE_NAME_LENGTH){
@@ -7784,7 +7738,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Fail out if found and it's already been defined
 	if(function_record != NULL && function_record->defined == TRUE){
-		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name);
+		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name.string);
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_function_name(function_record);
 		num_errors++;
@@ -7806,7 +7760,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Fail out if duplicate is found
 		if(found_variable != NULL){
-			sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name);
+			sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name.string);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			print_variable_name(found_variable);
 			num_errors++;
@@ -7819,7 +7773,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Fail out if duplicate has been found
 		if(found_type != NULL){
-			sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name);
+			sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			print_type_name(found_type);
 			num_errors++;
@@ -7841,7 +7795,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, storage_class);
+		function_record = create_function_record(ident_node->identifier, storage_class);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -7865,9 +7819,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		 */
 		if(strcmp("main", function_name) == 0){
 			//By default, this function has been called
-			function_record->called = 1;
+			function_record->called = TRUE;
 			//It is the main function
-			is_main_function = 1;
+			is_main_function = TRUE;
 			//And furthermore, it was called by the os
 			call_function(os, function_record->call_graph_node);
 		}
@@ -7910,7 +7864,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//If at any point this is more than the number of parameters this function is meant to have,
 			//we bail
 			if(param_count > function_record->number_of_params){
-				sprintf(info, "Function \"%s\" was defined implicitly to only have %d parameters. First defined here:", function_record->func_name, function_record->number_of_params);
+				sprintf(info, "Function \"%s\" was defined implicitly to only have %d parameters. First defined here:", function_record->func_name.string, function_record->number_of_params);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Print the function out too
 				print_function_name(function_record);
@@ -7925,7 +7879,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 			//Let's now compare the types here
 			if(types_assignable(&(func_param->type_defined_as), &(param_rec->type_defined_as)) == NULL){
-				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name);
+				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -8002,8 +7956,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(defining_prev_implicit == 1){
-		if(strcmp(type->type_name, function_record->return_type->type_name) != 0){
-			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name);
+		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
+			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
@@ -8098,7 +8052,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 		} else {
-			sprintf(info, "Function %s has no body", function_record->func_name);
+			sprintf(info, "Function %s has no body", function_record->func_name.string);
 			print_parse_message(WARNING, info, parser_line_num);
 		}
 
@@ -8145,7 +8099,7 @@ static u_int8_t replace_statement(FILE* fl){
 	
 	//Now that we have the ident, we need to make sure that it's not a duplicate
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->identifier;
+	char* name = ident_node->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
@@ -8239,7 +8193,7 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Now we're ready for assembly and insertion
-	symtab_constant_record_t* created_const = create_constant_record(name);
+	symtab_constant_record_t* created_const = create_constant_record(ident_node->identifier);
 
 	//Once we've created it, we'll pack it with values
 	created_const->constant_node = constant_node;

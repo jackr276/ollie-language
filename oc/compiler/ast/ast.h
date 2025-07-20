@@ -14,12 +14,6 @@
 #include <sys/types.h>
 
 /**
- * Most inline assembly statements are small, so the default statement 
- * size is only 1000 bytes. This can be realloc'd as needed automatically
- */
-#define DEFAULT_ASM_INLINE_SIZE 1000
-
-/**
  * All nodes here are N-ary trees. This means that, in addition
  * to all of the data that each unique one holds, they all also 
  * hold references to their first child and next sibling, with
@@ -28,10 +22,6 @@
 
 //A generic AST node can be any AST node
 typedef struct generic_ast_node_t generic_ast_node_t;
-//A constant node. Can represent any of the four kinds of constant
-typedef struct constant_ast_node_t constant_ast_node_t;
-//An AST node for assembly inline statements
-typedef struct asm_inline_stmt_ast_node_t asm_inline_stmt_ast_node_t;
 
 /**
  * Is this an assignable variable?
@@ -103,6 +93,12 @@ typedef enum address_specifier_type_t{
  * to what the actual node is
 */
 struct generic_ast_node_t{
+	//The identifier
+	dynamic_string_t identifier;
+	//String value stored as dynamic string
+	dynamic_string_t string_val;
+	//Any assembly inlined statements
+	dynamic_string_t asm_inline_statements;
 	//What is the next created AST NODE? Used for memory deallocation
 	generic_ast_node_t* next_created_ast_node;
 	//What is the inferred type of the node
@@ -116,10 +112,16 @@ struct generic_ast_node_t{
 	symtab_variable_record_t* variable;
 	//The symtab function record
 	symtab_function_record_t* func_record;
-	//Holds the name of the type as a string
-	char* type_name;
 	//The type record that we have
 	symtab_type_record_t* type_record;
+	//Long/int value
+	int64_t int_long_val;
+	//Constant float value
+	float float_val;
+	//Character value
+	char char_val;
+	//Holds the token for what kind of constant it is
+	Token constant_type;
 	//What is the value of this case statement
 	int64_t case_statement_value;
 	//The upper and lower bound for switch statements
@@ -133,8 +135,6 @@ struct generic_ast_node_t{
 	Token unary_operator;
 	//Construct accessor token
 	Token construct_accessor_tok;
-	//Store an ident if we have one
-	char* identifier;
 	//Is this assignable?
 	variable_assignability_t is_assignable;
 	//What side is this node on
@@ -147,35 +147,6 @@ struct generic_ast_node_t{
 	u_int8_t num_params;
 	//The type address specifier - for types
 	address_specifier_type_t address_type;
-};
-
-
-/**
- * The following are special cases. In these cases, the generic(void* node)
- * is used to grab these so-called inner-nodes
- */
-
-//Holds information about a constant
-struct constant_ast_node_t{
-	char string_val[MAX_TOKEN_LENGTH];
-	int64_t long_val;
-	//It's cheap enough for us to just hold all of these here
-	int32_t int_val;
-	float float_val;
-	char char_val;
-	//Holds the token for what kind of constant it is
-	Token constant_type;
-};
-
-
-//An assembly inline statement
-struct asm_inline_stmt_ast_node_t{
-	//We just need to hold all of the statements in a big chunk
-	char* asm_line_statements;
-	//The currently string length
-	u_int16_t length;
-	//The current max length(will be realloc'd if needed)
-	u_int16_t max_length;
 };
 
 /**
@@ -211,7 +182,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side);
 /**
  * A utility function for node duplication
  */
-generic_ast_node_t* duplicate_node(const generic_ast_node_t* node);
+generic_ast_node_t* duplicate_node(generic_ast_node_t* node);
 
 /**
  * A helper function that will appropriately add a child node into the parent

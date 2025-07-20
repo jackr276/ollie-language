@@ -14,11 +14,16 @@
 */
 
 #include "lexer.h"
+#include "../dynamic_string/dynamic_string.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include "../stack/lexstack.h"
+
+//For standardization across all modules
+#define TRUE 1
+#define FALSE 0
 
 //Total number of keywords
 #define KEYWORD_COUNT 48
@@ -80,40 +85,39 @@ static u_int8_t is_ws(char ch, u_int16_t* line_num, u_int16_t* parser_line_num){
 /**
  * Determines if an identifier is a keyword or some user-written identifier
  */
-static lexitem_t identifier_or_keyword(char* lexeme, u_int16_t line_number){
+static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int16_t line_number){
 	lexitem_t lex_item;
-	//Wipe this clean
-	memset(lex_item.lexeme, 0, MAX_TOKEN_LENGTH * sizeof(char));
 
 	//Assign our line number;
 	lex_item.line_num = line_number;
 
 	//Let's see if we have a keyword here
 	for(u_int8_t i = 0; i < KEYWORD_COUNT; i++){
-		if(strcmp(keyword_array[i], lexeme) == 0){
+		if(strcmp(keyword_array[i], lexeme.string) == 0){
 			//We can get out of here
 			lex_item.tok = tok_array[i];
-			strcpy(lex_item.lexeme, keyword_array[i]);
+			//Store the lexeme in here
+			lex_item.lexeme = lexeme;
 			return lex_item;
 		}
 	}
 
 	//Otherwise if we get here, it could be a regular ident or a label ident
-	if(*lexeme == '$'){
+	if(lexeme.string[0] == '$'){
 		lex_item.tok = LABEL_IDENT;
 	} else {
 		lex_item.tok = IDENT;
 	}
 	
 	//Fail out if too long
-	if(strlen(lex_item.lexeme) >= MAX_IDENT_LENGTH){
-		printf("[LINE %d | LEXER ERROR]: Identifiers may be at most 100 characters long\n", line_number);
+	if(lexeme.current_length >= MAX_IDENT_LENGTH){
+		printf("[LINE %d | LEXER ERROR]: Identifiers may be at most %d characters long\n", line_number, MAX_IDENT_LENGTH);
 		lex_item.tok = ERROR;
 		return lex_item;
 	}
 
-	//If we get here, we know that it's an ident
-	strcpy(lex_item.lexeme, lexeme);
+	//Store the lexeme in here
+	lex_item.lexeme = lexeme;
 
 	//Give back the lexer item
 	return lex_item;
@@ -148,24 +152,22 @@ lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 	lexitem_t asm_statement;
 	asm_statement.tok = ASM_STATEMENT;
 
-	//Wipe this while we're at it
-	memset(asm_statement.lexeme, 0, MAX_TOKEN_LENGTH * sizeof(char));
+	//The dynamic string for our assembly statement
+	dynamic_string_t asm_string;
+
+	//We'll allocate it here
+	dynamic_string_alloc(&asm_string);
 
 	//Searching char
 	char ch;
-
-	//For lexeme concatenation
-	char* lexeme_cursor = asm_statement.lexeme;
-	u_int16_t lexeme_index = 0;
 
 	//First pop off all of the tokens if there are any on the stack
 	while(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
 		//Pop whatever we have off
 		lexitem_t token = pop_token(pushed_back_tokens);
-		//Add it in here
-		strcat(asm_statement.lexeme, token.lexeme);
-		//We'll add the length to the lexeme cursor for tracking
-		lexeme_cursor += strlen(token.lexeme);
+
+		//Concatenate the string here
+		dynamic_string_concatenate(&asm_string, token.lexeme.string);
 	}
 
 	//So long as we don't see a backslash, we keep going
@@ -173,25 +175,16 @@ lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
 
 	//So long as we don't see this move along, adding ch into 
 	//our lexeme
-	while(ch != '\\' && lexeme_index < MAX_TOKEN_LENGTH){
-		//Whitespace tracking
-		is_ws(ch, &line_num, parser_line_num);
-
-		//Add it in
-		*lexeme_cursor = ch;
-		lexeme_cursor++;
-		//Add one more to this too
-		lexeme_index++;
+	while(ch != '\\'){
+		//In this case we'll add the char to the back
+		dynamic_string_add_char_to_back(&asm_string, ch);
 
 		//Refresh the char
 		ch = get_next_char(fl);
 	}
-
-	//If for some reason we overran the length, we give back an error
-	if(lexeme_index >= MAX_TOKEN_LENGTH){
-		asm_statement.tok = ERROR;
-		return asm_statement;
-	}
+	
+	//Store the asm string as the lexeme
+	asm_statement.lexeme = asm_string;
 
 	//Otherwise we're done
 	return asm_statement;
@@ -216,11 +209,12 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 
 	//We'll eventually return this
 	lexitem_t lex_item;
+
 	//By default it's an error
 	lex_item.tok = ERROR;
 
 	//Have we seen hexadecimal?
-	u_int8_t seen_hex = 0;
+	u_int8_t seen_hex = FALSE;
 
 	//If we're at the start -- added to avoid overcounts
 	if(ftell(fl) == 0){
@@ -235,21 +229,15 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 	char ch;
 	char ch2;
 	char ch3;
-	//Store the lexeme
-	char lexeme[MAX_TOKEN_LENGTH];
 
-	//The next index for the lexeme
-	char* lexeme_cursor = lexeme;
+	//Store the lexeme in a dynamically resizing string. It will only be allocated
+	//by the lexer at the instance when we need it
+	dynamic_string_t lexeme = {NULL, 0, 0};
+	//Store this completely blank copy in here at first
+	lex_item.lexeme = lexeme;
 
 	//We'll run through character by character until we hit EOF
 	while((ch = get_next_char(fl)) != EOF){
-		//Check to make sure we aren't overrunning our bounds
-		if(current_state != IN_MULTI_COMMENT && lexeme_cursor - lexeme > MAX_TOKEN_LENGTH-1){
-			lexitem_t l;
-			l.tok = ERROR;
-			return l;
-		}
-
 		//Switch on the current state
 		switch(current_state){
 			case IN_START:
@@ -341,27 +329,25 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 							lex_item.tok = ARROW;
 							lex_item.line_num = line_num;
 							return lex_item;
+
 						//If we're looking for a constant, there are more options
 						//here. This could be a negative sign.
 						} else if(const_search == SEARCHING_FOR_CONSTANT){
-							//Wipe this out now that we're here
-							memset(lexeme, 0, MAX_TOKEN_LENGTH);
-							//Set this too -- for iteration
-							lexeme_cursor = lexeme;
+							//Allocate the string here
+							dynamic_string_alloc(&lexeme);
 
 							//We're in an int
 							if(ch2 >= '0' && ch2 <= '9'){
-								*lexeme_cursor = ch;
-								*(lexeme_cursor + 1) = ch2;
-								lexeme_cursor += 2;
+								//Add these two characters in
+								dynamic_string_add_char_to_back(&lexeme, ch);
+								dynamic_string_add_char_to_back(&lexeme, ch2);
 								current_state = IN_INT;
 								break;
 							}
 
 							//We're in a float
 							if(ch2 == '.'){
-								*lexeme_cursor = ch;
-								lexeme_cursor += 1;
+								dynamic_string_add_char_to_back(&lexeme, ch);
 								current_state = IN_FLOAT;
 								break;
 							}
@@ -462,7 +448,6 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 
 					case ';':
 						lex_item.tok = SEMICOLON;
-						strcpy(lex_item.lexeme, ";");
 						lex_item.line_num = line_num;
 						return lex_item;
 
@@ -491,7 +476,6 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						} else if(ch2 == '='){
 							//Prepare and return
 							lex_item.tok = COLONEQ;
-							strcpy(lex_item.lexeme, ":=");
 							lex_item.line_num = line_num;
 							return lex_item;
 						} else {
@@ -529,7 +513,6 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 
 					case '{':
 						lex_item.tok = L_CURLY;
-						strcpy(lex_item.lexeme, "{");
 						lex_item.line_num = line_num;
 						return lex_item;
 
@@ -557,17 +540,15 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						//Let's see what we have here
 						ch2 = get_next_char(fl);
 						if(ch2 >= '0' && ch2 <= '9'){
-							//Erase this now
-							memset(lexeme, 0, MAX_TOKEN_LENGTH);
-							//Reset the cursor
-							lexeme_cursor = lexeme;
+							//Allocate our dynamic string
+							dynamic_string_alloc(&lexeme);
+							//Add both of these in
+							dynamic_string_add_char_to_back(&lexeme, ch);
+							dynamic_string_add_char_to_back(&lexeme, ch2);
+
 							//We are not in an int
 							current_state = IN_FLOAT;
-							//Add this in
-							*lexeme_cursor = ch;
-							lexeme_cursor++;
-							*lexeme_cursor = ch2;
-							lexeme_cursor++;
+
 						} else if(ch2 == '.'){
 							//Let's see if ch3 is '.'
 							char ch3 = get_next_char(fl);
@@ -599,7 +580,6 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					
 					case ',':
 						lex_item.tok = COMMA;
-						strcpy(lex_item.lexeme, ",");
 						lex_item.line_num = line_num;
 						return lex_item;
 
@@ -627,25 +607,20 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					case '"':
 						//Say that we're in a string
 						current_state = IN_STRING;
-						//0 this out
-						memset(lexeme, 0, MAX_TOKEN_LENGTH);
-						//String literal pointer
-						lexeme_cursor = lexeme;
+						//Allocate the lexeme
+						dynamic_string_alloc(&lexeme);
 						break;
 
 					//Beginning of a char const
 					case '\'':
-						//0 this out
-						memset(lexeme, 0, MAX_TOKEN_LENGTH);
-						//String literal pointer
-						lexeme_cursor = lexeme;
-
 						//Grab the next char
 						ch2 = get_next_char(fl);
 
-						//Put this in
-						*lexeme_cursor = ch2;
-						lexeme_cursor++;
+						//Allocate the lexeme here
+						dynamic_string_alloc(&lexeme);
+
+						//Add our char const ch2 in
+						dynamic_string_add_char_to_back(&lexeme, ch2);
 
 						//Now we must see another single quote
 						ch2 = get_next_char(fl);
@@ -659,7 +634,8 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 
 						//Package and return
 						lex_item.tok = CHAR_CONST;
-						strcpy(lex_item.lexeme, lexeme);
+						//Add the dynamic string in
+						lex_item.lexeme = lexeme;
 						lex_item.line_num = line_num;
 						return lex_item;
 
@@ -724,26 +700,20 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 
 					default:
 						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#' || ch == '_'){
-							//Erase this now
-							memset(lexeme, 0, MAX_TOKEN_LENGTH);
-							//Reset the cursor
-							lexeme_cursor = lexeme;
+							//Allocate the lexeme
+							dynamic_string_alloc(&lexeme);
+							//Add the char in
+							dynamic_string_add_char_to_back(&lexeme, ch);
 							//We are now in an identifier
 							current_state = IN_IDENT;
-							//Add this char into the lexeme
-							*lexeme_cursor = ch;
-							lexeme_cursor++;
 						//If we get here we have the start of either an int or a real
 						} else if(ch >= '0' && ch <= '9'){
-							//Erase this now
-							memset(lexeme, 0, MAX_TOKEN_LENGTH);
-							//Reset the cursor
-							lexeme_cursor = lexeme;
+							//Allocate the lexeme
+							dynamic_string_alloc(&lexeme);
+							//Add the character to the lexeme
+							dynamic_string_add_char_to_back(&lexeme, ch);
 							//We are not in an int
 							current_state = IN_INT;
-							//Add this in
-							*lexeme_cursor = ch;
-							lexeme_cursor++;
 						} else {
 							lex_item.tok = ERROR;
 							lex_item.line_num = line_num;
@@ -757,10 +727,8 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 				//Is it a number, letter, or _ or $?. If so, we can have it in our ident
 				if(ch == '_' || ch == '$' || (ch >= 'a' && ch <= 'z') 
 				   || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')){
-					//Add it in
-					*lexeme_cursor = ch;
-					//Advance
-					lexeme_cursor++;
+					//Add the character to the lexeme
+					dynamic_string_add_char_to_back(&lexeme, ch);
 				} else {
 					//If we get here, we need to get out of the thing
 					//We'll put this back as we went too far
@@ -774,44 +742,42 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 			case IN_INT:
 				//Add it in and move along
 				if(ch >= '0' && ch <= '9'){
-					*lexeme_cursor = ch;
-					lexeme_cursor++;
+					dynamic_string_add_char_to_back(&lexeme, ch);
 				//If we see hex and we're in hex, it's also fine
 				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == 1) 
 						|| ((ch >= 'A' && ch <= 'F') && seen_hex == 1)){
-						*lexeme_cursor = ch;
-						lexeme_cursor++;
+					dynamic_string_add_char_to_back(&lexeme, ch);
 				} else if(ch == 'x' || ch == 'X'){
 					//Have we seen the hex code?
 					//Fail case here
-					if(seen_hex == 1){
+					if(seen_hex == TRUE){
 						lexitem_t err;
 						err.tok = ERROR;
 						return err;
 					}
 
-					if(*(lexeme_cursor-1) != '0'){
+					//If we haven't seen the 0 here it's bad
+					if(*(lexeme.string) != '0'){
 						lexitem_t err;
 						err.tok = ERROR;
 						return err;
-
 					}
 
 					//Otherwise set this and add it in
-					seen_hex = 1;
+					seen_hex = TRUE;
 
-					*lexeme_cursor = ch;
-					lexeme_cursor++;
+					//Add the character dynamically
+					dynamic_string_add_char_to_back(&lexeme, ch);
 				
 				} else if (ch == '.'){
 					//We're actually in a float const
 					current_state = IN_FLOAT;
-					*lexeme_cursor = ch;
-					lexeme_cursor++;
+					//Add the character dynamically
+					dynamic_string_add_char_to_back(&lexeme, ch);
 
 				} else if (ch == 'l'){
-					strcpy(lex_item.lexeme, lexeme);
 					lex_item.line_num = line_num;
+					lex_item.lexeme = lexeme;
 					lex_item.tok = LONG_CONST;
 					return lex_item;
 
@@ -830,7 +796,7 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					}
 
 					//Pack everything up and return
-					strcpy(lex_item.lexeme, lexeme);
+					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_num;
 
 					return lex_item;
@@ -841,13 +807,13 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					put_back_char(fl);
 
 					//Populate and return
-					if(seen_hex == 1){
+					if(seen_hex == TRUE){
 						lex_item.tok = HEX_CONST;
 					} else {
 						lex_item.tok = INT_CONST;
 					}
 
-					strcpy(lex_item.lexeme, lexeme);
+					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_num;
 					return lex_item;
 				}
@@ -857,15 +823,15 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 			case IN_FLOAT:
 				//We're just in a regular float here
 				if(ch >= '0' && ch <= '9'){
-					*lexeme_cursor = ch;
-					lexeme_cursor++;
+					//Add the character in
+					dynamic_string_add_char_to_back(&lexeme, ch);
 				} else {
 					//Put back the char
 					put_back_char(fl);
 					
 					//We'll give this back now
 					lex_item.tok = FLOAT_CONST;
-					strcpy(lex_item.lexeme, lexeme);
+					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_num;
 					return lex_item;
 				}
@@ -878,7 +844,7 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					//Set the token
 					lex_item.tok = STR_CONST;
 					//Set the lexeme & line num
-					strcpy(lex_item.lexeme, lexeme);
+					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_num;
 					return lex_item;
 				//Escape char
@@ -889,8 +855,7 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					//Otherwise we'll just keep adding here
 					//Just for line counting
 					is_ws(ch, &line_num, parser_line_num);
-					*lexeme_cursor = ch;
-					lexeme_cursor++;
+					dynamic_string_add_char_to_back(&lexeme, ch);
 				}
 
 				break;
@@ -958,8 +923,13 @@ void push_back_token(lexitem_t l){
  * Print out a token and it's associated line number
 */
 void print_token(lexitem_t* l){
-	//Print out with nice formatting
-	printf("TOKEN: %3d, Lexeme: %10s, Line: %4d\n", l->tok, l->lexeme, l->line_num);
+	if(l->lexeme.string == NULL){
+		//Print out with nice formatting
+		printf("TOKEN: %3d, Lexeme %15s, Line: %4d\n", l->tok, "NONE", l->line_num);
+	} else {
+		//Print out with nice formatting
+		printf("TOKEN: %3d, Lexeme: %15s, Line: %4d\n", l->tok, l->lexeme.string, l->line_num);
+	}
 }
 
 

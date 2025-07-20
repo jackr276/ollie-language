@@ -25,7 +25,11 @@ int main(){
 	initialize_variable_scope(symtab);
 
 	for(u_int8_t i = 0; i < 5; i++){
-		num_collisions += insert_variable(symtab, create_variable_record(idents_l1[i], STORAGE_CLASS_NORMAL));
+		dynamic_string_t string;
+		dynamic_string_alloc(&string);
+		dynamic_string_set(&string, idents_l1[i]);
+
+		num_collisions += insert_variable(symtab, create_variable_record(string, STORAGE_CLASS_NORMAL));
 	}
 
 	printf("Collisions: %d\n", num_collisions);
@@ -35,7 +39,11 @@ int main(){
 	symtab_variable_record_t* found;
 
 	for(u_int8_t i = 0; i < 2; i++){
-		num_collisions += insert_variable(symtab, create_variable_record(idents_l2[i], STORAGE_CLASS_NORMAL));
+		dynamic_string_t string;
+		dynamic_string_alloc(&string);
+		dynamic_string_set(&string, idents_l2[i]);
+
+		num_collisions += insert_variable(symtab, create_variable_record(string, STORAGE_CLASS_NORMAL));
 	}
 
 

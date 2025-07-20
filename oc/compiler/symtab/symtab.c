@@ -206,7 +206,7 @@ static u_int16_t hash(char* name){
 static u_int16_t hash_type(generic_type_t* type){
 	u_int32_t key = 37;
 	
-	char* cursor = type->type_name;
+	char* cursor = type->type_name.string;
 	//Two primes(this should be good enough for us)
 	u_int32_t a = 54059;
 	u_int32_t b = 76963;
@@ -230,14 +230,14 @@ static u_int16_t hash_type(generic_type_t* type){
 /**
  * Dynamically allocate a variable record
 */
-symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T storage_class){
+symtab_variable_record_t* create_variable_record(dynamic_string_t name, STORAGE_CLASS_T storage_class){
 	//Allocate it
 	symtab_variable_record_t* record = (symtab_variable_record_t*)calloc(1, sizeof(symtab_variable_record_t));
 
 	//Store the name
-	strcpy(record->var_name, name);
+	record->var_name = name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash(name);
+	record->hash = hash(name.string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
 	//Store the storage class
@@ -255,14 +255,14 @@ symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T sto
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T storage_class){
+symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class){
 	//Allocate it
 	symtab_function_record_t* record = (symtab_function_record_t*)calloc(1, sizeof(symtab_function_record_t));
 
-	//Store the name
-	strcpy(record->func_name, name);
+	//Copy the name over
+	record->func_name = name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash(name);
+	record->hash = hash(name.string);
 	//Store the storage class
 	record->storage_class = storage_class;
 	//Was it ever called?
@@ -292,14 +292,14 @@ symtab_type_record_t* create_type_record(generic_type_t* type){
  * Dynamically allocate and create a constant record
  * NOTE: we just need the name here to make the hash
  */
-symtab_constant_record_t* create_constant_record(char* name){
+symtab_constant_record_t* create_constant_record(dynamic_string_t name){
 	//Allocate it
 	symtab_constant_record_t* record = calloc(1, sizeof(symtab_constant_record_t));
 	
 	//Hash the name and store it
-	record->hash = hash(name);
+	record->hash = hash(name.string);
 	//Store the name
-	strcpy(record->name, name);
+	record->name = name;
 	//Everything else will be handled by caller, just give this back
 	return record;
 }
@@ -520,7 +520,14 @@ void add_all_basic_types(type_symtab_t* symtab){
  * Create the stack pointer(rsp) variable for us to use throughout
  */
 symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
-	symtab_variable_record_t* stack_pointer = create_variable_record("stack_pointer", STORAGE_CLASS_NORMAL);
+	//Create the var name
+	dynamic_string_t variable_name;
+	dynamic_string_alloc(&variable_name);
+
+	//Set to be stack pointer
+	dynamic_string_set(&variable_name, "stack_pointer");
+
+	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name, STORAGE_CLASS_NORMAL);
 	//Set this type as a label(address)
 	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
 
@@ -544,7 +551,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 	//We could have had collisions so we'll have to hunt here
 	while(record_cursor != NULL){
 		//If we find the right one, then we can get out
-		if(strcmp(record_cursor->func_name, name) == 0){
+		if(strcmp(record_cursor->func_name.string, name) == 0){
 			return record_cursor;
 		}
 		//Advance it if we didn't have the right name
@@ -572,7 +579,7 @@ symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name
 	//that it is possible to have collisions, so two records having the same hash is not 
 	//always enough to know for sure
 	while(cursor != NULL){
-		if(strcmp(cursor->name, name) == 0){
+		if(strcmp(cursor->name.string, name) == 0){
 			return cursor;
 		}
 
@@ -607,7 +614,7 @@ symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name)
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->var_name, name) == 0){
+			if(strcmp(records_cursor->var_name.string, name) == 0){
 				return records_cursor;
 			}
 			//Advance it
@@ -640,7 +647,7 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
 	//We could have had collisions so we'll have to hunt here
 	while(records_cursor != NULL){
 		//If we find the right one, then we can get out
-		if(strcmp(records_cursor->var_name, name) == 0){
+		if(strcmp(records_cursor->var_name.string, name) == 0){
 			return records_cursor;
 		}
 		//Advance it
@@ -677,7 +684,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 		while(records_cursor != NULL){
 		
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->var_name, name) == 0){
+			if(strcmp(records_cursor->var_name.string, name) == 0){
 				return records_cursor;
 			}
 
@@ -709,7 +716,7 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name, name) == 0){
+			if(strcmp(records_cursor->type->type_name.string, name) == 0){
 				return records_cursor;
 			}
 			//Advance it
@@ -753,7 +760,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name, type->type_name) == 0){
+			if(strcmp(records_cursor->type->type_name.string, type->type_name.string) == 0){
 				//If we have an array type, we must compare bounds and they must match
 				if(type->type_class == TYPE_CLASS_ARRAY
 					&& type->array_type->num_members != records_cursor->type->array_type->num_members){
@@ -787,7 +794,7 @@ void print_function_record(symtab_function_record_t* record){
 	}
 
 	printf("Record: {\n");
-	printf("Name: %s,\n", record->func_name);
+	printf("Name: %s,\n", record->func_name.string);
 	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("Offset: %p\n", (void*)(record->offset));
@@ -805,7 +812,7 @@ void print_variable_record(symtab_variable_record_t* record){
 	}
 
 	printf("Record: {\n");
-	printf("Name: %s,\n", record->var_name);
+	printf("Name: %s,\n", record->var_name.string);
 	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("Offset: %p\n", (void*)(record->offset));
@@ -823,7 +830,7 @@ void print_type_record(symtab_type_record_t* record){
 	}
 
 	printf("Record: {\n");
-	printf("Name: %s,\n", record->type->type_name);
+	printf("Name: %s,\n", record->type->type_name.string);
 	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("}\n");
@@ -835,9 +842,9 @@ void print_type_record(symtab_type_record_t* record){
 void print_function_name(symtab_function_record_t* record){
 	//If it's static we'll add the keyword in
 	if(record->storage_class == STORAGE_CLASS_STATIC){
-		printf("\t---> %d | fn:static %s(", record->line_number, record->func_name);
+		printf("\t---> %d | fn:static %s(", record->line_number, record->func_name.string);
 	} else {
-		printf("\t---> %d | fn %s(", record->line_number, record->func_name);
+		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
 	}
 
 	//Print out the params
@@ -847,7 +854,7 @@ void print_function_name(symtab_function_record_t* record){
 			printf("mut ");
 		}
 
-		printf("%s : %s", record->func_params[i].associate_var->var_name, record->func_params[i].associate_var->type_defined_as->type_name);
+		printf("%s : %s", record->func_params[i].associate_var->var_name.string, record->func_params[i].associate_var->type_defined_as->type_name.string);
 		//Comma if needed
 		if(i < record->number_of_params-1){
 			printf(", ");
@@ -855,7 +862,11 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Final closing paren and return type
-	printf(") -> %s", record->return_type->type_name);
+	if(record->return_type != NULL){
+		printf(") -> %s", record->return_type->type_name.string);
+	} else {
+		printf(") -> (null)");
+	}
 
 	//If it was defined implicitly, we'll print a semicol
 	if(record->defined == 0){
@@ -875,11 +886,11 @@ void print_variable_name(symtab_variable_record_t* record){
 		print_function_name(record->function_declared_in);
 		return;
 	} else if (record->is_label == 1){
-		printf("\n---> %d | %s:\n", record->line_number, record->var_name);
+		printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
 		return;
 	} else if(record->is_enumeration_member == TRUE || record->is_construct_member == TRUE){
 		//The var name
-		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name, record->type_defined_as->type_name);
+		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
 	} else {
 		//Line num
 		printf("\n---> %d | ", record->line_number);
@@ -893,10 +904,10 @@ void print_variable_name(symtab_variable_record_t* record){
 		}
 
 		//The var name
-		printf("%s : ", record->var_name);
+		printf("%s : ", record->var_name.string);
 
 		//The type name
-		printf("%s ", record->type_defined_as->type_name);
+		printf("%s ", record->type_defined_as->type_name.string);
 		
 		//We'll print out some abbreviated stuff with the let record
 		if(record->declare_or_let == 1){
@@ -914,33 +925,30 @@ void print_variable_name(symtab_variable_record_t* record){
  */
 void print_constant_name(symtab_constant_record_t* record){
 	//First the record
-	printf("\n---> %d | replace %s with ", record->line_number, record->name);
+	printf("\n---> %d | replace %s with ", record->line_number, record->name.string);
 	
-	//Grab the constant node out for convenience
-	constant_ast_node_t* const_node = (constant_ast_node_t*)(((generic_ast_node_t*)record->constant_node)->node);
+	generic_ast_node_t* const_node = record->constant_node;
 
 	//We'll now switch based on what kind of constant that we have
 	switch (const_node->constant_type) {
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
-			printf("%d", const_node->int_val);
-			break;
 		case LONG_CONST_FORCE_U:
 		case LONG_CONST:
-			printf("%ld", const_node->long_val);
+			printf("%ld", const_node->int_long_val);
 			break;
 		case CHAR_CONST:
 			printf("%d", const_node->char_val);
 			break;
 		case STR_CONST:
-			printf("%s", const_node->string_val);
+			printf("%s", const_node->string_val.string);
 			break;
 		case FLOAT_CONST:
 			printf("%f", const_node->float_val);
 			break;
+		//We should never get here
 		default:
-			printf("FATAL INTERNAL COMPILER ERROR\n");
-			exit(1);
+			break;
 	}
 
 	//Now print out the semicolon
@@ -960,7 +968,7 @@ static void print_generic_type(generic_type_t* type){
 	}
 
 	//Then print out the name
-	printf("%s", type->type_name);
+	printf("%s", type->type_name.string);
 }
 
 
@@ -977,7 +985,7 @@ void print_type_name(symtab_type_record_t* record){
 	}
 
 	//Then print out the name
-	printf("%s\n\n", record->type->type_name);
+	printf("%s\n\n", record->type->type_name.string);
 }
 
 
@@ -1001,7 +1009,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				//Generate a warning here
 				(*num_warnings)++;
 
-				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name);
+				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
@@ -1009,7 +1017,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				//Generate a warning here
 				(*num_warnings)++;
 
-				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name);
+				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
@@ -1018,7 +1026,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				//Generate a warning here
 				(*num_warnings)++;
 
-				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name);
+				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
@@ -1065,7 +1073,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			
 			//We have a non initialized variable
 			if(record->initialized == 0){
-				sprintf(info, "Variable \"%s\" is never initialized. First defined here:", record->var_name);
+				sprintf(info, "Variable \"%s\" is never initialized. First defined here:", record->var_name.string);
 				print_warning(info, record->line_number);
 				print_variable_name(record);
 				(*num_warnings)++;
@@ -1075,7 +1083,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 
 			//If it's mutable but never mutated
 			if(record->is_mutable == 1 && record->assigned_to == 0){
-				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name);
+				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
 				print_warning(info, record->line_number);
 				print_variable_name(record);
 				(*num_warnings)++;

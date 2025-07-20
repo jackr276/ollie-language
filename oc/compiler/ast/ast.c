@@ -20,24 +20,21 @@ static generic_ast_node_t* current_ast_node = NULL;
  * This helper function negates a constant node's value
  */
 void negate_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
 	//Switch based on the value here
-	switch(const_node->constant_type){
+	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
 		case INT_CONST:
-			const_node->int_val = const_node->int_val * -1;
-			break;
-		case FLOAT_CONST:
-			const_node->float_val = const_node->float_val * -1;
-			break;
-		case CHAR_CONST:
-			const_node->char_val = const_node->char_val * -1;
 		case LONG_CONST_FORCE_U:
 		case LONG_CONST:
-			const_node->long_val = const_node->long_val * -1;
+			constant_node->int_long_val = constant_node->int_long_val * -1;
+			break;
+		case FLOAT_CONST:
+			constant_node->float_val = constant_node->float_val * -1;
+			break;
+		case CHAR_CONST:
+			constant_node->char_val = constant_node->char_val * -1;
+			break;
 		//This should never happen
 		default:
 			return;
@@ -49,24 +46,21 @@ void negate_constant_value(generic_ast_node_t* constant_node){
  * This helper function decrements a constant node's value
  */
 void decrement_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
 	//Switch based on the value here
-	switch(const_node->constant_type){
+	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
 		case INT_CONST:
-			const_node->int_val = const_node->int_val - 1;
-			break;
-		case FLOAT_CONST:
-			const_node->float_val = const_node->float_val - 1;
-			break;
-		case CHAR_CONST:
-			const_node->char_val = const_node->char_val - 1;
 		case LONG_CONST_FORCE_U:
 		case LONG_CONST:
-			const_node->long_val = const_node->long_val - 1;
+			constant_node->int_long_val = constant_node->int_long_val - 1;
+			break;
+		case FLOAT_CONST:
+			constant_node->float_val = constant_node->float_val - 1;
+			break;
+		case CHAR_CONST:
+			constant_node->char_val = constant_node->char_val - 1;
+			break;
 		//This should never happen
 		default:
 			return;
@@ -78,24 +72,21 @@ void decrement_constant_value(generic_ast_node_t* constant_node){
  * This helper function increments a constant node's value
  */
 void increment_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
 	//Switch based on the value here
-	switch(const_node->constant_type){
+	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
 		case INT_CONST:
-			const_node->int_val = const_node->int_val + 1;
-			break;
-		case FLOAT_CONST:
-			const_node->float_val = const_node->float_val + 1;
-			break;
-		case CHAR_CONST:
-			const_node->char_val = const_node->char_val + 1;
 		case LONG_CONST_FORCE_U:
 		case LONG_CONST:
-			const_node->long_val = const_node->long_val + 1;
+			constant_node->int_long_val = constant_node->int_long_val + 1;
+			break;
+		case FLOAT_CONST:
+			constant_node->float_val = constant_node->float_val + 1;
+			break;
+		case CHAR_CONST:
+			constant_node->char_val = constant_node->char_val + 1;
+			break;
 		//This should never happen
 		default:
 			return;
@@ -107,21 +98,18 @@ void increment_constant_value(generic_ast_node_t* constant_node){
  * This helper function will logically not a consant node's value
  */
 void logical_not_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
 	//Switch based on the value here
-	switch(const_node->constant_type){
+	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
 		case INT_CONST:
-			const_node->int_val = !(const_node->int_val);
-			break;
-		case CHAR_CONST:
-			const_node->char_val = !(const_node->char_val);
 		case LONG_CONST_FORCE_U:
 		case LONG_CONST:
-			const_node->long_val = !(const_node->long_val);
+			constant_node->int_long_val = !(constant_node->int_long_val);
+			break;
+		case CHAR_CONST:
+			constant_node->char_val = !(constant_node->char_val);
+			break;
 		//This should never happen
 		default:
 			return;
@@ -133,21 +121,18 @@ void logical_not_constant_value(generic_ast_node_t* constant_node){
  * This helper function will logically not a consant node's value
  */
 void bitwise_not_constant_value(generic_ast_node_t* constant_node){
-	//Grab the constant node out
-	constant_ast_node_t* const_node = ((constant_ast_node_t*)(constant_node->node));
-
 	//Switch based on the value here
-	switch(const_node->constant_type){
+	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
 		case INT_CONST:
-			const_node->int_val = ~(const_node->int_val);
-			break;
-		case CHAR_CONST:
-			const_node->char_val = ~(const_node->char_val);
 		case LONG_CONST_FORCE_U:
 		case LONG_CONST:
-			const_node->long_val = ~(const_node->long_val);
+			constant_node->int_long_val = ~(constant_node->int_long_val);
+			break;
+		case CHAR_CONST:
+			constant_node->char_val = ~(constant_node->char_val);
+			break;
 		//This should never happen
 		default:
 			return;
@@ -158,7 +143,7 @@ void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 /**
  * A utility function for duplicating nodes
  */
-generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
+generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	//First allocate the overall node here
 	generic_ast_node_t* duplicated = calloc(1, sizeof(generic_ast_node_t));
 
@@ -169,37 +154,21 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 	switch(node->CLASS){
 		//Asm inline is a special case because we'll need to copy the assembly over
 		case AST_NODE_CLASS_ASM_INLINE_STMT:
-			//Allocate the inner node
-			duplicated->node = calloc(1, sizeof(AST_NODE_CLASS_ASM_INLINE_STMT));
-			//Grab a reference for convenience
-			asm_inline_stmt_ast_node_t* duplicated_asm = (asm_inline_stmt_ast_node_t*)(duplicated->node);
-			asm_inline_stmt_ast_node_t* old_asm = (asm_inline_stmt_ast_node_t*)(node->node);
-			duplicated_asm->asm_line_statements = calloc(sizeof(char), old_asm->max_length);
-			duplicated_asm->max_length = old_asm->max_length;
-			duplicated_asm->length = old_asm->length;
-
-			//Copy over the entirety of the inlined assembly
-			strcpy(duplicated_asm->asm_line_statements, old_asm->asm_line_statements);
-			
+			duplicated->asm_inline_statements = clone_dynamic_string(&(node->asm_inline_statements));
 			break;
 
 		//Constants are another special case, because they contain a special inner node
 		case AST_NODE_CLASS_CONSTANT:
-			//Allocate the constant node
-			duplicated->node = calloc(1, sizeof(constant_ast_node_t));
-
-			//And then we'll copy the two onto eachother
-			memcpy(duplicated->node, node->node, sizeof(constant_ast_node_t));
+			//If we have a string constant, we'll duplicate the dynamic string
+			if(node->constant_type == STR_CONST){
+				duplicated->string_val = clone_dynamic_string(&(node->string_val));
+			}
 
 			break;
 
 		//Final case is that we have an identifier
 		case AST_NODE_CLASS_IDENTIFIER:
-			//Allocate this
-			duplicated->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
-			//Copy the string over
-			memcpy(duplicated->identifier, node->identifier, MAX_IDENT_LENGTH);
-
+			duplicated->identifier = clone_dynamic_string(&(node->identifier));
 			break;
 
 		//By default we do nothing, this is just there for the compiler to not complain
@@ -237,8 +206,6 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
-	//A pointer for referencing the asm inline statement
-	asm_inline_stmt_ast_node_t* asm_node;
 
 	//If we have the very first node
 	if(head_node == NULL){
@@ -251,34 +218,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
 	}
 	//Assign the class
 	node->CLASS = CLASS;
-	
-	//Switch based on what we have for special cases
-	switch(CLASS){
-		//The needs extra allocation
-		case AST_NODE_CLASS_ASM_INLINE_STMT:
-			//Allocate the inner node with the proper size
-			node->node = calloc(1, sizeof(asm_inline_stmt_ast_node_t));
-			//Extract the actual node
-			asm_node = node->node;
-			//We need to allocate the inside string as well
-			asm_node->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
-			asm_node->length = 0;
-			asm_node->max_length = DEFAULT_ASM_INLINE_SIZE;
-
-			break;
-	
-		//Constants and idents both require extra allocation
-		case AST_NODE_CLASS_CONSTANT:
-			node->node = calloc(1, sizeof(constant_ast_node_t));
-			break;
-		case AST_NODE_CLASS_IDENTIFIER:
-			node->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
-			break;
-
-		//By default do nothing, this is just so the compiler doesn't complain
-		default:
-			break;
-	}
 
 	//Assign the side of the node
 	node->side = side;
@@ -337,18 +276,15 @@ void ast_dealloc(){
 
 		//We can off the bat free it's data
 		if(temp->node != NULL){
-			//Special case here, we need to free the interior string
-			if(temp->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-				//Deallocate this string in here
-				free(((asm_inline_stmt_ast_node_t*)(temp->node))->asm_line_statements);
-			}
 			//No matter what, we always free this
 			free(temp->node);
 		}
 
 		//Free this if needed
 		if(temp->CLASS == AST_NODE_CLASS_IDENTIFIER){
-			free(temp->identifier);
+			dynamic_string_dealloc(&(temp->identifier));
+		} else if(temp->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+			dynamic_string_dealloc(&(temp->asm_inline_statements));
 		}
 
 		//Destroy temp here

@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <sys/types.h>
+#include "../dynamic_string/dynamic_string.h"
 
 //The maximum token length is 500 
 #define MAX_TOKEN_LENGTH 500
@@ -150,7 +151,7 @@ typedef struct lexitem_t lexitem_t;
 
 struct lexitem_t{
 	//The string(lexeme) that got us this token
-	char lexeme[MAX_TOKEN_LENGTH];
+	dynamic_string_t lexeme;
 	//The line number of the source that we found it on
 	u_int16_t line_num;
 	//The token associated with this item

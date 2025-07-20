@@ -97,7 +97,7 @@ typedef enum TYPE_CLASS{
  */
 struct generic_type_t{
 	//The name of the type
-	char type_name[MAX_TYPE_NAME_LENGTH];
+	dynamic_string_t type_name;
 	/**
 	 * The following pointers will be null except for the one that the type class
 	 * specifies this type belongs to
@@ -273,12 +273,12 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 /**
  * Dynamically allocate and create an enumerated type
  */
-generic_type_t* create_enumerated_type(char* type_name, u_int32_t line_number);
+generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number);
 
 /**
  * Dynamically allocate and create a constructed type
  */
-generic_type_t* create_constructed_type(char* type_name, u_int32_t line_number);
+generic_type_t* create_constructed_type(dynamic_string_t type_name, u_int32_t line_number);
 
 /**
  * Is the given binary operation valid for the type that was specificed?
@@ -318,7 +318,7 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 /**
  * Dynamically allocate and create an aliased type
  */
-generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_type, u_int32_t line_number);
+generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number);
 
 /**
  * Is a type signed?
