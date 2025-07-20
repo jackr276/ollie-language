@@ -158,7 +158,7 @@ void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 /**
  * A utility function for duplicating nodes
  */
-generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
+generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	//First allocate the overall node here
 	generic_ast_node_t* duplicated = calloc(1, sizeof(generic_ast_node_t));
 
@@ -195,11 +195,7 @@ generic_ast_node_t* duplicate_node(const generic_ast_node_t* node){
 
 		//Final case is that we have an identifier
 		case AST_NODE_CLASS_IDENTIFIER:
-			//Allocate this
-			duplicated->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
-			//Copy the string over
-			memcpy(duplicated->identifier, node->identifier, MAX_IDENT_LENGTH);
-
+			duplicated->identifier = clone_dynamic_string(&(node->identifier));
 			break;
 
 		//By default we do nothing, this is just there for the compiler to not complain
@@ -270,9 +266,6 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
 		//Constants and idents both require extra allocation
 		case AST_NODE_CLASS_CONSTANT:
 			node->node = calloc(1, sizeof(constant_ast_node_t));
-			break;
-		case AST_NODE_CLASS_IDENTIFIER:
-			node->identifier = calloc(MAX_IDENT_LENGTH, sizeof(char));
 			break;
 
 		//By default do nothing, this is just so the compiler doesn't complain
@@ -348,7 +341,7 @@ void ast_dealloc(){
 
 		//Free this if needed
 		if(temp->CLASS == AST_NODE_CLASS_IDENTIFIER){
-			free(temp->identifier);
+			dynamic_string_dealloc(&(temp->identifier));
 		}
 
 		//Destroy temp here

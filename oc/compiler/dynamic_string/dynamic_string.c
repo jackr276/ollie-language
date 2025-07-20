@@ -24,6 +24,27 @@ void dynamic_string_alloc(dynamic_string_t* dynamic_string){
 
 
 /**
+ * Clone a dynamic string into a new one
+ */
+dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string){
+	dynamic_string_t new = {NULL, 0, 0};
+
+	//Copy these values over
+	new.current_length = dynamic_string->current_length;
+	new.length = dynamic_string->length;
+
+	//Now we'll allocate and copy the string over
+	new.string = calloc(dynamic_string->length, sizeof(char));
+
+	//And we'll copy it over
+	strncpy(new.string, dynamic_string->string, dynamic_string->length);
+
+	//And give back the new one
+	return new;
+}
+
+
+/**
  * Set the value of a dynamic string. The function
  * will dynamically resize said string if what is passed
  * through is too big

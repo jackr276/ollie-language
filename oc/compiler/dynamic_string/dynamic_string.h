@@ -36,6 +36,11 @@ struct dynamic_string_t {
 void dynamic_string_alloc(dynamic_string_t* dynamic_string);
 
 /**
+ * Clone a dynamic string into a new one
+ */
+dynamic_string_t clone_dynamic_string(dynamic_string_t* dynamic_string);
+
+/**
  * Set the value of a dynamic string. The function
  * will dynamically resize said string if what is passed
  * through is too big

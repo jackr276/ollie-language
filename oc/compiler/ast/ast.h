@@ -103,6 +103,7 @@ typedef enum address_specifier_type_t{
  * to what the actual node is
 */
 struct generic_ast_node_t{
+	dynamic_string_t identifier;
 	//What is the next created AST NODE? Used for memory deallocation
 	generic_ast_node_t* next_created_ast_node;
 	//What is the inferred type of the node
@@ -116,8 +117,6 @@ struct generic_ast_node_t{
 	symtab_variable_record_t* variable;
 	//The symtab function record
 	symtab_function_record_t* func_record;
-	//Holds the name of the type as a string
-	char* type_name;
 	//The type record that we have
 	symtab_type_record_t* type_record;
 	//What is the value of this case statement
@@ -133,8 +132,6 @@ struct generic_ast_node_t{
 	Token unary_operator;
 	//Construct accessor token
 	Token construct_accessor_tok;
-	//Store an ident if we have one
-	char* identifier;
 	//Is this assignable?
 	variable_assignability_t is_assignable;
 	//What side is this node on
@@ -157,7 +154,8 @@ struct generic_ast_node_t{
 
 //Holds information about a constant
 struct constant_ast_node_t{
-	char string_val[MAX_TOKEN_LENGTH];
+	//String value stored as dynamic string
+	dynamic_string_t string_val;
 	int64_t long_val;
 	//It's cheap enough for us to just hold all of these here
 	int32_t int_val;
@@ -211,7 +209,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side);
 /**
  * A utility function for node duplication
  */
-generic_ast_node_t* duplicate_node(const generic_ast_node_t* node);
+generic_ast_node_t* duplicate_node(generic_ast_node_t* node);
 
 /**
  * A helper function that will appropriately add a child node into the parent

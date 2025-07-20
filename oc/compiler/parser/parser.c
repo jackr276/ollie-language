@@ -362,7 +362,7 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	
 	//If we can't find it that's bad
 	if(lookahead.tok != IDENT){
-		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme);
+		sprintf(info, "String %s is not a valid identifier", lookahead.lexeme.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -370,8 +370,9 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
 	//Idents are assignable
 	ident_node->is_assignable = ASSIGNABLE;
-	//Copy the string we got into it
-	strcpy(ident_node->identifier, lookahead.lexeme);
+	//Clone the string in
+	ident_node->identifier = clone_dynamic_string(&(lookahead.lexeme));
+
 	//Default identifier type is s_int32
 	ident_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 	//Add the line number
@@ -394,15 +395,15 @@ static generic_ast_node_t* label_identifier(FILE* fl, side_type_t side){
 	
 	//If we can't find it that's bad
 	if(lookahead.tok != LABEL_IDENT){
-		sprintf(info, "String %s is not a valid label identifier", lookahead.lexeme);
+		sprintf(info, "String %s is not a valid label identifier", lookahead.lexeme.string);
 		//Create and return an error node that will be sent up the chain
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Create the identifier node
 	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
-	//Copy the string we got into it
-	strcpy(label_ident_node->identifier, lookahead.lexeme);
+	//Clone the string in
+	label_ident_node->identifier = clone_dynamic_string(&(lookahead.lexeme));
 	//By default a label identifier is of type u_int64(memory address)
 	label_ident_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 	//Add the line number
@@ -450,7 +451,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			const_node->constant_type = INT_CONST;
 
 			//Store the integer value
-			const_node->int_val = atoi(lookahead.lexeme);
+			const_node->int_val = atoi(lookahead.lexeme.string);
 
 			//This is signed by default
 			constant_node->inferred_type = generic_signed_int;
@@ -462,7 +463,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Mark what it is
 			const_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			const_node->int_val = atoi(lookahead.lexeme);
+			const_node->int_val = atoi(lookahead.lexeme.string);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_unsigned_int;
@@ -474,7 +475,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Mark what it is 
 			const_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			const_node->int_val = strtol(lookahead.lexeme, NULL, 0);
+			const_node->int_val = strtol(lookahead.lexeme.string, NULL, 0);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_signed_int;
@@ -487,7 +488,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			const_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			const_node->long_val = atol(lookahead.lexeme);
+			const_node->long_val = atol(lookahead.lexeme.string);
 
 			//This is a signed i64
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
@@ -500,7 +501,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			const_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			const_node->long_val = atol(lookahead.lexeme);
+			const_node->long_val = atol(lookahead.lexeme.string);
 
 			//By default, int constants are of type s_int64 
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
@@ -510,7 +511,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		case FLOAT_CONST:
 			const_node->constant_type = FLOAT_CONST;
 			//Grab the float val
-			float float_val = atof(lookahead.lexeme);
+			float float_val = atof(lookahead.lexeme.string);
 
 			//Store the float value we were given
 			const_node->float_val = float_val;
@@ -522,7 +523,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		case CHAR_CONST:
 			const_node->constant_type = CHAR_CONST;
 			//Grab the char val
-			char char_val = *(lookahead.lexeme);
+			char char_val = *(lookahead.lexeme.string);
 
 			//Store the char value that we were given
 			const_node->char_val = char_val;
@@ -533,30 +534,13 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 
 		case STR_CONST:
 			const_node->constant_type = STR_CONST;
-			//String contants are of a char[] type. We will determine what the size of this char[] is here
-			//Let's first find the string length
-			u_int32_t length = strlen(lookahead.lexeme + 1);
-
-			//If it's empty throw a warning
-			if(length == 0){
-				return print_and_return_error("0 length string given as constant", parser_line_num);
-			}
-
-			//Too long of a string
-			if(length > 499){
-				return print_and_return_error("String literals may be at most 500 characters in length", parser_line_num);
-			}
-
-			//Increment 1 to account for the null terminator
-			length++;
-
 			//Let's find the type if it's in the symtab
 			symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, "char*");
 			constant_node->inferred_type = found_type->type;
 			
-			//By the time we make it down here, the type has been accounted for
-			//We'll now copy the lexeme in
-			strcpy(const_node->string_val, lookahead.lexeme);
+			//Clone the dynamic string in
+			const_node->string_val = clone_dynamic_string(&(lookahead.lexeme));
+
 			break;
 
 		default:
@@ -602,7 +586,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	}
 
 	//Grab the function name out for convenience
-	function_name = ident->identifier;
+	function_name = ident->identifier.string;
 
 	//Let's now look up the function name in the function symtab
 	function_record = lookup_function(function_symtab, function_name);
@@ -958,7 +942,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			}
 
 			//Grab this out for convenience
-			char* var_name = ident->identifier;
+			char* var_name = ident->identifier.string;
 
 			//We have a few options here, we could find a constant that has been declared
 			//like this. If so, we'll return a duplicate of the constant node that we have
@@ -1071,7 +1055,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 
 		//If we get here we fail
 		default:
-			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme);
+			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme.string);
 			return print_and_return_error(info, current_line);
 	}
 }
@@ -1424,7 +1408,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	}
 
 	//Grab this for nicety
-	char* member_name = ident->identifier;
+	char* member_name = ident->identifier.string;
 
 	//Let's see if we can look this up inside of the type
 	symtab_variable_record_t* var_record = get_construct_member(referenced_type->construct_type, member_name)->variable;
@@ -3576,7 +3560,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_
 	}
 
 	//Grab this for convenience
-	char* name = ident->identifier;
+	char* name = ident->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
@@ -3766,7 +3750,7 @@ static u_int8_t construct_definer(FILE* fl){
 	}
 
 	//Otherwise, we'll now add this identifier into the type name
-	strcat(type_name, ident->identifier);	
+	strcat(type_name, ident->identifier.string);	
 
 	//Once we have this, the actual node is useless so we'll free it
 
@@ -3867,7 +3851,7 @@ static u_int8_t construct_definer(FILE* fl){
 	}
 
 	//Let's grab the actual name out
-	strcpy(alias_name, alias_ident->identifier);
+	strcpy(alias_name, alias_ident->identifier.string);
 
 	//Once we have this, the alias ident is of no use to us
 
@@ -3953,7 +3937,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 
 	//Now if we make it here, we'll need to check and make sure that it isn't a duplicate of anything else
 	//Grab this for convenience
-	char* name = ident->identifier;
+	char* name = ident->identifier.string;
 
 	//Check that it isn't some duplicated function name
 	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
@@ -4108,7 +4092,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now if we get here we know that we found a valid ident, so we'll add it to the name
-	strcat(name, ident->identifier);
+	strcat(name, ident->identifier.string);
 
 	//Once we have this, we no longer need the ident node
 
@@ -4241,7 +4225,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Extract the alias name
-	strcpy(alias_name, alias_ident->identifier);
+	strcpy(alias_name, alias_ident->identifier.string);
 
 	//Now that we're here we don't need the node anymore
 	
@@ -4351,7 +4335,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 	   || lookahead.tok == S_INT64 || lookahead.tok == FLOAT32 || lookahead.tok == FLOAT64 || lookahead.tok == CHAR){
 
 		//We will now grab this record from the symtable to make our life easier
-		symtab_type_record_t* record = lookup_type_name_only(type_symtab, lookahead.lexeme);
+		symtab_type_record_t* record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
 
 		//Sanity check, if this is null something is very wrong
 		if(record == NULL){
@@ -4379,15 +4363,15 @@ static symtab_type_record_t* type_name(FILE* fl){
 		}
 
 		//Array bounds checking
-		if(strlen(type_ident->identifier) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
+		if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
 		}
 
 		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-		strcat(type_name, type_ident->identifier);
+		strcat(type_name, type_ident->identifier.string);
 
 		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
 		symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
@@ -4420,15 +4404,15 @@ static symtab_type_record_t* type_name(FILE* fl){
 		}
 
 		//Array bounds checking
-		if(strlen(type_ident->identifier) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
+		if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
 		}
 
 		//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-		strcat(type_name, type_ident->identifier);
+		strcat(type_name, type_ident->identifier.string);
 
 		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
 		symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
@@ -4463,15 +4447,15 @@ static symtab_type_record_t* type_name(FILE* fl){
 		}
 
 		//Array bounds checking
-		if(strlen(type_ident->identifier) > MAX_TYPE_NAME_LENGTH - 10){
-			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier);
+		if(strlen(type_ident->identifier.string) > MAX_TYPE_NAME_LENGTH - 10){
+			sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->identifier.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
 		}
 
 		//Grab a pointer for it for convenience
-		char* temp_name = type_ident->identifier;
+		char* temp_name = type_ident->identifier.string;
 
 		//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
 		symtab_type_record_t* record = lookup_type_name_only(type_symtab, temp_name);
@@ -4731,7 +4715,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 
 	//Now we must perform all needed duplication checks for the name
 	//Grab this for convenience
-	char* name = ident->identifier;
+	char* name = ident->identifier.string;
 
 	//Check that it isn't some duplicated function name
 	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
@@ -5040,7 +5024,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Otherwise we are all good syntactically here
 
 	//Grab the name out for convenience
-	char* label_name = label_ident->identifier;
+	char* label_name = label_ident->identifier.string;
 
 	//We now need to make sure that it isn't a duplicate
 	symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, label_name);
