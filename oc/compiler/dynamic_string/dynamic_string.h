@@ -22,6 +22,8 @@ typedef struct dynamic_string_t dynamic_string_t;
 struct dynamic_string_t {
 	//The string itself
 	char* string;
+	//The current length of the string
+	u_int16_t current_length;
 	//The length of said string
 	u_int16_t length;
 };
@@ -38,7 +40,7 @@ void dynamic_string_alloc(dynamic_string_t* dynamic_string);
  * will dynamically resize said string if what is passed
  * through is too big
  */
-dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_strig, char* string);
+dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_string, char* string);
 
 /**
  * Add a char to a dynamic string - this is really targeted at
