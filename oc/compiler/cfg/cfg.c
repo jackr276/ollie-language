@@ -2222,7 +2222,7 @@ static void emit_idle(basic_block_t* basic_block, u_int8_t is_branch_ending){
  */
 static void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t* asm_inline_node, u_int8_t is_branch_ending){
 	//First we allocate the whole thing
-	instruction_t* asm_inline_stmt = emit_asm_inline_instruction(asm_inline_node->node); 
+	instruction_t* asm_inline_stmt = emit_asm_inline_instruction(asm_inline_node); 
 	
 	//Mark this with whatever was passed through
 	asm_inline_stmt->is_branch_ending =is_branch_ending;
