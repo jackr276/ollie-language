@@ -118,8 +118,8 @@ struct symtab_function_record_t{
  * lexical level, line_number, parent function, etc.
  */
 struct symtab_variable_record_t{
-	//Variable name
-	char var_name[MAX_IDENT_LENGTH];
+	//The variable name
+	dynamic_string_t var_name;
 	//For SSA renaming
 	lightstack_t counter_stack;
 	//What function was it declared in?
@@ -193,8 +193,8 @@ struct symtab_type_record_t{
  * how we will keep references to constants as they're defined by the user
  */
 struct symtab_constant_record_t{
-	//The name
-	char name[MAX_IDENT_LENGTH];
+	//The name as a dynamic string
+	dynamic_string_t name;
 	//We'll link directly to the constant node here
 	void* constant_node;
 	//For linked list functionality
@@ -337,7 +337,7 @@ void finalize_type_scope(type_symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T storage_class);
+symtab_variable_record_t* create_variable_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);
 
 /**
  * Make a function record
@@ -354,7 +354,7 @@ symtab_type_record_t* create_type_record(generic_type_t* type);
  * other rules, this rule will actually have most of it's processing
  * done by the client
  */
-symtab_constant_record_t* create_constant_record(char* name);
+symtab_constant_record_t* create_constant_record(dynamic_string_t name);
 
 /**
  * Insert a function into the symbol table

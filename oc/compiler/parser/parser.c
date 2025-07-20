@@ -1145,7 +1145,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
 	//this assignment is illegal
 	if(current_var->initialized == TRUE && current_var->is_mutable == FALSE){
-		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name);
+		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -3613,7 +3613,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_
 	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record
-	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* member_record = create_variable_record(ident->identifier, STORAGE_CLASS_NORMAL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Mark that this is a construct member
@@ -3974,7 +3974,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 
 	//Once we make it all the way down here, we know that we don't have any duplication
 	//We can now make the record of the enum
-	symtab_variable_record_t* enum_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* enum_record = create_variable_record(ident->identifier, STORAGE_CLASS_NORMAL);
 	//Store the current value
 	enum_record->enum_member_value = current_member_val;
 	//It is an enum member
@@ -4767,11 +4767,11 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//symbol table
 	
 	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* param_record = create_variable_record(ident->identifier, STORAGE_CLASS_NORMAL);
 	//It is a function parameter
-	param_record->is_function_paramater = 1;
+	param_record->is_function_paramater = TRUE;
 	//We assume that it was initialized
-	param_record->initialized = 1;
+	param_record->initialized = TRUE;
 	//Add the line number
 	param_record->line_number = parser_line_num;
 	//If it is mutable
@@ -5031,7 +5031,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	}
 
 	//Now that we know we didn't find it, we'll create it
-	found = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
+	found = create_variable_record(label_ident->identifier, STORAGE_CLASS_NORMAL);
 	//Store the type
 	found->type_defined_as = label_type->type;
 	//Store the fact that it is a label
@@ -7115,7 +7115,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(ident_node->identifier, storage_class);
 	//Store its constant status
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
@@ -7336,7 +7336,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(ident_node->identifier, storage_class);
 	//Store it's mutability status
 	declared_var->is_mutable = is_mutable;
 	//Store the type
@@ -7755,7 +7755,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Fail out if duplicate is found
 		if(found_variable != NULL){
-			sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name);
+			sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name.string);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			print_variable_name(found_variable);
 			num_errors++;
@@ -8188,7 +8188,7 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Now we're ready for assembly and insertion
-	symtab_constant_record_t* created_const = create_constant_record(name);
+	symtab_constant_record_t* created_const = create_constant_record(ident_node->identifier);
 
 	//Once we've created it, we'll pack it with values
 	created_const->constant_node = constant_node;

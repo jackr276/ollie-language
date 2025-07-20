@@ -1138,7 +1138,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 		fprintf(fl, "t%d", variable->temp_var_number);
 	} else {
 		//Otherwise, print out the SSA generation along with the variable
-		fprintf(fl, "%s_%d", variable->linked_var->var_name, variable->ssa_generation);
+		fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
 	}
 
 	//Lastly we print out the remaining indirection characters
@@ -1494,10 +1494,10 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 	//For a label statement, we need to trim off the $ that it has
 	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
 		//Let's print it out. This is an instance where we will not use the print var
-		fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name + 1);
+		fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string + 1);
 	} else if(stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
 		//This is an instance where we will not use the print var
-		fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name + 1);
+		fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name.string + 1);
 	//Display an assembly inline statement
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
 		//Should already have a trailing newline

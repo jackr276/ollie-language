@@ -338,7 +338,11 @@ void print_stack_data_area(stack_data_area_t* area){
 		while(current != NULL){
 			three_addr_var_t* current_var = current->variable;
 			//We'll take the variable and the size
-			printf("%10s\t%8d\t%8d\n", current_var->linked_var->var_name, current->variable_size, current_var->stack_offset);
+			if(current_var->is_temporary == FALSE){
+				printf("%10s\t%8d\t%8d\n", current_var->linked_var->var_name.string, current->variable_size, current_var->stack_offset);
+			} else {
+				printf("temp %d\t%8d\t%8d\n", current_var->temp_var_number, current->variable_size, current_var->stack_offset);
+			}
 
 			//Advance the node
 			current = current->next;

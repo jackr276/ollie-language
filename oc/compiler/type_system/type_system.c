@@ -1530,7 +1530,7 @@ constructed_type_field_t* get_construct_member(constructed_type_t* construct, ch
 		var = construct->construct_table[_].variable;
 
 		//Now we'll do a simple comparison. If they match, we're set
-		if(strcmp(var->var_name, name) == 0){
+		if(strcmp(var->var_name.string, name) == 0){
 			//Return the whole record if we find it
 			return &(construct->construct_table[_]);
 		}

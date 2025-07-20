@@ -2893,7 +2893,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			}
 
 			//Now we'll grab the associated construct record
-			constructed_type_field_t* field = get_construct_member(current_type->construct_type, var->var_name);
+			constructed_type_field_t* field = get_construct_member(current_type->construct_type, var->var_name.string);
 
 			//The field we have
 			symtab_variable_record_t* member = field->variable;
