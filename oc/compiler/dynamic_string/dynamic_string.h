@@ -8,5 +8,46 @@
 #ifndef DYNAMIC_STRING_H
 #define DYNAMIC_STRING_H
 
+#include <sys/types.h>
 
-#endif
+//Default length of the string is 60 characters
+#define DEFAULT_START_LENGTH 60
+
+typedef struct dynamic_string_t dynamic_string_t;
+
+/**
+ * A dynamic string itself contains the true length of the string(with \0 included)
+ * and the pointer itself
+ */
+struct dynamic_string_t {
+	//The string itself
+	char* string;
+	//The length of said string
+	u_int16_t length;
+};
+
+
+/**
+ * Allocate a dynamic string on the heap
+ */
+dynamic_string_t* dynamic_string_alloc();
+
+/**
+ * Set the value of a dynamic string. The function
+ * will dynamically resize said string if what is passed
+ * through is too big
+ */
+dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_strig, char* string);
+
+/**
+ * Add a char to a dynamic string - this is really targeted at
+ * how our lexer works
+ */
+dynamic_string_t* dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch);
+
+/**
+ * Deallocate a dynamic string from the heap
+ */
+dynamic_string_t* dynamic_string_dealloc(dynamic_string_t* dynamic_string);
+
+#endif /* DYNAMIC_STRING_H */
