@@ -76,7 +76,7 @@ void dynamic_string_set(dynamic_string_t* dynamic_string, char* string){
 	}
 
 	//Set the current length to be this new length here
-	dynamic_string->current_length = new_length;
+	dynamic_string->current_length = new_length - 1;
 
 	//Copy the string over
 	strncpy(dynamic_string->string, string, paramter_length);

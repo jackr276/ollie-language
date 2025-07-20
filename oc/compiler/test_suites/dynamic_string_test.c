@@ -97,4 +97,22 @@ int main(){
 
 	//Destroy it
 	dynamic_string_dealloc(&string);
+
+	printf("=========== Testing char addition after setting ====================\n");
+
+	//Recreate the string
+	dynamic_string_alloc(&string);
+
+	//Set it
+	dynamic_string_set(&string, "I have been set");
+
+	//Add char by char
+	for(u_int16_t i = 0; i < length; i++){
+		dynamic_string_add_char_to_back(&string, addition_string[i]);
+		
+		printf("%s\n", string.string);
+	}
+
+	//Destroy it
+	dynamic_string_dealloc(&string);
 }
