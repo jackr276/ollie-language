@@ -4101,7 +4101,7 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
 
 	//If it's a function entry block, we need to print this out
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		printf("%s:\n", block->function_defined_in->func_name);
+		printf("%s:\n", block->function_defined_in->func_name.string);
 		print_stack_data_area(&(block->function_defined_in->data_area));
 	} else {
 		printf(".L%d:\n", block->block_id);

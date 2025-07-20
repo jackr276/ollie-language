@@ -1170,7 +1170,7 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 	} else if(constant->const_type == CHAR_CONST){
 		fprintf(fl, "'%c'", constant->char_const);
 	} else {
-		fprintf(fl, "\"%s\"", constant->str_const);
+		fprintf(fl, "\"%s\"", constant->string_constant.string);
 	}
 }
 
@@ -1442,7 +1442,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		//No matter what, we'll need to see the "call" keyword, followed
 		//by the function name
-		fprintf(fl, "call %s(", stmt->called_function->func_name);
+		fprintf(fl, "call %s(", stmt->called_function->func_name.string);
 
 		//Grab this out
 		dynamic_array_t* func_params = stmt->function_parameters;
@@ -2685,7 +2685,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "%s", instruction->inlined_assembly.string);
 			break;
 		case CALL:
-			fprintf(fl, "call %s", instruction->called_function->func_name);
+			fprintf(fl, "call %s", instruction->called_function->func_name.string);
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->destination_register, mode);
@@ -3025,7 +3025,8 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 			constant->float_const = const_node->float_val;
 			break;
 		case STR_CONST:
-			strcpy(constant->str_const, const_node->string_val.string);
+			//Simply use the same region here
+			constant->string_constant = const_node->string_val;
 			break;
 		case LONG_CONST:
 			constant->long_const = const_node->int_long_val;

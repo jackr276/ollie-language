@@ -387,7 +387,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Print the block's ID or the function name
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		printf("%s", block->function_defined_in->func_name);
+		printf("%s", block->function_defined_in->func_name.string);
 	} else {
 		printf(".L%d", block->block_id);
 	}
@@ -424,7 +424,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 		//Print the block's ID or the function name
 		if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", predecessor->function_defined_in->func_name);
+			printf("%s", predecessor->function_defined_in->func_name.string);
 		} else {
 			printf(".L%d", predecessor->block_id);
 		}
@@ -443,7 +443,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 		//Print the block's ID or the function name
 		if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", successor->function_defined_in->func_name);
+			printf("%s", successor->function_defined_in->func_name.string);
 		} else {
 			printf(".L%d", successor->block_id);
 		}
@@ -515,7 +515,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name);
+				printf("%s", printing_block->function_defined_in->func_name.string);
 			} else {
 				printf(".L%d", printing_block->block_id);
 			}
@@ -540,7 +540,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name);
+				printf("%s", printing_block->function_defined_in->func_name.string);
 			} else {
 				printf(".L%d", printing_block->block_id);
 			}
@@ -565,7 +565,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 		//Print the block's ID or the function name
 		if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", printing_block->function_defined_in->func_name);
+			printf("%s", printing_block->function_defined_in->func_name.string);
 		} else {
 			printf(".L%d", printing_block->block_id);
 		}
@@ -586,7 +586,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 		//Print the block's ID or the function name
 		if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", postdominator->function_defined_in->func_name);
+			printf("%s", postdominator->function_defined_in->func_name.string);
 		} else {
 			printf(".L%d", postdominator->block_id);
 		}
@@ -607,7 +607,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name);
+				printf("%s", printing_block->function_defined_in->func_name.string);
 			} else {
 				printf(".L%d", printing_block->block_id);
 			}

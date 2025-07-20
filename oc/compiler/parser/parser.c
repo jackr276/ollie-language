@@ -632,7 +632,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		
 		//If we don't see this it's bad
 		if(lookahead.tok != R_PAREN){
-			sprintf(info, "Function \"%s\" expects no parameters First declared here:", function_record->func_name);
+			sprintf(info, "Function \"%s\" expects no parameters First declared here:", function_record->func_name.string);
 			return print_and_return_error(info, current_line);
 		}
 		
@@ -726,7 +726,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	 * error
 	 */
 	if(num_params != function_num_params){
-		sprintf(info, "Function %s expectects %d parameters, but was only given %d", function_record->func_name, function_num_params, num_params);
+		sprintf(info, "Function %s expectects %d parameters, but was only given %d", function_record->func_name.string, function_num_params, num_params);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_function_name(function_record);
 		num_errors++;
@@ -5483,7 +5483,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		//If this is the case, the return type had better be void
 		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
 			&& current_function->return_type->basic_type->basic_type != VOID){
-			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name, current_function->return_type->type_name);
+			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
@@ -5498,7 +5498,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		//If we get here, but we do expect a void return, then this is an issue
 		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
 			&& current_function->return_type->basic_type->basic_type == VOID){
-			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name);
+			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
@@ -5530,7 +5530,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
-		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name, current_function->return_type->type_name,
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name,
 		  		expr_node->inferred_type->type_name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function
@@ -7637,8 +7637,8 @@ static int8_t check_jump_labels(){
 		}
 
 		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
-		if(strcmp(current_function->func_name, label->function_declared_in->func_name) != 0){
-			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name);
+		if(strcmp(current_function->func_name.string, label->function_declared_in->func_name.string) != 0){
+			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			return FAILURE;
 		}
@@ -7733,7 +7733,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Fail out if found and it's already been defined
 	if(function_record != NULL && function_record->defined == TRUE){
-		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name);
+		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name.string);
 		print_parse_message(PARSE_ERROR, info, current_line);
 		print_function_name(function_record);
 		num_errors++;
@@ -7790,7 +7790,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, storage_class);
+		function_record = create_function_record(ident_node->identifier, storage_class);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -7859,7 +7859,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//If at any point this is more than the number of parameters this function is meant to have,
 			//we bail
 			if(param_count > function_record->number_of_params){
-				sprintf(info, "Function \"%s\" was defined implicitly to only have %d parameters. First defined here:", function_record->func_name, function_record->number_of_params);
+				sprintf(info, "Function \"%s\" was defined implicitly to only have %d parameters. First defined here:", function_record->func_name.string, function_record->number_of_params);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Print the function out too
 				print_function_name(function_record);
@@ -8047,7 +8047,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 		} else {
-			sprintf(info, "Function %s has no body", function_record->func_name);
+			sprintf(info, "Function %s has no body", function_record->func_name.string);
 			print_parse_message(WARNING, info, parser_line_num);
 		}
 

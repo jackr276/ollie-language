@@ -434,7 +434,8 @@ struct three_addr_var_t{
  * A three address constant always holds the value of the constant
  */
 struct three_addr_const_t{
-	char str_const[MAX_TOKEN_LENGTH];
+	//The string constant
+	dynamic_string_t string_constant;
 	//For memory management
 	three_addr_const_t* next_created;
 	//We hold the type info

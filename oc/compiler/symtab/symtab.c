@@ -255,14 +255,14 @@ symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T sto
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T storage_class){
+symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class){
 	//Allocate it
 	symtab_function_record_t* record = (symtab_function_record_t*)calloc(1, sizeof(symtab_function_record_t));
 
-	//Store the name
-	strcpy(record->func_name, name);
+	//Copy the name over
+	record->func_name = name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash(name);
+	record->hash = hash(name.string);
 	//Store the storage class
 	record->storage_class = storage_class;
 	//Was it ever called?
@@ -544,7 +544,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 	//We could have had collisions so we'll have to hunt here
 	while(record_cursor != NULL){
 		//If we find the right one, then we can get out
-		if(strcmp(record_cursor->func_name, name) == 0){
+		if(strcmp(record_cursor->func_name.string, name) == 0){
 			return record_cursor;
 		}
 		//Advance it if we didn't have the right name
@@ -787,7 +787,7 @@ void print_function_record(symtab_function_record_t* record){
 	}
 
 	printf("Record: {\n");
-	printf("Name: %s,\n", record->func_name);
+	printf("Name: %s,\n", record->func_name.string);
 	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("Offset: %p\n", (void*)(record->offset));
@@ -835,9 +835,9 @@ void print_type_record(symtab_type_record_t* record){
 void print_function_name(symtab_function_record_t* record){
 	//If it's static we'll add the keyword in
 	if(record->storage_class == STORAGE_CLASS_STATIC){
-		printf("\t---> %d | fn:static %s(", record->line_number, record->func_name);
+		printf("\t---> %d | fn:static %s(", record->line_number, record->func_name.string);
 	} else {
-		printf("\t---> %d | fn %s(", record->line_number, record->func_name);
+		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
 	}
 
 	//Print out the params
@@ -998,7 +998,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				//Generate a warning here
 				(*num_warnings)++;
 
-				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name);
+				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
@@ -1006,7 +1006,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				//Generate a warning here
 				(*num_warnings)++;
 
-				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name);
+				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
@@ -1015,7 +1015,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				//Generate a warning here
 				(*num_warnings)++;
 
-				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name);
+				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);

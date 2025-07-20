@@ -82,8 +82,8 @@ struct symtab_function_record_t{
 	u_int8_t used_registers[15];
 	//The entrance CFG block to the function. There is always only one entrance
 	void* entrance_block;
-	//The name that we are storing. This is used to derive the hash
-	char func_name[MAX_IDENT_LENGTH];
+	//The name of the function
+	dynamic_string_t func_name;
 	//The parameters
 	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The data area for the whole function
@@ -342,7 +342,7 @@ symtab_variable_record_t* create_variable_record(char* name, STORAGE_CLASS_T sto
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(char* name, STORAGE_CLASS_T storage_class);
+symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);
 
 /**
  * Create a type record for the symbol table
