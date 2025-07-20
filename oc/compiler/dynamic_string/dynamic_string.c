@@ -92,6 +92,45 @@ dynamic_string_t* dynamic_string_add_char_to_back(dynamic_string_t* dynamic_stri
 	return dynamic_string;
 }
 
+/**
+ * Concatenate a string to the end of our dynamic string
+ */
+dynamic_string_t* dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
+	//Grab the string length here
+	u_int16_t additional_length = strlen(string) + 1;
+
+	//Now found the overall new length
+	u_int16_t new_length = dynamic_string->current_length + additional_length;
+
+	//If the current length of the string, plus the length of the new string, plus
+	//1 for the null character exceeds our current length, we need to resize
+	if(new_length >= dynamic_string->length){
+		//Is this string's new length less than double the old length? This
+		//will trigger our default behavior of doubling it
+		if(new_length < dynamic_string->length * 2){
+			//Double the length
+			dynamic_string->length = dynamic_string->length * 2;
+
+		//Otherwise, we need to go more than double. This is a rare case, but it can happen. If this does happen,
+		//we'll set the new length to be double the current length
+		} else {
+			dynamic_string->length = new_length * 2;
+		}
+
+		//Realloc the string with this length 
+		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length * sizeof(char));
+	}
+
+	//Concatenate the string here
+	strncat(dynamic_string->string, string, additional_length);
+
+	//Store the new length
+	dynamic_string->current_length = new_length;
+
+	//We return this for the user's convenience, but they do not need to use it
+	return dynamic_string;
+}
+
 
 /**
  * Deallocate a dynamic string from the heap

@@ -63,4 +63,31 @@ int main(){
 
 	//Deallocate it at the very end
 	dynamic_string_dealloc(&string);
+
+	printf("============ Testing concatenation ================\n");
+
+	//Recreate the string
+	dynamic_string_alloc(&string);
+
+	dynamic_string_set(&string, "I am a string before concatenation.");
+
+	printf("%s\n", string.string);
+
+	//Now concatenate
+	dynamic_string_concatenate(&string, "Now there is a concatenation on top of the original.");
+
+	printf("%s\n", string.string);
+
+	//Now concatenate
+	dynamic_string_concatenate(&string, "Now there is a third concatenation on top of the original.");
+
+	printf("%s\n", string.string);
+
+	//Now concatenate
+	dynamic_string_concatenate(&string, "Now there is a fourth concatenation on top of the original.");
+
+	printf("%s\n", string.string);
+
+	//Destroy it
+	dynamic_string_dealloc(&string);
 }

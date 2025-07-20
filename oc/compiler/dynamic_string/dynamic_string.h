@@ -49,6 +49,11 @@ dynamic_string_t* dynamic_string_set(dynamic_string_t* dynamic_string, char* str
 dynamic_string_t* dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch);
 
 /**
+ * Concatenate a string to the end of our dynamic string
+ */
+dynamic_string_t* dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string);
+
+/**
  * Deallocate a dynamic string from the heap
  */
 void dynamic_string_dealloc(dynamic_string_t* dynamic_string);
