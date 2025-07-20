@@ -108,7 +108,7 @@ static generic_ast_node_t* idle_statement(FILE* fl);
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
-static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee);
+static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
 
 
 /**
@@ -6525,11 +6525,9 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
 	generic_ast_node_t* assembly_ast_node_t = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
+
 	//Store this too
 	assembly_ast_node_t->line_number = parser_line_num;
-
-	//For quick reference, grab out the assembly node in here
-	asm_inline_stmt_ast_node_t* asm_node_ref = assembly_ast_node_t->node;
 
 	//We keep going here as long as we don't see the closing curly brace
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6547,24 +6545,11 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 			return print_and_return_error("Unable to parse assembly statement. Did you enclose the whole block in curly braces({})?", parser_line_num);
 		}
 
-		//Otherwise it worked, so we'll need to add the statement in here
-		//Let's check -- we may be overrunning our allocate bounds
-		if(asm_node_ref->length + strlen(lookahead.lexeme) + 1 >= asm_node_ref->max_length){
-			//We'll realloc here and update the max length by doubling it
-			asm_node_ref->max_length *= 2;
+		//Concatenate this in
+		dynamic_string_concatenate(&(assembly_ast_node_t->asm_inline_statements), lookahead.lexeme.string);
 
-			//Realloc as needed to keep enough space
-			asm_node_ref->asm_line_statements = realloc(asm_node_ref->asm_line_statements, asm_node_ref->max_length);
-		}
-
-		//Now we can add whatever the assembly statement that we had before is in
-		strcat(asm_node_ref->asm_line_statements, lookahead.lexeme);
-
-		//For readability
-		strcat(asm_node_ref->asm_line_statements, "\n");
-
-		//Update the length too
-		asm_node_ref->length += strlen(lookahead.lexeme) + 1;
+		//Add the newline character for readability
+		dynamic_string_add_char_to_back(&(assembly_ast_node_t->asm_inline_statements), '\n');
 
 		//Now we'll refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6853,7 +6838,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		}
 
 		//Extract the name
-		char* name = enum_ident_node->identifier;
+		char* name = enum_ident_node->identifier.string;
 
 		//If it's an identifier, then it has to be an enum
 		symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, name);
@@ -7053,7 +7038,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->identifier;
+	char* name = ident_node->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
@@ -7231,7 +7216,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->identifier;
+	char* name = ident_node->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
@@ -7454,15 +7439,15 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Array bounds checking real quick
-	if(strlen(ident_node->identifier) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Type names may only be at most 200 characters long, was given: %s", (ident_node->identifier));
+	if(strlen(ident_node->identifier.string) > MAX_TYPE_NAME_LENGTH){
+		sprintf(info, "Type names may only be at most 200 characters long, was given: %s", (ident_node->identifier.string));
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
 
 	//Let's extract the name
-	strcpy(ident_name, ident_node->identifier);
+	strcpy(ident_name, ident_node->identifier.string);
 
 	//Once we have the ident name, we no longer need the ident node
 
@@ -7597,7 +7582,7 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 		return let_statement(fl, is_global);
 	//Otherwise we have some weird error here
 	} else {
-		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme);
+		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 }
@@ -7608,7 +7593,7 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
  * are logical expressions, we will perform a deep copy to create an entirely new
  * chain of deferred statements
  */
-static generic_ast_node_t* duplicate_subtree(const generic_ast_node_t* duplicatee){
+static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee){
 	//Base case here -- although in theory we shouldn't make it here
 	if(duplicatee == NULL){
 		return NULL;
@@ -7657,7 +7642,7 @@ static int8_t check_jump_labels(){
 		generic_ast_node_t* label_ident_node = current_jump_statement->first_child;
 
 		//Let's grab out the name for convenience
-		char* name = label_ident_node->identifier;
+		char* name = label_ident_node->identifier.string;
 
 		//We now need to lookup the name in here. We use a special function that allows
 		//us to look deeper into the scopes 
@@ -7752,7 +7737,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
 	//Grab a reference for convenience
-	char* function_name = ident_node->identifier;
+	char* function_name = ident_node->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(function_name) > MAX_TYPE_NAME_LENGTH){
@@ -8129,7 +8114,7 @@ static u_int8_t replace_statement(FILE* fl){
 	
 	//Now that we have the ident, we need to make sure that it's not a duplicate
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->identifier;
+	char* name = ident_node->identifier.string;
 
 	//Array bounds checking real quick
 	if(strlen(name) > MAX_TYPE_NAME_LENGTH){

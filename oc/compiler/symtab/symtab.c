@@ -933,7 +933,7 @@ void print_constant_name(symtab_constant_record_t* record){
 			printf("%d", const_node->char_val);
 			break;
 		case STR_CONST:
-			printf("%s", const_node->string_val);
+			printf("%s", const_node->string_val.string);
 			break;
 		case FLOAT_CONST:
 			printf("%f", const_node->float_val);

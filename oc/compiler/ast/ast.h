@@ -14,12 +14,6 @@
 #include <sys/types.h>
 
 /**
- * Most inline assembly statements are small, so the default statement 
- * size is only 1000 bytes. This can be realloc'd as needed automatically
- */
-#define DEFAULT_ASM_INLINE_SIZE 1000
-
-/**
  * All nodes here are N-ary trees. This means that, in addition
  * to all of the data that each unique one holds, they all also 
  * hold references to their first child and next sibling, with
@@ -103,7 +97,10 @@ typedef enum address_specifier_type_t{
  * to what the actual node is
 */
 struct generic_ast_node_t{
+	//The identifier
 	dynamic_string_t identifier;
+	//Any assembly inlined statements
+	dynamic_string_t asm_inline_statements;
 	//What is the next created AST NODE? Used for memory deallocation
 	generic_ast_node_t* next_created_ast_node;
 	//What is the inferred type of the node
@@ -165,16 +162,6 @@ struct constant_ast_node_t{
 	Token constant_type;
 };
 
-
-//An assembly inline statement
-struct asm_inline_stmt_ast_node_t{
-	//We just need to hold all of the statements in a big chunk
-	char* asm_line_statements;
-	//The currently string length
-	u_int16_t length;
-	//The current max length(will be realloc'd if needed)
-	u_int16_t max_length;
-};
 
 /**
  * This helper function negates a constant node's value

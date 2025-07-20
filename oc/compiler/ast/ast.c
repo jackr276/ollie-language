@@ -169,18 +169,7 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	switch(node->CLASS){
 		//Asm inline is a special case because we'll need to copy the assembly over
 		case AST_NODE_CLASS_ASM_INLINE_STMT:
-			//Allocate the inner node
-			duplicated->node = calloc(1, sizeof(AST_NODE_CLASS_ASM_INLINE_STMT));
-			//Grab a reference for convenience
-			asm_inline_stmt_ast_node_t* duplicated_asm = (asm_inline_stmt_ast_node_t*)(duplicated->node);
-			asm_inline_stmt_ast_node_t* old_asm = (asm_inline_stmt_ast_node_t*)(node->node);
-			duplicated_asm->asm_line_statements = calloc(sizeof(char), old_asm->max_length);
-			duplicated_asm->max_length = old_asm->max_length;
-			duplicated_asm->length = old_asm->length;
-
-			//Copy over the entirety of the inlined assembly
-			strcpy(duplicated_asm->asm_line_statements, old_asm->asm_line_statements);
-			
+			duplicated->asm_inline_statements = clone_dynamic_string(&(node->asm_inline_statements));
 			break;
 
 		//Constants are another special case, because they contain a special inner node
@@ -250,22 +239,15 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
 	
 	//Switch based on what we have for special cases
 	switch(CLASS){
-		//The needs extra allocation
-		case AST_NODE_CLASS_ASM_INLINE_STMT:
-			//Allocate the inner node with the proper size
-			node->node = calloc(1, sizeof(asm_inline_stmt_ast_node_t));
-			//Extract the actual node
-			asm_node = node->node;
-			//We need to allocate the inside string as well
-			asm_node->asm_line_statements = calloc(sizeof(char), DEFAULT_ASM_INLINE_SIZE);
-			asm_node->length = 0;
-			asm_node->max_length = DEFAULT_ASM_INLINE_SIZE;
-
-			break;
-	
 		//Constants and idents both require extra allocation
 		case AST_NODE_CLASS_CONSTANT:
 			node->node = calloc(1, sizeof(constant_ast_node_t));
+			break;
+
+		//We know that we'll need this asm inline
+		case AST_NODE_CLASS_ASM_INLINE_STMT:
+			//Allocate this
+			dynamic_string_alloc(&(node->asm_inline_statements));
 			break;
 
 		//By default do nothing, this is just so the compiler doesn't complain
@@ -330,11 +312,6 @@ void ast_dealloc(){
 
 		//We can off the bat free it's data
 		if(temp->node != NULL){
-			//Special case here, we need to free the interior string
-			if(temp->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-				//Deallocate this string in here
-				free(((asm_inline_stmt_ast_node_t*)(temp->node))->asm_line_statements);
-			}
 			//No matter what, we always free this
 			free(temp->node);
 		}
@@ -342,6 +319,8 @@ void ast_dealloc(){
 		//Free this if needed
 		if(temp->CLASS == AST_NODE_CLASS_IDENTIFIER){
 			dynamic_string_dealloc(&(temp->identifier));
+		} else if(temp->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
+			dynamic_string_dealloc(&(temp->asm_inline_statements));
 		}
 
 		//Destroy temp here
