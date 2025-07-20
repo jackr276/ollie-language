@@ -439,7 +439,7 @@ dynamic_array_test-CI.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 dynamic_string_test-CI.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_CI)/dynamic_string_test.o
 
-dynamic_string_test_CI: dynamic_string_test-CI.o dynamic_string-CI.o
+dynamic_string_test-CI: dynamic_string_test-CI.o dynamic_string-CI.o
 	$(CC) -o $(OUT_CI)/dynamic_string_test $(OUT_CI)/dynamic_string_test.o $(OUT_CI)/dynamic_string.o
 
 dynamic_array_test-CI: dynamic_array_test-CI.o dynamic_array-CI.o
