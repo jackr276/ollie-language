@@ -17,6 +17,9 @@ void dynamic_string_alloc(dynamic_string_t* dynamic_string){
 
 	//Now we'll allocate this using the default strategy
 	dynamic_string->string = calloc(dynamic_string->length, sizeof(char));
+
+	//Set the current length to be zero
+	dynamic_string->current_length = 0;
 }
 
 
@@ -98,5 +101,9 @@ void dynamic_string_dealloc(dynamic_string_t* dynamic_string){
 	if(dynamic_string->string != NULL){
 		free(dynamic_string->string);
 	}
-}
 
+	//Reset all of these parameters
+	dynamic_string->string = NULL;
+	dynamic_string->current_length = 0;
+	dynamic_string->length = 0;
+}

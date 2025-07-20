@@ -6,6 +6,8 @@
 //Link to module being tested
 #include "../dynamic_string/dynamic_string.h"
 #include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
 
 int main(){
 	//Allocate the dynamic string
@@ -37,6 +39,27 @@ int main(){
 
 	//Print it out
 	printf("%s\n", string.string);
+
+	//Deallocate it at the very end
+	dynamic_string_dealloc(&string);
+
+	printf("============ Testing char addition ================\n");
+
+	//Recreate this string
+	dynamic_string_alloc(&string);
+
+	//We will add this char by char
+	char addition_string[] = "This is a very long string that will test char addition inside of the dynamic string submodule for ollie language.";
+
+	//Grab the length like a user would
+	u_int16_t length = strlen(addition_string);
+
+	//Add char by char
+	for(u_int16_t i = 0; i < length; i++){
+		dynamic_string_add_char_to_back(&string, addition_string[i]);
+		
+		printf("%s\n", string.string);
+	}
 
 	//Deallocate it at the very end
 	dynamic_string_dealloc(&string);
