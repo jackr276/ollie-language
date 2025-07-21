@@ -98,8 +98,8 @@ static statement_result_package_t visit_if_statement(values_package_t* values);
 static statement_result_package_t visit_while_statement(values_package_t* values);
 static statement_result_package_t visit_do_while_statement(values_package_t* values);
 static statement_result_package_t visit_for_statement(values_package_t* values);
-static basic_block_t* visit_case_statement(values_package_t* values);
-static basic_block_t* visit_default_statement(values_package_t* values);
+static statement_result_package_t visit_case_statement(values_package_t* values);
+static statement_result_package_t visit_default_statement(values_package_t* values);
 static statement_result_package_t visit_switch_statement(values_package_t* values);
 
 static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
@@ -4575,7 +4575,10 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
  * Visit a default statement.  These statements are also handled like individual blocks that can 
  * be jumped to
  */
-static basic_block_t* visit_default_statement(values_package_t* values){
+static statement_result_package_t visit_default_statement(values_package_t* values){
+	//Declare and prepack our results
+	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+
 	//For a default statement, it performs very similarly to a case statement. 
 	//It will be handled slightly differently in the jump table, but we'll get to that 
 	//later on
@@ -4587,6 +4590,10 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 	//Treated as case statements
 	default_stmt->block_type = BLOCK_TYPE_CASE;
 
+	//Prepackage these now
+	results.starting_block = default_stmt;
+	results.final_block = default_stmt;
+
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
 	values_package_t statement_values = *values;
@@ -4595,25 +4602,32 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 
 	//Let this take care of it
 	if(statement_values.initial_node != NULL){
-		basic_block_t* compound_statement_start = visit_compound_statement(&statement_values);
+		statement_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
 	
 		//If this is the case, just allocate a dummy
-		if(compound_statement_start == NULL){
-			compound_statement_start = basic_block_alloc(1);
+		if(default_compound_statement_results.starting_block == NULL){
+			default_compound_statement_results.starting_block = basic_block_alloc(1);
 		}	
 
 		//If we have an error
-		if(compound_statement_start->block_id == -1){
-			return compound_statement_start;
+		if(default_compound_statement_results.starting_block->block_id == -1){
+			return create_and_return_err();
 		}
 
 		//Once we get this back, we'll add it in to the main block
-		merge_blocks(default_stmt, compound_statement_start);
+		results.starting_block = merge_blocks(default_stmt, default_compound_statement_results.starting_block);
+
+		//If these are different, then we reassign to the very end of the compound statement
+		if(default_compound_statement_results.starting_block != default_compound_statement_results.final_block){
+			results.final_block = default_compound_statement_results.final_block;
+		//Otherwise start and end are the same
+		} else {
+			results.final_block = results.starting_block;
+		}
 	}
-	
 
 	//Give the block back
-	return default_stmt;
+	return results;
 }
 
 
@@ -4621,7 +4635,10 @@ static basic_block_t* visit_default_statement(values_package_t* values){
  * Visit a case statement. It is very important that case statements know
  * where the end of the switch statement is, in case break statements are used
  */
-static basic_block_t* visit_case_statement(values_package_t* values){
+static statement_result_package_t visit_case_statement(values_package_t* values){
+	//Declare and prepack our results
+	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+
 	//We need to make the block first
 	basic_block_t* case_stmt = basic_block_alloc(1);
 	case_stmt->block_type = BLOCK_TYPE_CASE;
@@ -4645,24 +4662,32 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
 	if(statement_values.initial_node != NULL){
 		//Let this take care of it
-		basic_block_t* compound_statement_start = visit_compound_statement(&statement_values);
+		statement_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
 
 		//If this is the case, just allocate a dummy
-		if(compound_statement_start == NULL){
-			compound_statement_start = basic_block_alloc(1);
+		if(case_compound_statement_results.starting_block == NULL){
+			case_compound_statement_results.starting_block = basic_block_alloc(1);
 		}
 
 		//If we have an error
-		if(compound_statement_start->block_id == -1){
-			return compound_statement_start;
+		if(case_compound_statement_results.starting_block->block_id == -1){
+			return create_and_return_err();
 		}
 
 		//Once we get this back, we'll add it in to the main block
-		merge_blocks(case_stmt, compound_statement_start);
+		results.starting_block = merge_blocks(case_stmt, case_compound_statement_results.starting_block);
+
+		//If these are different, then we reassign to the very end of the compound statement
+		if(case_compound_statement_results.starting_block != case_compound_statement_results.final_block){
+			results.final_block = case_compound_statement_results.final_block;
+		//Otherwise start and end are the same
+		} else {
+			results.final_block = results.starting_block;
+		}
 	}
 
 	//Give the block back
-	return case_stmt;
+	return results;
 }
 
 
