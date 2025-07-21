@@ -4604,13 +4604,9 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
 	if(statement_values.initial_node != NULL){
 		statement_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
 	
-		//If this is the case, just allocate a dummy
-		if(default_compound_statement_results.starting_block == NULL){
-			default_compound_statement_results.starting_block = basic_block_alloc(1);
-		}	
-
 		//If we have an error
-		if(default_compound_statement_results.starting_block->block_id == -1){
+		if(default_compound_statement_results.starting_block != NULL
+				&& default_compound_statement_results.starting_block->block_id == -1){
 			return create_and_return_err();
 		}
 
@@ -4618,7 +4614,8 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
 		results.starting_block = merge_blocks(default_stmt, default_compound_statement_results.starting_block);
 
 		//If these are different, then we reassign to the very end of the compound statement
-		if(default_compound_statement_results.starting_block != default_compound_statement_results.final_block){
+		if(default_compound_statement_results.starting_block != default_compound_statement_results.final_block
+			&& default_compound_statement_results.starting_block != NULL){
 			results.final_block = default_compound_statement_results.final_block;
 		//Otherwise start and end are the same
 		} else {
@@ -4664,13 +4661,9 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
 		//Let this take care of it
 		statement_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
 
-		//If this is the case, just allocate a dummy
-		if(case_compound_statement_results.starting_block == NULL){
-			case_compound_statement_results.starting_block = basic_block_alloc(1);
-		}
-
-		//If we have an error
-		if(case_compound_statement_results.starting_block->block_id == -1){
+		//If we have an error(specifically, if this is non-null and a negative ID)
+		if(case_compound_statement_results.starting_block != NULL
+				&& case_compound_statement_results.starting_block->block_id == -1){
 			return create_and_return_err();
 		}
 
@@ -4678,7 +4671,8 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
 		results.starting_block = merge_blocks(case_stmt, case_compound_statement_results.starting_block);
 
 		//If these are different, then we reassign to the very end of the compound statement
-		if(case_compound_statement_results.starting_block != case_compound_statement_results.final_block){
+		if(case_compound_statement_results.starting_block != case_compound_statement_results.final_block
+			&& case_compound_statement_results.starting_block != NULL){
 			results.final_block = case_compound_statement_results.final_block;
 		//Otherwise start and end are the same
 		} else {
@@ -4800,17 +4794,19 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 		}
 
 		//Now we'll add this one into the overall structure
-		add_successor(starting_block, case_block);
+		if(case_default_results.starting_block != NULL){
+			add_successor(starting_block, case_block);
 
-		//Now we'll drill down to the bottom to prime the next pass
-		current_block = case_default_results.final_block;
+			//Now we'll drill down to the bottom to prime the next pass
+			current_block = case_default_results.final_block;
 
-		//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
-		add_successor(current_block, ending_block);
+			//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
+			add_successor(current_block, ending_block);
 
-		//We will always emit a direct jump from this block to the ending block
-		emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
-
+			//We will always emit a direct jump from this block to the ending block
+			emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		}
+		
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
 	}
