@@ -6564,7 +6564,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
  *
  * Remember: By the time that we get here, we will have already seen the defer keyword
  *
- * <defer-statement> ::= defer {<logical-or-expression> | <assembly-inline-statement>};
+ * <defer-statement> ::= defer <compound statement>
  */
 static generic_ast_node_t* defer_statement(FILE* fl){
 	//Are we already inside of a defer statement? If we are,
@@ -6595,14 +6595,6 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//If this fails, we bail
 	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		return print_and_return_error("Invalid compound statement given to defer statement", current_line);
-	}
-
-	//Following this, we do need to see a semicolon
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Fail case here
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon expected after defer statement", parser_line_num);
 	}
 
 	//Otherwise it was valid, so we have another child for this overall deferred statement

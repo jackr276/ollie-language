@@ -17,7 +17,7 @@ fn main() -> i32{
 
 	defer{
 	@println(abc);
-	}; 
+	} 
 
 	//100% useless
 	if(abc == 3)  {

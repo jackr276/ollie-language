@@ -69,11 +69,11 @@ fn main() -> i32{
 		pop %rbx \
 		pop %rax \
 		};
-	};
+	}
 
 	defer {
 		x + 3;	
-	};
+	}
 	
 	if(!x)  {
 

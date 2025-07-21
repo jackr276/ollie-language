@@ -5,7 +5,7 @@ fn test_func() -> i32 {
 
 	defer {
 	i++;
-	};
+	}
 
 	while(i >= 232) {
 		if(i == 2) { 
@@ -22,7 +22,7 @@ fn test_func() -> i32 {
 
 	defer{
 	i++;
-	}; 
+	} 
 
 	while(i >= 0) {
 		i--;
@@ -74,7 +74,7 @@ fn main(argc:u32, argv:char**)->i32{
 
 	defer {
 		@test_func();
-	};
+	}
 
 	ret j + a;
 }

@@ -61,12 +61,12 @@ fn main() -> i32{
 		pop %rbx \
 		pop %rax \
 		};
-	};
+	}
 
 	defer { 
 		x := x + 3;	
 		@tester();
-	};
+	}
 	
 	if(!x) {
 		++x;

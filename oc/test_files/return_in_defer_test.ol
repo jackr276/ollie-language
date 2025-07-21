@@ -10,13 +10,13 @@ fn main() -> i32 {
 	//valid
 	defer {
 		y++;
-	};
+	}
 
 	y := y - 11;
 
 	defer {
 		ret y;
-	};
+	}
 
 
 	ret x << y;
