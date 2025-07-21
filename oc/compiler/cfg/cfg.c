@@ -1046,6 +1046,8 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != immediate_dominator(block)){
+				printf("STUCK IDOM\n");
+
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
 				
@@ -4105,9 +4107,6 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	//because that is what repeats on continue
 	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
-	//For our eventual token
-	statement_result_package_t expression_package;
-
 	//If it's null, that's actually ok here
 	if(compound_statement_results.starting_block == NULL){
 		//We'll make sure that the start points to this block
@@ -4119,9 +4118,6 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 
 		//Make the condition block jump to the exit. This is an inverse jump
 		emit_jump(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
-
-		//The direct successor to the entry block is the exit block, for efficiency reasons
-		for_stmt_entry_block->direct_successor = for_stmt_exit_block;
 
 		//And we're done
 		return result_package;
@@ -5808,5 +5804,5 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	rename_all_variables(cfg);
 
 	//Give back the reference
-	return cfg;
+	return cfg //FORCING COMP FAILURE
 }
