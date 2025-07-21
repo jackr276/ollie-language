@@ -555,9 +555,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		difference_found = FALSE;
 
 		//Run through all of the blocks backwards
-		for(int16_t i = cfg->function_blocks->current_index - 1; i >= 0; i--){
+		for(int16_t i = cfg->function_entry_blocks->current_index - 1; i >= 0; i--){
 			//Grab the block out
-			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_blocks, i);
+			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 			//Reset the registers in here while we're at it
 			memset(func_entry->function_defined_in->used_registers, 0, sizeof(u_int8_t) * 17);
@@ -1403,9 +1403,9 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 	//Optimization - live-ranges are function level, so we'll just go through the function
 	//blocks until we find one that matches this function
 	basic_block_t* function_block;
-	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		//Grab the block out
-		function_block = dynamic_array_get_at(cfg->function_blocks, i);
+		function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 		//We've got our match
 		if(function_block->function_defined_in == spill_range->function_defined_in){
@@ -1872,7 +1872,7 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 	heap_stack_t* heap_stack = heap_stack_alloc();
 
 	//Run through every function entry point in the CFG
-	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		//Reset the heap stack every time
 		reset_heap_stack(heap_stack);
 
@@ -1880,7 +1880,7 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		instruction_t* last_push_instruction = NULL;
 
 		//Grab it out
-		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_blocks, i);
+		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 		//Grab the function defined in as well
 		symtab_function_record_t* function = current_function_entry->function_defined_in;

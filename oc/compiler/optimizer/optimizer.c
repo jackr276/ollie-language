@@ -1000,12 +1000,12 @@ static void optimize_compound_logic(cfg_t* cfg){
  */
 static void clean(cfg_t* cfg){
 	//For each function in the CFG
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Have we seen change(modification) at all?
 		u_int8_t changed;
 
 		//Grab the function block out
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_blocks, _);
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, _);
 
 		//The postorder traversal array
 		dynamic_array_t* postorder;

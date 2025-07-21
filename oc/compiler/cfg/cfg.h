@@ -67,7 +67,9 @@ typedef enum{
 struct cfg_t{
 	//This dynamic array contains all of the function
 	//entry blocks for each function that we have
-	dynamic_array_t* function_blocks;
+	dynamic_array_t* function_entry_blocks;
+	//Store the exit blocks as well. This makes RPO traversal much easier
+	dynamic_array_t* function_exit_blocks;
 	//An array of all blocks that are 
 	//All created blocks
 	dynamic_array_t* created_blocks;

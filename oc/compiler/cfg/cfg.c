@@ -243,9 +243,9 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_in
  */
 void reset_reverse_post_order_sets(cfg_t* cfg){
 	//Run through all of the function blocks
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Grab the block out
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, _);
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
 
 		//Set the RPO to be null
 		if(function_entry_block->reverse_post_order != NULL){
@@ -1181,8 +1181,8 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 
 	//Now that we've initialized, we'll perform the same while change algorithm as before
 	//For each and every function
-	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
-		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_blocks, i);
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 		//If we don't have the RPO for this block, we'll make it now
 		if(current_function_block->reverse_post_order == NULL){
@@ -1319,12 +1319,12 @@ static void calculate_dominator_sets(cfg_t* cfg){
 	}
 
 	//For each and every function that we have, we will perform this operation separately
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Initialize a "worklist" dynamic array for this particular function
 		dynamic_array_t* worklist = dynamic_array_alloc();
 
 		//Add this into the worklist as a seed
-		dynamic_array_add(worklist, dynamic_array_get_at(cfg->function_blocks, _));
+		dynamic_array_add(worklist, dynamic_array_get_at(cfg->function_entry_blocks, _));
 		
 		//The new dominance frontier that we have each time
 		dynamic_array_t* new;
@@ -1562,9 +1562,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		difference_found = FALSE;
 
 		//Run through all of the blocks backwards
-		for(int16_t i = cfg->function_blocks->current_index - 1; i >= 0; i--){
+		for(int16_t i = cfg->function_entry_blocks->current_index - 1; i >= 0; i--){
 			//Grab the block out
-			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_blocks, i);
+			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 			//Calculate the reverse post order in reverse mode for this block, if it doesn't
 			//already exist
@@ -2023,9 +2023,9 @@ static void rename_all_variables(cfg_t* cfg){
 	//recursive, so that should in theory take care of everything for us
 	
 	//For each function block
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Invoke the rename function on it
-		rename_block(dynamic_array_get_at(cfg->function_blocks, _));
+		rename_block(dynamic_array_get_at(cfg->function_entry_blocks, _));
 	}
 }
 
@@ -3593,20 +3593,20 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 	//For holding our blocks
 	basic_block_t* block;
 
-	//Now we'll print out each and every function inside of the function_blocks
+	//Now we'll print out each and every function inside of the function_entry_blocks
 	//array. Each function will be printed using the BFS strategy
-	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		//We'll need a queue for our BFS
 		heap_queue_t* queue = heap_queue_alloc();
 
 		//Grab this out for convenience
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, i);
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 		//We'll want to see what the stack looks like
 		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
 		//Seed the search by adding the funciton block into the queue
-		enqueue(queue, dynamic_array_get_at(cfg->function_blocks, i));
+		enqueue(queue, dynamic_array_get_at(cfg->function_entry_blocks, i));
 
 		//So long as the queue isn't empty
 		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
@@ -3807,7 +3807,7 @@ void dealloc_cfg(cfg_t* cfg){
 
 	//Destroy the dynamic arrays too
 	dynamic_array_dealloc(cfg->created_blocks);
-	dynamic_array_dealloc(cfg->function_blocks);
+	dynamic_array_dealloc(cfg->function_entry_blocks);
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
@@ -5436,7 +5436,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
-static basic_block_t* visit_function_definition(generic_ast_node_t* function_node){
+static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
 	//We will now store this as the current function
@@ -5493,6 +5493,10 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//Determine and insert any needed ret statements
 	determine_and_insert_return_statements(function_starting_block, function_exit_block);
+
+	//Add the start and end blocks to their respective arrays
+	dynamic_array_add(cfg->function_entry_blocks, function_starting_block);
+	dynamic_array_add(cfg->function_exit_blocks, function_exit_block);
 
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
@@ -5611,15 +5615,12 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			//allow the helper to do it
 			case AST_NODE_CLASS_FUNC_DEF:
 				//Visit the function definition
-				block = visit_function_definition(ast_cursor);
+				block = visit_function_definition(cfg, ast_cursor);
 			
 				//If this failed, we're out
 				if(block->block_id == -1){
 					return FALSE;
 				}
-
-				//Otherwise we'll add him to the functions dynamic array
-				dynamic_array_add(cfg->function_blocks, block);
 
 				//All good to move along
 				break;
@@ -5729,9 +5730,9 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh, u_int8_t 
 
 		//For each function entry block, recompute all reverse post order
 		//CFG work
-		for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 			//Grab the block out
-			basic_block_t* block = dynamic_array_get_at(cfg->function_blocks, i);
+			basic_block_t* block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 			//Recompute the reverse post order cfg
 			block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(block, TRUE);
@@ -5767,7 +5768,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 
 	//Create the dynamic arrays that we need
 	cfg->created_blocks = dynamic_array_alloc();
-	cfg->function_blocks = dynamic_array_alloc();
+	cfg->function_entry_blocks = dynamic_array_alloc();
+	cfg->function_exit_blocks = dynamic_array_alloc();
 
 	//Hold the cfg
 	cfg_ref = cfg;
@@ -5804,5 +5806,5 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	rename_all_variables(cfg);
 
 	//Give back the reference
-	return cfg //FORCING COMP FAILURE
+	return cfg;
 }
