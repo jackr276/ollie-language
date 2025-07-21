@@ -217,7 +217,6 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_in
 		//Go all the way to the bottom
 		while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
 			entry = entry->direct_successor;
-			printf("STUCK\n\n");
 		}
 	}
 
@@ -1046,8 +1045,6 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != immediate_dominator(block)){
-				printf("STUCK IDOM\n");
-
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
 				
