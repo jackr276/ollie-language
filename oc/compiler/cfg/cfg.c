@@ -4102,13 +4102,13 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
-	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
+	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//For our eventual token
 	statement_result_package_t expression_package;
 
 	//If it's null, that's actually ok here
-	if(compound_stmt_start == NULL){
+	if(compound_statement_results.starting_block == NULL){
 		//We'll make sure that the start points to this block
 		add_successor(condition_block, for_stmt_update_block);
 
@@ -4124,7 +4124,7 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	}
 
 	//This will always be a successor to the conditional statement
-	add_successor(condition_block, compound_stmt_start);
+	add_successor(condition_block, compound_statement_results.starting_block);
 
 	//We must also remember that the condition block can point to the ending block, because
 	//if the condition fails, we will be jumping here
@@ -4134,18 +4134,13 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	emit_jump(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
 
 	//Emit a direct jump from the condition block to the compound stmt start
-	emit_jump(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(condition_block, compound_statement_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//This is a loop ending block
 	condition_block->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
-	basic_block_t* compound_stmt_end = compound_stmt_start;
-
-	//So long as we don't see the end or a return
-	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-		compound_stmt_end = compound_stmt_end->direct_successor;
-	}
+	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If it ends in a return statement, there is no point in continuing this
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
@@ -4199,26 +4194,21 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
 													 	NULL); //For loop update block
 
 	//We go right into the compound statement here
-	basic_block_t* do_while_compound_stmt_entry = visit_compound_statement(&compound_stmt_values);
+	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//If this is NULL, it means that we really don't have a compound statement there
-	if(do_while_compound_stmt_entry == NULL){
+	if(compound_statement_results.starting_block == NULL){
 		print_parse_message(PARSE_ERROR, "Do-while statement has empty clause, statement has no effect", do_while_stmt_node->line_number);
 		(*num_warnings_ref)++;
 	}
 
 	//No matter what, this will get merged into the top statement
-	add_successor(do_while_stmt_entry_block, do_while_compound_stmt_entry);
+	add_successor(do_while_stmt_entry_block, compound_statement_results.starting_block);
 	//Now we'll jump to it
-	emit_jump(do_while_stmt_entry_block, do_while_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(do_while_stmt_entry_block, compound_statement_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//We will drill to the bottom of the compound statement
-	basic_block_t* compound_stmt_end = do_while_stmt_entry_block;
-
-	//So long as we don't see NULL or return
-	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-		compound_stmt_end = compound_stmt_end->direct_successor;
-	}
+	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If we get this, we can't go forward. Just give it back
 	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
@@ -4269,7 +4259,7 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
  */
 static statement_result_package_t visit_while_statement(values_package_t* values){
 	//Initialize the result package
-	statement_result_package_t result_package;
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our entry block
 	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
@@ -4314,10 +4304,10 @@ static statement_result_package_t visit_while_statement(values_package_t* values
 													 	NULL); //For loop update block
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
-	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
+	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//If it's null, that means that we were given an empty while loop here
-	if(compound_stmt_start == NULL){
+	if(compound_statement_results.starting_block == NULL){
 		//For the user to see
 		print_cfg_message(WARNING, "While loop has empty body, has no effect", while_stmt_node->line_number);
 		(*num_warnings_ref)++;
@@ -4337,21 +4327,16 @@ static statement_result_package_t visit_while_statement(values_package_t* values
 	emit_jump(while_statement_entry_block, while_statement_end_block, jump_type, TRUE, TRUE);
 
 	//Otherwise it isn't null, so we can add it as a successor
-	add_successor(while_statement_entry_block, compound_stmt_start);
+	add_successor(while_statement_entry_block, compound_statement_results.starting_block);
 
 	//We want to have a direct jump to the body too
-	emit_jump(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(while_statement_entry_block, compound_statement_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//The exit block is also a successor to the entry block
 	add_successor(while_statement_entry_block, while_statement_end_block);
 
 	//Let's now find the end of the compound statement
-	basic_block_t* compound_stmt_end = compound_stmt_start;
-
-	//So long as it isn't null or return
-	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-		compound_stmt_end = compound_stmt_end->direct_successor;
-	}
+	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If it's not a return statement, we can add all of these in
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
@@ -4413,23 +4398,17 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 													 	values->for_loop_update_block); //For loop update block
 
 	//Visit the compound statement that we're required to have here
-	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
-	basic_block_t* if_compound_stmt_end;
+	statement_result_package_t if_compound_statement_results = visit_compound_statement(&if_compound_stmt_values);
 
-	if(if_compound_stmt_entry != NULL){
+	if(if_compound_statement_results.starting_block != NULL){
 		//Add the if statement node in as a direct successor
-		add_successor(entry_block, if_compound_stmt_entry);
+		add_successor(entry_block, if_compound_statement_results.starting_block);
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-		emit_jump(entry_block, if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
+		emit_jump(entry_block, if_compound_statement_results.starting_block, jump_to_if, TRUE, FALSE);
 
 		//Now we'll find the end of this statement
-		if_compound_stmt_end = if_compound_stmt_entry;
-
-		//Once we've visited, we'll need to drill to the end of this compound statement
-		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
-		}
+		basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
 
 		//If this is not a return block, we will add these
 		if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
@@ -4496,24 +4475,18 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 													 	values->for_loop_update_block); //For loop update block
 
 		//Let this handle the compound statement
-		basic_block_t* else_if_compound_stmt_entry = visit_compound_statement(&else_if_compound_stmt_values);
-		basic_block_t* else_if_compound_stmt_exit;
+		statement_result_package_t else_if_compound_statement_results = visit_compound_statement(&else_if_compound_stmt_values);
 
 		//If it's not null, we'll process fully
-		if(else_if_compound_stmt_entry != NULL){
+		if(else_if_compound_statement_results.starting_block != NULL){
 			//Add the if statement node in as a direct successor
-			add_successor(current_entry_block, else_if_compound_stmt_entry);
+			add_successor(current_entry_block, else_if_compound_statement_results.starting_block);
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-			emit_jump(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
+			emit_jump(current_entry_block, else_if_compound_statement_results.starting_block, jump_to_if, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
-			else_if_compound_stmt_exit = else_if_compound_stmt_entry;
-
-			//Once we've visited, we'll need to drill to the end of this compound statement
-			while(else_if_compound_stmt_exit->direct_successor != NULL && else_if_compound_stmt_exit->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-				else_if_compound_stmt_exit = else_if_compound_stmt_exit->direct_successor;
-			}
+			basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
 
 			//If this is not a return block, we will add these
 			if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
@@ -4553,11 +4526,10 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 													 	values->for_loop_update_block); //For loop update block
 
 		//Grab the compound statement
-		basic_block_t* else_compound_stmt_entry = visit_compound_statement(&else_compound_stmt_values);
-		basic_block_t* else_compound_stmt_exit;
+		statement_result_package_t else_compound_statement_values = visit_compound_statement(&else_compound_stmt_values);
 
 		//If it's NULL, that's fine, we'll just throw a warning
-		if(else_compound_stmt_entry == NULL){
+		if(else_compound_statement_values.starting_block == NULL){
 			print_cfg_message(WARNING, "Empty else clause in else-statement", cursor->line_number);
 			(*num_warnings_ref)++;
 			//We'll jump to the end here
@@ -4566,26 +4538,21 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 			emit_jump(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 		} else {
 			//Add the if statement node in as a direct successor
-			add_successor(current_entry_block, else_compound_stmt_entry);
+			add_successor(current_entry_block, else_compound_statement_values.starting_block);
 			//We will perform a normal jump to this one
-			emit_jump(current_entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
+			emit_jump(current_entry_block, else_compound_statement_values.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
-			else_compound_stmt_exit = else_compound_stmt_entry;
-
-			//Once we've visited, we'll need to drill to the end of this compound statement
-			while(else_compound_stmt_exit->direct_successor != NULL && else_compound_stmt_exit->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-				else_compound_stmt_exit = else_compound_stmt_exit->direct_successor;
-			}
+			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
 
 			//If this is not a return block, we will add these
-			if(else_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			if(else_compound_statement_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
-				emit_jump(else_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(else_compound_statement_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
-				add_successor(else_compound_stmt_exit, exit_block);
+				add_successor(else_compound_statement_exit, exit_block);
 			} else {
-				add_successor(else_compound_stmt_exit, exit_block);
+				add_successor(else_compound_statement_exit, exit_block);
 			}
 		}
 
@@ -5401,7 +5368,7 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 	//We always return the starting block
 	//It is possible that we have a completely NULL compound statement. This returns
 	//NULL in that event
-	return starting_block;
+	return results;
 }
 
 
@@ -5478,23 +5445,20 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 														NULL); //For loop update block
 
 		//Once we get here, we know that func cursor is the compound statement that we want
-		basic_block_t* compound_stmt_block = visit_compound_statement(&compound_stmt_values);
+		statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 		//Once we're done with the compound statement, we will merge it into the function
-		merge_blocks(function_starting_block, compound_stmt_block);
+	 	basic_block_t* compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
 
-		//Let's see if we actually made it all the way through and found a return
-		basic_block_t* compound_stmt_cursor = function_starting_block;
-
-		//Until we hit the end
-		while(compound_stmt_cursor->direct_successor != NULL){
-			compound_stmt_cursor = compound_stmt_cursor->direct_successor;
+		//Only reassign here if the two are different
+		if(compound_statement_results.starting_block != compound_statement_results.final_block){
+			compound_statement_exit_block = compound_statement_results.final_block;
 		}
 
 		//We will mark that this end here has a direct successor in the function exit block
-		add_successor(compound_stmt_cursor, function_exit_block);
+		add_successor(compound_statement_exit_block, function_exit_block);
 		//Ensure that it's the direct successor
-		compound_stmt_cursor->direct_successor = function_exit_block;
+		compound_statement_exit_block->direct_successor = function_exit_block;
 	
 	//Otherwise we'll just connect the exit and entry
 	} else {
