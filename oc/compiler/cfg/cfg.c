@@ -5390,9 +5390,11 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 		ast_cursor = ast_cursor->next_sibling;
 	}
 
-	//We always return the starting block
-	//It is possible that we have a completely NULL compound statement. This returns
-	//NULL in that event
+	//If we make it down here - we still need to ensure that results are packaged properly
+	results.starting_block = starting_block;
+	results.final_block = current_block;
+
+	//Give back results
 	return results;
 }
 
