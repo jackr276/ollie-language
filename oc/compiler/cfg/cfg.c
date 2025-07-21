@@ -217,6 +217,7 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_in
 		//Go all the way to the bottom
 		while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
 			entry = entry->direct_successor;
+			printf("STUCK\n\n");
 		}
 	}
 
@@ -4119,6 +4120,9 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 		//Make the condition block jump to the exit. This is an inverse jump
 		emit_jump(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
 
+		//The direct successor to the entry block is the exit block, for efficiency reasons
+		for_stmt_entry_block->direct_successor = for_stmt_exit_block;
+
 		//And we're done
 		return result_package;
 	}
@@ -4751,12 +4755,11 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block = starting_block;
-	
-	//The current block(case or default) that we're on
-	basic_block_t* case_block;
 
-	//We'll need to save the default block for our purposes later
+	basic_block_t* case_block;
 	basic_block_t* default_block;
+	
+	statement_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
 
 	//Get to the next statement. This is the first actual case 
 	//statement
@@ -4771,11 +4774,13 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 				//Update this
 				passing_values.initial_node = case_stmt_cursor;
 				//Visit our case stmt here
-				case_block = visit_case_statement(&passing_values);
+				case_default_results = visit_case_statement(&passing_values);
+				//This is the starting block
+				case_block = case_default_results.starting_block;
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
-				add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val - offset, case_block);
+				add_jump_table_entry(&(starting_block->jump_table), case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
 				break;
 
 			//Handle a default statement
@@ -4783,7 +4788,9 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 				//Update this
 				passing_values.initial_node = case_stmt_cursor;
 				//Visit the default statement
-				case_block = visit_default_statement(&passing_values);
+				case_default_results = visit_default_statement(&passing_values);
+				//This is the starting block
+				case_block = case_default_results.starting_block;
 
 				//This is the default block, so save for now
 				default_block = case_block;
@@ -4800,10 +4807,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 		add_successor(starting_block, case_block);
 
 		//Now we'll drill down to the bottom to prime the next pass
-		current_block = case_block;
-		while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-			current_block = current_block->direct_successor;
-		}
+		current_block = case_default_results.final_block;
 
 		//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
 		add_successor(current_block, ending_block);
