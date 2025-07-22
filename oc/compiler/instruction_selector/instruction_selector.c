@@ -4001,9 +4001,9 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 	heap_queue_t* queue = heap_queue_alloc();
 
 	//For each function
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Grab the function block out
-		basic_block_t* func_block = dynamic_array_get_at(cfg->function_blocks, _);
+		basic_block_t* func_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
 
 		//This function start block is the begging of our BFS	
 		enqueue(queue, func_block);

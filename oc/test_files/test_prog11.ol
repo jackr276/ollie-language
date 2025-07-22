@@ -29,7 +29,7 @@ fn main() -> i32{
 
 	let a_temp:i32 := b_arr[2];
 
-	defer {a++}
+	defer {a++;}
 	
 	
 

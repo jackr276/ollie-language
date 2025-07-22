@@ -92,14 +92,14 @@ typedef enum{
 
 //We predeclare up here to avoid needing any rearrangements
 static statement_result_package_t visit_declaration_statement(generic_ast_node_t* node);
-static basic_block_t* visit_compound_statement(values_package_t* values);
+static statement_result_package_t visit_compound_statement(values_package_t* values);
 static statement_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
 static statement_result_package_t visit_if_statement(values_package_t* values);
 static statement_result_package_t visit_while_statement(values_package_t* values);
 static statement_result_package_t visit_do_while_statement(values_package_t* values);
 static statement_result_package_t visit_for_statement(values_package_t* values);
-static basic_block_t* visit_case_statement(values_package_t* values);
-static basic_block_t* visit_default_statement(values_package_t* values);
+static statement_result_package_t visit_case_statement(values_package_t* values);
+static statement_result_package_t visit_default_statement(values_package_t* values);
 static statement_result_package_t visit_switch_statement(values_package_t* values);
 
 static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
@@ -242,9 +242,9 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_in
  */
 void reset_reverse_post_order_sets(cfg_t* cfg){
 	//Run through all of the function blocks
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Grab the block out
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, _);
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
 
 		//Set the RPO to be null
 		if(function_entry_block->reverse_post_order != NULL){
@@ -1178,8 +1178,8 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 
 	//Now that we've initialized, we'll perform the same while change algorithm as before
 	//For each and every function
-	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
-		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_blocks, i);
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 		//If we don't have the RPO for this block, we'll make it now
 		if(current_function_block->reverse_post_order == NULL){
@@ -1316,12 +1316,12 @@ static void calculate_dominator_sets(cfg_t* cfg){
 	}
 
 	//For each and every function that we have, we will perform this operation separately
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Initialize a "worklist" dynamic array for this particular function
 		dynamic_array_t* worklist = dynamic_array_alloc();
 
 		//Add this into the worklist as a seed
-		dynamic_array_add(worklist, dynamic_array_get_at(cfg->function_blocks, _));
+		dynamic_array_add(worklist, dynamic_array_get_at(cfg->function_entry_blocks, _));
 		
 		//The new dominance frontier that we have each time
 		dynamic_array_t* new;
@@ -1559,9 +1559,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		difference_found = FALSE;
 
 		//Run through all of the blocks backwards
-		for(int16_t i = cfg->function_blocks->current_index - 1; i >= 0; i--){
+		for(int16_t i = cfg->function_entry_blocks->current_index - 1; i >= 0; i--){
 			//Grab the block out
-			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_blocks, i);
+			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 			//Calculate the reverse post order in reverse mode for this block, if it doesn't
 			//already exist
@@ -2020,9 +2020,9 @@ static void rename_all_variables(cfg_t* cfg){
 	//recursive, so that should in theory take care of everything for us
 	
 	//For each function block
-	for(u_int16_t _ = 0; _ < cfg->function_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Invoke the rename function on it
-		rename_block(dynamic_array_get_at(cfg->function_blocks, _));
+		rename_block(dynamic_array_get_at(cfg->function_entry_blocks, _));
 	}
 }
 
@@ -3590,20 +3590,20 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 	//For holding our blocks
 	basic_block_t* block;
 
-	//Now we'll print out each and every function inside of the function_blocks
+	//Now we'll print out each and every function inside of the function_entry_blocks
 	//array. Each function will be printed using the BFS strategy
-	for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		//We'll need a queue for our BFS
 		heap_queue_t* queue = heap_queue_alloc();
 
 		//Grab this out for convenience
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_blocks, i);
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 		//We'll want to see what the stack looks like
 		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
 		//Seed the search by adding the funciton block into the queue
-		enqueue(queue, dynamic_array_get_at(cfg->function_blocks, i));
+		enqueue(queue, dynamic_array_get_at(cfg->function_entry_blocks, i));
 
 		//So long as the queue isn't empty
 		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
@@ -3804,7 +3804,7 @@ void dealloc_cfg(cfg_t* cfg){
 
 	//Destroy the dynamic arrays too
 	dynamic_array_dealloc(cfg->created_blocks);
-	dynamic_array_dealloc(cfg->function_blocks);
+	dynamic_array_dealloc(cfg->function_entry_blocks);
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
@@ -3814,13 +3814,15 @@ void dealloc_cfg(cfg_t* cfg){
 /**
  * Helper for returning error blocks. Error blocks always have an ID of -1
  */
-static basic_block_t* create_and_return_err(){
+static statement_result_package_t create_and_return_err(){
 	//Create the error
 	basic_block_t* err_block = basic_block_alloc(1);
 	//Set the ID to -1
 	err_block->block_id = -1;
 
-	return err_block;
+	//Packaage and return the results
+	statement_result_package_t results = {err_block, err_block, NULL, BLANK};
+	return results;
 }
 
 
@@ -4100,13 +4102,10 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
-	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
-
-	//For our eventual token
-	statement_result_package_t expression_package;
+	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//If it's null, that's actually ok here
-	if(compound_stmt_start == NULL){
+	if(compound_statement_results.starting_block == NULL){
 		//We'll make sure that the start points to this block
 		add_successor(condition_block, for_stmt_update_block);
 
@@ -4122,7 +4121,7 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	}
 
 	//This will always be a successor to the conditional statement
-	add_successor(condition_block, compound_stmt_start);
+	add_successor(condition_block, compound_statement_results.starting_block);
 
 	//We must also remember that the condition block can point to the ending block, because
 	//if the condition fails, we will be jumping here
@@ -4132,18 +4131,13 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	emit_jump(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
 
 	//Emit a direct jump from the condition block to the compound stmt start
-	emit_jump(condition_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(condition_block, compound_statement_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//This is a loop ending block
 	condition_block->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
-	basic_block_t* compound_stmt_end = compound_stmt_start;
-
-	//So long as we don't see the end or a return
-	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-		compound_stmt_end = compound_stmt_end->direct_successor;
-	}
+	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If it ends in a return statement, there is no point in continuing this
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
@@ -4197,26 +4191,21 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
 													 	NULL); //For loop update block
 
 	//We go right into the compound statement here
-	basic_block_t* do_while_compound_stmt_entry = visit_compound_statement(&compound_stmt_values);
+	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//If this is NULL, it means that we really don't have a compound statement there
-	if(do_while_compound_stmt_entry == NULL){
+	if(compound_statement_results.starting_block == NULL){
 		print_parse_message(PARSE_ERROR, "Do-while statement has empty clause, statement has no effect", do_while_stmt_node->line_number);
 		(*num_warnings_ref)++;
 	}
 
 	//No matter what, this will get merged into the top statement
-	add_successor(do_while_stmt_entry_block, do_while_compound_stmt_entry);
+	add_successor(do_while_stmt_entry_block, compound_statement_results.starting_block);
 	//Now we'll jump to it
-	emit_jump(do_while_stmt_entry_block, do_while_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(do_while_stmt_entry_block, compound_statement_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//We will drill to the bottom of the compound statement
-	basic_block_t* compound_stmt_end = do_while_stmt_entry_block;
-
-	//So long as we don't see NULL or return
-	while(compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-		compound_stmt_end = compound_stmt_end->direct_successor;
-	}
+	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If we get this, we can't go forward. Just give it back
 	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
@@ -4267,7 +4256,7 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
  */
 static statement_result_package_t visit_while_statement(values_package_t* values){
 	//Initialize the result package
-	statement_result_package_t result_package;
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our entry block
 	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
@@ -4312,10 +4301,10 @@ static statement_result_package_t visit_while_statement(values_package_t* values
 													 	NULL); //For loop update block
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
-	basic_block_t* compound_stmt_start = visit_compound_statement(&compound_stmt_values);
+	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//If it's null, that means that we were given an empty while loop here
-	if(compound_stmt_start == NULL){
+	if(compound_statement_results.starting_block == NULL){
 		//For the user to see
 		print_cfg_message(WARNING, "While loop has empty body, has no effect", while_stmt_node->line_number);
 		(*num_warnings_ref)++;
@@ -4335,21 +4324,16 @@ static statement_result_package_t visit_while_statement(values_package_t* values
 	emit_jump(while_statement_entry_block, while_statement_end_block, jump_type, TRUE, TRUE);
 
 	//Otherwise it isn't null, so we can add it as a successor
-	add_successor(while_statement_entry_block, compound_stmt_start);
+	add_successor(while_statement_entry_block, compound_statement_results.starting_block);
 
 	//We want to have a direct jump to the body too
-	emit_jump(while_statement_entry_block, compound_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(while_statement_entry_block, compound_statement_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 	//The exit block is also a successor to the entry block
 	add_successor(while_statement_entry_block, while_statement_end_block);
 
 	//Let's now find the end of the compound statement
-	basic_block_t* compound_stmt_end = compound_stmt_start;
-
-	//So long as it isn't null or return
-	while (compound_stmt_end->direct_successor != NULL && compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-		compound_stmt_end = compound_stmt_end->direct_successor;
-	}
+	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If it's not a return statement, we can add all of these in
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
@@ -4411,23 +4395,17 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 													 	values->for_loop_update_block); //For loop update block
 
 	//Visit the compound statement that we're required to have here
-	basic_block_t* if_compound_stmt_entry = visit_compound_statement(&if_compound_stmt_values);
-	basic_block_t* if_compound_stmt_end;
+	statement_result_package_t if_compound_statement_results = visit_compound_statement(&if_compound_stmt_values);
 
-	if(if_compound_stmt_entry != NULL){
+	if(if_compound_statement_results.starting_block != NULL){
 		//Add the if statement node in as a direct successor
-		add_successor(entry_block, if_compound_stmt_entry);
+		add_successor(entry_block, if_compound_statement_results.starting_block);
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-		emit_jump(entry_block, if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
+		emit_jump(entry_block, if_compound_statement_results.starting_block, jump_to_if, TRUE, FALSE);
 
 		//Now we'll find the end of this statement
-		if_compound_stmt_end = if_compound_stmt_entry;
-
-		//Once we've visited, we'll need to drill to the end of this compound statement
-		while(if_compound_stmt_end->direct_successor != NULL && if_compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-			if_compound_stmt_end = if_compound_stmt_end->direct_successor;
-		}
+		basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
 
 		//If this is not a return block, we will add these
 		if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
@@ -4494,24 +4472,18 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 													 	values->for_loop_update_block); //For loop update block
 
 		//Let this handle the compound statement
-		basic_block_t* else_if_compound_stmt_entry = visit_compound_statement(&else_if_compound_stmt_values);
-		basic_block_t* else_if_compound_stmt_exit;
+		statement_result_package_t else_if_compound_statement_results = visit_compound_statement(&else_if_compound_stmt_values);
 
 		//If it's not null, we'll process fully
-		if(else_if_compound_stmt_entry != NULL){
+		if(else_if_compound_statement_results.starting_block != NULL){
 			//Add the if statement node in as a direct successor
-			add_successor(current_entry_block, else_if_compound_stmt_entry);
+			add_successor(current_entry_block, else_if_compound_statement_results.starting_block);
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-			emit_jump(current_entry_block, else_if_compound_stmt_entry, jump_to_if, TRUE, FALSE);
+			emit_jump(current_entry_block, else_if_compound_statement_results.starting_block, jump_to_if, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
-			else_if_compound_stmt_exit = else_if_compound_stmt_entry;
-
-			//Once we've visited, we'll need to drill to the end of this compound statement
-			while(else_if_compound_stmt_exit->direct_successor != NULL && else_if_compound_stmt_exit->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-				else_if_compound_stmt_exit = else_if_compound_stmt_exit->direct_successor;
-			}
+			basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
 
 			//If this is not a return block, we will add these
 			if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
@@ -4551,11 +4523,10 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 													 	values->for_loop_update_block); //For loop update block
 
 		//Grab the compound statement
-		basic_block_t* else_compound_stmt_entry = visit_compound_statement(&else_compound_stmt_values);
-		basic_block_t* else_compound_stmt_exit;
+		statement_result_package_t else_compound_statement_values = visit_compound_statement(&else_compound_stmt_values);
 
 		//If it's NULL, that's fine, we'll just throw a warning
-		if(else_compound_stmt_entry == NULL){
+		if(else_compound_statement_values.starting_block == NULL){
 			print_cfg_message(WARNING, "Empty else clause in else-statement", cursor->line_number);
 			(*num_warnings_ref)++;
 			//We'll jump to the end here
@@ -4564,26 +4535,21 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 			emit_jump(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 		} else {
 			//Add the if statement node in as a direct successor
-			add_successor(current_entry_block, else_compound_stmt_entry);
+			add_successor(current_entry_block, else_compound_statement_values.starting_block);
 			//We will perform a normal jump to this one
-			emit_jump(current_entry_block, else_compound_stmt_entry, JUMP_TYPE_JMP, TRUE, FALSE);
+			emit_jump(current_entry_block, else_compound_statement_values.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
-			else_compound_stmt_exit = else_compound_stmt_entry;
-
-			//Once we've visited, we'll need to drill to the end of this compound statement
-			while(else_compound_stmt_exit->direct_successor != NULL && else_compound_stmt_exit->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-				else_compound_stmt_exit = else_compound_stmt_exit->direct_successor;
-			}
+			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
 
 			//If this is not a return block, we will add these
-			if(else_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			if(else_compound_statement_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
-				emit_jump(else_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(else_compound_statement_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
-				add_successor(else_compound_stmt_exit, exit_block);
+				add_successor(else_compound_statement_exit, exit_block);
 			} else {
-				add_successor(else_compound_stmt_exit, exit_block);
+				add_successor(else_compound_statement_exit, exit_block);
 			}
 		}
 
@@ -4606,7 +4572,10 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
  * Visit a default statement.  These statements are also handled like individual blocks that can 
  * be jumped to
  */
-static basic_block_t* visit_default_statement(values_package_t* values){
+static statement_result_package_t visit_default_statement(values_package_t* values){
+	//Declare and prepack our results
+	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+
 	//For a default statement, it performs very similarly to a case statement. 
 	//It will be handled slightly differently in the jump table, but we'll get to that 
 	//later on
@@ -4618,6 +4587,10 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 	//Treated as case statements
 	default_stmt->block_type = BLOCK_TYPE_CASE;
 
+	//Prepackage these now
+	results.starting_block = default_stmt;
+	results.final_block = default_stmt;
+
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
 	values_package_t statement_values = *values;
@@ -4626,25 +4599,29 @@ static basic_block_t* visit_default_statement(values_package_t* values){
 
 	//Let this take care of it
 	if(statement_values.initial_node != NULL){
-		basic_block_t* compound_statement_start = visit_compound_statement(&statement_values);
+		statement_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
 	
-		//If this is the case, just allocate a dummy
-		if(compound_statement_start == NULL){
-			compound_statement_start = basic_block_alloc(1);
-		}	
-
 		//If we have an error
-		if(compound_statement_start->block_id == -1){
-			return compound_statement_start;
+		if(default_compound_statement_results.starting_block != NULL
+				&& default_compound_statement_results.starting_block->block_id == -1){
+			return create_and_return_err();
 		}
 
 		//Once we get this back, we'll add it in to the main block
-		merge_blocks(default_stmt, compound_statement_start);
+		results.starting_block = merge_blocks(default_stmt, default_compound_statement_results.starting_block);
+
+		//If these are different, then we reassign to the very end of the compound statement
+		if(default_compound_statement_results.starting_block != default_compound_statement_results.final_block
+			&& default_compound_statement_results.starting_block != NULL){
+			results.final_block = default_compound_statement_results.final_block;
+		//Otherwise start and end are the same
+		} else {
+			results.final_block = results.starting_block;
+		}
 	}
-	
 
 	//Give the block back
-	return default_stmt;
+	return results;
 }
 
 
@@ -4652,7 +4629,10 @@ static basic_block_t* visit_default_statement(values_package_t* values){
  * Visit a case statement. It is very important that case statements know
  * where the end of the switch statement is, in case break statements are used
  */
-static basic_block_t* visit_case_statement(values_package_t* values){
+static statement_result_package_t visit_case_statement(values_package_t* values){
+	//Declare and prepack our results
+	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+
 	//We need to make the block first
 	basic_block_t* case_stmt = basic_block_alloc(1);
 	case_stmt->block_type = BLOCK_TYPE_CASE;
@@ -4676,24 +4656,29 @@ static basic_block_t* visit_case_statement(values_package_t* values){
 	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
 	if(statement_values.initial_node != NULL){
 		//Let this take care of it
-		basic_block_t* compound_statement_start = visit_compound_statement(&statement_values);
+		statement_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
 
-		//If this is the case, just allocate a dummy
-		if(compound_statement_start == NULL){
-			compound_statement_start = basic_block_alloc(1);
-		}
-
-		//If we have an error
-		if(compound_statement_start->block_id == -1){
-			return compound_statement_start;
+		//If we have an error(specifically, if this is non-null and a negative ID)
+		if(case_compound_statement_results.starting_block != NULL
+				&& case_compound_statement_results.starting_block->block_id == -1){
+			return create_and_return_err();
 		}
 
 		//Once we get this back, we'll add it in to the main block
-		merge_blocks(case_stmt, compound_statement_start);
+		results.starting_block = merge_blocks(case_stmt, case_compound_statement_results.starting_block);
+
+		//If these are different, then we reassign to the very end of the compound statement
+		if(case_compound_statement_results.starting_block != case_compound_statement_results.final_block
+			&& case_compound_statement_results.starting_block != NULL){
+			results.final_block = case_compound_statement_results.final_block;
+		//Otherwise start and end are the same
+		} else {
+			results.final_block = results.starting_block;
+		}
 	}
 
 	//Give the block back
-	return case_stmt;
+	return results;
 }
 
 
@@ -4757,12 +4742,11 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block = starting_block;
-	
-	//The current block(case or default) that we're on
-	basic_block_t* case_block;
 
-	//We'll need to save the default block for our purposes later
+	basic_block_t* case_block;
 	basic_block_t* default_block;
+	
+	statement_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
 
 	//Get to the next statement. This is the first actual case 
 	//statement
@@ -4777,11 +4761,13 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 				//Update this
 				passing_values.initial_node = case_stmt_cursor;
 				//Visit our case stmt here
-				case_block = visit_case_statement(&passing_values);
+				case_default_results = visit_case_statement(&passing_values);
+				//This is the starting block
+				case_block = case_default_results.starting_block;
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
-				add_jump_table_entry(&(starting_block->jump_table), case_block->case_stmt_val - offset, case_block);
+				add_jump_table_entry(&(starting_block->jump_table), case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
 				break;
 
 			//Handle a default statement
@@ -4789,7 +4775,9 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 				//Update this
 				passing_values.initial_node = case_stmt_cursor;
 				//Visit the default statement
-				case_block = visit_default_statement(&passing_values);
+				case_default_results = visit_default_statement(&passing_values);
+				//This is the starting block
+				case_block = case_default_results.starting_block;
 
 				//This is the default block, so save for now
 				default_block = case_block;
@@ -4803,20 +4791,19 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 		}
 
 		//Now we'll add this one into the overall structure
-		add_successor(starting_block, case_block);
+		if(case_default_results.starting_block != NULL){
+			add_successor(starting_block, case_block);
 
-		//Now we'll drill down to the bottom to prime the next pass
-		current_block = case_block;
-		while(current_block->direct_successor != NULL && current_block->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-			current_block = current_block->direct_successor;
+			//Now we'll drill down to the bottom to prime the next pass
+			current_block = case_default_results.final_block;
+
+			//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
+			add_successor(current_block, ending_block);
+
+			//We will always emit a direct jump from this block to the ending block
+			emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
 		}
-
-		//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
-		add_successor(current_block, ending_block);
-
-		//We will always emit a direct jump from this block to the ending block
-		emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
-
+		
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
 	}
@@ -4896,7 +4883,16 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
  *
  * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
  */
-static basic_block_t* visit_compound_statement(values_package_t* values){
+static statement_result_package_t visit_compound_statement(values_package_t* values){
+	//Everything to begin with is completely null'd out
+	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+	//A generic results package that we can use in any of our processing
+	statement_result_package_t generic_results;
+	//Generic values that we can use 
+	values_package_t generic_values;
+	//A defer statement cursor
+	generic_ast_node_t* defer_statement_cursor;
+
 	//The global starting block
 	basic_block_t* starting_block = NULL;
 	//The current block
@@ -4910,488 +4906,495 @@ static basic_block_t* visit_compound_statement(values_package_t* values){
 	
 	//Roll through the entire subtree
 	while(ast_cursor != NULL){
-		//We've found a declaration statement
-		if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
-			//Let the helper deal with it
-			statement_result_package_t declaration_results = visit_declaration_statement(ast_cursor);
+		//Using switch/case for the efficiency gain
+		switch(ast_cursor->CLASS){
+			case AST_NODE_CLASS_DECL_STMT:
+				generic_results = visit_declaration_statement(ast_cursor);
 
-			//If we're adding onto something(common case), we'll go here
-			if(starting_block != NULL){
-				//Merge the two blocks together
-				current_block = merge_blocks(current_block, declaration_results.starting_block); 
+				//If we're adding onto something(common case), we'll go here
+				if(starting_block != NULL){
+					//Merge the two blocks together
+					current_block = merge_blocks(current_block, generic_results.starting_block); 
 
-				//If these are not equal, we can reassign the current block to be the final block
-				if(declaration_results.starting_block != declaration_results.final_block){
-					current_block = declaration_results.final_block;
-				}
+					//If these are not equal, we can reassign the current block to be the final block
+					if(generic_results.starting_block != generic_results.final_block){
+						current_block = generic_results.final_block;
+					}
 
-			//Otherwise this is the very first thing
-			} else {
-				starting_block = declaration_results.starting_block;
-				current_block = declaration_results.final_block;
-			}
-
-		//We've found a let statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
-			//We'll visit the block here
-			statement_result_package_t let_results = visit_let_statement(ast_cursor, FALSE);
-
-			//If this is not null, then we're just adding onto something
-			if(starting_block != NULL){
-				//Merge the two together
-				current_block = merge_blocks(current_block, let_results.starting_block); 
-
-				//If these are not equal, we can reassign the current block to be the final block
-				if(let_results.starting_block != let_results.final_block){
-					current_block = let_results.final_block;
-				}
-
-			//Otherwise this is the very first thing
-			} else {
-				starting_block = let_results.starting_block;
-				current_block = let_results.final_block;
-			}
-
-		//If we have a return statement -- SPECIAL CASE HERE
-		} else if (ast_cursor->CLASS == AST_NODE_CLASS_RET_STMT){
-			//If for whatever reason the block is null, we'll create it
-			if(starting_block == NULL){
-				//We assume that this only happens once
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//Emit the return statement, let the sub rule handle
-			emit_ret(current_block, ast_cursor, FALSE);
-
-			//Destroy any/all successors of the current block. Once you have a return statement in a block, there
-			//can be no other successors
-			if(current_block->successors != NULL){
-				dynamic_array_dealloc(current_block->successors);
-				current_block->successors = NULL;
-			}
-
-			//A successor to this block is the exit block
-			add_successor(current_block, function_exit_block);
-
-			//The current block will now be marked as a return statement
-			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
-
-			//If there is anything after this statement, it is UNREACHABLE
-			if(ast_cursor->next_sibling != NULL){
-				print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
-				(*num_warnings_ref)++;
-			}
-
-			//We're completely done here
-			return starting_block;
-
-		//We've found an if-statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IF_STMT){
-			//Create the values package
-			values_package_t if_stmt_values;
-			if_stmt_values.initial_node = ast_cursor;
-			if_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
-			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
-
-			//We'll now enter the if statement
-			statement_result_package_t if_package = visit_if_statement(&if_stmt_values);
-			
-			//Once we have the if statement start, we'll add it in as a successor
-			if(starting_block == NULL){
-				//The starting block is the first one here
-				starting_block = if_package.starting_block;
-				//And the final block is the end
-				current_block = if_package.final_block;
-			} else {
-				//Add a successor to the current block
-				add_successor(current_block, if_package.starting_block);
-				//Emit a jump from current to the start
-				emit_jump(current_block, if_package.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//The current block is just whatever is at the end
-				current_block = if_package.final_block;
-			}
-
-		//Handle a while statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
-			//Create the values here
-			values_package_t while_stmt_values;
-			while_stmt_values.initial_node = ast_cursor;
-			while_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			while_stmt_values.loop_stmt_start = NULL;
-			while_stmt_values.loop_stmt_end = NULL;
-
-			//Visit the while statement
-			statement_result_package_t while_results = visit_while_statement(&while_stmt_values);
-
-			//We'll now add it in
-			if(starting_block == NULL){
-				starting_block = while_results.starting_block;
-				current_block = while_results.final_block;
-			//We never merge these
-			} else {
-				//Add as a successor
-				add_successor(current_block, while_results.starting_block);
-				//Emit a direct jump to it
-				emit_jump(current_block, while_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//And the current block is just the end block
-				current_block = while_results.final_block;
-			}
-
-		//Handle a do-while statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
-			//Create the values package
-			values_package_t do_while_values;
-			do_while_values.initial_node = ast_cursor;
-			do_while_values.loop_stmt_start = NULL;
-			do_while_values.loop_stmt_end = NULL;
-			do_while_values.for_loop_update_block = values->for_loop_update_block;
-
-			//Visit the statement
-			statement_result_package_t result_package = visit_do_while_statement(&do_while_values);
-
-			//We'll now add it in
-			if(starting_block == NULL){
-				starting_block = result_package.starting_block;
-				current_block = result_package.final_block;
-			//We never merge do-while's, they are strictly successors
-			} else {
-				//Add this in as a successor
-				add_successor(current_block, result_package.starting_block);
-				//Emit a jump from the current block to this
-				emit_jump(current_block, result_package.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//And we now know that the current block is just the end block
-				current_block = result_package.final_block;
-			}
-
-		//Handle a for statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
-			//Create the values package
-			values_package_t for_stmt_values;
-			for_stmt_values.initial_node = ast_cursor;
-			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			for_stmt_values.loop_stmt_start = NULL;
-			for_stmt_values.loop_stmt_end = NULL;
-
-			//First visit the statement
-			statement_result_package_t for_results = visit_for_statement(&for_stmt_values);
-
-			//Now we'll add it in
-			if(starting_block == NULL){
-				starting_block = for_results.starting_block;
-				current_block = for_results.final_block;
-			//We don't merge, we'll add successors
-			} else {
-				//Add the start as a successor
-				add_successor(current_block, for_results.starting_block);
-				//We go right to the exit block here
-				emit_jump(current_block, for_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//Go right to the final block here
-				current_block = for_results.final_block;
-			}
-			
-		//Handle a continue statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
-			//Let's first see if we're in a loop or not
-			if(values->loop_stmt_start == NULL){
-				print_cfg_message(PARSE_ERROR, "Continue statement was not found in a loop", ast_cursor->line_number);
-				(*num_errors_ref)++;
-				return create_and_return_err();
-			}
-
-			//This could happen where we have nothing here
-			if(starting_block == NULL){
-				//We'll assume that this only happens once
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//There are two options here. We could see a regular continue or a conditional
-			//continue. If the child is null, then it is a regular continue
-			if(ast_cursor->first_child == NULL){
-				//Mark this for later
-				current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
-
-				//Let's see what kind of loop we're in
-				//NON for loop
-				if(values->for_loop_update_block == NULL){
-					//Otherwise we are in a loop, so this means that we need to point the continue statement to
-					//the loop entry block
-					add_successor(current_block, values->loop_stmt_start);
-					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
-
-				//We are in a for loop
+				//Otherwise this is the very first thing
 				} else {
-					//Otherwise we are in a for loop, so we just need to point to the for loop update block
-					add_successor(current_block, values->for_loop_update_block);
-					//Emit a direct unconditional jump statement to it
-					emit_jump(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
 				}
 
-				//We're done here, so return the starting block. There is no 
-				//point in going on
-				return starting_block;
+				break;
 
-			//Otherwise, we have a conditional continue here
-			} else {
-				//Emit the expression code into the current statement
-				statement_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
-				//Decide the appropriate jump statement -- direct path here
-				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
+			case AST_NODE_CLASS_LET_STMT:
+				//We'll visit the block here
+				generic_results = visit_let_statement(ast_cursor, FALSE);
 
-				//We'll need a new block here - this will count as a branch
-				basic_block_t* new_block = basic_block_alloc(1);
-				
-				//Two divergent paths here -- whether or not we have a for loop
-				//Not a for loop
-				if(values->for_loop_update_block == NULL){
-					//Otherwise we are in a loop, so this means that we need to point the continue statement to
-					//the loop entry block
-					//Add the successor in
-					add_successor(current_block, values->loop_stmt_start);
-					//Add this new block in as a successor
-					add_successor(current_block, new_block);
-					//Restore the direct successor
-					current_block->direct_successor = new_block;
-					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
-					//The other end of the conditional continue will be jumping to this new block
-					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//We are in a for loop
+				//If this is not null, then we're just adding onto something
+				if(starting_block != NULL){
+					//Merge the two together
+					current_block = merge_blocks(current_block, generic_results.starting_block); 
+
+					//If these are not equal, we can reassign the current block to be the final block
+					if(generic_results.starting_block != generic_results.final_block){
+						current_block = generic_results.final_block;
+					}
+
+				//Otherwise this is the very first thing
 				} else {
-					//Otherwise we are in a for loop, so we just need to point to the for loop update block
-					//Add the successor in
-					add_successor(current_block, values->for_loop_update_block);
-					//Add this new block in as a successor
-					add_successor(current_block, new_block);
-					//Restore the direct successor
-					current_block->direct_successor = new_block;
-					//Emit a direct unconditional jump statement to it
-					emit_jump(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
-					//The other end of the conditional continue will be jumping to this new block
-					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
 				}
 
-				//And as we go forward, this new block will be the current block
-				current_block = new_block;
-			}
+				break;
 
-		//Hand le a break out statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_BREAK_STMT){
-			//Let's first see if we're in a loop or switch statement or not
-			if(values->loop_stmt_start == NULL){
-				print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop", ast_cursor->line_number);
-				(*num_errors_ref)++;
-				return create_and_return_err();
-			}
-
-			//This could happen where we have nothing here
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//There are two options here: We could have a conditional break
-			//or a normal break. If there is no child node, we have a normal break
-			if(ast_cursor->first_child == NULL){
-				//Mark this for later
-				current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
-
-				//We'll need to break out of the loop
-				add_successor(current_block, values->loop_stmt_end);
-				//We will jump to it -- this is always an uncoditional jump
-				emit_jump(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
-
-				//For a regular break statement, this is it, so we just get out
-				//Give back the starting block
-				return starting_block;
-
-			//Otherwise, we have a conditional break, which will generate a conditional jump instruction
-			} else {
-				//We'll also need a new block to jump to, since this is a conditional break
-				basic_block_t* new_block = basic_block_alloc(1);
-
-				//First let's emit the conditional code
-				statement_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
-
-				//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-				jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
-
-				//Add a successor to the end
-				add_successor(current_block, values->loop_stmt_end);
-				//Add the new block as a successor as well
-				add_successor(current_block, new_block);
-
-				//Make sure we mark this properly
-				current_block->direct_successor = new_block;
-
-				//We will jump to it -- this jump is decided above
-				emit_jump(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
-				//Emit a jump to the new block
-				emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
-
-				//Once we're out here, the current block is now the new one
-				current_block = new_block;
-			}
-
-		//Handle a defer statement. Remember that a defer statment is one monolithic
-		//node with a bunch of sub-nodes underneath that are all handleable by "expr"
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DEFER_STMT){
-			//Grab a cursor here
-			generic_ast_node_t* defer_stmt_cursor = ast_cursor->first_child;
-
-			//So long as this cursor is not null, we'll keep processing and adding
-			//compound statements
-			while(defer_stmt_cursor != NULL){
-				//Package the values
-				values_package_t values = pack_values(defer_stmt_cursor, NULL, NULL, NULL);
-
-				//Let the helper process this
-				basic_block_t* compound_stmt_block = visit_compound_statement(&values);
-
-				//The successor to the current block is this block
-				//If it's null then this is this block
+			case AST_NODE_CLASS_RET_STMT:
+				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
-					starting_block = compound_stmt_block;
+					//We assume that this only happens once
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//Emit the return statement, let the sub rule handle
+				emit_ret(current_block, ast_cursor, FALSE);
+
+				//Destroy any/all successors of the current block. Once you have a return statement in a block, there
+				//can be no other successors
+				if(current_block->successors != NULL){
+					dynamic_array_dealloc(current_block->successors);
+					current_block->successors = NULL;
+				}
+
+				//A successor to this block is the exit block
+				add_successor(current_block, function_exit_block);
+
+				//The current block will now be marked as a return statement
+				current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
+
+				//If there is anything after this statement, it is UNREACHABLE
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
+					(*num_warnings_ref)++;
+				}
+
+				//Package up the values
+				results.starting_block = starting_block;
+				results.final_block = current_block;
+				results.operator = BLANK;
+				results.assignee = NULL;
+
+				//We're completely done here
+				return results;
+		
+			case AST_NODE_CLASS_IF_STMT:
+				//Pack the values up accordingly
+				generic_values = pack_values(ast_cursor, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
+
+				//We'll now enter the if statement
+				generic_results = visit_if_statement(&generic_values);
+			
+				//Once we have the if statement start, we'll add it in as a successor
+				if(starting_block == NULL){
+					//The starting block is the first one here
+					starting_block = generic_results.starting_block;
+					//And the final block is the end
+					current_block = generic_results.final_block;
 				} else {
-					//Otherwise it's a successor
-					add_successor(current_block, compound_stmt_block);
-					//Jump to it - important for optimizer
-					emit_jump(current_block, compound_stmt_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Add a successor to the current block
+					add_successor(current_block, generic_results.starting_block);
+					//Emit a jump from current to the start
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//The current block is just whatever is at the end
+					current_block = generic_results.final_block;
 				}
 
-				//Regardless, the current block now is the compound statement
-				current_block = compound_stmt_block;
+				break;
 
-				//Once we're here the start is in current, we'll need to drill to the end
-				while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
-					current_block = current_block->direct_successor;
+			case AST_NODE_CLASS_WHILE_STMT:
+				//Pack the generic values up here
+				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+
+				//Visit the while statement
+				generic_results = visit_while_statement(&generic_values);
+
+				//We'll now add it in
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
+				//We never merge these
+				} else {
+					//Add as a successor
+					add_successor(current_block, generic_results.starting_block);
+					//Emit a direct jump to it
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//And the current block is just the end block
+					current_block = generic_results.final_block;
 				}
-
-				//Advance this to the next one
-				defer_stmt_cursor = defer_stmt_cursor->next_sibling;
-			}
-
-
-		//Handle a labeled statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LABEL_STMT){
-			//This really shouldn't happen, but it can't hurt
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-			
-			//We rely on the helper to do it for us
-			emit_label(current_block, ast_cursor, FALSE);
-
-		//Handle a jump statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_JUMP_STMT){
-			//This really shouldn't happen, but it can't hurt
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//We rely on the helper to do it for us
-			emit_direct_jump(current_block, ast_cursor, TRUE);
-
-		//A very unique case exists in the switch statement. For a switch 
-		//statement, we leverage some very unique properties of the enumerable
-		//types that it uses
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_SWITCH_STMT){
-			//Set the initial node
-			values->initial_node = ast_cursor;
-
-			//Visit the switch statement
-			statement_result_package_t switch_results = visit_switch_statement(values);
-
-			//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
-			//starting block's direct successor
-			if(starting_block == NULL){
-				starting_block = switch_results.starting_block;
-			} else {
-				//Otherwise this is a direct successor
-				add_successor(current_block, switch_results.starting_block);
-				//We will also emit a jump from the current block to the entry
-				emit_jump(current_block, switch_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-			}
-
-			//The current block is always what's directly at the end
-			current_block = switch_results.final_block;
-			
-		//We could also have a compound statement inside of here as well
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
-			//Prime this here
-			values->initial_node = ast_cursor;
-
-			//We'll simply recall this function and let it handle it
-			basic_block_t* compound_stmt_entry_block = visit_compound_statement(values);
-
-			//Add in everything appropriately here
-			if(starting_block == NULL){
-				starting_block = compound_stmt_entry_block;
-			} else {
-				//TODO MAY OR MAY NOT KEEP
-				add_successor(current_block, compound_stmt_entry_block);
-			}
-
-			//We need to drill to the end
-			//Set this to be current
-			current_block = compound_stmt_entry_block;
-
-			//Once we're here the start is in current, we'll need to drill to the end
-			while(current_block->direct_successor != NULL && current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
-				current_block = current_block->direct_successor;
-			}
-
-		//These are 100% user generated,
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-			//If we find an assembly inline statement, the actuality of it is
-			//incredibly easy. All that we need to do is literally take the 
-			//user's statement and insert it into the code
-
-			//We'll need a new block here regardless
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//Let the helper handle
-			emit_assembly_inline(current_block, ast_cursor, FALSE);
-
-		//Handle a nop statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IDLE_STMT){
-			//Do we need a new block?
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//Let the helper handle -- doesn't even need the cursor
-			emit_idle(current_block, FALSE);
 	
-		//This means that we have some kind of expression statement
-		} else {
-			//This could happen where we have nothing here
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
+				break;
+
+			case AST_NODE_CLASS_DO_WHILE_STMT:
+				//Pack the generic values up here
+				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+
+				//Visit the statement
+				generic_results = visit_do_while_statement(&generic_values);
+
+				//We'll now add it in
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
+				//We never merge do-while's, they are strictly successors
+				} else {
+					//Add this in as a successor
+					add_successor(current_block, generic_results.starting_block);
+					//Emit a jump from the current block to this
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//And we now know that the current block is just the end block
+					current_block = generic_results.final_block;
+				}
+
+				break;
+
+			case AST_NODE_CLASS_FOR_STMT:
+				//Pack the generic values up here
+				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+
+				//First visit the statement
+				generic_results = visit_for_statement(&generic_values);
+
+				//Now we'll add it in
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
+				//We don't merge, we'll add successors
+				} else {
+					//Add the start as a successor
+					add_successor(current_block, generic_results.starting_block);
+					//We go right to the exit block here
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Go right to the final block here
+					current_block = generic_results.final_block;
+				}
+
+				break;
+
+			case AST_NODE_CLASS_CONTINUE_STMT:
+				//Let's first see if we're in a loop or not
+				//TODO HERE
+				if(values->loop_stmt_start == NULL){
+					print_cfg_message(PARSE_ERROR, "Continue statement was not found in a loop", ast_cursor->line_number);
+					(*num_errors_ref)++;
+					return create_and_return_err();
+				}
+
+				//This could happen where we have nothing here
+				if(starting_block == NULL){
+					//We'll assume that this only happens once
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//There are two options here. We could see a regular continue or a conditional
+				//continue. If the child is null, then it is a regular continue
+				if(ast_cursor->first_child == NULL){
+					//Mark this for later
+					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
+
+					//Let's see what kind of loop we're in
+					//NON for loop
+					if(values->for_loop_update_block == NULL){
+						//Otherwise we are in a loop, so this means that we need to point the continue statement to
+						//the loop entry block
+						add_successor(current_block, values->loop_stmt_start);
+						//We always jump to the start of the loop statement unconditionally
+						emit_jump(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+
+					//We are in a for loop
+					} else {
+						//Otherwise we are in a for loop, so we just need to point to the for loop update block
+						add_successor(current_block, values->for_loop_update_block);
+						//Emit a direct unconditional jump statement to it
+						emit_jump(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					}
+
+					results.starting_block = starting_block;
+					results.final_block = current_block;
+					results.assignee = NULL;
+					results.operator = BLANK;
+
+					//We're done here, so return the starting block. There is no 
+					//point in going on
+					return results;
+
+				//Otherwise, we have a conditional continue here
+				} else {
+					//Emit the expression code into the current statement
+					statement_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+					//Decide the appropriate jump statement -- direct path here
+					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
+
+					//We'll need a new block here - this will count as a branch
+					basic_block_t* new_block = basic_block_alloc(1);
+					
+					//Two divergent paths here -- whether or not we have a for loop
+					//Not a for loop
+					if(values->for_loop_update_block == NULL){
+						//Otherwise we are in a loop, so this means that we need to point the continue statement to
+						//the loop entry block
+						//Add the successor in
+						add_successor(current_block, values->loop_stmt_start);
+						//Add this new block in as a successor
+						add_successor(current_block, new_block);
+						//Restore the direct successor
+						current_block->direct_successor = new_block;
+						//We always jump to the start of the loop statement unconditionally
+						emit_jump(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
+						//The other end of the conditional continue will be jumping to this new block
+						emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//We are in a for loop
+					} else {
+						//Otherwise we are in a for loop, so we just need to point to the for loop update block
+						//Add the successor in
+						add_successor(current_block, values->for_loop_update_block);
+						//Add this new block in as a successor
+						add_successor(current_block, new_block);
+						//Restore the direct successor
+						current_block->direct_successor = new_block;
+						//Emit a direct unconditional jump statement to it
+						emit_jump(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
+						//The other end of the conditional continue will be jumping to this new block
+						emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					}
+
+						//And as we go forward, this new block will be the current block
+						current_block = new_block;
+					}
+
+					break;
+
+			case AST_NODE_CLASS_BREAK_STMT:
+				//Let's first see if we're in a loop or switch statement or not
+				//TODO HERE
+				if(values->loop_stmt_start == NULL){
+					print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop", ast_cursor->line_number);
+					(*num_errors_ref)++;
+					return create_and_return_err();
+				}
+
+				//This could happen where we have nothing here
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//There are two options here: We could have a conditional break
+				//or a normal break. If there is no child node, we have a normal break
+				if(ast_cursor->first_child == NULL){
+					//Mark this for later
+					current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
+
+					//We'll need to break out of the loop
+					add_successor(current_block, values->loop_stmt_end);
+					//We will jump to it -- this is always an uncoditional jump
+					emit_jump(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
+
+					//Package and return
+					results.starting_block = starting_block;
+					results.final_block = current_block;
+					results.operator = BLANK;
+					results.assignee = NULL;
+
+					//For a regular break statement, this is it, so we just get out
+					//Give back the starting block
+					return results;
+
+				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
+				} else {
+					//We'll also need a new block to jump to, since this is a conditional break
+					basic_block_t* new_block = basic_block_alloc(1);
+
+					//First let's emit the conditional code
+					statement_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+
+					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
+					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
+
+					//Add a successor to the end
+					add_successor(current_block, values->loop_stmt_end);
+					//Add the new block as a successor as well
+					add_successor(current_block, new_block);
+
+					//Make sure we mark this properly
+					current_block->direct_successor = new_block;
+
+					//We will jump to it -- this jump is decided above
+					emit_jump(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
+					//Emit a jump to the new block
+					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+
+					//Once we're out here, the current block is now the new one
+					current_block = new_block;
+				}
+
+				break;
+
+			case AST_NODE_CLASS_DEFER_STMT:
+				//Grab a cursor here
+				defer_statement_cursor = ast_cursor->first_child;
+
+				//So long as this cursor is not null, we'll keep processing and adding
+				//compound statements
+				while(defer_statement_cursor != NULL){
+					//Package the values
+					values_package_t values = pack_values(defer_statement_cursor, NULL, NULL, NULL);
+
+					//Let the helper process this
+					statement_result_package_t compound_statement_results = visit_compound_statement(&values);
+
+					//The successor to the current block is this block
+					//If it's null then this is this block
+					if(starting_block == NULL){
+						starting_block = compound_statement_results.starting_block;
+					} else {
+						//Otherwise it's a successor
+						add_successor(current_block, compound_statement_results.starting_block);
+						//Jump to it - important for optimizer
+						emit_jump(current_block, compound_statement_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					}
+
+					//Current is now the end of the compound statement
+					current_block = compound_statement_results.final_block;
+
+					//Advance this to the next one
+					defer_statement_cursor = defer_statement_cursor->next_sibling;
+				}
+
+				break;
+
+			case AST_NODE_CLASS_LABEL_STMT:
+				//This really shouldn't happen, but it can't hurt
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+				
+				//We rely on the helper to do it for us
+				emit_label(current_block, ast_cursor, FALSE);
+
+				break;
+		
+			case AST_NODE_CLASS_JUMP_STMT:
+				//This really shouldn't happen, but it can't hurt
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//We rely on the helper to do it for us
+				emit_direct_jump(current_block, ast_cursor, TRUE);
+
+				break;
+
+			case AST_NODE_CLASS_SWITCH_STMT:
+				//Pack our values up here
+				generic_values = pack_values(ast_cursor, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
+
+				//Visit the switch statement
+				generic_results = visit_switch_statement(&generic_values);
+
+				//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
+				//starting block's direct successor
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+				} else {
+					//Otherwise this is a direct successor
+					add_successor(current_block, generic_results.starting_block);
+					//We will also emit a jump from the current block to the entry
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				}
+
+				//The current block is always what's directly at the end
+				current_block = generic_results.final_block;
+
+				break;
+
+			case AST_NODE_CLASS_COMPOUND_STMT:
+				//Pack our values up
+				generic_values = pack_values(values->initial_node, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
+
+				//We'll simply recall this function and let it handle it
+				generic_results = visit_compound_statement(&generic_values);
+
+				//Add in everything appropriately here
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+				} else {
+					add_successor(current_block, generic_results.starting_block);
+				}
+
+				//Current is just the end of this block
+				current_block = generic_results.final_block;
+
+				break;
+		
+
+			case AST_NODE_CLASS_ASM_INLINE_STMT:
+				//If we find an assembly inline statement, the actuality of it is
+				//incredibly easy. All that we need to do is literally take the 
+				//user's statement and insert it into the code
+
+				//We'll need a new block here regardless
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//Let the helper handle
+				emit_assembly_inline(current_block, ast_cursor, FALSE);
 			
-			//Also emit the simplified machine code
-			emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				break;
+
+			case AST_NODE_CLASS_IDLE_STMT:
+				//Do we need a new block?
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//Let the helper handle -- doesn't even need the cursor
+				emit_idle(current_block, FALSE);
+				
+				break;
+
+			//This means that we have some kind of expression statement
+			default:
+				//This could happen where we have nothing here
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+				
+				//Also emit the simplified machine code
+				emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				
+				break;
 		}
 
 		//Advance to the next child
 		ast_cursor = ast_cursor->next_sibling;
 	}
 
-	//We always return the starting block
-	//It is possible that we have a completely NULL compound statement. This returns
-	//NULL in that event
-	return starting_block;
+	//If we make it down here - we still need to ensure that results are packaged properly
+	results.starting_block = starting_block;
+	results.final_block = current_block;
+
+	//Give back results
+	return results;
 }
 
 
@@ -5434,7 +5437,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
-static basic_block_t* visit_function_definition(generic_ast_node_t* function_node){
+static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
 	//We will now store this as the current function
@@ -5468,23 +5471,20 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 														NULL); //For loop update block
 
 		//Once we get here, we know that func cursor is the compound statement that we want
-		basic_block_t* compound_stmt_block = visit_compound_statement(&compound_stmt_values);
+		statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 		//Once we're done with the compound statement, we will merge it into the function
-		merge_blocks(function_starting_block, compound_stmt_block);
+	 	basic_block_t* compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
 
-		//Let's see if we actually made it all the way through and found a return
-		basic_block_t* compound_stmt_cursor = function_starting_block;
-
-		//Until we hit the end
-		while(compound_stmt_cursor->direct_successor != NULL){
-			compound_stmt_cursor = compound_stmt_cursor->direct_successor;
+		//Only reassign here if the two are different
+		if(compound_statement_results.starting_block != compound_statement_results.final_block){
+			compound_statement_exit_block = compound_statement_results.final_block;
 		}
 
 		//We will mark that this end here has a direct successor in the function exit block
-		add_successor(compound_stmt_cursor, function_exit_block);
+		add_successor(compound_statement_exit_block, function_exit_block);
 		//Ensure that it's the direct successor
-		compound_stmt_cursor->direct_successor = function_exit_block;
+		compound_statement_exit_block->direct_successor = function_exit_block;
 	
 	//Otherwise we'll just connect the exit and entry
 	} else {
@@ -5494,6 +5494,10 @@ static basic_block_t* visit_function_definition(generic_ast_node_t* function_nod
 
 	//Determine and insert any needed ret statements
 	determine_and_insert_return_statements(function_starting_block, function_exit_block);
+
+	//Add the start and end blocks to their respective arrays
+	dynamic_array_add(cfg->function_entry_blocks, function_starting_block);
+	dynamic_array_add(cfg->function_exit_blocks, function_exit_block);
 
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
@@ -5612,15 +5616,12 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			//allow the helper to do it
 			case AST_NODE_CLASS_FUNC_DEF:
 				//Visit the function definition
-				block = visit_function_definition(ast_cursor);
+				block = visit_function_definition(cfg, ast_cursor);
 			
 				//If this failed, we're out
 				if(block->block_id == -1){
 					return FALSE;
 				}
-
-				//Otherwise we'll add him to the functions dynamic array
-				dynamic_array_add(cfg->function_blocks, block);
 
 				//All good to move along
 				break;
@@ -5730,9 +5731,9 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh, u_int8_t 
 
 		//For each function entry block, recompute all reverse post order
 		//CFG work
-		for(u_int16_t i = 0; i < cfg->function_blocks->current_index; i++){
+		for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 			//Grab the block out
-			basic_block_t* block = dynamic_array_get_at(cfg->function_blocks, i);
+			basic_block_t* block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 			//Recompute the reverse post order cfg
 			block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(block, TRUE);
@@ -5768,7 +5769,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 
 	//Create the dynamic arrays that we need
 	cfg->created_blocks = dynamic_array_alloc();
-	cfg->function_blocks = dynamic_array_alloc();
+	cfg->function_entry_blocks = dynamic_array_alloc();
+	cfg->function_exit_blocks = dynamic_array_alloc();
 
 	//Hold the cfg
 	cfg_ref = cfg;
