@@ -5322,71 +5322,67 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 				current_block = generic_results.final_block;
 
 				break;
-			
 
+			case AST_NODE_CLASS_COMPOUND_STMT:
+				//Pack our values up
+				generic_values = pack_values(values->initial_node, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
 
+				//We'll simply recall this function and let it handle it
+				generic_results = visit_compound_statement(&generic_values);
 
+				//Add in everything appropriately here
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+				} else {
+					add_successor(current_block, generic_results.starting_block);
+				}
 
-		}
+				//Current is just the end of this block
+				current_block = generic_results.final_block;
 
+				break;
 		
 
+			case AST_NODE_CLASS_ASM_INLINE_STMT:
+				//If we find an assembly inline statement, the actuality of it is
+				//incredibly easy. All that we need to do is literally take the 
+				//user's statement and insert it into the code
+
+				//We'll need a new block here regardless
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//Let the helper handle
+				emit_assembly_inline(current_block, ast_cursor, FALSE);
 			
-		//We could also have a compound statement inside of here as well
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
-			//Prime this here
-			values->initial_node = ast_cursor;
+				break;
 
-			//We'll simply recall this function and let it handle it
-			statement_result_package_t compound_statement_results = visit_compound_statement(values);
+			case AST_NODE_CLASS_IDLE_STMT:
+				//Do we need a new block?
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
 
-			//Add in everything appropriately here
-			if(starting_block == NULL){
-				starting_block = compound_statement_results.starting_block;
-			} else {
-				add_successor(current_block, compound_statement_results.starting_block);
-			}
+				//Let the helper handle -- doesn't even need the cursor
+				emit_idle(current_block, FALSE);
+				
+				break;
 
-			//Current is just the end of this block
-			current_block = compound_statement_results.final_block;
-
-
-		//These are 100% user generated,
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-			//If we find an assembly inline statement, the actuality of it is
-			//incredibly easy. All that we need to do is literally take the 
-			//user's statement and insert it into the code
-
-			//We'll need a new block here regardless
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//Let the helper handle
-			emit_assembly_inline(current_block, ast_cursor, FALSE);
-
-		//Handle a nop statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IDLE_STMT){
-			//Do we need a new block?
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//Let the helper handle -- doesn't even need the cursor
-			emit_idle(current_block, FALSE);
-	
-		//This means that we have some kind of expression statement
-		} else {
-			//This could happen where we have nothing here
-			if(starting_block == NULL){
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-			
-			//Also emit the simplified machine code
-			emit_expression(current_block, ast_cursor, FALSE, FALSE);
+			//This means that we have some kind of expression statement
+			default:
+				//This could happen where we have nothing here
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+				
+				//Also emit the simplified machine code
+				emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				
+				break;
 		}
 
 		//Advance to the next child
