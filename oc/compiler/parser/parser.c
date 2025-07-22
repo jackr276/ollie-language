@@ -6808,111 +6808,116 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//Let's now lookahead and see if we have a valid constant or not
 	lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
 
-	//If we have some kind of identifier -- it must be an enum member
-	if(lookahead.tok == IDENT){
-		//Put it back
-		push_back_token(lookahead);
+	switch(lookahead.tok){
+		case IDENT:
+			//Put it back
+			push_back_token(lookahead);
 
-		//Let the subrule handle it
-		generic_ast_node_t* enum_ident_node = identifier(fl, SIDE_TYPE_LEFT);
+			//Let the subrule handle it
+			generic_ast_node_t* enum_ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
-		//If it's invalid fail out
-		if(enum_ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return enum_ident_node;
-		}
+			//If it's invalid fail out
+			if(enum_ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+				return enum_ident_node;
+			}
 
-		//Extract the name
-		char* name = enum_ident_node->identifier.string;
+			//Extract the name
+			char* name = enum_ident_node->identifier.string;
 
-		//If it's an identifier, then it has to be an enum
-		symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, name);
+			//If it's an identifier, then it has to be an enum
+			symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, name);
 
-		//If we somehow couldn't find it
-		if(enum_record == NULL){
-			sprintf(info, "Identifier \"%s\" has never been declared", name);
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If we somehow couldn't find it
+			if(enum_record == NULL){
+				sprintf(info, "Identifier \"%s\" has never been declared", name);
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//If we could find it, but it isn't an enum
-		if(enum_record->is_enumeration_member == 0){
-			sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", name);
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If we could find it, but it isn't an enum
+			if(enum_record->is_enumeration_member == FALSE){
+				sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", name);
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//Otherwise we know that it is good, but is it the right type
-		//Are the types here compatible?
-		case_stmt->inferred_type = types_assignable(&(switch_stmt_node->inferred_type), &(enum_ident_node->inferred_type));
+			//Otherwise we know that it is good, but is it the right type
+			//Are the types here compatible?
+			case_stmt->inferred_type = types_assignable(&(switch_stmt_node->inferred_type), &(enum_ident_node->inferred_type));
 
-		//If this fails, they're incompatible
-		if(case_stmt->inferred_type == NULL){
-			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  switch_stmt_node->inferred_type->type_name.string, enum_ident_node->inferred_type->type_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If this fails, they're incompatible
+			if(case_stmt->inferred_type == NULL){
+				sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
+							  switch_stmt_node->inferred_type->type_name.string, enum_ident_node->inferred_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//Store this for later processing
-		enum_ident_node->variable = enum_record;
+			//Store this for later processing
+			enum_ident_node->variable = enum_record;
 
-		//Grab the value of this case statement
-		case_stmt->case_statement_value = enum_ident_node->variable->enum_member_value;
+			//Grab the value of this case statement
+			case_stmt->case_statement_value = enum_ident_node->variable->enum_member_value;
 
-		//We already have the value -- so this doesn't need to be a child node
+			//We already have the value -- so this doesn't need to be a child node
+			break;
 
-		//Is the lookahead a constant?
-	} else if(lookahead.tok == INT_CONST || lookahead.tok == INT_CONST_FORCE_U
-			  || lookahead.tok == CHAR_CONST || lookahead.tok == LONG_CONST 
-			  || lookahead.tok == LONG_CONST_FORCE_U || lookahead.tok == HEX_CONST){
-		//Put it back
-		push_back_token(lookahead);
-	
-		//We are now required to see a valid constant
-		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+		case CHAR_CONST:
+		case HEX_CONST:
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+			//Put it back
+			push_back_token(lookahead);
+		
+			//We are now required to see a valid constant
+			generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
 
-		//If this fails, the whole thing is over
-		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			return print_and_return_error("Invalid constant found in switch statment", current_line);
-		}
+			//If this fails, the whole thing is over
+			if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+				return print_and_return_error("Invalid constant found in switch statment", current_line);
+			}
 
-		//If we have an integer constant here, we need to make sure that it is not negative. Negative values
-		//would mess with the jump table logic. Ollie langauge does not support GCC-style "switch-to-if" conversions
-		//if the user does this
-		switch(const_node->constant_type){
-			case INT_CONST:
-			case INT_CONST_FORCE_U:
-			case LONG_CONST:
-			case LONG_CONST_FORCE_U:
-				if(const_node->int_long_val < 0){
-					return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-				}
+			//If we have an integer constant here, we need to make sure that it is not negative. Negative values
+			//would mess with the jump table logic. Ollie langauge does not support GCC-style "switch-to-if" conversions
+			//if the user does this
+			switch(const_node->constant_type){
+				case INT_CONST:
+				case INT_CONST_FORCE_U:
+				case LONG_CONST:
+				case LONG_CONST_FORCE_U:
+					if(const_node->int_long_val < 0){
+						return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
+					}
 
-				//Store the value
-				case_stmt->case_statement_value = const_node->int_long_val;
-				break;
+					//Store the value
+					case_stmt->case_statement_value = const_node->int_long_val;
+					break;
 
-			case CHAR_CONST:
-				//Just assign the char value here
-				case_stmt->case_statement_value = const_node->char_val;
+				case CHAR_CONST:
+					//Just assign the char value here
+					case_stmt->case_statement_value = const_node->char_val;
 
-			default:
-				return print_and_return_error("Illegal type given as case statement value", parser_line_num);
-		}
+				default:
+					return print_and_return_error("Illegal type given as case statement value", parser_line_num);
+			}
 
-		//Otherwise we know that it is good, but is it the right type
-		//Are the types here compatible?
-		case_stmt->inferred_type = types_assignable(&(switch_stmt_node->inferred_type), &(const_node->inferred_type));
+			//Otherwise we know that it is good, but is it the right type
+			//Are the types here compatible?
+			case_stmt->inferred_type = types_assignable(&(switch_stmt_node->inferred_type), &(const_node->inferred_type));
 
-		//If this fails, they're incompatible
-		if(case_stmt->inferred_type == NULL){
-			sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-						  switch_stmt_node->inferred_type->type_name.string, const_node->inferred_type->type_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If this fails, they're incompatible
+			if(case_stmt->inferred_type == NULL){
+				sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
+							  switch_stmt_node->inferred_type->type_name.string, const_node->inferred_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//We already have the value -- so this doesn't need to be a child node
+			//We already have the value -- so this doesn't need to be a child node
+			break;
 
-	} else {
-		return print_and_return_error("Enum member or constant required as argument to case statement", current_line);
+		default:
+			return print_and_return_error("Enum member or constant required as argument to case statement", current_line);
 	}
+
 
 	//If it's higher than the upper bound, it now is the upper bound
 	if(case_stmt->case_statement_value > switch_stmt_node->upper_bound){
@@ -7318,7 +7323,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(expr_node->inferred_type->type_class == TYPE_CLASS_POINTER){
-		if(expr_node->variable != NULL && expr_node->variable->is_mutable == 0 && is_mutable == 1){
+		if(expr_node->variable != NULL && expr_node->variable->is_mutable == FALSE && is_mutable == TRUE){
 			return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
 		}
 	}
