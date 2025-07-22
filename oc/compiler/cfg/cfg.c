@@ -4993,201 +4993,193 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 				generic_values = pack_values(ast_cursor, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
 
 				//We'll now enter the if statement
-				statement_result_package_t if_package = visit_if_statement(&generic_values);
+				generic_results = visit_if_statement(&generic_values);
 			
 				//Once we have the if statement start, we'll add it in as a successor
 				if(starting_block == NULL){
 					//The starting block is the first one here
-					starting_block = if_package.starting_block;
+					starting_block = generic_results.starting_block;
 					//And the final block is the end
-					current_block = if_package.final_block;
+					current_block = generic_results.final_block;
 				} else {
 					//Add a successor to the current block
-					add_successor(current_block, if_package.starting_block);
+					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from current to the start
-					emit_jump(current_block, if_package.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 					//The current block is just whatever is at the end
-					current_block = if_package.final_block;
+					current_block = generic_results.final_block;
 				}
 
 				break;
 
+			case AST_NODE_CLASS_WHILE_STMT:
+				//Pack the generic values up here
+				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+
+				//Visit the while statement
+				generic_results = visit_while_statement(&generic_values);
+
+				//We'll now add it in
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
+				//We never merge these
+				} else {
+					//Add as a successor
+					add_successor(current_block, generic_results.starting_block);
+					//Emit a direct jump to it
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//And the current block is just the end block
+					current_block = generic_results.final_block;
+				}
 	
-	
+				break;
+
+			case AST_NODE_CLASS_DO_WHILE_STMT:
+				//Pack the generic values up here
+				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+
+				//Visit the statement
+				generic_results = visit_do_while_statement(&generic_values);
+
+				//We'll now add it in
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
+				//We never merge do-while's, they are strictly successors
+				} else {
+					//Add this in as a successor
+					add_successor(current_block, generic_results.starting_block);
+					//Emit a jump from the current block to this
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//And we now know that the current block is just the end block
+					current_block = generic_results.final_block;
+				}
+
+				break;
+
+			case AST_NODE_CLASS_FOR_STMT:
+				//Pack the generic values up here
+				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+
+				//First visit the statement
+				generic_results = visit_for_statement(&generic_values);
+
+				//Now we'll add it in
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
+				//We don't merge, we'll add successors
+				} else {
+					//Add the start as a successor
+					add_successor(current_block, generic_results.starting_block);
+					//We go right to the exit block here
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Go right to the final block here
+					current_block = generic_results.final_block;
+				}
+
+				break;
+
+			case AST_NODE_CLASS_CONTINUE_STMT:
+				//Let's first see if we're in a loop or not
+				//TODO HERE
+				if(values->loop_stmt_start == NULL){
+					print_cfg_message(PARSE_ERROR, "Continue statement was not found in a loop", ast_cursor->line_number);
+					(*num_errors_ref)++;
+					return create_and_return_err();
+				}
+
+				//This could happen where we have nothing here
+				if(starting_block == NULL){
+					//We'll assume that this only happens once
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//There are two options here. We could see a regular continue or a conditional
+				//continue. If the child is null, then it is a regular continue
+				if(ast_cursor->first_child == NULL){
+					//Mark this for later
+					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
+
+					//Let's see what kind of loop we're in
+					//NON for loop
+					if(values->for_loop_update_block == NULL){
+						//Otherwise we are in a loop, so this means that we need to point the continue statement to
+						//the loop entry block
+						add_successor(current_block, values->loop_stmt_start);
+						//We always jump to the start of the loop statement unconditionally
+						emit_jump(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+
+					//We are in a for loop
+					} else {
+						//Otherwise we are in a for loop, so we just need to point to the for loop update block
+						add_successor(current_block, values->for_loop_update_block);
+						//Emit a direct unconditional jump statement to it
+						emit_jump(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					}
+
+					results.starting_block = starting_block;
+					results.final_block = current_block;
+					results.assignee = NULL;
+					results.operator = BLANK;
+
+					//We're done here, so return the starting block. There is no 
+					//point in going on
+					return results;
+
+				//Otherwise, we have a conditional continue here
+				} else {
+					//Emit the expression code into the current statement
+					statement_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+					//Decide the appropriate jump statement -- direct path here
+					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
+
+					//We'll need a new block here - this will count as a branch
+					basic_block_t* new_block = basic_block_alloc(1);
+					
+					//Two divergent paths here -- whether or not we have a for loop
+					//Not a for loop
+					if(values->for_loop_update_block == NULL){
+						//Otherwise we are in a loop, so this means that we need to point the continue statement to
+						//the loop entry block
+						//Add the successor in
+						add_successor(current_block, values->loop_stmt_start);
+						//Add this new block in as a successor
+						add_successor(current_block, new_block);
+						//Restore the direct successor
+						current_block->direct_successor = new_block;
+						//We always jump to the start of the loop statement unconditionally
+						emit_jump(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
+						//The other end of the conditional continue will be jumping to this new block
+						emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//We are in a for loop
+					} else {
+						//Otherwise we are in a for loop, so we just need to point to the for loop update block
+						//Add the successor in
+						add_successor(current_block, values->for_loop_update_block);
+						//Add this new block in as a successor
+						add_successor(current_block, new_block);
+						//Restore the direct successor
+						current_block->direct_successor = new_block;
+						//Emit a direct unconditional jump statement to it
+						emit_jump(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
+						//The other end of the conditional continue will be jumping to this new block
+						emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					}
+
+					//And as we go forward, this new block will be the current block
+					current_block = new_block;
+				}
+
+				break;
+
 
 		}
 
 		
-		//Handle a while statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
-			//Create the values here
-			values_package_t while_stmt_values;
-			while_stmt_values.initial_node = ast_cursor;
-			while_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			while_stmt_values.loop_stmt_start = NULL;
-			while_stmt_values.loop_stmt_end = NULL;
-
-			//Visit the while statement
-			statement_result_package_t while_results = visit_while_statement(&while_stmt_values);
-
-			//We'll now add it in
-			if(starting_block == NULL){
-				starting_block = while_results.starting_block;
-				current_block = while_results.final_block;
-			//We never merge these
-			} else {
-				//Add as a successor
-				add_successor(current_block, while_results.starting_block);
-				//Emit a direct jump to it
-				emit_jump(current_block, while_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//And the current block is just the end block
-				current_block = while_results.final_block;
-			}
-
-		//Handle a do-while statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_DO_WHILE_STMT){
-			//Create the values package
-			values_package_t do_while_values;
-			do_while_values.initial_node = ast_cursor;
-			do_while_values.loop_stmt_start = NULL;
-			do_while_values.loop_stmt_end = NULL;
-			do_while_values.for_loop_update_block = values->for_loop_update_block;
-
-			//Visit the statement
-			statement_result_package_t result_package = visit_do_while_statement(&do_while_values);
-
-			//We'll now add it in
-			if(starting_block == NULL){
-				starting_block = result_package.starting_block;
-				current_block = result_package.final_block;
-			//We never merge do-while's, they are strictly successors
-			} else {
-				//Add this in as a successor
-				add_successor(current_block, result_package.starting_block);
-				//Emit a jump from the current block to this
-				emit_jump(current_block, result_package.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//And we now know that the current block is just the end block
-				current_block = result_package.final_block;
-			}
-
-		//Handle a for statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_FOR_STMT){
-			//Create the values package
-			values_package_t for_stmt_values;
-			for_stmt_values.initial_node = ast_cursor;
-			for_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			for_stmt_values.loop_stmt_start = NULL;
-			for_stmt_values.loop_stmt_end = NULL;
-
-			//First visit the statement
-			statement_result_package_t for_results = visit_for_statement(&for_stmt_values);
-
-			//Now we'll add it in
-			if(starting_block == NULL){
-				starting_block = for_results.starting_block;
-				current_block = for_results.final_block;
-			//We don't merge, we'll add successors
-			} else {
-				//Add the start as a successor
-				add_successor(current_block, for_results.starting_block);
-				//We go right to the exit block here
-				emit_jump(current_block, for_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//Go right to the final block here
-				current_block = for_results.final_block;
-			}
 			
-		//Handle a continue statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_CONTINUE_STMT){
-			//Let's first see if we're in a loop or not
-			if(values->loop_stmt_start == NULL){
-				print_cfg_message(PARSE_ERROR, "Continue statement was not found in a loop", ast_cursor->line_number);
-				(*num_errors_ref)++;
-				return create_and_return_err();
-			}
-
-			//This could happen where we have nothing here
-			if(starting_block == NULL){
-				//We'll assume that this only happens once
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
-
-			//There are two options here. We could see a regular continue or a conditional
-			//continue. If the child is null, then it is a regular continue
-			if(ast_cursor->first_child == NULL){
-				//Mark this for later
-				current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
-
-				//Let's see what kind of loop we're in
-				//NON for loop
-				if(values->for_loop_update_block == NULL){
-					//Otherwise we are in a loop, so this means that we need to point the continue statement to
-					//the loop entry block
-					add_successor(current_block, values->loop_stmt_start);
-					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
-
-				//We are in a for loop
-				} else {
-					//Otherwise we are in a for loop, so we just need to point to the for loop update block
-					add_successor(current_block, values->for_loop_update_block);
-					//Emit a direct unconditional jump statement to it
-					emit_jump(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				}
-
-				results.starting_block = starting_block;
-				results.final_block = current_block;
-				results.assignee = NULL;
-				results.operator = BLANK;
-
-				//We're done here, so return the starting block. There is no 
-				//point in going on
-				return results;
-
-			//Otherwise, we have a conditional continue here
-			} else {
-				//Emit the expression code into the current statement
-				statement_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
-				//Decide the appropriate jump statement -- direct path here
-				jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
-				//We'll need a new block here - this will count as a branch
-				basic_block_t* new_block = basic_block_alloc(1);
-				
-				//Two divergent paths here -- whether or not we have a for loop
-				//Not a for loop
-				if(values->for_loop_update_block == NULL){
-					//Otherwise we are in a loop, so this means that we need to point the continue statement to
-					//the loop entry block
-					//Add the successor in
-					add_successor(current_block, values->loop_stmt_start);
-					//Add this new block in as a successor
-					add_successor(current_block, new_block);
-					//Restore the direct successor
-					current_block->direct_successor = new_block;
-					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
-					//The other end of the conditional continue will be jumping to this new block
-					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//We are in a for loop
-				} else {
-					//Otherwise we are in a for loop, so we just need to point to the for loop update block
-					//Add the successor in
-					add_successor(current_block, values->for_loop_update_block);
-					//Add this new block in as a successor
-					add_successor(current_block, new_block);
-					//Restore the direct successor
-					current_block->direct_successor = new_block;
-					//Emit a direct unconditional jump statement to it
-					emit_jump(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
-					//The other end of the conditional continue will be jumping to this new block
-					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				}
-
-				//And as we go forward, this new block will be the current block
-				current_block = new_block;
-			}
-
 		//Hand le a break out statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_BREAK_STMT){
 			//Let's first see if we're in a loop or switch statement or not
