@@ -4886,6 +4886,11 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 static statement_result_package_t visit_compound_statement(values_package_t* values){
 	//Everything to begin with is completely null'd out
 	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+	//A generic results package that we can use in any of our processing
+	statement_result_package_t generic_results;
+	//Generic values that we can use 
+	values_package_t generic_values;
+
 	//The global starting block
 	basic_block_t* starting_block = NULL;
 	//The current block
@@ -4899,115 +4904,120 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 	
 	//Roll through the entire subtree
 	while(ast_cursor != NULL){
-		//We've found a declaration statement
-		if(ast_cursor->CLASS == AST_NODE_CLASS_DECL_STMT){
-			//Let the helper deal with it
-			statement_result_package_t declaration_results = visit_declaration_statement(ast_cursor);
+		//Using switch/case for the efficiency gain
+		switch(ast_cursor->CLASS){
+			case AST_NODE_CLASS_DECL_STMT:
+				generic_results = visit_declaration_statement(ast_cursor);
 
-			//If we're adding onto something(common case), we'll go here
-			if(starting_block != NULL){
-				//Merge the two blocks together
-				current_block = merge_blocks(current_block, declaration_results.starting_block); 
+				//If we're adding onto something(common case), we'll go here
+				if(starting_block != NULL){
+					//Merge the two blocks together
+					current_block = merge_blocks(current_block, generic_results.starting_block); 
 
-				//If these are not equal, we can reassign the current block to be the final block
-				if(declaration_results.starting_block != declaration_results.final_block){
-					current_block = declaration_results.final_block;
+					//If these are not equal, we can reassign the current block to be the final block
+					if(generic_results.starting_block != generic_results.final_block){
+						current_block = generic_results.final_block;
+					}
+
+				//Otherwise this is the very first thing
+				} else {
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
 				}
 
-			//Otherwise this is the very first thing
-			} else {
-				starting_block = declaration_results.starting_block;
-				current_block = declaration_results.final_block;
-			}
+				break;
 
-		//We've found a let statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_LET_STMT){
-			//We'll visit the block here
-			statement_result_package_t let_results = visit_let_statement(ast_cursor, FALSE);
+			case AST_NODE_CLASS_LET_STMT:
+				//We'll visit the block here
+				generic_results = visit_let_statement(ast_cursor, FALSE);
 
-			//If this is not null, then we're just adding onto something
-			if(starting_block != NULL){
-				//Merge the two together
-				current_block = merge_blocks(current_block, let_results.starting_block); 
+				//If this is not null, then we're just adding onto something
+				if(starting_block != NULL){
+					//Merge the two together
+					current_block = merge_blocks(current_block, generic_results.starting_block); 
 
-				//If these are not equal, we can reassign the current block to be the final block
-				if(let_results.starting_block != let_results.final_block){
-					current_block = let_results.final_block;
+					//If these are not equal, we can reassign the current block to be the final block
+					if(generic_results.starting_block != generic_results.final_block){
+						current_block = generic_results.final_block;
+					}
+
+				//Otherwise this is the very first thing
+				} else {
+					starting_block = generic_results.starting_block;
+					current_block = generic_results.final_block;
 				}
 
-			//Otherwise this is the very first thing
-			} else {
-				starting_block = let_results.starting_block;
-				current_block = let_results.final_block;
-			}
+				break;
 
-		//If we have a return statement -- SPECIAL CASE HERE
-		} else if (ast_cursor->CLASS == AST_NODE_CLASS_RET_STMT){
-			//If for whatever reason the block is null, we'll create it
-			if(starting_block == NULL){
-				//We assume that this only happens once
-				starting_block = basic_block_alloc(1);
-				current_block = starting_block;
-			}
+			case AST_NODE_CLASS_RET_STMT:
+				//If for whatever reason the block is null, we'll create it
+				if(starting_block == NULL){
+					//We assume that this only happens once
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
 
-			//Emit the return statement, let the sub rule handle
-			emit_ret(current_block, ast_cursor, FALSE);
+				//Emit the return statement, let the sub rule handle
+				emit_ret(current_block, ast_cursor, FALSE);
 
-			//Destroy any/all successors of the current block. Once you have a return statement in a block, there
-			//can be no other successors
-			if(current_block->successors != NULL){
-				dynamic_array_dealloc(current_block->successors);
-				current_block->successors = NULL;
-			}
+				//Destroy any/all successors of the current block. Once you have a return statement in a block, there
+				//can be no other successors
+				if(current_block->successors != NULL){
+					dynamic_array_dealloc(current_block->successors);
+					current_block->successors = NULL;
+				}
 
-			//A successor to this block is the exit block
-			add_successor(current_block, function_exit_block);
+				//A successor to this block is the exit block
+				add_successor(current_block, function_exit_block);
 
-			//The current block will now be marked as a return statement
-			current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
+				//The current block will now be marked as a return statement
+				current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
 
-			//If there is anything after this statement, it is UNREACHABLE
-			if(ast_cursor->next_sibling != NULL){
-				print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
-				(*num_warnings_ref)++;
-			}
+				//If there is anything after this statement, it is UNREACHABLE
+				if(ast_cursor->next_sibling != NULL){
+					print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
+					(*num_warnings_ref)++;
+				}
 
-			//Package up the values
-			results.starting_block = starting_block;
-			results.final_block = current_block;
-			results.operator = BLANK;
-			results.assignee = NULL;
+				//Package up the values
+				results.starting_block = starting_block;
+				results.final_block = current_block;
+				results.operator = BLANK;
+				results.assignee = NULL;
 
-			//We're completely done here
-			return results;
+				//We're completely done here
+				return results;
+		
+			case AST_NODE_CLASS_IF_STMT:
+				//Pack the values up accordingly
+				generic_values = pack_values(ast_cursor, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
 
-		//We've found an if-statement
-		} else if(ast_cursor->CLASS == AST_NODE_CLASS_IF_STMT){
-			//Create the values package
-			values_package_t if_stmt_values;
-			if_stmt_values.initial_node = ast_cursor;
-			if_stmt_values.for_loop_update_block = values->for_loop_update_block;
-			if_stmt_values.loop_stmt_start = values->loop_stmt_start;
-			if_stmt_values.loop_stmt_end = values->loop_stmt_end;
-
-			//We'll now enter the if statement
-			statement_result_package_t if_package = visit_if_statement(&if_stmt_values);
+				//We'll now enter the if statement
+				statement_result_package_t if_package = visit_if_statement(&generic_values);
 			
-			//Once we have the if statement start, we'll add it in as a successor
-			if(starting_block == NULL){
-				//The starting block is the first one here
-				starting_block = if_package.starting_block;
-				//And the final block is the end
-				current_block = if_package.final_block;
-			} else {
-				//Add a successor to the current block
-				add_successor(current_block, if_package.starting_block);
-				//Emit a jump from current to the start
-				emit_jump(current_block, if_package.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
-				//The current block is just whatever is at the end
-				current_block = if_package.final_block;
-			}
+				//Once we have the if statement start, we'll add it in as a successor
+				if(starting_block == NULL){
+					//The starting block is the first one here
+					starting_block = if_package.starting_block;
+					//And the final block is the end
+					current_block = if_package.final_block;
+				} else {
+					//Add a successor to the current block
+					add_successor(current_block, if_package.starting_block);
+					//Emit a jump from current to the start
+					emit_jump(current_block, if_package.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//The current block is just whatever is at the end
+					current_block = if_package.final_block;
+				}
 
+				break;
+
+	
+	
+
+		}
+
+		
 		//Handle a while statement
 		} else if(ast_cursor->CLASS == AST_NODE_CLASS_WHILE_STMT){
 			//Create the values here
