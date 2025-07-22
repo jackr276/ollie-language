@@ -3434,7 +3434,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
  *
- * BNF Rule: <logical_or_expression> ? <ternary_expression> # <ternary_expression>
+ * BNF Rule: <logical_or_expression> ? <logical_or_expression> else <logical_or_expression>
  */
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//Declare the lookahead token
@@ -3456,6 +3456,8 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//back and return the conditional
 	if(lookahead.tok != QUESTION){
 		push_back_token(lookahead);
+
+		//We'll just give back whatever this was
 		return conditional;
 	}
 
@@ -3473,8 +3475,8 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//The first child is the conditional
 	add_child_node(ternary_expression_node, conditional);
 
-	//We now must see another valid ternary
-	generic_ast_node_t* if_branch = ternary_expression(fl, side);
+	//We must now see a valid top level expression
+	generic_ast_node_t* if_branch = logical_or_expression(fl, side);
 
 	//If this is invalid, then we bail out
 	if(if_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3492,8 +3494,8 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 		return print_and_return_error("else expected between branches in ternary operator", parser_line_num);
 	}
 	
-	//We now must see another valid ternary
-	generic_ast_node_t* else_branch = ternary_expression(fl, side);
+	//We now must see another valid logical or expression 
+	generic_ast_node_t* else_branch = logical_or_expression(fl, side);
 
 	//If this is invalid, then we bail out
 	if(else_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7186,7 +7188,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Let's now check and see if this is mutable
 	if(lookahead.tok == MUT){
-		is_mutable = 1;
+		is_mutable = TRUE;
 	} else {
 		//Otherwise push this back
 		push_back_token(lookahead);
