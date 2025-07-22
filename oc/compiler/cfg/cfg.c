@@ -2125,7 +2125,6 @@ static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, th
 	//Now we emit the offset multiplication
 	three_addr_var_t* total_offset = emit_binary_operation_with_constant(basic_block, offset, offset, STAR, type_size, is_branch_ending);
 
-
 	//Once we have the total offset, we add it to the base address
 	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), base_addr, PLUS, total_offset);
 	
@@ -2665,16 +2664,11 @@ static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, gene
 		 	return emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
 		case AST_NODE_CLASS_CONSTANT:
 			return emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
-		case AST_NODE_CLASS_BINARY_EXPR:
-			return emit_binary_expression(basic_block, primary_parent, is_branch_ending).assignee;
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent, is_branch_ending);
-		//Something went wrong here if we're hitting the default rule
+		//By default, we're emitting some kind of expression here
 		default:
-			//Throw some error here, really this should never occur
-			print_parse_message(PARSE_ERROR, "Did not find identifier, constant, expression or function call in primary expression", primary_parent->line_number);
-			(*num_errors_ref)++;
-			exit(0);
+			return emit_expression(basic_block, primary_parent, is_branch_ending, FALSE).assignee;
 	}
 }
 
@@ -4838,6 +4832,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//First step -> if we're below the minimum, we jump to default 
 	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
+	
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
@@ -4848,6 +4843,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Next step -> if we're above the maximum, jump to default
 	emit_binary_operation_with_constant(starting_block, package2.assignee, package2.assignee, G_THAN, upper_bound, TRUE);
+
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump

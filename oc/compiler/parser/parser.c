@@ -555,7 +555,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<identifier>({<logical-or-expression>}?{, <logical-or-expression>}*)
+ * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*)
  */
 static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//The current line num
@@ -668,7 +668,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		current_function_param = function_record->func_params[num_params].associate_var;
 
 		//Parameters are in the form of a conditional expression
-		current_param = logical_or_expression(fl, side);
+		current_param = ternary_expression(fl, side);
 
 		//We now have an error of some kind
 		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1005,8 +1005,8 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//We'll push it up to the stack for matching
 			push_token(grouping_stack, lookahead);
 
-			//We are now required to see a valid logical or expression expression
-			generic_ast_node_t* expr = logical_or_expression(fl, side);
+			//We are now required to see a valid logical ternary expression
+			generic_ast_node_t* expr = ternary_expression(fl, side);
 
 			//If it's an error, just give the node back
 			if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1455,7 +1455,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 
 	//Now we are required to see a valid constant expression representing what
 	//the actual index is.
-	generic_ast_node_t* expr = logical_or_expression(fl, side);
+	generic_ast_node_t* expr = ternary_expression(fl, side);
 
 	//If we fail, automatic exit here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3434,7 +3434,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
  *
- * BNF Rule: <logical_or_expression> ? <logical_or_expression> else <logical_or_expression>
+ * BNF Rule: <logical_or_expression> ? <ternary_expression> else <ternary_expression>
  */
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//Declare the lookahead token
@@ -3476,7 +3476,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	add_child_node(ternary_expression_node, conditional);
 
 	//We must now see a valid top level expression
-	generic_ast_node_t* if_branch = logical_or_expression(fl, side);
+	generic_ast_node_t* if_branch = ternary_expression(fl, side);
 
 	//If this is invalid, then we bail out
 	if(if_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3495,7 +3495,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	}
 	
 	//We now must see another valid logical or expression 
-	generic_ast_node_t* else_branch = logical_or_expression(fl, side);
+	generic_ast_node_t* else_branch = ternary_expression(fl, side);
 
 	//If this is invalid, then we bail out
 	if(else_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
