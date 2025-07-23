@@ -557,6 +557,8 @@ three_addr_var_t* emit_ternary_variable(generic_type_t* type, variable_symtab_t*
 
 	//Now create and add the symtab record for this variable
 	symtab_variable_record_t* record = create_variable_record(string, STORAGE_CLASS_NORMAL);
+	//Store the type here
+	record->type_defined_as = type;
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);

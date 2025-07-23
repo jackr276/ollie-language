@@ -3193,6 +3193,9 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	//Add this into the if block
 	add_statement(if_block, if_assignment);
 
+	//This counts as the result being assigned in the if block
+	add_assigned_variable(if_block, result);
+
 	//Now add a direct jump to the end
 	emit_jump(if_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
 
@@ -3207,6 +3210,9 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 
 	//Add this into the else block
 	add_statement(else_block, else_assignment);
+
+	//This counts as an assignment in the else block
+	add_assigned_variable(else_block, result);
 
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
