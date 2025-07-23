@@ -42,6 +42,8 @@ basic_block_t* function_exit_block = NULL;
 symtab_variable_record_t* stack_pointer = NULL;
 //Keep a variable for it too
 three_addr_var_t* stack_pointer_var = NULL;
+//Keep a record for the variable symtab
+variable_symtab_t* variable_symtab;
 //Store this for usage
 static generic_type_t* u64 = NULL;
 //The current stack offset for any given function
@@ -3157,7 +3159,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	basic_block_t* end_block = basic_block_alloc(1);
 
 	//Let's first create the final result variable here
-	three_addr_var_t* result = emit_temp_var(ternary_operation->inferred_type);
+	three_addr_var_t* result = emit_ternary_variable(ternary_operation->inferred_type, variable_symtab);
 
 	//Grab a cursor to the first child
 	generic_ast_node_t* cursor = ternary_operation->first_child;
@@ -5760,6 +5762,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 
 	//Add this in
 	type_symtab = results->type_symtab;
+	variable_symtab = results->variable_symtab;
 
 	//Keep this on hand
 	u64 = lookup_type_name_only(type_symtab, "u64")->type;
