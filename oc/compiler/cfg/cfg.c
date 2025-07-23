@@ -103,7 +103,7 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
 static statement_result_package_t visit_switch_statement(values_package_t* values);
 
 static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
-static statement_result_package_t emit_ternary_expression(generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
+static statement_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
@@ -3145,12 +3145,10 @@ static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, gener
  * 	cmove a, result
  * 	cmovne b, result
  */
-static statement_result_package_t emit_ternary_expression(generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+static statement_result_package_t emit_ternary_expression(basic_block_t* starting_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
 	//Expression return package that we need
 	statement_result_package_t return_package;
 
-	//The starting block
-	basic_block_t* starting_block = basic_block_alloc(1);
 	//The if area block
 	basic_block_t* if_block = basic_block_alloc(1);
 	//And the else area block
@@ -3241,9 +3239,7 @@ static statement_result_package_t emit_ternary_expression(generic_ast_node_t* te
  */
 static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
 	//The return package here
-	statement_result_package_t package;
-	//Operator is blank by default
-	package.operator = BLANK;
+	statement_result_package_t package = {basic_block, basic_block, NULL, BLANK};
 
 	//Store the left and right hand types
 	generic_type_t* left_hand_type;
@@ -3422,7 +3418,7 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
 			//Emit the ternary expression
-			 return emit_ternary_expression(expr_node, is_branch_ending);
+			 return emit_ternary_expression(basic_block, expr_node, is_branch_ending);
 
 		//Default is a unary expression
 		default:
@@ -5577,14 +5573,11 @@ static statement_result_package_t visit_let_statement(generic_ast_node_t* node, 
 	//Now emit whatever binary expression code that we have
 	statement_result_package_t package = emit_expression(current_block, node->first_child, is_branch_ending, FALSE);
 
-	//We could have potentially had a ternary expression here. This means that the expressions lead_block
-	//is now no longer really the end block, and we'll need to adjust
-	if(package.starting_block != NULL && current_block != package.starting_block){
-		printf("HERE\n");
-		//Merge the two together
-		//current_block = merge_blocks(current_block, package.starting_block);
-		//Now that they're merged, we'll need to reassign current to be the end block
-		//current_block = package.final_block;
+	//The current block here is whatever the final block in the package is 
+	if(package.final_block != NULL && package.final_block != current_block){
+		//We'll reassign this to be the final block. If this does happen, it means that
+		//at some point we had a ternary expression
+		current_block = package.final_block;
 	}
 
 	//The actual statement is the assignment of right to left
