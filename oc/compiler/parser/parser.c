@@ -3508,6 +3508,9 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//Determine the compatibility of these ternary nodes, and coerce it
 	ternary_expression_node->inferred_type = determine_compatibility_and_coerce(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type), QUESTION);
 
+	//A ternary is not assignable
+	ternary_expression_node->is_assignable = FALSE;
+
 	//Give back the parent level node
 	return ternary_expression_node;
 }
