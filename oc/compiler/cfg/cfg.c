@@ -2238,12 +2238,12 @@ static void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t*
 /**
  * Emit the abstract machine code for a return statement
  */
-static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
+static statement_result_package_t emit_return(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
 	//For holding our temporary return variable
-	statement_result_package_t package;
+	statement_result_package_t return_package = {basic_block, basic_block, NULL, BLANK};
 
-	//Is null by default
-	package.assignee = NULL;
+	//Keep track of a current block here for our purposes
+	basic_block_t* current = basic_block;
 
 	//This is what we'll be using to return
 	three_addr_var_t* return_variable = NULL;
@@ -2254,20 +2254,29 @@ static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u
 	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
 		//Perform the binary operation here
-		package = emit_expression(basic_block, ret_node->first_child, is_branch_ending, FALSE);
+		statement_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
+
+		//If we hit a ternary here, we'll need to reassign what our current block is
+		if(expression_package.final_block != NULL && expression_package.final_block != current){
+			//Assign current to be the new end
+			current = expression_package.final_block;
+
+			//The final block of the overall return chunk will be this
+			return_package.final_block = current;
+		}
 
 		//Emit the temp assignment
-		instruction_t* assn_stmt = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(expression_package.assignee->type), expression_package.assignee);
 
 		//If this isn't temporary, then it's being used
-		if(package.assignee->is_temporary == FALSE){
-			add_used_variable(basic_block, package.assignee);
+		if(expression_package.assignee->is_temporary == FALSE){
+			add_used_variable(basic_block, expression_package.assignee);
 		}
 
 		//Add it into the block
-		add_statement(basic_block, assn_stmt);
+		add_statement(current, assignment);
 		//The return variable is now what was assigned
-		return_variable	= assn_stmt->assignee;
+		return_variable	= assignment->assignee;
 	}
 
 	//We'll use the ret stmt feature here
@@ -2277,7 +2286,10 @@ static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u
 	ret_stmt->is_branch_ending = is_branch_ending;
 
 	//Once it's been emitted, we'll add it in as a statement
-	add_statement(basic_block, ret_stmt);
+	add_statement(current, ret_stmt);
+
+	//Give back the results
+	return return_package;
 }
 
 
@@ -4968,7 +4980,13 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 				}
 
 				//Emit the return statement, let the sub rule handle
-				emit_ret(current_block, ast_cursor, FALSE);
+			 	generic_results = emit_return(current_block, ast_cursor, FALSE);
+
+				//If this is the case, it means that we've hit a ternary at some point and need
+				//to reassign this final block
+				if(generic_results.final_block != NULL && generic_results.final_block != current_block){
+					current_block = generic_results.final_block;
+				}
 
 				//Destroy any/all successors of the current block. Once you have a return statement in a block, there
 				//can be no other successors
