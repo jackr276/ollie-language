@@ -894,7 +894,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
  *
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
- * 									| (<logical-or-expression>)
+ * 									| (<ternary_expression>)
  * 									| sizeof(<logical-or-expression>)
  * 									| typesize(<type-name>)
  * 									| <function-call>
@@ -1005,7 +1005,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//We'll push it up to the stack for matching
 			push_token(grouping_stack, lookahead);
 
-			//We are now required to see a valid logical ternary expression
+			//We are now required to see a valid ternary expression
 			generic_ast_node_t* expr = ternary_expression(fl, side);
 
 			//If it's an error, just give the node back
@@ -1433,7 +1433,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
  *
  * We expect that the caller has given back the [ token for this rule
  *
- * BNF Rule: <array-accessor> ::= [ <logical-or-expression> ]
+ * BNF Rule: <array-accessor> ::= [ <ternary-expression> ]
  *
  */
 static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
