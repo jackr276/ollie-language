@@ -4058,17 +4058,38 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 
 	//If the very first one is not blank
 	if(ast_cursor->first_child != NULL){
+		//Create this for our results here
+		statement_result_package_t first_child_result_package = {NULL, NULL, NULL, BLANK};
+
 		switch(ast_cursor->first_child->CLASS){
 			//We could have a let statement
 			case AST_NODE_CLASS_LET_STMT:
-				//TODO must be changed for ternary
-				merge_blocks(for_stmt_entry_block, visit_let_statement(ast_cursor->first_child, FALSE).starting_block);
+				//Let the subrule handle this
+				first_child_result_package = visit_let_statement(ast_cursor->first_child, FALSE);
+				//We'll need to merge the entry block here due to the way that let statements work
+				for_stmt_entry_block = merge_blocks(for_stmt_entry_block, first_child_result_package.starting_block);
+
+				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
+				//This is a special way of working things due to how let statements work
+				if(first_child_result_package.starting_block != first_child_result_package.final_block){
+				//Make this the new end
+					for_stmt_entry_block = first_child_result_package.final_block;
+				}
+		
 				break;
 			default:
-				//Add it's child in as a statement to the entry block
-				emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
+				//Let the subrule handle this
+				first_child_result_package = emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
+
+				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
+				if(first_child_result_package.final_block != NULL && first_child_result_package.final_block != for_stmt_entry_block){
+				//Make this the new end
+					for_stmt_entry_block = first_child_result_package.final_block;
+				}
+
+				break;
+			}
 		}
-	}
 
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
 	//The second and third condition in the for loop are the ones that execute continously. The third condition

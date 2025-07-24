@@ -11,7 +11,7 @@ fn main() -> i32 {
 	let mut test:i32 := 0;
 	
 	//Ternary inside of the for loop
-	for(let mut i:i32 := a == 3 ? x : 1; i < 32; i++) {
+	for(let mut i:i32 := a == 3 ? x else 1; i < 32; i++) {
 		test++;
 	}
 
