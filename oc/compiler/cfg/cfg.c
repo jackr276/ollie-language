@@ -3056,7 +3056,7 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 		//Handle the case of a preincrement
 		case PLUSPLUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
 			//The assignee comes from our package
 			assignee = unary_package.assignee;
 
@@ -3081,25 +3081,42 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 		//Handle the case of a predecrement
 		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//If we have a basic type, we can use the regular process
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
 				//We really just have an "inc" instruction here
-				return emit_dec_code(basic_block, assignee, is_branch_ending);
+				unary_package.assignee = emit_dec_code(current_block, assignee, is_branch_ending);
 			//If we actually have a pointer, we'll let the helper deal with it
 			} else {
 				//Let the helper deal with this
-				return handle_pointer_arithmetic(basic_block, first_child->unary_operator, assignee, is_branch_ending);
+				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
 			}
+
+			//Give back the final unary package
+			return unary_package;
 
 		//Handle a dereference
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//Get the dereferenced variable
-			dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expression_parent->inferred_type);
+			dereferenced = emit_pointer_indirection(current_block, assignee, unary_expression_parent->inferred_type);
 
 			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
@@ -3107,34 +3124,58 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
 				//Add it in
-				add_statement(basic_block, temp_assignment);
+				add_statement(current_block, temp_assignment);
 
-				//Return the assignee of this
-				return temp_assignment->assignee;
+				//This one's assignee is our overall assignee
+				unary_package.assignee = temp_assignment->assignee;
 
 			//Otherwise just give back what we had
 			} else {
-				return dereferenced;
+				//This one's assignee is just the dereferenced var
+				unary_package.assignee = dereferenced;
 			}
+
+			//Give back the final unary package
+			return unary_package;
 	
 		//Bitwise not operator
 		case B_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
 
-			//Let the helper handle it
-			return emit_bitwise_not_expr_code(basic_block, assignee, is_branch_ending);
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
+
+			//The new assignee will come from this helper
+			unary_package.assignee = emit_bitwise_not_expr_code(current_block, assignee, is_branch_ending);
+
+			//Give the package back
+			return unary_package;
 
 		//Logical not operator
 		case L_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
 
-			//Let the helper deal with it
-			return emit_logical_neg_stmt_code(basic_block, assignee, is_branch_ending);
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
+
+			//The new assignee will come from this helper
+			unary_package.assignee = emit_logical_neg_stmt_code(current_block, assignee, is_branch_ending);
+
+			//Give the package back
+			return unary_package;
 
 		/**
-		 * Negation operator
+		 * Arithmetic negation operator
 		 * x = -a;
 		 * t <- a;
 		 * negl t;
