@@ -3185,17 +3185,27 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 		 */
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
 			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 
 			//Add this into the block
-			add_statement(basic_block, assignment);
+			add_statement(current_block, assignment);
 
 			//We will emit the negation code here
-			return emit_neg_stmt_code(basic_block, assignment->assignee, is_branch_ending);
+			unary_package.assignee =  emit_neg_stmt_code(basic_block, assignment->assignee, is_branch_ending);
+
+			//And give back the final value
+			return unary_package;
 
 		//Handle the case of the address operator
 		case SINGLE_AND:
@@ -3204,7 +3214,14 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 			 * this unary expression as if it is on the left hand side. We cannot have temporary
 			 * variables in this assignee
 			 */
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, FALSE, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, FALSE, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
@@ -3212,20 +3229,23 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 			assignment->is_branch_ending = is_branch_ending;
 
 			//We will count the assignee here as a used variable
-			add_used_variable(basic_block, assignee);
+			add_used_variable(current_block, assignee);
 
 			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
 			assignee->linked_var->must_be_spilled = TRUE;
 
 			//Add this into the block
-			add_statement(basic_block, assignment);
+			add_statement(current_block, assignment);
 
-			//Give back the assignee
-			return assignment->assignee;
+			//This assignee comes from the last assignment
+			unary_package.assignee = assignment->assignee;
+
+			//Give back the unary package
+			return unary_package;
 
 		//In reality we should never actually hit this, it's just there for the C compiler to be happy
 		default:
-			return NULL;
+			return unary_package;
 	}
 }
 
@@ -3509,6 +3529,9 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 	//Declare and initialize the results
 	statement_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
+	//Keep track of our current block - this may change as we go through this
+	basic_block_t* current_block = basic_block;
+
 	//We'll process based on the class of our expression node
 	switch(expr_node->CLASS){
 		case AST_NODE_CLASS_ASNMNT_EXPR:
@@ -3519,32 +3542,53 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			cursor = expr_node->first_child;
 
 			//Emit the left hand unary expression
-			three_addr_var_t* left_hand_var = emit_unary_expression(basic_block, cursor, FALSE, is_branch_ending);
+			statement_result_package_t unary_package = emit_unary_expression(current_block, cursor, FALSE, is_branch_ending);
+
+			//If this is different(which it could be), we'll reassign current
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				//Reassign current to be at the end
+				current_block = unary_package.final_block;
+
+				//And we now have a new final block
+				result_package.final_block = current_block;
+			}
+
+			//The left hand var is the final assignee of the unary statement
+			three_addr_var_t* left_hand_var = unary_package.assignee;
 
 			//Advance the cursor up
 			cursor = cursor->next_sibling;
 
 			//Now emit the right hand expression
-			statement_result_package_t package = emit_expression(basic_block, cursor, is_branch_ending, FALSE);
+			statement_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending, FALSE);
+
+			//Again, if this is different(which it could be), we'll reassign current
+			if(expression_package.final_block != NULL && expression_package.final_block != current_block){
+				//Reassign current to be at the end
+				current_block = expression_package.final_block;
+
+				//And we now have a new final block
+				expression_package.final_block = current_block;
+			}
 
 			//Finally we'll construct the whole thing
-			instruction_t* stmt = emit_assignment_instruction(left_hand_var, package.assignee);
+			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, expression_package.assignee);
 
 			//If this is not a temp var, then we can flag it as being assigned
 			if(left_hand_var->is_temporary == FALSE){
-				add_assigned_variable(basic_block, left_hand_var);
+				add_assigned_variable(current_block, left_hand_var);
 			}
 
 			//If the package's assignee is not temp, it counts as used
-			if(package.assignee->is_temporary == FALSE){
-				add_used_variable(basic_block, package.assignee);
+			if(expression_package.assignee->is_temporary == FALSE){
+				add_used_variable(current_block, expression_package.assignee);
 			}
 			
 			//Mark this with what was passed through
-			stmt->is_branch_ending = is_branch_ending;
+			final_assignment->is_branch_ending = is_branch_ending;
 
-			//Now add this statement in here
-			add_statement(basic_block, stmt);
+			//Now add thi statement in here
+			add_statement(current_block, final_assignment);
 
 			//Now pack the return value here
 			result_package.assignee = left_hand_var;
@@ -3554,12 +3598,11 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 	
 		case AST_NODE_CLASS_BINARY_EXPR:
 			//Emit the binary expression node
-			return emit_binary_expression(basic_block, expr_node, is_branch_ending);
+			return emit_binary_expression(current_block, expr_node, is_branch_ending);
 
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			//Emit the function call statement
-			result_package.assignee = emit_function_call(basic_block, expr_node, is_branch_ending);
-			return result_package;
+			return emit_function_call(current_block, expr_node, is_branch_ending);
 
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
 			//Emit the ternary expression
@@ -3574,9 +3617,7 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			 * ensures that we have a conditional to read even if a user puts something like if(x)
 			*/
 			//Let this rule handle it
-			result_package.assignee = emit_unary_expression(basic_block, expr_node, is_condition, is_branch_ending);
-			//Again signedness is irrelevant here because any jumps would just be "je/jne"
-			return result_package;
+			return emit_unary_expression(basic_block, expr_node, is_condition, is_branch_ending);
 	}
 }
 
