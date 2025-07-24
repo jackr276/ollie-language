@@ -3158,8 +3158,13 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	//The ending block for the whole thing
 	basic_block_t* end_block = basic_block_alloc(1);
 
+	//Create the ternary variable here
+	symtab_variable_record_t* ternary_variable = create_ternary_variable(ternary_operation->inferred_type, variable_symtab);
+
 	//Let's first create the final result variable here
-	three_addr_var_t* result = emit_ternary_variable(ternary_operation->inferred_type, variable_symtab);
+	three_addr_var_t* if_result = emit_var(ternary_variable, FALSE);
+	three_addr_var_t* else_result = emit_var(ternary_variable, FALSE);
+	three_addr_var_t* final_result = emit_var(ternary_variable, FALSE);
 
 	//Grab a cursor to the first child
 	generic_ast_node_t* cursor = ternary_operation->first_child;
@@ -3188,13 +3193,13 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	statement_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending, TRUE);
 
 	//We'll now create a conditional move for the if branch into the result
-	instruction_t* if_assignment = emit_assignment_instruction(result, if_branch.assignee);
+	instruction_t* if_assignment = emit_assignment_instruction(if_result, if_branch.assignee);
 
 	//Add this into the if block
 	add_statement(if_block, if_assignment);
 
 	//This counts as the result being assigned in the if block
-	add_assigned_variable(if_block, result);
+	add_assigned_variable(if_block, if_result);
 
 	//Now add a direct jump to the end
 	emit_jump(if_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
@@ -3206,13 +3211,13 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	statement_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending, TRUE);
 
 	//We'll now create a conditional move for the else branch into the result
-	instruction_t* else_assignment = emit_assignment_instruction(result, else_branch.assignee);
+	instruction_t* else_assignment = emit_assignment_instruction(else_result, else_branch.assignee);
 
 	//Add this into the else block
 	add_statement(else_block, else_assignment);
 
 	//This counts as an assignment in the else block
-	add_assigned_variable(else_block, result);
+	add_assigned_variable(else_block, else_result);
 
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
@@ -3227,7 +3232,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	//Add the final things in here
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
-	return_package.assignee = result;
+	return_package.assignee = final_result;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 

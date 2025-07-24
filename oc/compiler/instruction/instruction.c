@@ -527,28 +527,12 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
  * symtab record, and as such will be picked up by the phi function
  * inserted. It will also not be declared as temp
  */
-three_addr_var_t* emit_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab){
-	//First we allocate it
-	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t));
-
-	//Link it to this list
-	var->next_created = emitted_vars;
-	emitted_vars = var;
-
-	//Mark this as non-temporary
-	var->is_temporary = FALSE;
-	//Store the type information
-	var->type = type;
-	//Generate a unique temp var number for it
-	var->temp_var_number = increment_and_get_temp_id();
-
-	//We can also set the variable size here real quick
-	var->variable_size = select_variable_size(var);
-
+symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab){
 	//And here is the special part - we'll need to make a symtab record
 	//for this variable and add it in
 	char variable_name[100];
-	sprintf(variable_name, "t%d", var->temp_var_number);
+	//Grab a new temp ar number from here
+	sprintf(variable_name, "t%d", increment_and_get_temp_id());
 
 	//Create and set the name here
 	dynamic_string_t string;
@@ -563,11 +547,8 @@ three_addr_var_t* emit_ternary_variable(generic_type_t* type, variable_symtab_t*
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
 
-	//And link the record to the variable
-	var->linked_var = record;
-
 	//And give it back
-	return var;
+	return record;
 }
 
 

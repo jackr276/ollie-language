@@ -615,12 +615,9 @@ u_int8_t is_modulus_instruction(instruction_t* instruction);
 three_addr_var_t* emit_temp_var(generic_type_t* type);
 
 /**
- * Create and return a ternary variable. A ternary variable is halfway
- * between a temp and a full fledged non-temp variable. It will have a 
- * symtab record, and as such will be picked up by the phi function
- * inserted. It will also not be declared as temp
+ * Create a ternary variable record
  */
-three_addr_var_t* emit_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab);
+symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab);
 
 /**
  * Create and return a temporary variable from a live range
