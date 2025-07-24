@@ -3238,13 +3238,25 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	add_successor(if_block, end_block);
 	add_successor(else_block, end_block);
 
+	//Now in the end block, we'll perform one final assignment for SSA reasons. We want to have a completely
+	//closed loop, and the ternary variable that we make here will not exist anywhere else. As such, we'll
+	//perform one final temp assignment in the end block
+	instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(final_result->type), final_result);
+
+	//The final result counts as a used variable now
+	add_used_variable(end_block, final_result);
+
+	//Add the final assignment in as our last statement in the end block
+	add_statement(end_block, final_assignment);
+
 	//The direct successor of the starting block is the ending block
 	starting_block->direct_successor = end_block;
 
 	//Add the final things in here
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
-	return_package.assignee = final_result;
+	//The final assignee is the temp var that we assigned to
+	return_package.assignee = final_assignment->assignee;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 
@@ -5599,10 +5611,7 @@ static statement_result_package_t visit_declaration_statement(generic_ast_node_t
  */
 static statement_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Create the return package here
-	statement_result_package_t let_results;
-
-	//We already know that there is no operator here
-	let_results.operator = BLANK;
+	statement_result_package_t let_results = {NULL, NULL, NULL, BLANK};
 
 	//What block are we emitting to?
 	basic_block_t* current_block = basic_block_alloc(1);
