@@ -2822,9 +2822,20 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 		(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR)){
 		//First of two potentialities is the array accessor
 		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
-			//TODO this should be emit_expr
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
-			three_addr_var_t* offset = emit_binary_expression(basic_block, cursor->first_child, is_branch_ending).assignee;
+			statement_result_package_t expression_package = emit_expression(current, cursor->first_child, is_branch_ending, FALSE);
+
+			//If there is a difference in current and the final block, we'll reassign here
+			if(expression_package.final_block != NULL && current != expression_package.final_block){
+				//Set this to be at the end
+				current = expression_package.final_block;
+
+				//This is also the new final block
+				postfix_package.final_block = current;
+			}
+
+			//This is whatever was emitted by the expression
+			three_addr_var_t* offset = expression_package.assignee;
 			
 			//What is the internal type that we're pointing to? This will determine our scale
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
@@ -2833,6 +2844,7 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 			} else {
 				//We'll dereference the current type
 				current_type = current_type->pointer_type->points_to;
+
 			}
 
 			/**
@@ -2847,16 +2859,16 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 			if(current_address == NULL){
 				//Remember, we can only use lea if we have a power of 2 
 				if(is_power_of_2(current_type->type_size) == TRUE){
-					address = emit_lea(basic_block, current_var, offset, current_type, is_branch_ending);
+					address = emit_lea(current, current_var, offset, current_type, is_branch_ending);
 				} else {
-					address = emit_address_offset_calc(basic_block, current_var, offset, current_type, is_branch_ending);
+					address = emit_address_offset_calc(current, current_var, offset, current_type, is_branch_ending);
 				}
 			} else {
 				//Remember, we can only use lea if we have a power of 2 
 				if(is_power_of_2(current_type->type_size) == TRUE){
-					address = emit_lea(basic_block, current_address, offset, current_type, is_branch_ending);
+					address = emit_lea(current, current_address, offset, current_type, is_branch_ending);
 				} else {
-					address = emit_address_offset_calc(basic_block, current_address, offset, current_type, is_branch_ending);
+					address = emit_address_offset_calc(current, current_address, offset, current_type, is_branch_ending);
 				}
 			}
 
@@ -2872,7 +2884,7 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
 				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
-					current_var = emit_mem_code(basic_block, address);
+					current_var = emit_mem_code(current, address);
 					//It's a write
 					current_var->access_type = MEMORY_ACCESS_WRITE;
 
@@ -2883,7 +2895,7 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 				//Otherwise we're dealing with a read
 				} else {
 					//Still emit the memory code
-					current_var = emit_mem_code(basic_block, address);
+					current_var = emit_mem_code(current, address);
 					//It's a read
 					current_var->access_type = MEMORY_ACCESS_READ;
 
@@ -2892,13 +2904,13 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 
 					//If the current var isn't temp, it's been used
 					if(current_var->is_temporary == FALSE){
-						add_used_variable(basic_block, current_var);
+						add_used_variable(current, current_var);
 					}
 
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
-					add_statement(basic_block, deref_stmt);
+					add_statement(current, deref_stmt);
 
 					//Update the current bar too
 					current_var = deref_stmt->assignee;
@@ -2921,11 +2933,11 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 			//If current var is a pointer, then we need to dereference it to get the actual construct type	
 			if(current_type->type_class == TYPE_CLASS_POINTER){
 				//We need to first dereference this
-				three_addr_var_t* dereferenced = emit_pointer_indirection(basic_block, current_var, current_type->pointer_type->points_to);
+				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->pointer_type->points_to);
 
 				//Assign temp to be the current address
 				instruction_t* assnment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
-				add_statement(basic_block, assnment);
+				add_statement(current, assnment);
 
 				//Reassign what current address really is
 				current_address = assnment->assignee;
@@ -2951,7 +2963,7 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 			//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 			//we've already gotten
 			if(current_address == NULL){
-				address = emit_construct_address_calculation(basic_block, current_var, offset, is_branch_ending);
+				address = emit_construct_address_calculation(current, current_var, offset, is_branch_ending);
 			} else {
 				address = emit_construct_address_calculation(basic_block, current_address, offset, is_branch_ending);
 			}
@@ -2964,7 +2976,7 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
 				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
-					current_var = emit_mem_code(basic_block, address);
+					current_var = emit_mem_code(current, address);
 					//It's a write
 					current_var->access_type = MEMORY_ACCESS_WRITE;
 
@@ -2975,7 +2987,7 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 				//Otherwise we're dealing with a read
 				} else {
 					//Still emit the memory code
-					current_var = emit_mem_code(basic_block, address);
+					current_var = emit_mem_code(current, address);
 					//It's a read
 					current_var->access_type = MEMORY_ACCESS_READ;
 
@@ -2984,13 +2996,13 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 
 					//If the current var isn't temp, it's been used
 					if(current_var->is_temporary == FALSE){
-						add_used_variable(basic_block, current_var);
+						add_used_variable(current, current_var);
 					}
 
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
-					add_statement(basic_block, deref_stmt);
+					add_statement(current, deref_stmt);
 
 					//Update the current bar too
 					current_var = deref_stmt->assignee;
@@ -3010,42 +3022,61 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 
 	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
 	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
-		//Let the helper do it
-		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
+		//The helper can deal with this. Whatever it gives back is our assignee
+		postfix_package.assignee = emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 	} else {
-		return current_var;
+		//Our assignee here is the current var
+		postfix_package.assignee = current_var;
 	}
+
+	//Give back the package
+	return postfix_package;
 }
 
 
 /**
  * Handle a unary operator, in whatever form it may be
  */
-static statement_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static statement_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Top level declarations to avoid using them in the switch statement
 	three_addr_var_t* dereferenced;
 	instruction_t* assignment;
 	three_addr_var_t* assignee;
+	//The unary expression package
+	statement_result_package_t unary_package;
+
+	//We'll keep track of what the current block here is
+	basic_block_t* current_block = basic_block;
 
 	//Extract the first child from the unary expression parent node
-	generic_ast_node_t* first_child = unary_expr_parent->first_child;
+	generic_ast_node_t* first_child = unary_expression_parent->first_child;
 
 	//Now that we've emitted the assignee, we can handle the specific unary operators
 	switch(first_child->unary_operator){
 		//Handle the case of a preincrement
 		case PLUSPLUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from our package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//If the assignee is not a pointer, we'll handle the normal case
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
 				//We really just have an "inc" instruction here
-				return emit_inc_code(basic_block, assignee, is_branch_ending);
+				unary_package.assignee = emit_inc_code(current_block, assignee, is_branch_ending);
 			//If we actually do have a pointer, we need the helper to deal with this
 			} else {
 				//Let the helper deal with this
-				return handle_pointer_arithmetic(basic_block, first_child->unary_operator, assignee, is_branch_ending);
+				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
 			}
+
+			//Give back the final unary package
+			return unary_package;
 
 		//Handle the case of a predecrement
 		case MINUSMINUS:
@@ -3068,7 +3099,7 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
 
 			//Get the dereferenced variable
-			dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expr_parent->inferred_type);
+			dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expression_parent->inferred_type);
 
 			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
@@ -3136,7 +3167,7 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
-			assignment = emit_memory_address_assignment(emit_temp_var(unary_expr_parent->inferred_type), assignee);
+			assignment = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), assignee);
 			assignment->is_branch_ending = is_branch_ending;
 
 			//We will count the assignee here as a used variable
