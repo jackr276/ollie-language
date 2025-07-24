@@ -1,4 +1,4 @@
-/**
+/*
  * The implementation file for all CFG related operations
  *
  * The CFG will translate the higher level code into something referred to as 
@@ -2674,7 +2674,7 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
  */
 static statement_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Initialize these results at first
-	statement_result_package_t result_package = {basic_block, basic_block, NULL, NULL};
+	statement_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->CLASS){
@@ -2752,7 +2752,7 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
  */
 static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Our own return package - we may or may not use it
-	statement_result_package_t postfix_package = {basic_block, basic_block, NULL, NULL};
+	statement_result_package_t postfix_package = {basic_block, basic_block, NULL, BLANK};
 
 	//If this is itself not a postfix expression, we need to lose it here
 	if(postfix_parent->CLASS != AST_NODE_CLASS_POSTFIX_EXPR){
@@ -3043,7 +3043,7 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
 	instruction_t* assignment;
 	three_addr_var_t* assignee;
 	//The unary expression package
-	statement_result_package_t unary_package;
+	statement_result_package_t unary_package = {NULL, NULL, NULL, BLANK};
 
 	//We'll keep track of what the current block here is
 	basic_block_t* current_block = basic_block;
@@ -3407,6 +3407,9 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	//The return package here
 	statement_result_package_t package = {basic_block, basic_block, NULL, BLANK};
 
+	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
+	basic_block_t* current_block = basic_block;
+	
 	//Store the left and right hand types
 	generic_type_t* left_hand_type;
 	generic_type_t* right_hand_type;
@@ -3419,7 +3422,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	//Have we hit the so-called "root level" here? If we have, then we're just going to pass this
 	//down to another rule
 	if(logical_or_expr->CLASS != AST_NODE_CLASS_BINARY_EXPR){
-		return emit_unary_expression(basic_block, logical_or_expr, FALSE, is_branch_ending);
+		return emit_unary_expression(current_block, logical_or_expr, FALSE, is_branch_ending);
 	}
 
 	//Otherwise, when we get here, we know that we have a binary expression of some kind
@@ -3432,24 +3435,33 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	left_hand_type = cursor->inferred_type;
 	
 	//Emit the binary expression on the left first
-	statement_result_package_t left_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
+	statement_result_package_t left_side = emit_binary_expression(current_block, cursor, is_branch_ending);
+
+	//If these are different, then we'll need to reassign current
+	if(left_side.final_block != NULL && left_side.final_block != current_block){
+		//Reassign current
+		current_block = left_side.final_block;
+
+		//This is also the new final block for the overall statement
+		package.final_block = current_block;
+	}
 
 	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
-	if(left_hand_temp.assignee->is_temporary == FALSE){
+	if(left_side.assignee->is_temporary == FALSE){
 		//emit the temp assignment
-		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_hand_temp.assignee);
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_side.assignee);
 		//Add it into here
-		add_statement(basic_block, temp_assignment);
+		add_statement(current_block, temp_assignment);
 		
 		//We can mark that op1 was used
-		add_used_variable(basic_block, left_hand_temp.assignee);
+		add_used_variable(current_block, left_side.assignee);
 		
 		//Grab the assignee out
 		op1 = temp_assignment->assignee;
 
 	//Otherwise the left hand temp assignee is just fine for us
 	} else {
-		op1 = left_hand_temp.assignee;
+		op1 = left_side.assignee;
 	}
 
 	//Advance up here
@@ -3457,14 +3469,24 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	right_hand_type = cursor->inferred_type;
 
 	//Then grab the right hand temp
-	statement_result_package_t right_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
+	statement_result_package_t right_side = emit_binary_expression(current_block, cursor, is_branch_ending);
+
+	//If these are different, then we'll need to reassign current
+	if(right_side.final_block != NULL && right_side.final_block != current_block){
+		//Reassign current
+		current_block = right_side.final_block;
+
+		//This is also the new final block for the overall statement
+		package.final_block = current_block;
+	}
+
+	//Grab this out for convenience
+	op2 = right_side.assignee;
 
 	//Let's see what binary operator that we have
 	Token binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
 	package.operator = binary_operator;
-	//Grab this out for convenience
-	op2 = right_hand_temp.assignee;
 
 	//Switch based on whatever operator that we have
 	switch(binary_operator){
@@ -3489,7 +3511,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	package.assignee = assignee;
 	
 	//Emit the binary operator expression using our helper
-	instruction_t* stmt = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
+	instruction_t* binary_operation = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
 
 	//If this isn't temporary, it's being assigned
 	if(assignee->is_temporary == FALSE){
@@ -3507,10 +3529,10 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	}
 
 	//Mark this with what we have
-	stmt->is_branch_ending = is_branch_ending;
+	binary_operation->is_branch_ending = is_branch_ending;
 
 	//Add this statement to the block
-	add_statement(basic_block, stmt);
+	add_statement(current_block, binary_operation);
 
 	//Return the temp variable that we assigned to
 	return package;
