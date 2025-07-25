@@ -3301,6 +3301,9 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	//The ending block for the whole thing
 	basic_block_t* end_block = basic_block_alloc(1);
 
+	//This block could change, so we'll need to keep track of it in a current block variable
+	basic_block_t* current_block = starting_block;
+
 	//Create the ternary variable here
 	symtab_variable_record_t* ternary_variable = create_ternary_variable(ternary_operation->inferred_type, variable_symtab);
 
@@ -3313,27 +3316,38 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
 	//Let's first process the conditional
-	statement_result_package_t package = emit_binary_expression(starting_block, cursor, is_branch_ending);
+	statement_result_package_t expression_package = emit_binary_expression(current_block, cursor, is_branch_ending);
+
+	//Let's see if we need to reassign
+	if(expression_package.final_block != NULL && expression_package.final_block != current_block){
+		//Reassign this to be at the true end
+		current_block = expression_package.final_block;
+	}
 
 	//The package's assignee is what we base all conditional moves on
-	u_int8_t is_signed = is_type_signed(package.assignee->type); 
+	u_int8_t is_signed = is_type_signed(expression_package.assignee->type); 
 
 	//Select the jump type for our conditional
-	jump_type_t jump = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_signed);
+	jump_type_t jump = select_appropriate_jump_stmt(expression_package.operator, JUMP_CATEGORY_NORMAL, is_signed);
 	
 	//Now we'll emit a jump to the if block and else block
-	emit_jump(starting_block, if_block, jump, is_branch_ending, FALSE);
-	emit_jump(starting_block, else_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
+	emit_jump(current_block, if_block, jump, is_branch_ending, FALSE);
+	emit_jump(current_block, else_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
 
 	//These are both now successors to the if block
-	add_successor(starting_block, if_block);
-	add_successor(starting_block, else_block);
+	add_successor(current_block, if_block);
+	add_successor(current_block, else_block);
 
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
 
 	//Emit this in our new if block
 	statement_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending, TRUE);
+
+	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
+	if(if_branch.final_block != NULL && if_branch.final_block != if_block){
+		if_block = if_branch.final_block;
+	}
 
 	//We'll now create a conditional move for the if branch into the result
 	instruction_t* if_assignment = emit_assignment_instruction(if_result, if_branch.assignee);
@@ -3352,6 +3366,11 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 
 	//Emit this in our else block
 	statement_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending, TRUE);
+
+	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
+	if(else_branch.final_block != NULL && else_branch.final_block != else_block){
+		else_block = else_branch.final_block;
+	}
 
 	//We'll now create a conditional move for the else branch into the result
 	instruction_t* else_assignment = emit_assignment_instruction(else_result, else_branch.assignee);

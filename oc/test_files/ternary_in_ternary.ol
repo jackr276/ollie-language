@@ -9,7 +9,7 @@ fn main() -> i32 {
 	let mut z:i32 := 5;
 	let mut a:i32 := 6;
 
-	let ret_val:i32 := x == 2 ? x else (x == 3 : z else a);
+	let ret_val:i32 := x == 2 ? x else (x == 3 ? z else a);
 
 	ret ret_val;
 }
