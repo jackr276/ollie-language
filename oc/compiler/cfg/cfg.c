@@ -2774,6 +2774,17 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 	//We should always have a primary expression first. We'll first call the primary expression
 	statement_result_package_t primary_package = emit_primary_expr_code(current, cursor, temp_assignment_required, is_branch_ending);
 
+	//Move the cursor along
+	cursor = cursor->next_sibling;
+
+	//This will happen a lot - we'll have nowhere else to go. When that happens,
+	//all that we need to do is return the primary package
+	if(cursor == NULL){
+		return primary_package;
+	} 
+
+	//Otherwise we'll need to do some saving here
+
 	//The current variable is now his assignee
 	current_var = primary_package.assignee;
 
@@ -2784,15 +2795,6 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 		//This package's final block is now current
 		postfix_package.final_block = current;
 	}
-
-	//Move the cursor along
-	cursor = cursor->next_sibling;
-
-	//This will happen a lot - we'll have nowhere else to go. When that happens,
-	//all that we need to do is return the primary package
-	if(cursor == NULL){
-		return primary_package;
-	} 
 
 	//We could also go right into a terminal expression like a unary operator. If so
 	//handle it and then bail
@@ -3483,6 +3485,10 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	//Grab this out for convenience
 	op2 = right_side.assignee;
 
+	if(op2 == NULL){
+		printf("NULL AT %d\n", cursor->line_number);
+	}
+
 	//Let's see what binary operator that we have
 	Token binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
@@ -3751,6 +3757,9 @@ static statement_result_package_t emit_function_call(basic_block_t* basic_block,
 		//Add it in
 		add_statement(current, assignment);
 	} 
+
+	//This is always the assignee we gave above
+	result_package.assignee = assignee;
 
 	//Give back what we assigned to
 	return result_package;
