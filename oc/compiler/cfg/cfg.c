@@ -3504,10 +3504,6 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	//Grab this out for convenience
 	op2 = right_side.assignee;
 
-	if(op2 == NULL){
-		printf("NULL AT %d\n", cursor->line_number);
-	}
-
 	//Let's see what binary operator that we have
 	Token binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
@@ -3528,7 +3524,12 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 			break;
 		//We use the default strategy - op1 is also the assignee
 		default:
-			assignee = op1;
+			if(left_side.operator != QUESTION){
+				assignee = op1;
+			} else {
+				assignee = emit_temp_var(logical_or_expr->inferred_type);
+			}
+
 			break;
 	}
 	
