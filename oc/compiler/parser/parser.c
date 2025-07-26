@@ -60,7 +60,7 @@ static heap_queue_t* current_function_jump_statements = NULL;
 static lex_stack_t* grouping_stack = NULL;
 
 //The lexstack that we'll use for storing our current level(function, for loop, etc)
-static lex_stack_t* nesting_level_stack = NULL; 
+static lex_stack_t* nesting_stack = NULL; 
 
 //The number of errors
 static u_int32_t num_errors;
@@ -7567,9 +7567,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Are we defining something that's already been defined implicitly?
-	u_int8_t defining_prev_implicit = 0;
+	u_int8_t defining_prev_implicit = FALSE;
 	//Is it the main function?
-	u_int8_t is_main_function = 0;
+	u_int8_t is_main_function = FALSE;
 
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
@@ -8315,8 +8315,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	}
 
 	//Create a stack for recording our depth
-	if(nesting_level_stack == NULL){
-		nesting_level_stack = lex_stack_alloc();
+	if(nesting_stack == NULL){
+		nesting_stack = lex_stack_alloc();
 	}
 
 	//Global entry/run point, will give us a tree with
@@ -8349,7 +8349,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Deallocate these when done
 	lex_stack_dealloc(&grouping_stack);
-	lex_stack_dealloc(&nesting_level_stack);
+	lex_stack_dealloc(&nesting_stack);
 
 	//Close the file out
 	fclose(fl);
