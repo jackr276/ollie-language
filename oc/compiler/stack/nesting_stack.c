@@ -67,7 +67,7 @@ nesting_stack_status_t nesting_stack_is_empty(nesting_stack_t* nesting_stack){
 /**
  * Pop the head off of the stack and return the data
  */
-nesting_level_t pop_level(nesting_stack_t* stack){
+nesting_level_t pop_nesting_level(nesting_stack_t* stack){
 	//Special case: we have an empty stack
 	if(stack->top == NULL){
 		return NO_NESTING_LEVEL;
@@ -93,7 +93,7 @@ nesting_level_t pop_level(nesting_stack_t* stack){
 /**
  * Peek the top of the stack without removing it
  */
-nesting_level_t peek_level(nesting_stack_t* stack){
+nesting_level_t peek_nesting_level(nesting_stack_t* stack){
 	//If the top is NULL, just return NULL
 	if(stack->top == NULL){
 		return NO_NESTING_LEVEL;

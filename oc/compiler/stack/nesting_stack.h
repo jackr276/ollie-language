@@ -20,7 +20,6 @@ typedef struct nesting_stack_node_t nesting_stack_node_t;
 typedef enum {
 	NO_NESTING_LEVEL = 0, // Our default value
 	FUNCTION,
-	COMPOUND_STATEMENT,
 	CASE_STATEMENT,
 	LOOP_STATEMENT,
 	IF_STATEMENT,
@@ -63,7 +62,7 @@ nesting_stack_t* nesting_stack_alloc();
 /**
  * Add a new nesting level to the top of the stack
  */
-void push_nesting(nesting_stack_t* stack, nesting_level_t level);
+void push_nesting_level(nesting_stack_t* stack, nesting_level_t level);
 
 /**
  * Is the stack empty or not
@@ -78,13 +77,13 @@ u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_le
 /**
  * Remove the top value of the stack
  */
-nesting_level_t pop_level(nesting_stack_t* stack);
+nesting_level_t pop_nesting_level(nesting_stack_t* stack);
 
 /**
  * Return the top value of the stack, but do not
  * remove it
  */
-nesting_level_t peek_level(nesting_stack_t* stack);
+nesting_level_t peek_nesting_level(nesting_stack_t* stack);
 
 /**
  * Destroy the stack with a proper cleanup

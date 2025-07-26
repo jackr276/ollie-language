@@ -5080,6 +5080,9 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	lexitem_t lookahead;
 	lexitem_t lookahead2;
 
+	//Push the if statement nesting level
+	push_nesting_level(nesting_stack, IF_STATEMENT);
+
 	//Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
 	//will be a child of this statement
 	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_CLASS_IF_STMT, SIDE_TYPE_LEFT);
@@ -5233,6 +5236,9 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//Store the line number
 	if_stmt->line_number = current_line;
+
+	//Now that we're done, we'll pop this off of the stack
+	pop_nesting_level(nesting_stack);
 
 	//Once we reach the end, return the root level node
 	return if_stmt;
@@ -5778,6 +5784,9 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
+	//Push the looping statement onto here
+	push_nesting_level(nesting_stack, LOOP_STATEMENT);
+
 	//First create the actual node
 	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_CLASS_WHILE_STMT, SIDE_TYPE_LEFT);
 
@@ -5835,6 +5844,9 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	//Store the current line number
 	while_stmt_node->line_number = current_line;
 
+	//And now that we're done, pop this off of the nesting stack
+	pop_nesting_level(nesting_stack);
+
 	//And we'll return the root reference
 	return while_stmt_node;
 }
@@ -5853,6 +5865,9 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Push this nesting level onto the stack
+	push_nesting_level(nesting_stack, LOOP_STATEMENT);
 
 	//Let's first create the overall global root node
 	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT, SIDE_TYPE_LEFT);
@@ -5927,6 +5942,9 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	}
 	//Store the line number
 	do_while_stmt_node->line_number = current_line;
+
+	//Now that we're done, remove this from the stack
+	pop_nesting_level(nesting_stack);
 	
 	//Otherwise if we made it here, everything went well
 	return do_while_stmt_node;
@@ -5946,6 +5964,9 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num; 
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Push this nesting level onto the stack
+	push_nesting_level(nesting_stack, LOOP_STATEMENT);
 
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_CLASS_FOR_STMT, SIDE_TYPE_LEFT);
@@ -6130,6 +6151,9 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	finalize_variable_scope(variable_symtab);
 	//Store the line number
 	for_stmt_node->line_number = current_line;
+
+	//Now that we're done, pop this off of the stack
+	pop_nesting_level(nesting_stack);
 
 	//It all worked here, so we'll return the root
 	return for_stmt_node;
@@ -6395,6 +6419,9 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
+	//Push this on as a nesting level
+	push_nesting_level(nesting_stack, DEFER_STATEMENT);
+
 	//Now if we see that this is NULL, we'll allocate here
 	if(deferred_stmts_node == NULL){
 		deferred_stmts_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT, SIDE_TYPE_LEFT);
@@ -6410,6 +6437,9 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 
 	//Otherwise it was valid, so we have another child for this overall deferred statement
 	add_child_node(deferred_stmts_node, compound_stmt_node);
+
+	//And pop it off now that we're done
+	pop_nesting_level(nesting_stack);
 
 	//And give back nothing, we're all set
 	return NULL;
@@ -6587,6 +6617,9 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
+	//Record that we're in a case statement in here
+	push_nesting_level(nesting_stack, CASE_STATEMENT);
+
 	//If we see default, we can just make the default node
 	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT, SIDE_TYPE_LEFT);
 
@@ -6610,6 +6643,9 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	//Otherwise, we add this in as a child
 	add_child_node(default_stmt, switch_compound_stmt);
 
+	//And pop it off now that we're done
+	pop_nesting_level(nesting_stack);
+
 	//Otherwise it all worked, so we'll just return
 	return default_stmt;
 }
@@ -6626,6 +6662,9 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Push this onto the stack as a nesting level
+	push_nesting_level(nesting_stack, CASE_STATEMENT);
 	
 	//Remember that we've already seen the first "case" keyword here, so now we need
 	//to consume whatever comes after it(constant or enum value)
@@ -6792,6 +6831,9 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 	//Otherwise, we add this in as a child
 	add_child_node(case_stmt, switch_compound_stmt);
+
+	//And now that we're done, pop this off of the stack
+	pop_nesting_level(nesting_stack);
 
 	//Finally give this back
 	return case_stmt;
@@ -7502,6 +7544,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
 
+	//We also need to mark that we're in a function using the nesting stack
+	push_nesting_level(nesting_stack, FUNCTION);
+
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
 
@@ -7827,6 +7872,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		
 		//This function was not defined
 		function_record->defined = FALSE;
+
+		//Remove the nesting level now that we're not in a function
+		pop_nesting_level(nesting_stack);
 		
 		//Return NULL here
 		return NULL;
@@ -7887,6 +7935,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Store the line number
 		function_node->line_number = current_line;
+
+		//Remove the nesting level now that we're not in a function
+		pop_nesting_level(nesting_stack);
 
 		//All good so we can get out
 		return function_node;
