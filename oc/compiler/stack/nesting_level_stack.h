@@ -12,10 +12,13 @@
 
 #include <sys/types.h>
 
+typedef struct nesting_level_node_t nesting_level_node_t;
+
 /**
  * All of our different possible nesting values
  */
 typedef enum {
+	NO_NESTING_LEVEL = 0, // Our default value
 	FUNCTION,
 	COMPOUND_STATEMENT,
 	CASE_STATEMENT,
@@ -76,7 +79,7 @@ nesting_level_t pop_level(nesting_level_stack_t* stack);
  * Return the top value of the stack, but do not
  * remove it
  */
-nesting_level_t peek_token(nesting_level_stack_t* stack);
+nesting_level_t peek_level(nesting_level_stack_t* stack);
 
 /**
  * Destroy the stack with a proper cleanup
