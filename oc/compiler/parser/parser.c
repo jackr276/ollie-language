@@ -59,6 +59,9 @@ static heap_queue_t* current_function_jump_statements = NULL;
 //Our stack for storing variables, etc
 static lex_stack_t* grouping_stack = NULL;
 
+//The lexstack that we'll use for storing our current level(function, for loop, etc)
+static lex_stack_t* nesting_level_stack = NULL; 
+
 //The number of errors
 static u_int32_t num_errors;
 //The number of warnings
@@ -71,7 +74,7 @@ static u_int16_t parser_line_num = 1;
 u_int8_t in_defer = FALSE;
 
 //The last nesting level
-static Token nesting_level = BLANK;
+static Token last_nesting_level = BLANK;
 
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
@@ -5128,9 +5131,9 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	add_child_node(if_stmt, expression_node);
 
 	//Save the old nesting level
-	Token old_nesting_level = nesting_level;
+	Token old_last_nesting_level = last_nesting_level;
 	//Flag that this is an if 
-	nesting_level = IF;
+	last_nesting_level = IF;
 
 	//Now following this, we need to see a valid compound statement
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
@@ -5239,7 +5242,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	}
 
 	//Reset the nesting level here
-	nesting_level = old_nesting_level;
+	last_nesting_level = old_last_nesting_level;
 	
 	//Store the line number
 	if_stmt->line_number = current_line;
@@ -5709,8 +5712,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	generic_ast_node_t* stmt;
 
 	//Set this nesting level for searching
-	Token old_nesting_level = nesting_level;
-	nesting_level = SWITCH;
+	Token old_last_nesting_level = last_nesting_level;
+	last_nesting_level = SWITCH;
 
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
@@ -5759,7 +5762,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	}
 
 	//Now that we're done here we can reset it
-	nesting_level = old_nesting_level;
+	last_nesting_level = old_last_nesting_level;
 
 	//If we haven't found a default clause, it's a failure
 	if(found_default_clause == FALSE){
@@ -5845,10 +5848,10 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	}
 
 	//Save this for later
-	Token old_nesting_level = nesting_level;
+	Token old_last_nesting_level = last_nesting_level;
 
 	//The nesting level here is in a for loop
-	nesting_level = WHILE;
+	last_nesting_level = WHILE;
 
 	//Following this, we need to see a valid compound statement, and then we're done
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
@@ -5859,7 +5862,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	}
 
 	//Reset the nesting level afterwards
-	nesting_level = old_nesting_level;
+	last_nesting_level = old_last_nesting_level;
 
 	//Otherwise we'll add it in as a child
 	add_child_node(while_stmt_node, compound_stmt_node);
@@ -5889,16 +5892,16 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT, SIDE_TYPE_LEFT);
 
 	//Save the old nesting level
-	Token old_nesting_level = nesting_level;
+	Token old_last_nesting_level = last_nesting_level;
 	//Set this to be in a do while
-	nesting_level = DO;
+	last_nesting_level = DO;
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
 	generic_ast_node_t* compound_stmt = compound_statement(fl);
 
 	//Now reset this
-	nesting_level = old_nesting_level;
+	last_nesting_level = old_last_nesting_level;
 
 	//If we fail, then we are done here
 	if(compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -6154,10 +6157,10 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	}
 	
 	//Save this for later
-	Token old_nesting_level = nesting_level;
+	Token old_last_nesting_level = last_nesting_level;
 
 	//The nesting level here is in a for loop
-	nesting_level = FOR;
+	last_nesting_level = FOR;
 
 	//Now that we're all done, we need to see a valid compound statement
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
@@ -6169,7 +6172,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	}
 
 	//This is now back to the original nesting level
-	nesting_level = old_nesting_level;
+	last_nesting_level = old_last_nesting_level;
 
 	//Otherwise if we make it here, we know that it worked so we'll add it as a child
 	add_child_node(for_stmt_node, compound_stmt_node);
@@ -6440,12 +6443,12 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 static generic_ast_node_t* defer_statement(FILE* fl){
 	//Are we already inside of a defer statement? If we are,
 	//we'll want to fail out here
-	if(nesting_level != FN){
+	if(last_nesting_level != FN){
 		return print_and_return_error("Defer statements must be placed at the top level lexical scope in a function", parser_line_num);
 	}
 
 	//Set this to be clear that we're in a defer
-	nesting_level = DEFER;
+	last_nesting_level = DEFER;
 
 	//Set this flag to be true
 	in_defer = TRUE;
@@ -6472,7 +6475,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	add_child_node(deferred_stmts_node, compound_stmt_node);
 
 	//Once we're out of here, we need to unset the flag for the future processing
-	nesting_level = FN;
+	last_nesting_level = FN;
 
 	//Unset this flag too
 	in_defer = FALSE;
@@ -7905,7 +7908,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		deferred_stmts_node = NULL;
 
 		//Set the root level indicator to function
-		nesting_level = FN;
+		last_nesting_level = FN;
 
 		//We are finally required to see a valid compound statement
 		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
@@ -7958,7 +7961,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		function_node->line_number = current_line;
 
 		//Reset the nesting level
-		nesting_level = BLANK;
+		last_nesting_level = BLANK;
 
 		//All good so we can get out
 		return function_node;
@@ -8290,7 +8293,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Initialize the OS call graph. This is because the OS always calls the main function
 	os = calloc(1, sizeof(call_graph_node_t));
-
 	
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
@@ -8310,6 +8312,11 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	if(grouping_stack == NULL){
 		grouping_stack = lex_stack_alloc();
+	}
+
+	//Create a stack for recording our depth
+	if(nesting_level_stack == NULL){
+		nesting_level_stack = lex_stack_alloc();
 	}
 
 	//Global entry/run point, will give us a tree with
@@ -8339,6 +8346,10 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	results->num_warnings = num_warnings;
 	//How many lines did we process?
 	results->lines_processed = parser_line_num;
+
+	//Deallocate these when done
+	lex_stack_dealloc(&grouping_stack);
+	lex_stack_dealloc(&nesting_level_stack);
 
 	//Close the file out
 	fclose(fl);
