@@ -3388,17 +3388,6 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	add_successor(if_block, end_block);
 	add_successor(else_block, end_block);
 
-	//Now in the end block, we'll perform one final assignment for SSA reasons. We want to have a completely
-	//closed loop, and the ternary variable that we make here will not exist anywhere else. As such, we'll
-	//perform one final temp assignment in the end block
-	//instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(final_result->type), final_result);
-
-	//The final result counts as a used variable now
-	//add_used_variable(end_block, final_result);
-
-	//Add the final assignment in as our last statement in the end block
-	//add_statement(end_block, final_assignment);
-
 	//The direct successor of the starting block is the ending block
 	starting_block->direct_successor = end_block;
 
@@ -3406,7 +3395,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
 	//The final assignee is the temp var that we assigned to
-	return_package.assignee =  final_result;//final_assignment->assignee;
+	return_package.assignee =  final_result;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 
@@ -3555,17 +3544,17 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 
 	//If this isn't temporary, it's being assigned
 	if(assignee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, assignee);
+		add_assigned_variable(current_block, assignee);
 	}
 
 	//If these are not temporary, they're being used
 	if(op1->is_temporary == FALSE){
-		add_used_variable(basic_block, op1);
+		add_used_variable(current_block, op1);
 	}
 
 	//Same deal with this one
 	if(op2->is_temporary == FALSE){
-		add_used_variable(basic_block, op2);
+		add_used_variable(current_block, op2);
 	}
 
 	//Mark this with what we have
