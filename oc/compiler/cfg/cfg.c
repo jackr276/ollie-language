@@ -4933,7 +4933,7 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
  */
 static statement_result_package_t visit_switch_statement(values_package_t* values){
 	//Declare the result package off the bat
-	statement_result_package_t result_package;
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//The starting block for the switch statement - we'll want this in a new
 	//block
@@ -4948,9 +4948,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//We can already fill in the result package
 	result_package.starting_block = starting_block;
 	result_package.final_block = ending_block;
-	//We know that these will both be empty
-	result_package.assignee = NULL;
-	result_package.operator = BLANK;
 
 	//We need a quick reference to the starting block ID
 	u_int16_t starting_block_id = starting_block->block_id;
@@ -5065,13 +5062,77 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
+
+	//TODO NOT YET FULLY FUNCTIONAL
 	
+	//The current block, relative to the starting block
+	basic_block_t* current = starting_block;
+	
+	//Let's first emit the expression. This will at least give us an assignee to work with
+	statement_result_package_t input_results = emit_expression(current, expression_node, TRUE, TRUE);
+
+	//We could have had a ternary here, so we'll need to account for that possibility
+	if(input_results.final_block != NULL && current != input_results.final_block){
+		//Just reassign what current is
+		current = input_results.final_block;
+	}
+
+	/**
+	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
+	 * on the condition codes being set from the operation to take us through all three
+	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
+	 * are in the range
+	 */
+
+	//Grab the type our for convenience
+	generic_type_t* input_result_type = input_results.assignee->type;
+
+	//Grab the signedness of the result
+	u_int8_t is_signed = is_type_signed(input_results.assignee->type);
+
+	//Let's first do our lower than comparison
+	//First step -> if we're below the minimum, we jump to default 
+	emit_binary_operation_with_constant(current, emit_temp_var(input_result_type), input_results.assignee, L_THAN, lower_bound, TRUE);
+
+	//If we are lower than this(regular jump), we will go to the default block
+	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
+	//Now we'll emit our jump
+	emit_jump(current, default_block, jump_lower_than, TRUE, FALSE);
+
+	//Next step -> if we're above the maximum, jump to default
+	emit_binary_operation_with_constant(current, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
+
+	//If we are lower than this(regular jump), we will go to the default block
+	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
+	//Now we'll emit our jump
+	emit_jump(current, default_block, jump_greater_than, TRUE, FALSE);
+
+	//Now that all this is done, we can use our jump table for the rest
+	//We'll now need to cut the value down by whatever our offset was	
+	three_addr_var_t* input = emit_binary_operation_with_constant(current, emit_temp_var(input_result_type), input_results.assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
+
+	/**
+	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
+	 * 	base address(.JT1) + input * 8 
+	 *
+	 * We have a special kind of statement for doing this
+	 * 	
+	 */
+	//Emit the address first
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(current, &(starting_block->jump_table), input, TRUE);
+
+	//Now we'll emit the indirect jump to the address
+	emit_indirect_jump(current, address, JUMP_TYPE_JMP, TRUE);
+
+	//Give back the starting block
+	return result_package;
+
+	
+	/*
 	//The very first thing should be an expression telling us what to switch on
 	//There should be some kind of expression here
 	statement_result_package_t package1 = emit_expression(starting_block, expression_node, TRUE, TRUE);
 
-	//Unsigned by default
-	u_int8_t is_signed = is_type_signed(package1.assignee->type);
 
 	//First step -> if we're below the minimum, we jump to default 
 	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
@@ -5099,15 +5160,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//We'll now need to cut the value down by whatever our offset was	
 	three_addr_var_t* input = emit_binary_operation_with_constant(starting_block, package3.assignee, package3.assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
 
-	/**
-	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
-	 * 	base address(.JT1) + input * 8 
-	 *
-	 * We have a special kind of statement for doing this
-	 * 	
-	 *
-	 * 	TODO an idea: we could replace this is a right shift by 3(just a thought)
-	 */
 	//Emit the address first
 	three_addr_var_t* address = emit_indirect_jump_address_calculation(starting_block, &(starting_block->jump_table), input, TRUE);
 
@@ -5115,7 +5167,9 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	emit_indirect_jump(starting_block, address, JUMP_TYPE_JMP, TRUE);
 
 	//Give back the starting block
+	//
 	return result_package;
+	*/
 }
 
 

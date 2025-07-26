@@ -5634,8 +5634,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Push to stack for later matching
 	push_token(grouping_stack, lookahead);
 
-	//Now we must see a valid conditional expression
-	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+	//Now we must see a valid ternary-level expression
+	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one we fail right out
 	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
