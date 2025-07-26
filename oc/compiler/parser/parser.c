@@ -18,7 +18,7 @@
 #include <sys/types.h>
 #include "parser.h"
 #include "../stack/lexstack.h"
-#include "../stack/nesting_level_stack.h"
+#include "../stack/nesting_stack.h"
 #include "../queue/heap_queue.h"
 #include "../stack/lightstack.h"
 
@@ -61,7 +61,7 @@ static heap_queue_t* current_function_jump_statements = NULL;
 static lex_stack_t* grouping_stack = NULL;
 
 //THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
-static nesting_level_stack_t* nesting_stack = NULL; 
+static nesting_stack_t* nesting_stack = NULL; 
 
 //The number of errors
 static u_int32_t num_errors;
