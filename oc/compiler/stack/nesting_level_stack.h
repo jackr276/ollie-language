@@ -11,10 +11,19 @@
 #define NESTING_LEVEL_STACK_H 
 
 #include <sys/types.h>
-#include "../lexer/lexer.h"
 
-//Allows us to use lex_node_t as a type
-typedef struct lex_node_t lex_node_t;
+/**
+ * All of our different possible nesting values
+ */
+typedef enum {
+	FUNCTION,
+	COMPOUND_STATEMENT,
+	CASE_STATEMENT,
+	LOOP_STATEMENT,
+	IF_STATEMENT,
+	DEFER_STATEMENT,
+	//TODO more probably needed
+} nesting_level_t;
 
 /**
  * The current status of the lexer stack
@@ -22,14 +31,14 @@ typedef struct lex_node_t lex_node_t;
 typedef enum{
 	NESTING_STACK_EMPTY,
 	NESTING_STACK_NOT_EMPTY,
-} nesting_stack_status_t;
+} nesting_level_stack_status_t;
 
 /**
  * Nodes for our stack
  */
-struct lex_node_t {
-	lex_node_t* next;
-	lexitem_t l;
+struct nesting_level_node_t {
+	nesting_level_node_t* next;
+	nesting_level_t level;
 };
 
 
@@ -38,40 +47,40 @@ struct lex_node_t {
  * have more than one stack
  */
 typedef struct {
-	lex_node_t* top;
+	nesting_level_node_t* top;
 	u_int16_t num_nodes;
-} lex_stack_t;
+} nesting_level_stack_t;
 
 
 /**
  * Initialize a stack
  */
-lex_stack_t* lex_stack_alloc();
+nesting_level_stack_t* nesting_stack_alloc();
 
 /**
- * Push a pointer onto the top of the stack
+ * Add a new nesting level to the top of the stack
  */
-void push_token(lex_stack_t* stack, lexitem_t l);
+void push_nesting_level(nesting_level_stack_t* stack, nesting_level_t level);
 
 /**
  * Is the stack empty or not
  */
-lex_stack_status_t lex_stack_is_empty(lex_stack_t* lex_stack);
+nesting_level_stack_status_t nesting_stack_is_empty(nesting_level_stack_t* nesting_stack);
 
 /**
  * Remove the top value of the stack
  */
-lexitem_t pop_token(lex_stack_t* stack);
+nesting_level_t pop_level(nesting_level_stack_t* stack);
 
 /**
  * Return the top value of the stack, but do not
  * remove it
  */
-lexitem_t peek_token(lex_stack_t* stack);
+nesting_level_t peek_token(nesting_level_stack_t* stack);
 
 /**
  * Destroy the stack with a proper cleanup
  */
-void lex_stack_dealloc(lex_stack_t** stack);
+void nesting_stack_dealloc(nesting_level_stack_t** stack);
 
-#endif /* LEX_STACK_H */
+#endif /* NESTING_LEVEL_STACK_T */
