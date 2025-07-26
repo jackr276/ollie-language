@@ -3358,6 +3358,11 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	//This counts as the result being assigned in the if block
 	add_assigned_variable(if_block, if_result);
 
+	//This counts as a use
+	if(if_branch.assignee->is_temporary == FALSE){
+		add_used_variable(if_block, if_branch.assignee);
+	}
+
 	//Now add a direct jump to the end
 	emit_jump(if_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
 
@@ -3380,6 +3385,11 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 
 	//This counts as an assignment in the else block
 	add_assigned_variable(else_block, else_result);
+
+	//This counts as a use
+	if(else_branch.assignee->is_temporary == FALSE){
+		add_used_variable(else_block, else_branch.assignee);
+	}
 
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
@@ -3456,24 +3466,6 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 		package.final_block = current_block;
 	}
 
-	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
-	if(left_side.assignee->is_temporary == FALSE){
-		//emit the temp assignment
-		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_side.assignee);
-		//Add it into here
-		add_statement(current_block, temp_assignment);
-		
-		//We can mark that op1 was used
-		add_used_variable(current_block, left_side.assignee);
-		
-		//Grab the assignee out
-		op1 = temp_assignment->assignee;
-
-	//Otherwise the left hand temp assignee is just fine for us
-	} else {
-		op1 = left_side.assignee;
-	}
-
 	//Advance up here
 	cursor = cursor->next_sibling;
 	right_hand_type = cursor->inferred_type;
@@ -3488,6 +3480,25 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 
 		//This is also the new final block for the overall statement
 		package.final_block = current_block;
+	}
+
+	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
+	if(left_side.assignee->is_temporary == FALSE){
+		//emit the temp assignment
+		instruction_t* left_side_temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_side.assignee);
+
+		//Add it into here
+		add_statement(current_block, left_side_temp_assignment);
+		
+		//We can mark that op1 was used
+		add_used_variable(current_block, left_side.assignee);
+
+		//Grab the assignee out
+		op1 = left_side_temp_assignment->assignee;
+
+	//Otherwise the left hand temp assignee is just fine for us
+	} else {
+		op1 = left_side.assignee;
 	}
 
 	//Grab this out for convenience
