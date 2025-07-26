@@ -5312,7 +5312,13 @@ static generic_ast_node_t* jump_statement(FILE* fl){
  */
 static generic_ast_node_t* continue_statement(FILE* fl){
 	//Lookahead token
-	lexitem_t lookahead;
+	lexitem_t lookahead;	
+
+	//We need to ensure that we're in a loop here of some kind. If we aren't then this is 
+	//invalid
+	if(nesting_stack_contains_level(nesting_stack, LOOP_STATEMENT) == FALSE){
+		return print_and_return_error("Continue statements must be used inside of loops", parser_line_num);
+	}
 
 	//Once we get here, we've already seen the continue keyword, so we can make the node
 	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_CLASS_CONTINUE_STMT, SIDE_TYPE_LEFT);
@@ -5395,6 +5401,12 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 static generic_ast_node_t* break_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//We need to ensure that we're in a loop here of some kind. If we aren't then this is 
+	//invalid
+	if(nesting_stack_contains_level(nesting_stack, LOOP_STATEMENT) == FALSE){
+		return print_and_return_error("Break statements must be used inside of loops", parser_line_num);
+	}
 
 	//Once we get here, we've already seen the break keyword, so we can make the node
 	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_CLASS_BREAK_STMT, SIDE_TYPE_LEFT);
@@ -6163,93 +6175,6 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 	//It all worked here, so we'll return the root
 	return for_stmt_node;
-}
-
-
-/**
- * A compound statement is denoted by the {} braces, and can decay in to 
- * statements and declarations. It also represents the start of a brand new
- * lexical scope for types and variables. Like all rules, this rule returns
- * a reference to the root node that it creates
- *
- * NOTE: We assume that we have NOT consumed the { token by the time we make
- * it here
- *
- * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}* {<definition>}*}
- */
-static generic_ast_node_t* switch_compound_statement(FILE* fl){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//We must first see a left curly
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If we don't see one, we fail out
-	if(lookahead.tok != L_CURLY){
-		return print_and_return_error("Left curly brace required at beginning of compound statement", parser_line_num);
-	}
-
-	//Push onto the grouping stack so we can check matching
-	push_token(grouping_stack, lookahead);
-
-	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT, SIDE_TYPE_LEFT);
-	//Store the line number here
-	compound_stmt_node->line_number = parser_line_num;
-
-	//Begin a new lexical scope for types and variables
-	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab);
-
-	//Now we can keep going until we see a closing curly
-	//We'll seed the search
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//So long as we don't reach the end
-	while(lookahead.tok != R_CURLY){
-		//Put whatever we saw back
-		push_back_token(lookahead);
-		
-		//We now need to see a valid statement that is allowed inside of a case block
-		generic_ast_node_t* stmt_node = statement(fl);
-
-		//If this is null, which is possible for define or alias statements,
-		//we'll just move along to the next one
-		if(stmt_node == NULL){
-			//Refresh the lookahead
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-			continue;
-		}
-
-		//If it's invalid we'll pass right through, no error printing
-		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			//Send it right back
-			return stmt_node;
-		}
-
-		//Otherwise, we'll add it as a child node
-		add_child_node(compound_stmt_node, stmt_node);
-
-		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
-
-	//Once we've escaped out of the while loop, we know that the token we currently have
-	//is an R_CURLY
-	//We still must check for matching
-	if(pop_token(grouping_stack).tok != L_CURLY){
-		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
-	}
-
-	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
-	//"finalize" both of these scopes
-	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
-	//Add in the line number
-	compound_stmt_node->line_number = parser_line_num;
-
-	//And we're all done, so we'll return the reference to the root node
-	return compound_stmt_node;
 }
 
 

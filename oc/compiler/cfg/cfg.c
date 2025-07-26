@@ -5354,14 +5354,6 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 				break;
 
 			case AST_NODE_CLASS_CONTINUE_STMT:
-				//Let's first see if we're in a loop or not
-				//TODO HERE
-				if(values->loop_stmt_start == NULL){
-					print_cfg_message(PARSE_ERROR, "Continue statement was not found in a loop", ast_cursor->line_number);
-					(*num_errors_ref)++;
-					return create_and_return_err();
-				}
-
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
@@ -5448,14 +5440,6 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 					break;
 
 			case AST_NODE_CLASS_BREAK_STMT:
-				//Let's first see if we're in a loop or switch statement or not
-				//TODO HERE
-				if(values->loop_stmt_start == NULL){
-					print_cfg_message(PARSE_ERROR, "Break statement was not found in a loop", ast_cursor->line_number);
-					(*num_errors_ref)++;
-					return create_and_return_err();
-				}
-
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
