@@ -3469,20 +3469,6 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 		//Grab the assignee out
 		op1 = temp_assignment->assignee;
 
-	//If we have a ternary operation, we'll want to emit one temp assignment anyways to avoid violating SSA form
-	//} else if(left_side.operator == QUESTION){
-		//emit the temp assignment
-		//instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_side.assignee);
-		//Add it into here
-		//add_statement(current_block, temp_assignment);
-		
-		//We can mark that op1 was used
-		//add_used_variable(current_block, left_side.assignee);
-		
-		//Grab the assignee out
-		//op1 = temp_assignment->assignee;
-
-
 	//Otherwise the left hand temp assignee is just fine for us
 	} else {
 		op1 = left_side.assignee;
@@ -3527,12 +3513,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 			break;
 		//We use the default strategy - op1 is also the assignee
 		default:
-			if(left_side.operator != QUESTION){
-				assignee = op1;
-			} else {
-				assignee = emit_temp_var(logical_or_expr->inferred_type);
-			}
-
+			assignee = op1;
 			break;
 	}
 	
