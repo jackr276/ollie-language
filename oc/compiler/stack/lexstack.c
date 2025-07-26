@@ -13,11 +13,7 @@
  */
 lex_stack_t* lex_stack_alloc(){
 	//Allocate our stack
-	lex_stack_t* stack = (lex_stack_t*)malloc(sizeof(lex_stack_t));
-
-	//Initialize these values
-	stack->num_nodes = 0;
-	stack->top = NULL;
+	lex_stack_t* stack = calloc(1, sizeof(lex_stack_t));
 
 	//Return the stack
 	return stack;
@@ -35,7 +31,7 @@ void push_token(lex_stack_t* stack, lexitem_t l){
 	}
 
 	//Allocate a new node
-	lex_node_t* new = (lex_node_t*)malloc(sizeof(lex_node_t));
+	lex_node_t* new = calloc(1, sizeof(lex_node_t));
 	//Store the data
 	new->l = l;
 

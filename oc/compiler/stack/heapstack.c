@@ -13,11 +13,7 @@
  */
 heap_stack_t* heap_stack_alloc(){
 	//Allocate our stack
-	heap_stack_t* stack = (heap_stack_t*)malloc(sizeof(heap_stack_t));
-
-	//Initialize these values
-	stack->num_nodes = 0;
-	stack->top = NULL;
+	heap_stack_t* stack = calloc(1, sizeof(heap_stack_t));
 
 	//Return the stack
 	return stack;
@@ -41,7 +37,7 @@ void push(heap_stack_t* stack, void* data){
 	}
 
 	//Allocate a new node
-	stack_node_t* new = (stack_node_t*)malloc(sizeof(stack_node_t));
+	stack_node_t* new = calloc(1, sizeof(stack_node_t));
 	//Store the data
 	new->data = data;
 

@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include "parser.h"
 #include "../stack/lexstack.h"
+#include "../stack/nesting_stack.h"
 #include "../queue/heap_queue.h"
 #include "../stack/lightstack.h"
 
@@ -59,6 +60,9 @@ static heap_queue_t* current_function_jump_statements = NULL;
 //Our stack for storing variables, etc
 static lex_stack_t* grouping_stack = NULL;
 
+//THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
+static nesting_stack_t* nesting_stack = NULL; 
+
 //The number of errors
 static u_int32_t num_errors;
 //The number of warnings
@@ -66,12 +70,6 @@ static u_int32_t num_warnings;
 
 //The current parser line number
 static u_int16_t parser_line_num = 1;
-
-//Are we in a defer statement or not?
-u_int8_t in_defer = FALSE;
-
-//The last nesting level
-static Token nesting_level = BLANK;
 
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
@@ -5082,6 +5080,9 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	lexitem_t lookahead;
 	lexitem_t lookahead2;
 
+	//Push the if statement nesting level
+	push_nesting_level(nesting_stack, IF_STATEMENT);
+
 	//Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
 	//will be a child of this statement
 	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_CLASS_IF_STMT, SIDE_TYPE_LEFT);
@@ -5126,11 +5127,6 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//If we make it here, we can add this in as the first child to the root node
 	add_child_node(if_stmt, expression_node);
-
-	//Save the old nesting level
-	Token old_nesting_level = nesting_level;
-	//Flag that this is an if 
-	nesting_level = IF;
 
 	//Now following this, we need to see a valid compound statement
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
@@ -5238,11 +5234,11 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		push_back_token(lookahead);
 	}
 
-	//Reset the nesting level here
-	nesting_level = old_nesting_level;
-	
 	//Store the line number
 	if_stmt->line_number = current_line;
+
+	//Now that we're done, we'll pop this off of the stack
+	pop_nesting_level(nesting_stack);
 
 	//Once we reach the end, return the root level node
 	return if_stmt;
@@ -5316,7 +5312,13 @@ static generic_ast_node_t* jump_statement(FILE* fl){
  */
 static generic_ast_node_t* continue_statement(FILE* fl){
 	//Lookahead token
-	lexitem_t lookahead;
+	lexitem_t lookahead;	
+
+	//We need to ensure that we're in a loop here of some kind. If we aren't then this is 
+	//invalid
+	if(nesting_stack_contains_level(nesting_stack, LOOP_STATEMENT) == FALSE){
+		return print_and_return_error("Continue statements must be used inside of loops", parser_line_num);
+	}
 
 	//Once we get here, we've already seen the continue keyword, so we can make the node
 	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_CLASS_CONTINUE_STMT, SIDE_TYPE_LEFT);
@@ -5400,6 +5402,12 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
+	//We need to ensure that we're in a loop here of some kind. If we aren't then this is 
+	//invalid
+	if(nesting_stack_contains_level(nesting_stack, LOOP_STATEMENT) == FALSE){
+		return print_and_return_error("Break statements must be used inside of loops", parser_line_num);
+	}
+
 	//Once we get here, we've already seen the break keyword, so we can make the node
 	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_CLASS_BREAK_STMT, SIDE_TYPE_LEFT);
 	//Store the line number
@@ -5476,13 +5484,14 @@ static generic_ast_node_t* break_statement(FILE* fl){
  * BNF Rule: <return-statement> ::= ret {<ternary-epxression>}?;
  */
 static generic_ast_node_t* return_statement(FILE* fl){
-	//If we're in a defer statement, we actually cannot do this
-	if(in_defer == TRUE){
-		return print_and_return_error("Ret statements cannot be placed inside of defer blocks", parser_line_num);
-	}
-
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Do we contain a defer at any point in here? If so, that is invalid because we already
+	//have a return. If this happens, we'll need to reject it
+	if(nesting_stack_contains_level(nesting_stack, DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Ret statements cannot be placed inside of defer blocks", parser_line_num);
+	}
 
 	//We can create the node now
 	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_CLASS_RET_STMT, SIDE_TYPE_LEFT);
@@ -5708,10 +5717,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Handle our statement here
 	generic_ast_node_t* stmt;
 
-	//Set this nesting level for searching
-	Token old_nesting_level = nesting_level;
-	nesting_level = SWITCH;
-
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
 		//Switch by the lookahead
@@ -5758,9 +5763,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Now that we're done here we can reset it
-	nesting_level = old_nesting_level;
-
 	//If we haven't found a default clause, it's a failure
 	if(found_default_clause == FALSE){
 		return print_and_return_error("Switch statements are required to have a \"default\" clause", current_line);
@@ -5799,6 +5801,9 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	lexitem_t lookahead;
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+
+	//Push the looping statement onto here
+	push_nesting_level(nesting_stack, LOOP_STATEMENT);
 
 	//First create the actual node
 	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_CLASS_WHILE_STMT, SIDE_TYPE_LEFT);
@@ -5844,12 +5849,6 @@ static generic_ast_node_t* while_statement(FILE* fl){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
-	//Save this for later
-	Token old_nesting_level = nesting_level;
-
-	//The nesting level here is in a for loop
-	nesting_level = WHILE;
-
 	//Following this, we need to see a valid compound statement, and then we're done
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
@@ -5858,13 +5857,13 @@ static generic_ast_node_t* while_statement(FILE* fl){
 		return print_and_return_error("Invalid compound statement in while expression", parser_line_num);
 	}
 
-	//Reset the nesting level afterwards
-	nesting_level = old_nesting_level;
-
 	//Otherwise we'll add it in as a child
 	add_child_node(while_stmt_node, compound_stmt_node);
 	//Store the current line number
 	while_stmt_node->line_number = current_line;
+
+	//And now that we're done, pop this off of the nesting stack
+	pop_nesting_level(nesting_stack);
 
 	//And we'll return the root reference
 	return while_stmt_node;
@@ -5885,20 +5884,15 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
+	//Push this nesting level onto the stack
+	push_nesting_level(nesting_stack, LOOP_STATEMENT);
+
 	//Let's first create the overall global root node
 	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT, SIDE_TYPE_LEFT);
-
-	//Save the old nesting level
-	Token old_nesting_level = nesting_level;
-	//Set this to be in a do while
-	nesting_level = DO;
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
 	generic_ast_node_t* compound_stmt = compound_statement(fl);
-
-	//Now reset this
-	nesting_level = old_nesting_level;
 
 	//If we fail, then we are done here
 	if(compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5966,6 +5960,9 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	}
 	//Store the line number
 	do_while_stmt_node->line_number = current_line;
+
+	//Now that we're done, remove this from the stack
+	pop_nesting_level(nesting_stack);
 	
 	//Otherwise if we made it here, everything went well
 	return do_while_stmt_node;
@@ -5985,6 +5982,9 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num; 
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Push this nesting level onto the stack
+	push_nesting_level(nesting_stack, LOOP_STATEMENT);
 
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_CLASS_FOR_STMT, SIDE_TYPE_LEFT);
@@ -6153,12 +6153,6 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 	
-	//Save this for later
-	Token old_nesting_level = nesting_level;
-
-	//The nesting level here is in a for loop
-	nesting_level = FOR;
-
 	//Now that we're all done, we need to see a valid compound statement
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
@@ -6168,9 +6162,6 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		return compound_stmt_node;
 	}
 
-	//This is now back to the original nesting level
-	nesting_level = old_nesting_level;
-
 	//Otherwise if we make it here, we know that it worked so we'll add it as a child
 	add_child_node(for_stmt_node, compound_stmt_node);
 
@@ -6179,187 +6170,11 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	//Store the line number
 	for_stmt_node->line_number = current_line;
 
+	//Now that we're done, pop this off of the stack
+	pop_nesting_level(nesting_stack);
+
 	//It all worked here, so we'll return the root
 	return for_stmt_node;
-}
-
-
-/**
- * This special modification of the statement rule prohibits us seeing any switch, case or
- * default statements. This statement type is intended to be used inside of swtich statements
- */
-static generic_ast_node_t* statement_in_block(FILE* fl){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//Let's grab the next item and see what we have here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Switch based on the lookahead token
-	switch(lookahead.tok){
-		//If we see a label ident, we know we're seeing a labeled statement
-		case LABEL_IDENT:
-			//This rule relies on these tokens, so we'll push them back
-			push_back_token(lookahead);
-	
-			//Just return whatever the rule gives us
-			return labeled_statement(fl);
-			
-		//Compound statement here
-		case L_CURLY:
-			//The rule relies on it, so put it back
-			push_back_token(lookahead);
-
-			//Return whatever the rule gives us
-			return compound_statement(fl);
-
-		//For statement
-		case FOR:
-			//This rule relies on for already being consumed, so we won't put it back
-			return for_statement(fl);
-
-		//Defer statement
-		case DEFER:
-			//This rule relies on the defer keyword already being consumed, so we won't put it back
-			return defer_statement(fl);
-
-		//Idle statement
-		case IDLE:
-			return idle_statement(fl);
-	
-		//While statement
-		case WHILE:
-			//This rule relies on while already being consumed, so we won't put it back
-			return while_statement(fl);
-
-		//Handle a do-while
-		case DO:
-			//This rule relies on do already being consumed, so we won't put it back
-			return do_while_statement(fl);
-
-		//This will give an error
-		case SWITCH:
-			return print_and_return_error("Ollie language does not allow for nested switch statements", parser_line_num);
-
-		//These will also error
-		case CASE:
-		case DEFAULT:
-			return print_and_return_error("Ollie language does not allow for nested case or default statements", parser_line_num);
-
-		//If statement
-		case IF:
-			//This rule relies on if already being consumed, so we won't put it back
-			return if_statement(fl);
-
-		//Break and continue
-		case BREAK:
-		case CONTINUE:
-			return print_and_return_error("Ollie language does not allow continue or break in switch statments", parser_line_num);
-
-		//Jump/return
-		case JUMP:
-			//Give back a jump statement
-			return jump_statement(fl);
-
-		//Give back a return statement
-		case RETURN:
-			return return_statement(fl);
-
-		//Variable declaration & assign
-		case LET:
-			return let_statement(fl, FALSE);
-
-		//Pure declaration
-		case DECLARE:
-			return declare_statement(fl, FALSE);
-
-		//By default - we just have some kind of expression
-		default:
-			//Put the token back
-			push_back_token(lookahead);
-
-			//Give back the expression statement
-			return expression_statement(fl);
-	}
-}
-
-
-/**
- * A compound statement is denoted by the {} braces, and can decay in to 
- * statements and declarations. It also represents the start of a brand new
- * lexical scope for types and variables. Like all rules, this rule returns
- * a reference to the root node that it creates
- *
- * NOTE: We assume that we have NOT consumed the { token by the time we make
- * it here
- *
- * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}* {<definition>}*}
- */
-static generic_ast_node_t* switch_compound_statement(FILE* fl){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//We must first see a left curly
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If we don't see one, we fail out
-	if(lookahead.tok != L_CURLY){
-		return print_and_return_error("Left curly brace required at beginning of compound statement", parser_line_num);
-	}
-
-	//Push onto the grouping stack so we can check matching
-	push_token(grouping_stack, lookahead);
-
-	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT, SIDE_TYPE_LEFT);
-	//Store the line number here
-	compound_stmt_node->line_number = parser_line_num;
-
-	//Begin a new lexical scope for types and variables
-	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab);
-
-	//Now we can keep going until we see a closing curly
-	//We'll seed the search
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//So long as we don't reach the end
-	while(lookahead.tok != R_CURLY){
-		//Put whatever we saw back
-		push_back_token(lookahead);
-		
-		//We now need to see a valid statement that is allowed inside of a case block
-		generic_ast_node_t* stmt_node = statement_in_block(fl);
-
-		//If it's invalid we'll pass right through, no error printing
-		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-			//Send it right back
-			return stmt_node;
-		}
-
-		//Otherwise, we'll add it as a child node
-		add_child_node(compound_stmt_node, stmt_node);
-
-		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
-
-	//Once we've escaped out of the while loop, we know that the token we currently have
-	//is an R_CURLY
-	//We still must check for matching
-	if(pop_token(grouping_stack).tok != L_CURLY){
-		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
-	}
-
-	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
-	//"finalize" both of these scopes
-	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
-	//Add in the line number
-	compound_stmt_node->line_number = parser_line_num;
-
-	//And we're all done, so we'll return the reference to the root node
-	return compound_stmt_node;
 }
 
 
@@ -6404,72 +6219,30 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 
 	//So long as we don't reach the end
 	while(lookahead.tok != R_CURLY){
-		//Switch based on the lookahead
-		switch(lookahead.tok){
-			//Declare or let, we'll let that rule handle it
-			case DECLARE:
-			case LET:
-				//We'll let the actual rule handle it, so push the token back
-				push_back_token(lookahead);
+		//Put whatever we saw back
+		push_back_token(lookahead);
+		
+		//We now need to see a valid statement that is allowed inside of a case block
+		generic_ast_node_t* stmt_node = statement(fl);
 
-				//We now need to see a valid version
-				generic_ast_node_t* declaration_node = declaration(fl, FALSE);
-
-				//If it's invalid, we pass right through, no error printing
-				if(declaration_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-					//It's already an error, so just send it back up
-					return declaration_node;
-				}
-
-				//Otherwise it's worked just fine, so we'll add it in as a child
-				add_child_node(compound_stmt_node, declaration_node);
-				
-				break;
-	
-			//Definition of type or alias statement
-			case DEFINE:
-			case ALIAS:
-				//Put the token back
-				push_back_token(lookahead);
-
-				//Let's see if it worked
-				u_int8_t status = definition(fl);
-
-				//If we fail here we'll throw an error
-				if(status == FAILURE){
-					//Return an error node
-					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
-				}
-				
-				break;
-
-			default:
-				//Push it back
-				push_back_token(lookahead);
-
-				//We now need to see a valid statement
-				generic_ast_node_t* stmt_node = statement(fl);
-
-				//If it's null(which is possible) we just move along
-				if(stmt_node == NULL){
-					goto loop_end;
-				}
-
-				//If it's invalid we'll pass right through, no error printing
-				if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-					//Send it right back
-					return stmt_node;
-				}
-
-				//Otherwise, we'll add it as a child node
-				add_child_node(compound_stmt_node, stmt_node);
-
-				//Break out
-				break;
+		//If this is null, which is possible, we'll just move along
+		//to the next one
+		if(stmt_node == NULL){
+			//Refresh the lookahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
 		}
 
-	loop_end:
-		//Whatever happened, once we get here we need to refresh the lookahead
+		//If it's invalid we'll pass right through, no error printing
+		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Send it right back
+			return stmt_node;
+		}
+
+		//add it as a child node
+		add_child_node(compound_stmt_node, stmt_node);
+
+		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
@@ -6572,22 +6345,21 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
  * <defer-statement> ::= defer <compound statement>
  */
 static generic_ast_node_t* defer_statement(FILE* fl){
-	//Are we already inside of a defer statement? If we are,
-	//we'll want to fail out here
-	if(nesting_level != FN){
-		return print_and_return_error("Defer statements must be placed at the top level lexical scope in a function", parser_line_num);
-	}
-
-	//Set this to be clear that we're in a defer
-	nesting_level = DEFER;
-
-	//Set this flag to be true
-	in_defer = TRUE;
-
 	//For searching
 	lexitem_t lookahead;
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
+
+	//If we see any kind of invalid nesting here, we'll need to fail out. Defer
+	//statements can only be nested inside of a function, and nothing else. So, if
+	//the very first token that we see here is not a function, we're immediately
+	//failing out of this
+	if(peek_nesting_level(nesting_stack) != FUNCTION){
+		return print_and_return_error("Defer statements must be in the top lexical scope of a function", parser_line_num);
+	}
+
+	//Push this on as a nesting level
+	push_nesting_level(nesting_stack, DEFER_STATEMENT);
 
 	//Now if we see that this is NULL, we'll allocate here
 	if(deferred_stmts_node == NULL){
@@ -6605,11 +6377,8 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//Otherwise it was valid, so we have another child for this overall deferred statement
 	add_child_node(deferred_stmts_node, compound_stmt_node);
 
-	//Once we're out of here, we need to unset the flag for the future processing
-	nesting_level = FN;
-
-	//Unset this flag too
-	in_defer = FALSE;
+	//And pop it off now that we're done
+	pop_nesting_level(nesting_stack);
 
 	//And give back nothing, we're all set
 	return NULL;
@@ -6663,13 +6432,36 @@ static generic_ast_node_t* idle_statement(FILE* fl){
  */
 static generic_ast_node_t* statement(FILE* fl){
 	//Lookahead token
-	lexitem_t lookahead;
-
-	//Let's grab the next item and see what we have here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Switch based on the token
 	switch(lookahead.tok){
+		//Declare or let, we'll let that rule handle it
+		case DECLARE:
+		case LET:
+			//We'll let the actual rule handle it, so push the token back
+			push_back_token(lookahead);
+
+			//We now need to see a valid version
+			return declaration(fl, FALSE);
+
+		//Definition of type or alias statement
+		case DEFINE:
+		case ALIAS:
+			//Put the token back
+			push_back_token(lookahead);
+
+			//Let's see if it worked
+			u_int8_t status = definition(fl);
+
+			//If we fail here we'll throw an error
+			if(status == FAILURE){
+				//Return an error node
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+
+			return NULL;
+		
 		//If we see a label ident, we know we're seeing a labeled statement
 		case LABEL_IDENT:
 			//This rule relies on these tokens, so we'll push them back
@@ -6764,6 +6556,9 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
+	//Record that we're in a case statement in here
+	push_nesting_level(nesting_stack, CASE_STATEMENT);
+
 	//If we see default, we can just make the default node
 	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT, SIDE_TYPE_LEFT);
 
@@ -6776,16 +6571,19 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	}
 
 	//We now need to see a valid switch compound statement
-	generic_ast_node_t* switch_compound_stmt = switch_compound_statement(fl);
+	generic_ast_node_t* switch_compound_stmt = compound_statement(fl);
 
 	//If this is an error, we fail out
-	if(switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(switch_compound_stmt != NULL && switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
 		//Send it back up
 		return switch_compound_stmt;
 	}
 
 	//Otherwise, we add this in as a child
 	add_child_node(default_stmt, switch_compound_stmt);
+
+	//And pop it off now that we're done
+	pop_nesting_level(nesting_stack);
 
 	//Otherwise it all worked, so we'll just return
 	return default_stmt;
@@ -6803,6 +6601,9 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Push this onto the stack as a nesting level
+	push_nesting_level(nesting_stack, CASE_STATEMENT);
 	
 	//Remember that we've already seen the first "case" keyword here, so now we need
 	//to consume whatever comes after it(constant or enum value)
@@ -6959,16 +6760,19 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	}
 
 	//We'll let the helper deal with it
-	generic_ast_node_t* switch_compound_stmt = switch_compound_statement(fl);
+	generic_ast_node_t* switch_compound_stmt = compound_statement(fl);
 
 	//If this is an error, we fail out
-	if(switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(switch_compound_stmt != NULL && switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
 		//Send it back up
 		return switch_compound_stmt;
 	}
 
 	//Otherwise, we add this in as a child
 	add_child_node(case_stmt, switch_compound_stmt);
+
+	//And now that we're done, pop this off of the stack
+	pop_nesting_level(nesting_stack);
 
 	//Finally give this back
 	return case_stmt;
@@ -7675,9 +7479,12 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Are we defining something that's already been defined implicitly?
-	u_int8_t defining_prev_implicit = 0;
+	u_int8_t defining_prev_implicit = FALSE;
 	//Is it the main function?
-	u_int8_t is_main_function = 0;
+	u_int8_t is_main_function = FALSE;
+
+	//We also need to mark that we're in a function using the nesting stack
+	push_nesting_level(nesting_stack, FUNCTION);
 
 	//What is the function's storage class? Normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
@@ -8004,6 +7811,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		
 		//This function was not defined
 		function_record->defined = FALSE;
+
+		//Remove the nesting level now that we're not in a function
+		pop_nesting_level(nesting_stack);
 		
 		//Return NULL here
 		return NULL;
@@ -8014,9 +7824,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Some housekeeping, if there were previously deferred statements, we want them out
 		deferred_stmts_node = NULL;
-
-		//Set the root level indicator to function
-		nesting_level = FN;
 
 		//We are finally required to see a valid compound statement
 		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
@@ -8068,8 +7875,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Store the line number
 		function_node->line_number = current_line;
 
-		//Reset the nesting level
-		nesting_level = BLANK;
+		//Remove the nesting level now that we're not in a function
+		pop_nesting_level(nesting_stack);
 
 		//All good so we can get out
 		return function_node;
@@ -8401,7 +8208,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Initialize the OS call graph. This is because the OS always calls the main function
 	os = calloc(1, sizeof(call_graph_node_t));
-
 	
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
@@ -8421,6 +8227,11 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	if(grouping_stack == NULL){
 		grouping_stack = lex_stack_alloc();
+	}
+
+	//Create a stack for recording our depth
+	if(nesting_stack == NULL){
+		nesting_stack = nesting_stack_alloc();
 	}
 
 	//Global entry/run point, will give us a tree with
@@ -8450,6 +8261,10 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	results->num_warnings = num_warnings;
 	//How many lines did we process?
 	results->lines_processed = parser_line_num;
+
+	//Deallocate these when done
+	lex_stack_dealloc(&grouping_stack);
+	nesting_stack_dealloc(&nesting_stack);
 
 	//Close the file out
 	fclose(fl);
