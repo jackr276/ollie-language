@@ -30,7 +30,7 @@ three_addr_const_t* emitted_consts = NULL;
 /**
  * A helper function for our atomically increasing temp id
  */
-static int32_t increment_and_get_temp_id(){
+int32_t increment_and_get_temp_id(){
 	current_temp_id++;
 	return current_temp_id;
 }
@@ -520,36 +520,6 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	return var;
 }
 
-
-/**
- * Create and return a ternary variable. A ternary variable is halfway
- * between a temp and a full fledged non-temp variable. It will have a 
- * symtab record, and as such will be picked up by the phi function
- * inserted. It will also not be declared as temp
- */
-symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab){
-	//And here is the special part - we'll need to make a symtab record
-	//for this variable and add it in
-	char variable_name[100];
-	//Grab a new temp ar number from here
-	sprintf(variable_name, "t%d", increment_and_get_temp_id());
-
-	//Create and set the name here
-	dynamic_string_t string;
-	dynamic_string_alloc(&string);
-	dynamic_string_set(&string, variable_name);
-
-	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(string, STORAGE_CLASS_NORMAL);
-	//Store the type here
-	record->type_defined_as = type;
-
-	//Insert this into the variable symtab
-	insert_variable(variable_symtab, record);
-
-	//And give it back
-	return record;
-}
 
 
 /**

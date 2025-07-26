@@ -3305,7 +3305,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	basic_block_t* current_block = starting_block;
 
 	//Create the ternary variable here
-	symtab_variable_record_t* ternary_variable = create_ternary_variable(ternary_operation->inferred_type, variable_symtab);
+	symtab_variable_record_t* ternary_variable = create_ternary_variable(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
 
 	//Let's first create the final result variable here
 	three_addr_var_t* if_result = emit_var(ternary_variable, FALSE);
@@ -3391,13 +3391,13 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	//Now in the end block, we'll perform one final assignment for SSA reasons. We want to have a completely
 	//closed loop, and the ternary variable that we make here will not exist anywhere else. As such, we'll
 	//perform one final temp assignment in the end block
-	instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(final_result->type), final_result);
+	//instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(final_result->type), final_result);
 
 	//The final result counts as a used variable now
-	add_used_variable(end_block, final_result);
+	//add_used_variable(end_block, final_result);
 
 	//Add the final assignment in as our last statement in the end block
-	add_statement(end_block, final_assignment);
+	//add_statement(end_block, final_assignment);
 
 	//The direct successor of the starting block is the ending block
 	starting_block->direct_successor = end_block;
@@ -3406,7 +3406,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
 	//The final assignee is the temp var that we assigned to
-	return_package.assignee = final_assignment->assignee;
+	return_package.assignee =  final_result;//final_assignment->assignee;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 
@@ -3479,6 +3479,20 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 		
 		//Grab the assignee out
 		op1 = temp_assignment->assignee;
+
+	//If we have a ternary operation, we'll want to emit one temp assignment anyways to avoid violating SSA form
+	//} else if(left_side.operator == QUESTION){
+		//emit the temp assignment
+		//instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_side.assignee);
+		//Add it into here
+		//add_statement(current_block, temp_assignment);
+		
+		//We can mark that op1 was used
+		//add_used_variable(current_block, left_side.assignee);
+		
+		//Grab the assignee out
+		//op1 = temp_assignment->assignee;
+
 
 	//Otherwise the left hand temp assignee is just fine for us
 	} else {

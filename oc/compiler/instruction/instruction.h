@@ -534,6 +534,11 @@ struct instruction_t{
 };
 
 /**
+ * A helper function for our atomically increasing temp id
+ */
+int32_t increment_and_get_temp_id();
+
+/**
  * Insert an instruction in a block before the given instruction
  */
 void insert_instruction_before_given(instruction_t* insertee, instruction_t* given);
@@ -613,11 +618,6 @@ u_int8_t is_modulus_instruction(instruction_t* instruction);
  * Create and return a temporary variable
 */
 three_addr_var_t* emit_temp_var(generic_type_t* type);
-
-/**
- * Create a ternary variable record
- */
-symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab);
 
 /**
  * Create and return a temporary variable from a live range
