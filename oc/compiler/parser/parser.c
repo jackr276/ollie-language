@@ -5475,6 +5475,12 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
+	//Do we contain a defer at any point in here? If so, that is invalid because we already
+	//have a return. If this happens, we'll need to reject it
+	if(nesting_stack_contains_level(nesting_stack, DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Ret statements cannot be placed inside of defer blocks", parser_line_num);
+	}
+
 	//We can create the node now
 	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_CLASS_RET_STMT, SIDE_TYPE_LEFT);
 
@@ -6419,6 +6425,14 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 
+	//If we see any kind of invalid nesting here, we'll need to fail out. Defer
+	//statements can only be nested inside of a function, and nothing else. So, if
+	//the very first token that we see here is not a function, we're immediately
+	//failing out of this
+	if(peek_nesting_level(nesting_stack) != FUNCTION){
+		return print_and_return_error("Defer statements must be in the top lexical scope of a function", parser_line_num);
+	}
+
 	//Push this on as a nesting level
 	push_nesting_level(nesting_stack, DEFER_STATEMENT);
 
@@ -6632,10 +6646,10 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	}
 
 	//We now need to see a valid switch compound statement
-	generic_ast_node_t* switch_compound_stmt = switch_compound_statement(fl);
+	generic_ast_node_t* switch_compound_stmt = compound_statement(fl);
 
 	//If this is an error, we fail out
-	if(switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(switch_compound_stmt != NULL && switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
 		//Send it back up
 		return switch_compound_stmt;
 	}
@@ -6821,10 +6835,10 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	}
 
 	//We'll let the helper deal with it
-	generic_ast_node_t* switch_compound_stmt = switch_compound_statement(fl);
+	generic_ast_node_t* switch_compound_stmt = compound_statement(fl);
 
 	//If this is an error, we fail out
-	if(switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(switch_compound_stmt != NULL && switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
 		//Send it back up
 		return switch_compound_stmt;
 	}
