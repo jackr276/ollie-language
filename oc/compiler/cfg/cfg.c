@@ -4146,7 +4146,7 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
 static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//Just to double check
 	if(a == NULL){
-		print_cfg_message(PARSE_ERROR, "Fatal error. Attempting to merge null block", 0);
+		printf("Fatal error. Attempting to merge null block");
 		exit(1);
 	}
 
@@ -4550,12 +4550,6 @@ static statement_result_package_t visit_while_statement(values_package_t* values
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
 
-	//If it isn't, we'll error out. This is really only for dev use
-	if(ast_cursor->CLASS != AST_NODE_CLASS_COMPOUND_STMT){
-		print_cfg_message(PARSE_ERROR, "Found node that is not a compound statement in while-loop subtree", while_stmt_node->line_number);
-		exit(0);
-	}
-
 	//Create a copy of our values here
 	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	while_statement_entry_block, //Loop statement start
@@ -4567,10 +4561,6 @@ static statement_result_package_t visit_while_statement(values_package_t* values
 
 	//If it's null, that means that we were given an empty while loop here
 	if(compound_statement_results.starting_block == NULL){
-		//For the user to see
-		print_cfg_message(WARNING, "While loop has empty body, has no effect", while_stmt_node->line_number);
-		(*num_warnings_ref)++;
-
 		//We do still need to have our successor be the ending block
 		add_successor(while_statement_entry_block, while_statement_end_block);
 
@@ -4682,9 +4672,6 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 
 	//If this is null, it's fine, but we should throw a warning
 	} else {
-		print_cfg_message(WARNING, "Empty if clause in if-statement", cursor->line_number);
-		(*num_warnings_ref)++;
-
 		//We'll just set this to jump out of here
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
@@ -4760,9 +4747,6 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 
 		//If this is NULL, it's fine, but we should warn
 		} else {
-			print_cfg_message(WARNING, "Empty else-if clause in else-if-statement", cursor->line_number);
-			(*num_warnings_ref)++;
-
 			//We'll just set this to jump out of here
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
@@ -4789,8 +4773,6 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 
 		//If it's NULL, that's fine, we'll just throw a warning
 		if(else_compound_statement_values.starting_block == NULL){
-			print_cfg_message(WARNING, "Empty else clause in else-statement", cursor->line_number);
-			(*num_warnings_ref)++;
 			//We'll jump to the end here
 			add_successor(current_entry_block, exit_block);
 			//Emit a direct jump here
@@ -4978,9 +4960,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	if(values->initial_node->first_child == NULL){
 		//Ensure that the starting block's direct successor is the end block, for convenience
 		starting_block->direct_successor = ending_block;
-		//Print this message
-		print_cfg_message(WARNING, "Empty switch statement detected", values->initial_node->line_number);
-		(*num_warnings_ref)++;
 		//It's just going to be empty
 		return result_package;
 	}
@@ -5048,7 +5027,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 			//Otherwise we have some weird error, so we'll fail out
 			default:
-				print_cfg_message(PARSE_ERROR, "Switch statements are only allowed \"case\" and \"default\" statements", case_stmt_cursor->line_number);
 				exit(0);
 		}
 
