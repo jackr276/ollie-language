@@ -5107,9 +5107,15 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//Now we'll emit our jump
 	emit_jump(current, default_block, jump_greater_than, TRUE, FALSE);
 
+	//To avoid violating SSA rules, we'll emit a temporary assignment here
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
+
+	//Add it into the block
+	add_statement(current, temporary_variable_assignent);
+
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(current, emit_temp_var(input_result_type), input_results.assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(current, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:

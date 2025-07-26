@@ -5,7 +5,7 @@
 fn main(arg:i32, argv:char**) -> i32{
 	let mut x:i32 := 32;
 
-	switch(x){
+	switch(x * 3){
 		case 2 -> {
 			x := 32;
 		}
