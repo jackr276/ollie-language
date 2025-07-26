@@ -71,6 +71,11 @@ void push_nesting(nesting_stack_t* stack, nesting_level_t level);
 nesting_stack_status_t nesting_stack_is_empty(nesting_stack_t* nesting_stack);
 
 /**
+ * Perform a scan of the nesting stack to see if a given level is contained
+ */
+u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_level_t level);
+
+/**
  * Remove the top value of the stack
  */
 nesting_level_t pop_level(nesting_stack_t* stack);

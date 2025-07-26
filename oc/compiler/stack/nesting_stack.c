@@ -7,6 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+//For standardization across all modules
+#define TRUE 1
+#define FALSE 0
+
 /**
  * Create a stack
  */
@@ -97,6 +101,29 @@ nesting_level_t peek_level(nesting_stack_t* stack){
 
 	//Return the data pointer
 	return stack->top->level;
+}
+
+
+/**
+ * Perform a scan of the nesting stack to see if a given level is contained
+ */
+u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_level_t level){
+	//Grab a cursor to the current node
+	nesting_stack_node_t* current = nesting_stack->top;
+
+	//Run through the nesting stack from top to bottom
+	while(current != NULL){
+		//If these are equal then we're done, we've found it
+		if(current->level == level){
+			return TRUE;
+		}
+
+		//Otherwise we'll advance downwards
+		current = current->next;
+	}
+
+	//If we make it here, we didn't find it, so we're done
+	return FALSE;
 }
 
 
