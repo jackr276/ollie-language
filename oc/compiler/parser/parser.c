@@ -555,7 +555,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @<identifier>({<logical-or-expression>}?{, <logical-or-expression>}*)
+ * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*)
  */
 static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//The current line num
@@ -668,7 +668,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		current_function_param = function_record->func_params[num_params].associate_var;
 
 		//Parameters are in the form of a conditional expression
-		current_param = logical_or_expression(fl, side);
+		current_param = ternary_expression(fl, side);
 
 		//We now have an error of some kind
 		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -894,7 +894,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
  *
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
- * 									| (<logical-or-expression>)
+ * 									| (<ternary_expression>)
  * 									| sizeof(<logical-or-expression>)
  * 									| typesize(<type-name>)
  * 									| <function-call>
@@ -1005,8 +1005,8 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//We'll push it up to the stack for matching
 			push_token(grouping_stack, lookahead);
 
-			//We are now required to see a valid logical or expression expression
-			generic_ast_node_t* expr = logical_or_expression(fl, side);
+			//We are now required to see a valid ternary expression
+			generic_ast_node_t* expr = ternary_expression(fl, side);
 
 			//If it's an error, just give the node back
 			if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -1433,7 +1433,7 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
  *
  * We expect that the caller has given back the [ token for this rule
  *
- * BNF Rule: <array-accessor> ::= [ <logical-or-expression> ]
+ * BNF Rule: <array-accessor> ::= [ <ternary-expression> ]
  *
  */
 static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
@@ -1455,7 +1455,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 
 	//Now we are required to see a valid constant expression representing what
 	//the actual index is.
-	generic_ast_node_t* expr = logical_or_expression(fl, side);
+	generic_ast_node_t* expr = ternary_expression(fl, side);
 
 	//If we fail, automatic exit here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3434,7 +3434,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
  *
- * BNF Rule: <logical_or_expression> ? <ternary_expression> # <ternary_expression>
+ * BNF Rule: <logical_or_expression> ? <ternary_expression> else <ternary_expression>
  */
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//Declare the lookahead token
@@ -3456,6 +3456,8 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//back and return the conditional
 	if(lookahead.tok != QUESTION){
 		push_back_token(lookahead);
+
+		//We'll just give back whatever this was
 		return conditional;
 	}
 
@@ -3473,7 +3475,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	//The first child is the conditional
 	add_child_node(ternary_expression_node, conditional);
 
-	//We now must see another valid ternary
+	//We must now see a valid top level expression
 	generic_ast_node_t* if_branch = ternary_expression(fl, side);
 
 	//If this is invalid, then we bail out
@@ -3492,7 +3494,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 		return print_and_return_error("else expected between branches in ternary operator", parser_line_num);
 	}
 	
-	//We now must see another valid ternary
+	//We now must see another valid logical or expression 
 	generic_ast_node_t* else_branch = ternary_expression(fl, side);
 
 	//If this is invalid, then we bail out
@@ -3505,6 +3507,9 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 
 	//Determine the compatibility of these ternary nodes, and coerce it
 	ternary_expression_node->inferred_type = determine_compatibility_and_coerce(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type), QUESTION);
+
+	//A ternary is not assignable
+	ternary_expression_node->is_assignable = FALSE;
 
 	//Give back the parent level node
 	return ternary_expression_node;
@@ -7186,7 +7191,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Let's now check and see if this is mutable
 	if(lookahead.tok == MUT){
-		is_mutable = 1;
+		is_mutable = TRUE;
 	} else {
 		//Otherwise push this back
 		push_back_token(lookahead);

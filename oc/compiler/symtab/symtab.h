@@ -340,6 +340,11 @@ void finalize_type_scope(type_symtab_t* symtab);
 symtab_variable_record_t* create_variable_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);
 
 /**
+ * Create a ternary variable record
+ */
+symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+
+/**
  * Make a function record
  */
 symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);

@@ -1,4 +1,4 @@
-/**
+/*
  * The implementation file for all CFG related operations
  *
  * The CFG will translate the higher level code into something referred to as 
@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <sys/ucontext.h>
 #include "../queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
 
@@ -42,6 +43,8 @@ basic_block_t* function_exit_block = NULL;
 symtab_variable_record_t* stack_pointer = NULL;
 //Keep a variable for it too
 three_addr_var_t* stack_pointer_var = NULL;
+//Keep a record for the variable symtab
+variable_symtab_t* variable_symtab;
 //Store this for usage
 static generic_type_t* u64 = NULL;
 //The current stack offset for any given function
@@ -105,8 +108,8 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
 static statement_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
-static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
-static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
+static statement_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
+static statement_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
 static statement_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
@@ -2125,7 +2128,6 @@ static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, th
 	//Now we emit the offset multiplication
 	three_addr_var_t* total_offset = emit_binary_operation_with_constant(basic_block, offset, offset, STAR, type_size, is_branch_ending);
 
-
 	//Once we have the total offset, we add it to the base address
 	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), base_addr, PLUS, total_offset);
 	
@@ -2237,12 +2239,12 @@ static void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t*
 /**
  * Emit the abstract machine code for a return statement
  */
-static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
+static statement_result_package_t emit_return(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
 	//For holding our temporary return variable
-	statement_result_package_t package;
+	statement_result_package_t return_package = {basic_block, basic_block, NULL, BLANK};
 
-	//Is null by default
-	package.assignee = NULL;
+	//Keep track of a current block here for our purposes
+	basic_block_t* current = basic_block;
 
 	//This is what we'll be using to return
 	three_addr_var_t* return_variable = NULL;
@@ -2253,20 +2255,29 @@ static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u
 	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
 		//Perform the binary operation here
-		package = emit_expression(basic_block, ret_node->first_child, is_branch_ending, FALSE);
+		statement_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
+
+		//If we hit a ternary here, we'll need to reassign what our current block is
+		if(expression_package.final_block != NULL && expression_package.final_block != current){
+			//Assign current to be the new end
+			current = expression_package.final_block;
+
+			//The final block of the overall return chunk will be this
+			return_package.final_block = current;
+		}
 
 		//Emit the temp assignment
-		instruction_t* assn_stmt = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(expression_package.assignee->type), expression_package.assignee);
 
 		//If this isn't temporary, then it's being used
-		if(package.assignee->is_temporary == FALSE){
-			add_used_variable(basic_block, package.assignee);
+		if(expression_package.assignee->is_temporary == FALSE){
+			add_used_variable(basic_block, expression_package.assignee);
 		}
 
 		//Add it into the block
-		add_statement(basic_block, assn_stmt);
+		add_statement(current, assignment);
 		//The return variable is now what was assigned
-		return_variable	= assn_stmt->assignee;
+		return_variable	= assignment->assignee;
 	}
 
 	//We'll use the ret stmt feature here
@@ -2276,7 +2287,10 @@ static void emit_ret(basic_block_t* basic_block, generic_ast_node_t* ret_node, u
 	ret_stmt->is_branch_ending = is_branch_ending;
 
 	//Once it's been emitted, we'll add it in as a statement
-	add_statement(basic_block, ret_stmt);
+	add_statement(current, ret_stmt);
+
+	//Give back the results
+	return return_package;
 }
 
 
@@ -2658,26 +2672,29 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
-static three_addr_var_t* emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static statement_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//Initialize these results at first
+	statement_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->CLASS){
+		//In this case we'll only worry about the assignee
 		case AST_NODE_CLASS_IDENTIFIER:
-		 	return emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
+		 	result_package.assignee = emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
+			return result_package;
+
+		//Same in this case - just an assignee in basic block
 		case AST_NODE_CLASS_CONSTANT:
-			return emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
-		case AST_NODE_CLASS_TERNARY_EXPRESSION:
-			//FOR NOW
-			return emit_ternary_expression(basic_block, primary_parent, is_branch_ending).assignee;
-		case AST_NODE_CLASS_BINARY_EXPR:
-			return emit_binary_expression(basic_block, primary_parent, is_branch_ending).assignee;
+			result_package.assignee = emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
+			return result_package;
+
+		//This could potentially have ternaries - so we'll just return whatever is in here
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent, is_branch_ending);
-		//Something went wrong here if we're hitting the default rule
+
+		//By default, we're emitting some kind of expression here
 		default:
-			//Throw some error here, really this should never occur
-			print_parse_message(PARSE_ERROR, "Did not find identifier, constant, expression or function call in primary expression", primary_parent->line_number);
-			(*num_errors_ref)++;
-			exit(0);
+			return emit_expression(basic_block, primary_parent, is_branch_ending, FALSE);
 	}
 }
 
@@ -2733,11 +2750,20 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
  * that we could see. The two that we'll need to be concerned about are construct
  * and array access
  */
-static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//Our own return package - we may or may not use it
+	statement_result_package_t postfix_package = {basic_block, basic_block, NULL, BLANK};
+
 	//If this is itself not a postfix expression, we need to lose it here
 	if(postfix_parent->CLASS != AST_NODE_CLASS_POSTFIX_EXPR){
 		return emit_primary_expr_code(basic_block, postfix_parent, temp_assignment_required, is_branch_ending);
 	}
+
+	//We'll need to keep track of the current block - in case we hit expressions that expand blocks
+	basic_block_t* current = basic_block;
+
+	//We'll also keep track of our current variable
+	three_addr_var_t* current_var;
 
 	//We'll first want a cursor
 	generic_ast_node_t* cursor = postfix_parent->first_child;
@@ -2746,21 +2772,38 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 	side_type_t postfix_expr_side = cursor->side;
 
 	//We should always have a primary expression first. We'll first call the primary expression
-	three_addr_var_t* current_var = emit_primary_expr_code(basic_block, cursor, temp_assignment_required, is_branch_ending);
+	statement_result_package_t primary_package = emit_primary_expr_code(current, cursor, temp_assignment_required, is_branch_ending);
 
 	//Move the cursor along
 	cursor = cursor->next_sibling;
 
 	//This will happen a lot - we'll have nowhere else to go. When that happens,
-	//all we need to do is give back the first variable
+	//all that we need to do is return the primary package
 	if(cursor == NULL){
-		return current_var;
-	
+		return primary_package;
+	} 
+
+	//Otherwise we'll need to do some saving here
+
+	//The current variable is now his assignee
+	current_var = primary_package.assignee;
+
+	//If this happens, it means that we hit a ternary at some point, and need to reassign
+	if(primary_package.final_block != NULL && primary_package.final_block != current){
+		current = primary_package.final_block;
+
+		//This package's final block is now current
+		postfix_package.final_block = current;
+	}
+
 	//We could also go right into a terminal expression like a unary operator. If so
 	//handle it and then bail
-	} else if(cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
-		//Let the helper do it
-		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
+	if(cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
+		//We'll let our helper do it here
+		postfix_package.assignee = emit_postoperation_code(current, primary_package.assignee, cursor->unary_operator, temp_assignment_required, is_branch_ending);
+
+		//Now give back the postfix package
+		return postfix_package;
 	}
 
 	//If we get here we know that we have at least one construct/array access statement
@@ -2782,7 +2825,19 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 		//First of two potentialities is the array accessor
 		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
-			three_addr_var_t* offset = emit_binary_expression(basic_block, cursor->first_child, is_branch_ending).assignee;
+			statement_result_package_t expression_package = emit_expression(current, cursor->first_child, is_branch_ending, FALSE);
+
+			//If there is a difference in current and the final block, we'll reassign here
+			if(expression_package.final_block != NULL && current != expression_package.final_block){
+				//Set this to be at the end
+				current = expression_package.final_block;
+
+				//This is also the new final block
+				postfix_package.final_block = current;
+			}
+
+			//This is whatever was emitted by the expression
+			three_addr_var_t* offset = expression_package.assignee;
 			
 			//What is the internal type that we're pointing to? This will determine our scale
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
@@ -2791,6 +2846,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			} else {
 				//We'll dereference the current type
 				current_type = current_type->pointer_type->points_to;
+
 			}
 
 			/**
@@ -2805,16 +2861,16 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			if(current_address == NULL){
 				//Remember, we can only use lea if we have a power of 2 
 				if(is_power_of_2(current_type->type_size) == TRUE){
-					address = emit_lea(basic_block, current_var, offset, current_type, is_branch_ending);
+					address = emit_lea(current, current_var, offset, current_type, is_branch_ending);
 				} else {
-					address = emit_address_offset_calc(basic_block, current_var, offset, current_type, is_branch_ending);
+					address = emit_address_offset_calc(current, current_var, offset, current_type, is_branch_ending);
 				}
 			} else {
 				//Remember, we can only use lea if we have a power of 2 
 				if(is_power_of_2(current_type->type_size) == TRUE){
-					address = emit_lea(basic_block, current_address, offset, current_type, is_branch_ending);
+					address = emit_lea(current, current_address, offset, current_type, is_branch_ending);
 				} else {
-					address = emit_address_offset_calc(basic_block, current_address, offset, current_type, is_branch_ending);
+					address = emit_address_offset_calc(current, current_address, offset, current_type, is_branch_ending);
 				}
 			}
 
@@ -2830,7 +2886,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
 				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
-					current_var = emit_mem_code(basic_block, address);
+					current_var = emit_mem_code(current, address);
 					//It's a write
 					current_var->access_type = MEMORY_ACCESS_WRITE;
 
@@ -2841,7 +2897,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				//Otherwise we're dealing with a read
 				} else {
 					//Still emit the memory code
-					current_var = emit_mem_code(basic_block, address);
+					current_var = emit_mem_code(current, address);
 					//It's a read
 					current_var->access_type = MEMORY_ACCESS_READ;
 
@@ -2850,13 +2906,13 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 
 					//If the current var isn't temp, it's been used
 					if(current_var->is_temporary == FALSE){
-						add_used_variable(basic_block, current_var);
+						add_used_variable(current, current_var);
 					}
 
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
-					add_statement(basic_block, deref_stmt);
+					add_statement(current, deref_stmt);
 
 					//Update the current bar too
 					current_var = deref_stmt->assignee;
@@ -2879,11 +2935,11 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//If current var is a pointer, then we need to dereference it to get the actual construct type	
 			if(current_type->type_class == TYPE_CLASS_POINTER){
 				//We need to first dereference this
-				three_addr_var_t* dereferenced = emit_pointer_indirection(basic_block, current_var, current_type->pointer_type->points_to);
+				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->pointer_type->points_to);
 
 				//Assign temp to be the current address
 				instruction_t* assnment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
-				add_statement(basic_block, assnment);
+				add_statement(current, assnment);
 
 				//Reassign what current address really is
 				current_address = assnment->assignee;
@@ -2909,7 +2965,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 			//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 			//we've already gotten
 			if(current_address == NULL){
-				address = emit_construct_address_calculation(basic_block, current_var, offset, is_branch_ending);
+				address = emit_construct_address_calculation(current, current_var, offset, is_branch_ending);
 			} else {
 				address = emit_construct_address_calculation(basic_block, current_address, offset, is_branch_ending);
 			}
@@ -2922,7 +2978,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
 				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
-					current_var = emit_mem_code(basic_block, address);
+					current_var = emit_mem_code(current, address);
 					//It's a write
 					current_var->access_type = MEMORY_ACCESS_WRITE;
 
@@ -2933,7 +2989,7 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 				//Otherwise we're dealing with a read
 				} else {
 					//Still emit the memory code
-					current_var = emit_mem_code(basic_block, address);
+					current_var = emit_mem_code(current, address);
 					//It's a read
 					current_var->access_type = MEMORY_ACCESS_READ;
 
@@ -2942,13 +2998,13 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 
 					//If the current var isn't temp, it's been used
 					if(current_var->is_temporary == FALSE){
-						add_used_variable(basic_block, current_var);
+						add_used_variable(current, current_var);
 					}
 
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
-					add_statement(basic_block, deref_stmt);
+					add_statement(current, deref_stmt);
 
 					//Update the current bar too
 					current_var = deref_stmt->assignee;
@@ -2968,65 +3024,101 @@ static three_addr_var_t* emit_postfix_expr_code(basic_block_t* basic_block, gene
 
 	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
 	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
-		//Let the helper do it
-		return emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
+		//The helper can deal with this. Whatever it gives back is our assignee
+		postfix_package.assignee = emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 	} else {
-		return current_var;
+		//Our assignee here is the current var
+		postfix_package.assignee = current_var;
 	}
+
+	//Give back the package
+	return postfix_package;
 }
 
 
 /**
  * Handle a unary operator, in whatever form it may be
  */
-static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expr_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static statement_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Top level declarations to avoid using them in the switch statement
 	three_addr_var_t* dereferenced;
 	instruction_t* assignment;
 	three_addr_var_t* assignee;
+	//The unary expression package
+	statement_result_package_t unary_package = {NULL, NULL, NULL, BLANK};
+
+	//We'll keep track of what the current block here is
+	basic_block_t* current_block = basic_block;
 
 	//Extract the first child from the unary expression parent node
-	generic_ast_node_t* first_child = unary_expr_parent->first_child;
+	generic_ast_node_t* first_child = unary_expression_parent->first_child;
 
 	//Now that we've emitted the assignee, we can handle the specific unary operators
 	switch(first_child->unary_operator){
 		//Handle the case of a preincrement
 		case PLUSPLUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from our package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//If the assignee is not a pointer, we'll handle the normal case
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
 				//We really just have an "inc" instruction here
-				return emit_inc_code(basic_block, assignee, is_branch_ending);
+				unary_package.assignee = emit_inc_code(current_block, assignee, is_branch_ending);
 			//If we actually do have a pointer, we need the helper to deal with this
 			} else {
 				//Let the helper deal with this
-				return handle_pointer_arithmetic(basic_block, first_child->unary_operator, assignee, is_branch_ending);
+				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
 			}
+
+			//Give back the final unary package
+			return unary_package;
 
 		//Handle the case of a predecrement
 		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//If we have a basic type, we can use the regular process
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
 				//We really just have an "inc" instruction here
-				return emit_dec_code(basic_block, assignee, is_branch_ending);
+				unary_package.assignee = emit_dec_code(current_block, assignee, is_branch_ending);
 			//If we actually have a pointer, we'll let the helper deal with it
 			} else {
 				//Let the helper deal with this
-				return handle_pointer_arithmetic(basic_block, first_child->unary_operator, assignee, is_branch_ending);
+				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
 			}
+
+			//Give back the final unary package
+			return unary_package;
 
 		//Handle a dereference
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//Get the dereferenced variable
-			dereferenced = emit_pointer_indirection(basic_block, assignee, unary_expr_parent->inferred_type);
+			dereferenced = emit_pointer_indirection(current_block, assignee, unary_expression_parent->inferred_type);
 
 			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
@@ -3034,34 +3126,58 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
 				//Add it in
-				add_statement(basic_block, temp_assignment);
+				add_statement(current_block, temp_assignment);
 
-				//Return the assignee of this
-				return temp_assignment->assignee;
+				//This one's assignee is our overall assignee
+				unary_package.assignee = temp_assignment->assignee;
 
 			//Otherwise just give back what we had
 			} else {
-				return dereferenced;
+				//This one's assignee is just the dereferenced var
+				unary_package.assignee = dereferenced;
 			}
+
+			//Give back the final unary package
+			return unary_package;
 	
 		//Bitwise not operator
 		case B_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
 
-			//Let the helper handle it
-			return emit_bitwise_not_expr_code(basic_block, assignee, is_branch_ending);
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
+
+			//The new assignee will come from this helper
+			unary_package.assignee = emit_bitwise_not_expr_code(current_block, assignee, is_branch_ending);
+
+			//Give the package back
+			return unary_package;
 
 		//Logical not operator
 		case L_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
 
-			//Let the helper deal with it
-			return emit_logical_neg_stmt_code(basic_block, assignee, is_branch_ending);
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
+
+			//The new assignee will come from this helper
+			unary_package.assignee = emit_logical_neg_stmt_code(current_block, assignee, is_branch_ending);
+
+			//Give the package back
+			return unary_package;
 
 		/**
-		 * Negation operator
+		 * Arithmetic negation operator
 		 * x = -a;
 		 * t <- a;
 		 * negl t;
@@ -3071,17 +3187,27 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 		 */
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
 			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 
 			//Add this into the block
-			add_statement(basic_block, assignment);
+			add_statement(current_block, assignment);
 
 			//We will emit the negation code here
-			return emit_neg_stmt_code(basic_block, assignment->assignee, is_branch_ending);
+			unary_package.assignee =  emit_neg_stmt_code(basic_block, assignment->assignee, is_branch_ending);
+
+			//And give back the final value
+			return unary_package;
 
 		//Handle the case of the address operator
 		case SINGLE_AND:
@@ -3090,28 +3216,38 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
 			 * this unary expression as if it is on the left hand side. We cannot have temporary
 			 * variables in this assignee
 			 */
-			assignee = emit_unary_expression(basic_block, first_child->next_sibling, FALSE, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, FALSE, is_branch_ending);
+			//The assignee comes from the package
+			assignee = unary_package.assignee;
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
 
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
-			assignment = emit_memory_address_assignment(emit_temp_var(unary_expr_parent->inferred_type), assignee);
+			assignment = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), assignee);
 			assignment->is_branch_ending = is_branch_ending;
 
 			//We will count the assignee here as a used variable
-			add_used_variable(basic_block, assignee);
+			add_used_variable(current_block, assignee);
 
 			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
 			assignee->linked_var->must_be_spilled = TRUE;
 
 			//Add this into the block
-			add_statement(basic_block, assignment);
+			add_statement(current_block, assignment);
 
-			//Give back the assignee
-			return assignment->assignee;
+			//This assignee comes from the last assignment
+			unary_package.assignee = assignment->assignee;
+
+			//Give back the unary package
+			return unary_package;
 
 		//In reality we should never actually hit this, it's just there for the C compiler to be happy
 		default:
-			return NULL;
+			return unary_package;
 	}
 }
 
@@ -3122,7 +3258,7 @@ static three_addr_var_t* emit_unary_operation(basic_block_t* basic_block, generi
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static statement_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Switch based on what class this node actually is
 	switch(unary_expression->CLASS){
 		//If it's actually a unary expression, we can do some processing
@@ -3154,41 +3290,53 @@ static three_addr_var_t* emit_unary_expression(basic_block_t* basic_block, gener
  * 	cmove a, result
  * 	cmovne b, result
  */
-static statement_result_package_t emit_ternary_expression(basic_block_t* origin_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+static statement_result_package_t emit_ternary_expression(basic_block_t* starting_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
 	//Expression return package that we need
 	statement_result_package_t return_package;
-	//Mark that we had a ternary here
-	return_package.operator = QUESTION;
 
-	//The ending block for the whole thing
-	basic_block_t* end_block = basic_block_alloc(1);
 	//The if area block
 	basic_block_t* if_block = basic_block_alloc(1);
 	//And the else area block
 	basic_block_t* else_block = basic_block_alloc(1);
+	//The ending block for the whole thing
+	basic_block_t* end_block = basic_block_alloc(1);
+
+	//This block could change, so we'll need to keep track of it in a current block variable
+	basic_block_t* current_block = starting_block;
+
+	//Create the ternary variable here
+	symtab_variable_record_t* ternary_variable = create_ternary_variable(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
 
 	//Let's first create the final result variable here
-	three_addr_var_t* result = emit_temp_var(ternary_operation->inferred_type);
+	three_addr_var_t* if_result = emit_var(ternary_variable, FALSE);
+	three_addr_var_t* else_result = emit_var(ternary_variable, FALSE);
+	three_addr_var_t* final_result = emit_var(ternary_variable, FALSE);
 
 	//Grab a cursor to the first child
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
 	//Let's first process the conditional
-	statement_result_package_t package = emit_binary_expression(origin_block, cursor, is_branch_ending);
+	statement_result_package_t expression_package = emit_binary_expression(current_block, cursor, is_branch_ending);
+
+	//Let's see if we need to reassign
+	if(expression_package.final_block != NULL && expression_package.final_block != current_block){
+		//Reassign this to be at the true end
+		current_block = expression_package.final_block;
+	}
 
 	//The package's assignee is what we base all conditional moves on
-	u_int8_t is_signed = is_type_signed(package.assignee->type); 
+	u_int8_t is_signed = is_type_signed(expression_package.assignee->type); 
 
 	//Select the jump type for our conditional
-	jump_type_t jump = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_signed);
+	jump_type_t jump = select_appropriate_jump_stmt(expression_package.operator, JUMP_CATEGORY_NORMAL, is_signed);
 	
 	//Now we'll emit a jump to the if block and else block
-	emit_jump(origin_block, if_block, jump, is_branch_ending, FALSE);
-	emit_jump(origin_block, else_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
+	emit_jump(current_block, if_block, jump, is_branch_ending, FALSE);
+	emit_jump(current_block, else_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
 
 	//These are both now successors to the if block
-	add_successor(origin_block, if_block);
-	add_successor(origin_block, else_block);
+	add_successor(current_block, if_block);
+	add_successor(current_block, else_block);
 
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
@@ -3196,11 +3344,24 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* origin_
 	//Emit this in our new if block
 	statement_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending, TRUE);
 
+	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
+	if(if_branch.final_block != NULL && if_branch.final_block != if_block){
+		if_block = if_branch.final_block;
+	}
+
 	//We'll now create a conditional move for the if branch into the result
-	instruction_t* if_assignment = emit_assignment_instruction(result, if_branch.assignee);
+	instruction_t* if_assignment = emit_assignment_instruction(if_result, if_branch.assignee);
 
 	//Add this into the if block
 	add_statement(if_block, if_assignment);
+
+	//This counts as the result being assigned in the if block
+	add_assigned_variable(if_block, if_result);
+
+	//This counts as a use
+	if(if_branch.assignee->is_temporary == FALSE){
+		add_used_variable(if_block, if_branch.assignee);
+	}
 
 	//Now add a direct jump to the end
 	emit_jump(if_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
@@ -3211,11 +3372,24 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* origin_
 	//Emit this in our else block
 	statement_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending, TRUE);
 
+	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
+	if(else_branch.final_block != NULL && else_branch.final_block != else_block){
+		else_block = else_branch.final_block;
+	}
+
 	//We'll now create a conditional move for the else branch into the result
-	instruction_t* else_assignment = emit_assignment_instruction(result, else_branch.assignee);
+	instruction_t* else_assignment = emit_assignment_instruction(else_result, else_branch.assignee);
 
 	//Add this into the else block
 	add_statement(else_block, else_assignment);
+
+	//This counts as an assignment in the else block
+	add_assigned_variable(else_block, else_result);
+
+	//This counts as a use
+	if(else_branch.assignee->is_temporary == FALSE){
+		add_used_variable(else_block, else_branch.assignee);
+	}
 
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
@@ -3224,8 +3398,16 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* origin_
 	add_successor(if_block, end_block);
 	add_successor(else_block, end_block);
 
+	//The direct successor of the starting block is the ending block
+	starting_block->direct_successor = end_block;
+
+	//Add the final things in here
+	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
-	return_package.assignee = result;
+	//The final assignee is the temp var that we assigned to
+	return_package.assignee =  final_result;
+	//Mark that we had a ternary here
+	return_package.operator = QUESTION;
 
 	//Give back the result
 	return return_package;
@@ -3243,10 +3425,11 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* origin_
  */
 static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
 	//The return package here
-	statement_result_package_t package;
-	//Operator is blank by default
-	package.operator = BLANK;
+	statement_result_package_t package = {basic_block, basic_block, NULL, BLANK};
 
+	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
+	basic_block_t* current_block = basic_block;
+	
 	//Store the left and right hand types
 	generic_type_t* left_hand_type;
 	generic_type_t* right_hand_type;
@@ -3259,8 +3442,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	//Have we hit the so-called "root level" here? If we have, then we're just going to pass this
 	//down to another rule
 	if(logical_or_expr->CLASS != AST_NODE_CLASS_BINARY_EXPR){
-		package.assignee = emit_unary_expression(basic_block, logical_or_expr, FALSE, is_branch_ending);
-		return package;
+		return emit_unary_expression(current_block, logical_or_expr, FALSE, is_branch_ending);
 	}
 
 	//Otherwise, when we get here, we know that we have a binary expression of some kind
@@ -3273,24 +3455,15 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	left_hand_type = cursor->inferred_type;
 	
 	//Emit the binary expression on the left first
-	statement_result_package_t left_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
+	statement_result_package_t left_side = emit_binary_expression(current_block, cursor, is_branch_ending);
 
-	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
-	if(left_hand_temp.assignee->is_temporary == FALSE){
-		//emit the temp assignment
-		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_hand_temp.assignee);
-		//Add it into here
-		add_statement(basic_block, temp_assignment);
-		
-		//We can mark that op1 was used
-		add_used_variable(basic_block, left_hand_temp.assignee);
-		
-		//Grab the assignee out
-		op1 = temp_assignment->assignee;
+	//If these are different, then we'll need to reassign current
+	if(left_side.final_block != NULL && left_side.final_block != current_block){
+		//Reassign current
+		current_block = left_side.final_block;
 
-	//Otherwise the left hand temp assignee is just fine for us
-	} else {
-		op1 = left_hand_temp.assignee;
+		//This is also the new final block for the overall statement
+		package.final_block = current_block;
 	}
 
 	//Advance up here
@@ -3298,14 +3471,43 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	right_hand_type = cursor->inferred_type;
 
 	//Then grab the right hand temp
-	statement_result_package_t right_hand_temp = emit_binary_expression(basic_block, cursor, is_branch_ending);
+	statement_result_package_t right_side = emit_binary_expression(current_block, cursor, is_branch_ending);
+
+	//If these are different, then we'll need to reassign current
+	if(right_side.final_block != NULL && right_side.final_block != current_block){
+		//Reassign current
+		current_block = right_side.final_block;
+
+		//This is also the new final block for the overall statement
+		package.final_block = current_block;
+	}
+
+	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
+	if(left_side.assignee->is_temporary == FALSE){
+		//emit the temp assignment
+		instruction_t* left_side_temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_side.assignee);
+
+		//Add it into here
+		add_statement(current_block, left_side_temp_assignment);
+		
+		//We can mark that op1 was used
+		add_used_variable(current_block, left_side.assignee);
+
+		//Grab the assignee out
+		op1 = left_side_temp_assignment->assignee;
+
+	//Otherwise the left hand temp assignee is just fine for us
+	} else {
+		op1 = left_side.assignee;
+	}
+
+	//Grab this out for convenience
+	op2 = right_side.assignee;
 
 	//Let's see what binary operator that we have
 	Token binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
 	package.operator = binary_operator;
-	//Grab this out for convenience
-	op2 = right_hand_temp.assignee;
 
 	//Switch based on whatever operator that we have
 	switch(binary_operator){
@@ -3330,28 +3532,28 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	package.assignee = assignee;
 	
 	//Emit the binary operator expression using our helper
-	instruction_t* stmt = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
+	instruction_t* binary_operation = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
 
 	//If this isn't temporary, it's being assigned
 	if(assignee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, assignee);
+		add_assigned_variable(current_block, assignee);
 	}
 
 	//If these are not temporary, they're being used
 	if(op1->is_temporary == FALSE){
-		add_used_variable(basic_block, op1);
+		add_used_variable(current_block, op1);
 	}
 
 	//Same deal with this one
 	if(op2->is_temporary == FALSE){
-		add_used_variable(basic_block, op2);
+		add_used_variable(current_block, op2);
 	}
 
 	//Mark this with what we have
-	stmt->is_branch_ending = is_branch_ending;
+	binary_operation->is_branch_ending = is_branch_ending;
 
 	//Add this statement to the block
-	add_statement(basic_block, stmt);
+	add_statement(current_block, binary_operation);
 
 	//Return the temp variable that we assigned to
 	return package;
@@ -3368,7 +3570,10 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
 	//Declare and initialize the results
-	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	statement_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+
+	//Keep track of our current block - this may change as we go through this
+	basic_block_t* current_block = basic_block;
 
 	//We'll process based on the class of our expression node
 	switch(expr_node->CLASS){
@@ -3380,32 +3585,53 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			cursor = expr_node->first_child;
 
 			//Emit the left hand unary expression
-			three_addr_var_t* left_hand_var = emit_unary_expression(basic_block, cursor, FALSE, is_branch_ending);
+			statement_result_package_t unary_package = emit_unary_expression(current_block, cursor, FALSE, is_branch_ending);
+
+			//If this is different(which it could be), we'll reassign current
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				//Reassign current to be at the end
+				current_block = unary_package.final_block;
+
+				//And we now have a new final block
+				result_package.final_block = current_block;
+			}
+
+			//The left hand var is the final assignee of the unary statement
+			three_addr_var_t* left_hand_var = unary_package.assignee;
 
 			//Advance the cursor up
 			cursor = cursor->next_sibling;
 
 			//Now emit the right hand expression
-			statement_result_package_t package = emit_expression(basic_block, cursor, is_branch_ending, FALSE);
+			statement_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending, FALSE);
+
+			//Again, if this is different(which it could be), we'll reassign current
+			if(expression_package.final_block != NULL && expression_package.final_block != current_block){
+				//Reassign current to be at the end
+				current_block = expression_package.final_block;
+
+				//And we now have a new final block
+				expression_package.final_block = current_block;
+			}
 
 			//Finally we'll construct the whole thing
-			instruction_t* stmt = emit_assignment_instruction(left_hand_var, package.assignee);
+			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, expression_package.assignee);
 
 			//If this is not a temp var, then we can flag it as being assigned
 			if(left_hand_var->is_temporary == FALSE){
-				add_assigned_variable(basic_block, left_hand_var);
+				add_assigned_variable(current_block, left_hand_var);
 			}
 
 			//If the package's assignee is not temp, it counts as used
-			if(package.assignee->is_temporary == FALSE){
-				add_used_variable(basic_block, package.assignee);
+			if(expression_package.assignee->is_temporary == FALSE){
+				add_used_variable(current_block, expression_package.assignee);
 			}
 			
 			//Mark this with what was passed through
-			stmt->is_branch_ending = is_branch_ending;
+			final_assignment->is_branch_ending = is_branch_ending;
 
-			//Now add this statement in here
-			add_statement(basic_block, stmt);
+			//Now add thi statement in here
+			add_statement(current_block, final_assignment);
 
 			//Now pack the return value here
 			result_package.assignee = left_hand_var;
@@ -3415,17 +3641,15 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 	
 		case AST_NODE_CLASS_BINARY_EXPR:
 			//Emit the binary expression node
-			return emit_binary_expression(basic_block, expr_node, is_branch_ending);
+			return emit_binary_expression(current_block, expr_node, is_branch_ending);
 
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			//Emit the function call statement
-			result_package.assignee = emit_function_call(basic_block, expr_node, is_branch_ending);
-			return result_package;
+			return emit_function_call(current_block, expr_node, is_branch_ending);
 
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
 			//Emit the ternary expression
-			result_package.assignee = emit_ternary_expression(basic_block, expr_node, is_branch_ending).assignee;
-			return result_package;
+			 return emit_ternary_expression(basic_block, expr_node, is_branch_ending);
 
 		//Default is a unary expression
 		default:
@@ -3436,9 +3660,7 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			 * ensures that we have a conditional to read even if a user puts something like if(x)
 			*/
 			//Let this rule handle it
-			result_package.assignee = emit_unary_expression(basic_block, expr_node, is_condition, is_branch_ending);
-			//Again signedness is irrelevant here because any jumps would just be "je/jne"
-			return result_package;
+			return emit_unary_expression(basic_block, expr_node, is_condition, is_branch_ending);
 	}
 }
 
@@ -3447,9 +3669,15 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
  * Emit a function call node. In this iteration of a function call, we will still be parameterized, so the actual 
  * node will record what needs to be passed into the function
  */
-static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
+static statement_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
+	//Initially we'll emit this, though it may change
+ 	statement_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+
 	//Grab this out first
 	symtab_function_record_t* func_record = function_call_node->func_record;
+
+	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
+	basic_block_t* current = basic_block;
 
 	//The function's assignee
 	three_addr_var_t* assignee = NULL;
@@ -3485,7 +3713,17 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
-		statement_result_package_t package = emit_expression(basic_block, param_cursor, is_branch_ending, FALSE);
+		statement_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+
+		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
+		//to reassign
+		if(package.final_block != NULL && package.final_block != current){
+			//We've seen a ternary, reassign current
+			current = package.final_block;
+
+			//Reassign this as well, so that we stay current
+			result_package.final_block = current;
+		}
 
 		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
 		//registers before a function call
@@ -3493,11 +3731,11 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 
 		//If the package's assignee is not temporary, then this counts as a use
 		if(package.assignee->is_temporary == FALSE){
-			add_used_variable(basic_block, package.assignee);
+			add_used_variable(current, package.assignee);
 		}
 
 		//Add this to the block
-		add_statement(basic_block, assignment);
+		add_statement(current, assignment);
 
 		//Mark this
 		assignment->assignee->parameter_number = current_func_param_idx;
@@ -3514,7 +3752,7 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 
 	//Once we make it here, we should have all of the params stored in temp vars
 	//We can now add the function call statement in
-	add_statement(basic_block, func_call_stmt);
+	add_statement(current, func_call_stmt);
 
 	//We'll always have an assignment instruction
 	instruction_t* assignment;
@@ -3532,11 +3770,14 @@ static three_addr_var_t* emit_function_call(basic_block_t* basic_block, generic_
 		assignment->cannot_be_combined = TRUE;
 
 		//Add it in
-		add_statement(basic_block, assignment);
+		add_statement(current, assignment);
 	} 
 
+	//This is always the assignee we gave above
+	result_package.assignee = assignee;
+
 	//Give back what we assigned to
-	return assignee;
+	return result_package;
 }
 
 
@@ -4040,17 +4281,38 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 
 	//If the very first one is not blank
 	if(ast_cursor->first_child != NULL){
+		//Create this for our results here
+		statement_result_package_t first_child_result_package = {NULL, NULL, NULL, BLANK};
+
 		switch(ast_cursor->first_child->CLASS){
 			//We could have a let statement
 			case AST_NODE_CLASS_LET_STMT:
-				//TODO must be changed for ternary
-				merge_blocks(for_stmt_entry_block, visit_let_statement(ast_cursor->first_child, FALSE).starting_block);
+				//Let the subrule handle this
+				first_child_result_package = visit_let_statement(ast_cursor->first_child, FALSE);
+				//We'll need to merge the entry block here due to the way that let statements work
+				for_stmt_entry_block = merge_blocks(for_stmt_entry_block, first_child_result_package.starting_block);
+
+				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
+				//This is a special way of working things due to how let statements work
+				if(first_child_result_package.starting_block != first_child_result_package.final_block){
+				//Make this the new end
+					for_stmt_entry_block = first_child_result_package.final_block;
+				}
+		
 				break;
 			default:
-				//Add it's child in as a statement to the entry block
-				emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
+				//Let the subrule handle this
+				first_child_result_package = emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
+
+				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
+				if(first_child_result_package.final_block != NULL && first_child_result_package.final_block != for_stmt_entry_block){
+				//Make this the new end
+					for_stmt_entry_block = first_child_result_package.final_block;
+				}
+
+				break;
+			}
 		}
-	}
 
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
 	//The second and third condition in the for loop are the ones that execute continously. The third condition
@@ -4835,6 +5097,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//First step -> if we're below the minimum, we jump to default 
 	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
+	
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
@@ -4845,6 +5108,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Next step -> if we're above the maximum, jump to default
 	emit_binary_operation_with_constant(starting_block, package2.assignee, package2.assignee, G_THAN, upper_bound, TRUE);
+
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
@@ -4960,7 +5224,13 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 				}
 
 				//Emit the return statement, let the sub rule handle
-				emit_ret(current_block, ast_cursor, FALSE);
+			 	generic_results = emit_return(current_block, ast_cursor, FALSE);
+
+				//If this is the case, it means that we've hit a ternary at some point and need
+				//to reassign this final block
+				if(generic_results.final_block != NULL && generic_results.final_block != current_block){
+					current_block = generic_results.final_block;
+				}
 
 				//Destroy any/all successors of the current block. Once you have a return statement in a block, there
 				//can be no other successors
@@ -5552,18 +5822,13 @@ static statement_result_package_t visit_declaration_statement(generic_ast_node_t
  */
 static statement_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Create the return package here
-	statement_result_package_t let_results;
-
-	//We already know that there is no operator here
-	let_results.operator = BLANK;
+	statement_result_package_t let_results = {NULL, NULL, NULL, BLANK};
 
 	//What block are we emitting to?
-	basic_block_t* lead_block = basic_block_alloc(1);
+	basic_block_t* current_block = basic_block_alloc(1);
 
 	//We know that this will be the lead block
-	let_results.starting_block = lead_block;
-	//This is also the final block TODO FIX FOR TERNARY
-	let_results.final_block = lead_block;
+	let_results.starting_block = current_block;
 
 	//Let's grab the associated variable record here
 	symtab_variable_record_t* var = node->variable;
@@ -5572,24 +5837,34 @@ static statement_result_package_t visit_let_statement(generic_ast_node_t* node, 
  	three_addr_var_t* left_hand_var = emit_var(var, FALSE);
 
 	//This has been assigned to
-	add_assigned_variable(lead_block, left_hand_var);
+	add_assigned_variable(current_block, left_hand_var);
 
 	//The left hand var is our assigned var
 	let_results.assignee = left_hand_var;
 
 	//Now emit whatever binary expression code that we have
-	statement_result_package_t package = emit_expression(lead_block, node->first_child, is_branch_ending, FALSE);
+	statement_result_package_t package = emit_expression(current_block, node->first_child, is_branch_ending, FALSE);
+
+	//The current block here is whatever the final block in the package is 
+	if(package.final_block != NULL && package.final_block != current_block){
+		//We'll reassign this to be the final block. If this does happen, it means that
+		//at some point we had a ternary expression
+		current_block = package.final_block;
+	}
 
 	//The actual statement is the assignment of right to left
 	instruction_t* assignment_statement = emit_assignment_instruction(left_hand_var, package.assignee);
 
 	//If this is not temporary, then it counts as used
 	if(package.assignee->is_temporary == FALSE){
-		add_used_variable(lead_block, package.assignee);
+		add_used_variable(current_block, package.assignee);
 	}
 
 	//Finally we'll add this into the overall block
-	add_statement(lead_block, assignment_statement);
+	add_statement(current_block, assignment_statement);
+
+	//This is also the final block for now, unless a ternary comes along
+	let_results.final_block = current_block;
 
 	//Give the block back
 	return let_results;
@@ -5757,6 +6032,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 
 	//Add this in
 	type_symtab = results->type_symtab;
+	variable_symtab = results->variable_symtab;
 
 	//Keep this on hand
 	u64 = lookup_type_name_only(type_symtab, "u64")->type;

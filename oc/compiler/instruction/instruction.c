@@ -30,7 +30,7 @@ three_addr_const_t* emitted_consts = NULL;
 /**
  * A helper function for our atomically increasing temp id
  */
-static int32_t increment_and_get_temp_id(){
+int32_t increment_and_get_temp_id(){
 	current_temp_id++;
 	return current_temp_id;
 }
@@ -519,6 +519,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	//Finally we'll bail out
 	return var;
 }
+
 
 
 /**

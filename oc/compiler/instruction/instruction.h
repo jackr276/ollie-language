@@ -534,6 +534,11 @@ struct instruction_t{
 };
 
 /**
+ * A helper function for our atomically increasing temp id
+ */
+int32_t increment_and_get_temp_id();
+
+/**
  * Insert an instruction in a block before the given instruction
  */
 void insert_instruction_before_given(instruction_t* insertee, instruction_t* given);
