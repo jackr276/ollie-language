@@ -6329,7 +6329,15 @@ static generic_ast_node_t* switch_compound_statement(FILE* fl){
 		push_back_token(lookahead);
 		
 		//We now need to see a valid statement that is allowed inside of a case block
-		generic_ast_node_t* stmt_node = statement_in_block(fl);
+		generic_ast_node_t* stmt_node = statement(fl);
+
+		//If this is null, which is possible for define or alias statements,
+		//we'll just move along to the next one
+		if(stmt_node == NULL){
+			//Refresh the lookahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
 
 		//If it's invalid we'll pass right through, no error printing
 		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -6404,72 +6412,30 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 
 	//So long as we don't reach the end
 	while(lookahead.tok != R_CURLY){
-		//Switch based on the lookahead
-		switch(lookahead.tok){
-			//Declare or let, we'll let that rule handle it
-			case DECLARE:
-			case LET:
-				//We'll let the actual rule handle it, so push the token back
-				push_back_token(lookahead);
+		//Put whatever we saw back
+		push_back_token(lookahead);
+		
+		//We now need to see a valid statement that is allowed inside of a case block
+		generic_ast_node_t* stmt_node = statement(fl);
 
-				//We now need to see a valid version
-				generic_ast_node_t* declaration_node = declaration(fl, FALSE);
-
-				//If it's invalid, we pass right through, no error printing
-				if(declaration_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-					//It's already an error, so just send it back up
-					return declaration_node;
-				}
-
-				//Otherwise it's worked just fine, so we'll add it in as a child
-				add_child_node(compound_stmt_node, declaration_node);
-				
-				break;
-	
-			//Definition of type or alias statement
-			case DEFINE:
-			case ALIAS:
-				//Put the token back
-				push_back_token(lookahead);
-
-				//Let's see if it worked
-				u_int8_t status = definition(fl);
-
-				//If we fail here we'll throw an error
-				if(status == FAILURE){
-					//Return an error node
-					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
-				}
-				
-				break;
-
-			default:
-				//Push it back
-				push_back_token(lookahead);
-
-				//We now need to see a valid statement
-				generic_ast_node_t* stmt_node = statement(fl);
-
-				//If it's null(which is possible) we just move along
-				if(stmt_node == NULL){
-					goto loop_end;
-				}
-
-				//If it's invalid we'll pass right through, no error printing
-				if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-					//Send it right back
-					return stmt_node;
-				}
-
-				//Otherwise, we'll add it as a child node
-				add_child_node(compound_stmt_node, stmt_node);
-
-				//Break out
-				break;
+		//If this is null, which is possible, we'll just move along
+		//to the next one
+		if(stmt_node == NULL){
+			//Refresh the lookahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
 		}
 
-	loop_end:
-		//Whatever happened, once we get here we need to refresh the lookahead
+		//If it's invalid we'll pass right through, no error printing
+		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			//Send it right back
+			return stmt_node;
+		}
+
+		//add it as a child node
+		add_child_node(compound_stmt_node, stmt_node);
+
+		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
@@ -6663,13 +6629,36 @@ static generic_ast_node_t* idle_statement(FILE* fl){
  */
 static generic_ast_node_t* statement(FILE* fl){
 	//Lookahead token
-	lexitem_t lookahead;
-
-	//Let's grab the next item and see what we have here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Switch based on the token
 	switch(lookahead.tok){
+		//Declare or let, we'll let that rule handle it
+		case DECLARE:
+		case LET:
+			//We'll let the actual rule handle it, so push the token back
+			push_back_token(lookahead);
+
+			//We now need to see a valid version
+			return declaration(fl, FALSE);
+
+		//Definition of type or alias statement
+		case DEFINE:
+		case ALIAS:
+			//Put the token back
+			push_back_token(lookahead);
+
+			//Let's see if it worked
+			u_int8_t status = definition(fl);
+
+			//If we fail here we'll throw an error
+			if(status == FAILURE){
+				//Return an error node
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+
+			return NULL;
+		
 		//If we see a label ident, we know we're seeing a labeled statement
 		case LABEL_IDENT:
 			//This rule relies on these tokens, so we'll push them back
