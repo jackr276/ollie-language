@@ -777,6 +777,8 @@ void delete_statement(instruction_t* stmt){
  * Add a block to the dominance frontier of the first block
  */
 static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t* df_block){
+	printf("DF BLOCK: .L%d\n", df_block->block_id);
+
 	//If the dominance frontier hasn't been allocated yet, we'll do that here
 	if(block->dominance_frontier == NULL){
 		block->dominance_frontier = dynamic_array_alloc();
@@ -4984,11 +4986,23 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	values_package_t passing_values = *values;
 
 	//Keep a reference to whatever the current switch statement block is
-	basic_block_t* current_block = starting_block;
-
+	basic_block_t* current_block;
 	basic_block_t* case_block;
 	basic_block_t* default_block;
 	
+	//The current block, relative to the starting block
+	basic_block_t* root_level_block = starting_block;
+	
+	//Let's first emit the expression. This will at least give us an assignee to work with
+	statement_result_package_t input_results = emit_expression(root_level_block, expression_node, TRUE, TRUE);
+
+	//We could have had a ternary here, so we'll need to account for that possibility
+	if(input_results.final_block != NULL && root_level_block != input_results.final_block){
+		//Just reassign what current is
+		root_level_block = input_results.final_block;
+	}
+
+	//Wipe this out here just in case
 	statement_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
 
 	//Get to the next statement. This is the first actual case 
@@ -5034,7 +5048,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 		//Now we'll add this one into the overall structure
 		if(case_default_results.starting_block != NULL){
-			add_successor(starting_block, case_block);
+			add_successor(root_level_block, case_block);
 
 			//Now we'll drill down to the bottom to prime the next pass
 			current_block = case_default_results.final_block;
@@ -5068,20 +5082,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
 
-	//TODO NOT YET FULLY FUNCTIONAL
-	
-	//The current block, relative to the starting block
-	basic_block_t* current = starting_block;
-	
-	//Let's first emit the expression. This will at least give us an assignee to work with
-	statement_result_package_t input_results = emit_expression(current, expression_node, TRUE, TRUE);
-
-	//We could have had a ternary here, so we'll need to account for that possibility
-	if(input_results.final_block != NULL && current != input_results.final_block){
-		//Just reassign what current is
-		current = input_results.final_block;
-	}
-
 	/**
 	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
 	 * on the condition codes being set from the operation to take us through all three
@@ -5097,30 +5097,30 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(current, emit_temp_var(input_result_type), input_results.assignee, L_THAN, lower_bound, TRUE);
+	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, L_THAN, lower_bound, TRUE);
 
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
-	emit_jump(current, default_block, jump_lower_than, TRUE, FALSE);
+	emit_jump(root_level_block, default_block, jump_lower_than, TRUE, FALSE);
 
 	//Next step -> if we're above the maximum, jump to default
-	emit_binary_operation_with_constant(current, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
+	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
 
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
-	emit_jump(current, default_block, jump_greater_than, TRUE, FALSE);
+	emit_jump(root_level_block, default_block, jump_greater_than, TRUE, FALSE);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
 
 	//Add it into the block
-	add_statement(current, temporary_variable_assignent);
+	add_statement(root_level_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(current, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -5130,10 +5130,13 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	 * 	
 	 */
 	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(current, &(starting_block->jump_table), input, TRUE);
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, &(starting_block->jump_table), input, TRUE);
 
 	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump(current, address, JUMP_TYPE_JMP, TRUE);
+	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
+
+	//Ensure that we wire this in properly
+	//result_package.starting_block->direct_successor = result_package.final_block;
 
 	//Give back the starting block
 	return result_package;
