@@ -411,6 +411,10 @@ struct three_addr_var_t{
 	u_int32_t ssa_generation;
 	//What's the temp var number
 	u_int32_t temp_var_number;
+	//What's the reference count of this variable.
+	//This will be needed later on down the line in 
+	//the instruction selector
+	u_int32_t use_count;
 	//What is the indirection level
 	u_int16_t indirection_level;
 	//Is this a temp variable?

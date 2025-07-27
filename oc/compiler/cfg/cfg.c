@@ -337,6 +337,14 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * as live
  */
 static void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//Increment the use count of this variable, regardless of what it is
+	var->use_count++;
+
+	//If this is a temporary var, then we're done here, we'll simply bail out
+	if(var->is_temporary == TRUE){
+		return;
+	}
+
 	//If this is NULL, we'll need to allocate it
 	if(basic_block->used_variables == NULL){
 		basic_block->used_variables = dynamic_array_alloc();
@@ -2587,15 +2595,12 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
  * Emit a binary operation statement with a constant built in
  */
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending){
-	//If these variables are not temporary, then we have read from them
 	if(assignee->is_temporary == FALSE){
-		add_used_variable(basic_block, assignee);
+		add_assigned_variable(basic_block, assignee);
 	}
 
-	//Add this one in too
-	if(op1->is_temporary == FALSE){
-		add_used_variable(basic_block, assignee);
-	}
+	//Add op1 as a used variable
+	add_used_variable(basic_block, op1);
 
 	//First let's create it
 	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, op1, op, constant);
@@ -5101,6 +5106,8 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Next step -> if we're above the maximum, jump to default
 	emit_binary_operation_with_constant(current, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
+
+	printf("COUNT: %d\n\n\n", input_results.assignee->use_count);
 
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
