@@ -5107,8 +5107,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//Next step -> if we're above the maximum, jump to default
 	emit_binary_operation_with_constant(current, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
 
-	printf("COUNT: %d\n\n\n", input_results.assignee->use_count);
-
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
@@ -5139,50 +5137,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Give back the starting block
 	return result_package;
-
-	
-	/*
-	//The very first thing should be an expression telling us what to switch on
-	//There should be some kind of expression here
-	statement_result_package_t package1 = emit_expression(starting_block, expression_node, TRUE, TRUE);
-
-
-	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
-	
-	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
-	//Now we'll emit our jump
-	emit_jump(starting_block, default_block, jump_lower_than, TRUE, FALSE);
-
-	//Due to the way temp assignment works, we actually need to re-emit this whole thing
-	statement_result_package_t package2 = emit_expression(starting_block, expression_node, TRUE, TRUE);
-
-	//Next step -> if we're above the maximum, jump to default
-	emit_binary_operation_with_constant(starting_block, package2.assignee, package2.assignee, G_THAN, upper_bound, TRUE);
-
-	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
-	//Now we'll emit our jump
-	emit_jump(starting_block, default_block, jump_greater_than, TRUE, FALSE);
-
-	//Due to the way temp assignment works, we actually need to re-emit this whole thing
-	statement_result_package_t package3 = emit_expression(starting_block, expression_node, TRUE, TRUE);
-
-	//Now that all this is done, we can use our jump table for the rest
-	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(starting_block, package3.assignee, package3.assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
-
-	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(starting_block, &(starting_block->jump_table), input, TRUE);
-
-	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump(starting_block, address, JUMP_TYPE_JMP, TRUE);
-
-	//Give back the starting block
-	//
-	return result_package;
-	*/
 }
 
 
