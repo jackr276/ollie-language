@@ -40,7 +40,7 @@ jump_table_t* jump_table_alloc(u_int16_t size){
 	table->num_nodes = size;
 
 	//And initialize the dynamic array
-	table->nodes = dynamic_array_alloc();
+	table->nodes = dynamic_array_alloc_initial_size(size);
 
 	//And return a copy of this stack data
 	return table;

@@ -159,7 +159,7 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
 	//Return NULL here. It is the caller's responsibility
 	//to check this
-	if(array->current_index <= index){
+	if(array->current_max_size <= index){
 		return NULL;
 	}
 
