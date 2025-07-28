@@ -30,7 +30,7 @@ static int32_t increment_and_get_id(){
  * Allocate the jump table
  */
 jump_table_t* jump_table_alloc(u_int16_t size){
-	//Stack allocate
+	//Heap allocate
 	jump_table_t* table = calloc(1, sizeof(jump_table_t));
 
 	//Grab the ID for the table

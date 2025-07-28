@@ -4213,6 +4213,9 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	a->block_terminal_type = b->block_terminal_type;
 
+	//If b has a jump table, we'll need to add this in as well
+	a->jump_table = b->jump_table;
+
 	//If b executes more than A and it's now a part of A, we'll need to bump up A appropriately
 	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
 		a->estimated_execution_frequency = b->estimated_execution_frequency;
@@ -4882,10 +4885,7 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
 	//Declare and prepack our results
 	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
 
-	//We need to make the block first
-	basic_block_t* case_stmt = basic_block_alloc(1);
-	case_stmt->block_type = BLOCK_TYPE_CASE;
-
+	
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
 	//done by the parser, so we're guaranteed to see something
@@ -4893,37 +4893,43 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
 	
 	//The first child is our enum value
 	generic_ast_node_t* case_stmt_cursor = values->initial_node;
-	//Grab the value -- this should've already been done by the parser
-	case_stmt->case_stmt_val = case_stmt_cursor->case_statement_value;
 
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
 	values_package_t statement_values = *values;
+
 	//Only difference here is the starting place
 	statement_values.initial_node = case_stmt_cursor->first_child;
 
-	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
-	if(statement_values.initial_node != NULL){
-		//Let this take care of it
-		statement_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
+	//Let this take care of it
+	statement_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
 
+	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
+	if(case_compound_statement_results.starting_block != NULL){
 		//If we have an error(specifically, if this is non-null and a negative ID)
-		if(case_compound_statement_results.starting_block != NULL
-				&& case_compound_statement_results.starting_block->block_id == -1){
+		if(case_compound_statement_results.starting_block->block_id == -1){
 			return create_and_return_err();
 		}
 
 		//Once we get this back, we'll add it in to the main block
-		results.starting_block = merge_blocks(case_stmt, case_compound_statement_results.starting_block);
+		results.starting_block = case_compound_statement_results.starting_block;
 
-		//If these are different, then we reassign to the very end of the compound statement
-		if(case_compound_statement_results.starting_block != case_compound_statement_results.final_block
-			&& case_compound_statement_results.starting_block != NULL){
-			results.final_block = case_compound_statement_results.final_block;
-		//Otherwise start and end are the same
-		} else {
-			results.final_block = results.starting_block;
-		}
+		//Add this in as the final block
+		results.final_block = case_compound_statement_results.final_block;
+
+		//Be sure that we copy over the case statement value as well
+		results.starting_block->case_stmt_val = case_stmt_cursor->case_statement_value;
+
+	} else {
+		//We need to make the block first
+		basic_block_t* case_stmt = basic_block_alloc(1);
+
+		//Grab the value -- this should've already been done by the parser
+		case_stmt->case_stmt_val = case_stmt_cursor->case_statement_value;
+
+		//We'll set the front and end block to both be this
+		results.starting_block = case_stmt;
+		results.final_block = case_stmt;
 	}
 
 	//Give the block back
