@@ -70,7 +70,7 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	}
 
 	//If b is a switch statment start block, we'll copy the jump table
-	if(b->block_type == BLOCK_TYPE_SWITCH){
+	if(b->jump_table != NULL){
 		a->jump_table = b->jump_table;
 	}
 
@@ -116,11 +116,12 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 		//Run through the jump table and replace all of those targets as well. Most of the time,
 		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
 		//what will ensure that switch statements are not corrupted by the optimization process
-		for(u_int16_t idx = 0; idx < predecessor->jump_table.num_nodes; idx++){
+		for(u_int16_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
 			//If this equals the other node, we'll need to replace it
-			if(predecessor->jump_table.nodes[idx] == empty_block){
+			if(dynamic_array_get_at(predecessor->jump_table->nodes, idx) == empty_block){
 				//This now points to the replacement
-				predecessor->jump_table.nodes[idx] = replacement;
+				dynamic_array_set_at(predecessor->jump_table->nodes, replacement, idx);
+
 			}
 		}
 

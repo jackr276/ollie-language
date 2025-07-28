@@ -16,8 +16,8 @@
 */
 static void print_assembly_block(FILE* fl, basic_block_t* block){
 	//If this is some kind of switch block, we first print the jump table
-	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
-		print_jump_table(fl, &(block->jump_table));
+	if(block->jump_table != NULL){
+		print_jump_table(fl, block->jump_table);
 	}
 
 	//If it's a function entry block, we need to print this out

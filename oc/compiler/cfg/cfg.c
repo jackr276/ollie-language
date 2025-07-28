@@ -392,8 +392,8 @@ static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* 
 */
 static void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
 	//If this is some kind of switch block, we first print the jump table
-	if(block->jump_table.nodes != NULL){
-		print_jump_table(stdout, &(block->jump_table));
+	if(block->jump_table != NULL){
+		print_jump_table(stdout, block->jump_table);
 	}
 
 	//Print the block's ID or the function name
@@ -4011,7 +4011,7 @@ void basic_block_dealloc(basic_block_t* block){
 
 	//If this is a switch statement entry block, then it will have a jump table
 	if(block->block_type == BLOCK_TYPE_SWITCH){
-		jump_table_dealloc(&(block->jump_table));
+		jump_table_dealloc(block->jump_table);
 	}
 
 	//Grab a statement cursor here
@@ -5014,7 +5014,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
-				add_jump_table_entry(&(root_level_block->jump_table), case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
+				add_jump_table_entry(root_level_block->jump_table, case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
 				break;
 
 			//Handle a default statement
@@ -5056,10 +5056,10 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
 	//with the default value
-	for(u_int16_t _ = 0; _ < root_level_block->jump_table.num_nodes; _++){
+	for(u_int16_t _ = 0; _ < root_level_block->jump_table->num_nodes; _++){
 		//If it's null, we'll make it the default
-		if(root_level_block->jump_table.nodes[_] == NULL){
-			root_level_block->jump_table.nodes[_] = default_block;
+		if(dynamic_array_get_at(root_level_block->jump_table->nodes, _) == NULL){
+			dynamic_array_set_at(root_level_block->jump_table->nodes, default_block, _);
 		}
 	}
 
@@ -5120,7 +5120,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	 * 	
 	 */
 	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, &(root_level_block->jump_table), input, TRUE);
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, root_level_block->jump_table, input, TRUE);
 
 	//Now we'll emit the indirect jump to the address
 	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);

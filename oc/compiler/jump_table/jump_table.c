@@ -57,8 +57,8 @@ void add_jump_table_entry(jump_table_t* table, u_int16_t index, void* entry){
 		exit(1);
 	}
 
-	//We simply add in like this
-	table->nodes[index] = entry;
+	//Allow the API to set this accordingly
+	dynamic_array_set_at(table->nodes, entry, index);
 }
 
 
@@ -74,7 +74,7 @@ void print_jump_table(FILE* fl, jump_table_t* table){
 	//Now we'll run through and print out everything in the table's values
 	for(u_int16_t _ = 0; _ < table->num_nodes; _++){
 		//Each node is a basic block
-		basic_block_t* node = table->nodes[_];
+		basic_block_t* node = dynamic_array_get_at(table->nodes, _);
 
 		//Now we'll print it
 		fprintf(fl, "\t.quad\t.L%d\n", node->block_id);
@@ -90,10 +90,9 @@ void print_jump_table(FILE* fl, jump_table_t* table){
  * internal array
 */
 void jump_table_dealloc(jump_table_t* table){
-	//Just free the internal table, set to NULL as warnings
-	free(table->nodes);
-	
-	//Set these for the future
-	table->nodes = NULL;
-	table->num_nodes = 0;
+	//Deallocate the dynamic array
+	dynamic_array_dealloc(table->nodes);
+
+	//And we can free this structure as well
+	free(table);
 }
