@@ -4010,7 +4010,7 @@ void basic_block_dealloc(basic_block_t* block){
 	}
 
 	//If this is a switch statement entry block, then it will have a jump table
-	if(block->block_type == BLOCK_TYPE_SWITCH){
+	if(block->jump_table != NULL){
 		jump_table_dealloc(block->jump_table);
 	}
 
