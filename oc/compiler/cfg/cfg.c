@@ -4949,9 +4949,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//this is important for break statements
 	basic_block_t* ending_block = basic_block_alloc(1);
 
-	//Mark that this is a switch statement
-	starting_block->block_type = BLOCK_TYPE_SWITCH;
-
 	//We can already fill in the result package
 	result_package.starting_block = starting_block;
 	result_package.final_block = ending_block;
@@ -5001,6 +4998,10 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 		//Just reassign what current is
 		root_level_block = input_results.final_block;
 	}
+
+	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic
+	//will be happening
+	root_level_block->block_type = BLOCK_TYPE_SWITCH;
 
 	//Wipe this out here just in case
 	statement_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
