@@ -4834,14 +4834,6 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
 
 	//Grab a cursor to our default statement
 	generic_ast_node_t* default_stmt_cursor = values->initial_node;
-	//Create it. We assume that this happens once
-	basic_block_t* default_stmt = basic_block_alloc(1);
-	//Treated as case statements
-	default_stmt->block_type = BLOCK_TYPE_CASE;
-
-	//Prepackage these now
-	results.starting_block = default_stmt;
-	results.final_block = default_stmt;
 
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
@@ -4849,27 +4841,27 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
 	//Only difference here is the starting place
 	statement_values.initial_node = default_stmt_cursor->first_child;
 
-	//Let this take care of it
-	if(statement_values.initial_node != NULL){
-		statement_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
-	
+	//Grab the compound statement out of here
+	statement_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
+
+	//Let this take care of it if we have an actual compound statement here
+	if(default_compound_statement_results.starting_block != NULL){
 		//If we have an error
-		if(default_compound_statement_results.starting_block != NULL
-				&& default_compound_statement_results.starting_block->block_id == -1){
+		if(default_compound_statement_results.starting_block->block_id == -1) {
 			return create_and_return_err();
 		}
 
-		//Once we get this back, we'll add it in to the main block
-		results.starting_block = merge_blocks(default_stmt, default_compound_statement_results.starting_block);
+		//Otherwise, we'll just copy over the starting and ending block into our results
+		results.starting_block = default_compound_statement_results.starting_block;
+		results.final_block = default_compound_statement_results.final_block;
 
-		//If these are different, then we reassign to the very end of the compound statement
-		if(default_compound_statement_results.starting_block != default_compound_statement_results.final_block
-			&& default_compound_statement_results.starting_block != NULL){
-			results.final_block = default_compound_statement_results.final_block;
-		//Otherwise start and end are the same
-		} else {
-			results.final_block = results.starting_block;
-		}
+	} else {
+		//Create it. We assume that this happens once
+		basic_block_t* default_stmt = basic_block_alloc(1);
+
+		//Prepackage these now
+		results.starting_block = default_stmt;
+		results.final_block = default_stmt;
 	}
 
 	//Give the block back

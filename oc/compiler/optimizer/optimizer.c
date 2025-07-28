@@ -1209,6 +1209,18 @@ static void sweep(cfg_t* cfg){
 				//Perform the deletion and advancement
 				instruction_t* temp = stmt;
 
+				//If we are deleting an indirect jump address calculation statement,
+				//then this statements jump table is useless
+				if(temp->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+					//We'll need to deallocate this jump table
+					jump_table_dealloc(temp->jumping_to_block);
+
+					//We also want to flag this as null in the block that this statement
+					//comes from
+					basic_block_t* block = temp->block_contained_in; 
+					block->jump_table = NULL;
+				}
+
 				//If we have a stack pointer, this came from an allocation. We'll 
 				//need to update the stack accordingly if we're deleting this
 				if(temp->op1 != NULL && temp->op1->is_stack_pointer == TRUE){
