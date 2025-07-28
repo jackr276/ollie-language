@@ -12,6 +12,7 @@
 #include <strings.h>
 #include <sys/types.h>
 #include "../cfg/cfg.h"
+#include "../dynamic_array/dynamic_array.h"
 
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
 static int32_t current_jump_block_id = 0;
@@ -28,17 +29,18 @@ static int32_t increment_and_get_id(){
 /**
  * Allocate the jump table
  */
-jump_table_t jump_table_alloc(u_int16_t size){
+jump_table_t* jump_table_alloc(u_int16_t size){
 	//Stack allocate
-	jump_table_t table;
+	jump_table_t* table = calloc(1, sizeof(jump_table_t));
 
 	//Grab the ID for the table
-	table.jump_table_id = increment_and_get_id();
+	table->jump_table_id = increment_and_get_id();
 
-	//Now we dynamically allocate the array
-	table.nodes = calloc(sizeof(void*), size);
-	//Now we set the actual value
-	table.num_nodes = size;
+	//Set the number of nodes
+	table->num_nodes = size;
+
+	//And initialize the dynamic array
+	table->nodes = dynamic_array_alloc();
 
 	//And return a copy of this stack data
 	return table;

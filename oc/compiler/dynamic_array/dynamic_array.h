@@ -68,6 +68,14 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index);
 
 
 /**
+ * Set an element at a specified index. No check will be performed
+ * to see if the element is already there. Dynamic resize
+ * will be in effect here
+ */
+void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index);
+
+
+/**
  * Delete an element from the dynamic array at a given index. Returns
  * the element at said index
  */
