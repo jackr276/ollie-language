@@ -1505,7 +1505,9 @@ static void mark(cfg_t* cfg){
 			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
 
 			//If this is a switch statement block, then we'll simply mark everything
-			if(rdf_block->block_type == BLOCK_TYPE_SWITCH){
+			//We'll know it's a switch statement block based on whether or not we have an indirect jump here.
+			//Indirect jumps in Ollie are only ever used in switch statements
+			if(rdf_block->exit_statement->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
 				//Run through and mark everything in it
 				instruction_t* cursor = rdf_block->leader_statement;
 

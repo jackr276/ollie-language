@@ -392,7 +392,7 @@ static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* 
 */
 static void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
 	//If this is some kind of switch block, we first print the jump table
-	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
+	if(block->jump_table.nodes != NULL){
 		print_jump_table(stdout, &(block->jump_table));
 	}
 
@@ -777,8 +777,6 @@ void delete_statement(instruction_t* stmt){
  * Add a block to the dominance frontier of the first block
  */
 static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t* df_block){
-	printf("DF BLOCK: .L%d\n", df_block->block_id);
-
 	//If the dominance frontier hasn't been allocated yet, we'll do that here
 	if(block->dominance_frontier == NULL){
 		block->dominance_frontier = dynamic_array_alloc();
@@ -4956,23 +4954,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//We need a quick reference to the starting block ID
 	u_int16_t starting_block_id = starting_block->block_id;
 
-	//If this is empty, serious issue. The initial node already is
-	//a switch statement. Its first child is the expression inside of it
-	if(values->initial_node->first_child == NULL){
-		//Ensure that the starting block's direct successor is the end block, for convenience
-		starting_block->direct_successor = ending_block;
-		//It's just going to be empty
-		return result_package;
-	}
-
-	//Let's also allocate our jump table. We know how large the jump table needs to be from
-	//data passed in by the parser
-	starting_block->jump_table = jump_table_alloc(values->initial_node->upper_bound - values->initial_node->lower_bound + 1);
-
-	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
-	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
-	u_int32_t offset = values->initial_node->lower_bound - 0;
-
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 	
@@ -5002,6 +4983,14 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic
 	//will be happening
 	root_level_block->block_type = BLOCK_TYPE_SWITCH;
+	
+	//Let's also allocate our jump table. We know how large the jump table needs to be from
+	//data passed in by the parser
+	root_level_block->jump_table = jump_table_alloc(values->initial_node->upper_bound - values->initial_node->lower_bound + 1);
+
+	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
+	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
+	u_int32_t offset = values->initial_node->lower_bound - 0;
 
 	//Wipe this out here just in case
 	statement_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
@@ -5025,7 +5014,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
-				add_jump_table_entry(&(starting_block->jump_table), case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
+				add_jump_table_entry(&(root_level_block->jump_table), case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
 				break;
 
 			//Handle a default statement
@@ -5067,10 +5056,10 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
 	//with the default value
-	for(u_int16_t _ = 0; _ < starting_block->jump_table.num_nodes; _++){
+	for(u_int16_t _ = 0; _ < root_level_block->jump_table.num_nodes; _++){
 		//If it's null, we'll make it the default
-		if(starting_block->jump_table.nodes[_] == NULL){
-			starting_block->jump_table.nodes[_] = default_block;
+		if(root_level_block->jump_table.nodes[_] == NULL){
+			root_level_block->jump_table.nodes[_] = default_block;
 		}
 	}
 
@@ -5131,7 +5120,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	 * 	
 	 */
 	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, &(starting_block->jump_table), input, TRUE);
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, &(root_level_block->jump_table), input, TRUE);
 
 	//Now we'll emit the indirect jump to the address
 	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
