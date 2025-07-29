@@ -337,6 +337,14 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * as live
  */
 static void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//Increment the use count of this variable, regardless of what it is
+	var->use_count++;
+
+	//If this is a temporary var, then we're done here, we'll simply bail out
+	if(var->is_temporary == TRUE){
+		return;
+	}
+
 	//If this is NULL, we'll need to allocate it
 	if(basic_block->used_variables == NULL){
 		basic_block->used_variables = dynamic_array_alloc();
@@ -384,8 +392,8 @@ static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* 
 */
 static void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
 	//If this is some kind of switch block, we first print the jump table
-	if(block->block_type == BLOCK_TYPE_SWITCH || block->jump_table.nodes != NULL){
-		print_jump_table(stdout, &(block->jump_table));
+	if(block->jump_table != NULL){
+		print_jump_table(stdout, block->jump_table);
 	}
 
 	//Print the block's ID or the function name
@@ -2587,15 +2595,12 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
  * Emit a binary operation statement with a constant built in
  */
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending){
-	//If these variables are not temporary, then we have read from them
 	if(assignee->is_temporary == FALSE){
-		add_used_variable(basic_block, assignee);
+		add_assigned_variable(basic_block, assignee);
 	}
 
-	//Add this one in too
-	if(op1->is_temporary == FALSE){
-		add_used_variable(basic_block, assignee);
-	}
+	//Add op1 as a used variable
+	add_used_variable(basic_block, op1);
 
 	//First let's create it
 	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, op1, op, constant);
@@ -4005,8 +4010,8 @@ void basic_block_dealloc(basic_block_t* block){
 	}
 
 	//If this is a switch statement entry block, then it will have a jump table
-	if(block->block_type == BLOCK_TYPE_SWITCH){
-		jump_table_dealloc(&(block->jump_table));
+	if(block->jump_table != NULL){
+		jump_table_dealloc(block->jump_table);
 	}
 
 	//Grab a statement cursor here
@@ -4207,6 +4212,9 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	}
 
 	a->block_terminal_type = b->block_terminal_type;
+
+	//If b has a jump table, we'll need to add this in as well
+	a->jump_table = b->jump_table;
 
 	//If b executes more than A and it's now a part of A, we'll need to bump up A appropriately
 	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
@@ -4826,14 +4834,6 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
 
 	//Grab a cursor to our default statement
 	generic_ast_node_t* default_stmt_cursor = values->initial_node;
-	//Create it. We assume that this happens once
-	basic_block_t* default_stmt = basic_block_alloc(1);
-	//Treated as case statements
-	default_stmt->block_type = BLOCK_TYPE_CASE;
-
-	//Prepackage these now
-	results.starting_block = default_stmt;
-	results.final_block = default_stmt;
 
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
@@ -4841,27 +4841,27 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
 	//Only difference here is the starting place
 	statement_values.initial_node = default_stmt_cursor->first_child;
 
-	//Let this take care of it
-	if(statement_values.initial_node != NULL){
-		statement_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
-	
+	//Grab the compound statement out of here
+	statement_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
+
+	//Let this take care of it if we have an actual compound statement here
+	if(default_compound_statement_results.starting_block != NULL){
 		//If we have an error
-		if(default_compound_statement_results.starting_block != NULL
-				&& default_compound_statement_results.starting_block->block_id == -1){
+		if(default_compound_statement_results.starting_block->block_id == -1) {
 			return create_and_return_err();
 		}
 
-		//Once we get this back, we'll add it in to the main block
-		results.starting_block = merge_blocks(default_stmt, default_compound_statement_results.starting_block);
+		//Otherwise, we'll just copy over the starting and ending block into our results
+		results.starting_block = default_compound_statement_results.starting_block;
+		results.final_block = default_compound_statement_results.final_block;
 
-		//If these are different, then we reassign to the very end of the compound statement
-		if(default_compound_statement_results.starting_block != default_compound_statement_results.final_block
-			&& default_compound_statement_results.starting_block != NULL){
-			results.final_block = default_compound_statement_results.final_block;
-		//Otherwise start and end are the same
-		} else {
-			results.final_block = results.starting_block;
-		}
+	} else {
+		//Create it. We assume that this happens once
+		basic_block_t* default_stmt = basic_block_alloc(1);
+
+		//Prepackage these now
+		results.starting_block = default_stmt;
+		results.final_block = default_stmt;
 	}
 
 	//Give the block back
@@ -4877,10 +4877,7 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
 	//Declare and prepack our results
 	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
 
-	//We need to make the block first
-	basic_block_t* case_stmt = basic_block_alloc(1);
-	case_stmt->block_type = BLOCK_TYPE_CASE;
-
+	
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
 	//done by the parser, so we're guaranteed to see something
@@ -4888,37 +4885,43 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
 	
 	//The first child is our enum value
 	generic_ast_node_t* case_stmt_cursor = values->initial_node;
-	//Grab the value -- this should've already been done by the parser
-	case_stmt->case_stmt_val = case_stmt_cursor->case_statement_value;
 
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
 	values_package_t statement_values = *values;
+
 	//Only difference here is the starting place
 	statement_values.initial_node = case_stmt_cursor->first_child;
 
-	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
-	if(statement_values.initial_node != NULL){
-		//Let this take care of it
-		statement_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
+	//Let this take care of it
+	statement_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
 
+	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
+	if(case_compound_statement_results.starting_block != NULL){
 		//If we have an error(specifically, if this is non-null and a negative ID)
-		if(case_compound_statement_results.starting_block != NULL
-				&& case_compound_statement_results.starting_block->block_id == -1){
+		if(case_compound_statement_results.starting_block->block_id == -1){
 			return create_and_return_err();
 		}
 
 		//Once we get this back, we'll add it in to the main block
-		results.starting_block = merge_blocks(case_stmt, case_compound_statement_results.starting_block);
+		results.starting_block = case_compound_statement_results.starting_block;
 
-		//If these are different, then we reassign to the very end of the compound statement
-		if(case_compound_statement_results.starting_block != case_compound_statement_results.final_block
-			&& case_compound_statement_results.starting_block != NULL){
-			results.final_block = case_compound_statement_results.final_block;
-		//Otherwise start and end are the same
-		} else {
-			results.final_block = results.starting_block;
-		}
+		//Add this in as the final block
+		results.final_block = case_compound_statement_results.final_block;
+
+		//Be sure that we copy over the case statement value as well
+		results.starting_block->case_stmt_val = case_stmt_cursor->case_statement_value;
+
+	} else {
+		//We need to make the block first
+		basic_block_t* case_stmt = basic_block_alloc(1);
+
+		//Grab the value -- this should've already been done by the parser
+		case_stmt->case_stmt_val = case_stmt_cursor->case_statement_value;
+
+		//We'll set the front and end block to both be this
+		results.starting_block = case_stmt;
+		results.final_block = case_stmt;
 	}
 
 	//Give the block back
@@ -4933,7 +4936,7 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
  */
 static statement_result_package_t visit_switch_statement(values_package_t* values){
 	//Declare the result package off the bat
-	statement_result_package_t result_package;
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//The starting block for the switch statement - we'll want this in a new
 	//block
@@ -4942,35 +4945,9 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//this is important for break statements
 	basic_block_t* ending_block = basic_block_alloc(1);
 
-	//Mark that this is a switch statement
-	starting_block->block_type = BLOCK_TYPE_SWITCH;
-
 	//We can already fill in the result package
 	result_package.starting_block = starting_block;
 	result_package.final_block = ending_block;
-	//We know that these will both be empty
-	result_package.assignee = NULL;
-	result_package.operator = BLANK;
-
-	//We need a quick reference to the starting block ID
-	u_int16_t starting_block_id = starting_block->block_id;
-
-	//If this is empty, serious issue. The initial node already is
-	//a switch statement. Its first child is the expression inside of it
-	if(values->initial_node->first_child == NULL){
-		//Ensure that the starting block's direct successor is the end block, for convenience
-		starting_block->direct_successor = ending_block;
-		//It's just going to be empty
-		return result_package;
-	}
-
-	//Let's also allocate our jump table. We know how large the jump table needs to be from
-	//data passed in by the parser
-	starting_block->jump_table = jump_table_alloc(values->initial_node->upper_bound - values->initial_node->lower_bound + 1);
-
-	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
-	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
-	u_int32_t offset = values->initial_node->lower_bound - 0;
 
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
@@ -4982,11 +4959,35 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	values_package_t passing_values = *values;
 
 	//Keep a reference to whatever the current switch statement block is
-	basic_block_t* current_block = starting_block;
-
+	basic_block_t* current_block;
 	basic_block_t* case_block;
 	basic_block_t* default_block;
 	
+	//The current block, relative to the starting block
+	basic_block_t* root_level_block = starting_block;
+	
+	//Let's first emit the expression. This will at least give us an assignee to work with
+	statement_result_package_t input_results = emit_expression(root_level_block, expression_node, TRUE, TRUE);
+
+	//We could have had a ternary here, so we'll need to account for that possibility
+	if(input_results.final_block != NULL && root_level_block != input_results.final_block){
+		//Just reassign what current is
+		root_level_block = input_results.final_block;
+	}
+
+	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic
+	//will be happening
+	root_level_block->block_type = BLOCK_TYPE_SWITCH;
+	
+	//Let's also allocate our jump table. We know how large the jump table needs to be from
+	//data passed in by the parser
+	root_level_block->jump_table = jump_table_alloc(values->initial_node->upper_bound - values->initial_node->lower_bound + 1);
+
+	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
+	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
+	u_int32_t offset = values->initial_node->lower_bound - 0;
+
+	//Wipe this out here just in case
 	statement_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
 
 	//Get to the next statement. This is the first actual case 
@@ -5008,7 +5009,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
-				add_jump_table_entry(&(starting_block->jump_table), case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
+				add_jump_table_entry(root_level_block->jump_table, case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
 				break;
 
 			//Handle a default statement
@@ -5032,7 +5033,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 		//Now we'll add this one into the overall structure
 		if(case_default_results.starting_block != NULL){
-			add_successor(starting_block, case_block);
+			add_successor(root_level_block, case_block);
 
 			//Now we'll drill down to the bottom to prime the next pass
 			current_block = case_default_results.final_block;
@@ -5050,10 +5051,10 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
 	//with the default value
-	for(u_int16_t _ = 0; _ < starting_block->jump_table.num_nodes; _++){
+	for(u_int16_t _ = 0; _ < root_level_block->jump_table->num_nodes; _++){
 		//If it's null, we'll make it the default
-		if(starting_block->jump_table.nodes[_] == NULL){
-			starting_block->jump_table.nodes[_] = default_block;
+		if(dynamic_array_get_at(root_level_block->jump_table->nodes, _) == NULL){
+			dynamic_array_set_at(root_level_block->jump_table->nodes, default_block, _);
 		}
 	}
 
@@ -5065,39 +5066,46 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
-	
-	//The very first thing should be an expression telling us what to switch on
-	//There should be some kind of expression here
-	statement_result_package_t package1 = emit_expression(starting_block, expression_node, TRUE, TRUE);
 
-	//Unsigned by default
-	u_int8_t is_signed = is_type_signed(package1.assignee->type);
+	/**
+	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
+	 * on the condition codes being set from the operation to take us through all three
+	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
+	 * are in the range
+	 */
 
+	//Grab the type our for convenience
+	generic_type_t* input_result_type = input_results.assignee->type;
+
+	//Grab the signedness of the result
+	u_int8_t is_signed = is_type_signed(input_results.assignee->type);
+
+	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(starting_block, package1.assignee, package1.assignee, L_THAN, lower_bound, TRUE);
-	
+	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, L_THAN, lower_bound, TRUE);
+
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
-	emit_jump(starting_block, default_block, jump_lower_than, TRUE, FALSE);
-
-	//Due to the way temp assignment works, we actually need to re-emit this whole thing
-	statement_result_package_t package2 = emit_expression(starting_block, expression_node, TRUE, TRUE);
+	emit_jump(root_level_block, default_block, jump_lower_than, TRUE, FALSE);
 
 	//Next step -> if we're above the maximum, jump to default
-	emit_binary_operation_with_constant(starting_block, package2.assignee, package2.assignee, G_THAN, upper_bound, TRUE);
+	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
 
 	//If we are lower than this(regular jump), we will go to the default block
 	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
 	//Now we'll emit our jump
-	emit_jump(starting_block, default_block, jump_greater_than, TRUE, FALSE);
+	emit_jump(root_level_block, default_block, jump_greater_than, TRUE, FALSE);
 
-	//Due to the way temp assignment works, we actually need to re-emit this whole thing
-	statement_result_package_t package3 = emit_expression(starting_block, expression_node, TRUE, TRUE);
+	//To avoid violating SSA rules, we'll emit a temporary assignment here
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
+
+	//Add it into the block
+	add_statement(root_level_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(starting_block, package3.assignee, package3.assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -5105,14 +5113,15 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	 *
 	 * We have a special kind of statement for doing this
 	 * 	
-	 *
-	 * 	TODO an idea: we could replace this is a right shift by 3(just a thought)
 	 */
 	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(starting_block, &(starting_block->jump_table), input, TRUE);
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, root_level_block->jump_table, input, TRUE);
 
 	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump(starting_block, address, JUMP_TYPE_JMP, TRUE);
+	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
+
+	//Ensure that we wire this in properly
+	//result_package.starting_block->direct_successor = result_package.final_block;
 
 	//Give back the starting block
 	return result_package;

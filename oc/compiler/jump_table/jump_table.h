@@ -21,11 +21,11 @@ typedef struct jump_table_t jump_table_t;
  * to declare the range of values for the jump
 */
 struct jump_table_t{
-	//A list of all nodes. This list is guaranteed to always be sorted
-	void** nodes;
+	//The list of all nodes. This is internally a dynamic array
+	void* nodes;
 	//The default block
 	void* default_block;
-	//The number of nodes that we have
+	//The number of nodes
 	u_int16_t num_nodes;
 	//The ID of the jump table. Jump tables get IDs just like blocks, although
 	//these tables are distinct
@@ -35,7 +35,7 @@ struct jump_table_t{
 /**
  * Allocate the jump table
  */
-jump_table_t jump_table_alloc(u_int16_t size);
+jump_table_t* jump_table_alloc(u_int16_t size);
 
 /**
  * Insert an entry into the jump table. This will be used

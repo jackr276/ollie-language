@@ -70,7 +70,7 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	}
 
 	//If b is a switch statment start block, we'll copy the jump table
-	if(b->block_type == BLOCK_TYPE_SWITCH){
+	if(b->jump_table != NULL){
 		a->jump_table = b->jump_table;
 	}
 
@@ -116,11 +116,13 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 		//Run through the jump table and replace all of those targets as well. Most of the time,
 		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
 		//what will ensure that switch statements are not corrupted by the optimization process
-		for(u_int16_t idx = 0; idx < predecessor->jump_table.num_nodes; idx++){
-			//If this equals the other node, we'll need to replace it
-			if(predecessor->jump_table.nodes[idx] == empty_block){
-				//This now points to the replacement
-				predecessor->jump_table.nodes[idx] = replacement;
+		if(predecessor->jump_table != NULL){
+			for(u_int16_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
+				//If this equals the other node, we'll need to replace it
+				if(dynamic_array_get_at(predecessor->jump_table->nodes, idx) == empty_block){
+					//This now points to the replacement
+					dynamic_array_set_at(predecessor->jump_table->nodes, replacement, idx);
+				}
 			}
 		}
 
@@ -1207,6 +1209,18 @@ static void sweep(cfg_t* cfg){
 				//Perform the deletion and advancement
 				instruction_t* temp = stmt;
 
+				//If we are deleting an indirect jump address calculation statement,
+				//then this statements jump table is useless
+				if(temp->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+					//We'll need to deallocate this jump table
+					jump_table_dealloc(temp->jumping_to_block);
+
+					//We also want to flag this as null in the block that this statement
+					//comes from
+					basic_block_t* block = temp->block_contained_in; 
+					block->jump_table = NULL;
+				}
+
 				//If we have a stack pointer, this came from an allocation. We'll 
 				//need to update the stack accordingly if we're deleting this
 				if(temp->op1 != NULL && temp->op1->is_stack_pointer == TRUE){
@@ -1505,7 +1519,9 @@ static void mark(cfg_t* cfg){
 			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
 
 			//If this is a switch statement block, then we'll simply mark everything
-			if(rdf_block->block_type == BLOCK_TYPE_SWITCH){
+			//We'll know it's a switch statement block based on whether or not we have an indirect jump here.
+			//Indirect jumps in Ollie are only ever used in switch statements
+			if(rdf_block->exit_statement->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
 				//Run through and mark everything in it
 				instruction_t* cursor = rdf_block->leader_statement;
 
@@ -1755,7 +1771,7 @@ cfg_t* optimize(cfg_t* cfg){
 	//entire block. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
 	clean(cfg);
-
+	
 	//PASS 4: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	//etc. So, to remedy this, we will recalculate everything in the CFG

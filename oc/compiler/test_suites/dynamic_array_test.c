@@ -84,4 +84,41 @@ int main(){
 	
 	//Destroy it
 	dynamic_array_dealloc(array);
+
+	printf("\n================= TESTING SETTING =================\n");
+
+	//Allocate this one with an initial size
+	array = dynamic_array_alloc_initial_size(35);
+
+	for(int16_t i = 34; i >= 0; i--){
+		int* c = malloc(1 * sizeof(int));
+
+		if(i % 2 == 1){
+			*c = 1;
+		} else {
+			*c = 0;
+		}
+
+		dynamic_array_set_at(array, c, i);
+	}
+
+	printf("[");
+
+	for(u_int16_t i = 0; i < 35; i++){
+		int* value = dynamic_array_get_at(array, i);
+
+		if(value == NULL){
+			printf("(NULL)");
+		} else {
+			printf("%d", *value);
+		}
+
+		if(i != 34){
+			printf(", ");
+		}
+	}
+
+	printf("]\n");
+
+	dynamic_array_dealloc(array);
 }

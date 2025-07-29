@@ -37,6 +37,14 @@ dynamic_array_t* dynamic_array_alloc();
 
 
 /**
+ * Initialize a dynamic array with an initial
+ * size. This is useful if we already know
+ * the size we need
+ */
+dynamic_array_t* dynamic_array_alloc_initial_size(u_int16_t initial_size);
+
+
+/**
  * Create an exact clone of the dynamic array that we're given
  */
 dynamic_array_t* clone_dynamic_array(dynamic_array_t* array);
@@ -65,6 +73,14 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr);
  * Get an element at a specified index. Do not remove the element
  */
 void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index);
+
+
+/**
+ * Set an element at a specified index. No check will be performed
+ * to see if the element is already there. Dynamic resize
+ * will be in effect here
+ */
+void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index);
 
 
 /**
