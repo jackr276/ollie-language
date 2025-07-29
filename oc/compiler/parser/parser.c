@@ -5613,6 +5613,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	lexitem_t lookahead;
 	//By default we have not found one of these
 	u_int8_t found_default_clause = FALSE;
+	//Is this a c-style switch statement? By default, we assume it's not
+	u_int8_t is_c_style = FALSE;
 
 	//Once we get here, we can allocate the root level node
 	//NOTE: we may actually switch the class to a c-style switch statement here if we
@@ -5729,6 +5731,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 				//Handle a case statement here. We'll need to pass
 				//the node in because of the type checking that we do
 				stmt = case_statement(fl, switch_stmt_node, values);
+
 
 				//If it fails, then we're done
 				if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
