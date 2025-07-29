@@ -5749,7 +5749,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 						//not being a c-style switch statement, we have an error
 						//here
 						} else if(is_c_style == FALSE){
-							return print_and_return_error("C-style and Ollie-style case statements cannot be combined in the same switch statement", parser_line_num);
+							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
 						}
 
 						//Otherwise we should be set here, so break out
@@ -5767,7 +5767,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 						//Otherwise, if this has already been declared to be a c-style switch statement, then we're
 						//attempting to mix and match here. This is also an error
 						else if(is_c_style == TRUE){
-							return print_and_return_error("C-style and Ollie-style case statements cannot be combined in the same switch statement", parser_line_num);
+							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
 						}
 
 						//Otherwise we should be set here, so break out
@@ -5797,16 +5797,51 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 				//Handle a default statement
 				stmt = default_statement(fl);
 
-				//If it fails, then we're done
-				if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-					return stmt;
+				//Go based on what our class here
+				switch(stmt->CLASS){
+					//C-style default statement
+					case AST_NODE_CLASS_C_STYLE_DEFAULT_STMT:
+						//The -1 would mean that it's not been declared yet.
+						//As such, since this is the first thing that we're seeing,
+						//we'll set this to be TRUE
+						if(is_c_style == -1){
+							is_c_style = TRUE;
+
+						//Otherwise, if this has already been declared as
+						//not being a c-style switch statement, we have an error
+						//here
+						} else if(is_c_style == FALSE){
+							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
+						}
+
+						//Otherwise we should be set here, so break out
+						break;
+
+					//Regular ollie style default statement
+					case AST_NODE_CLASS_DEFAULT_STMT:
+						//The -1 would mean that it's not been declared yet.
+						//As such, since this is the first thing that we're seeing,
+						//we'll set this to be FALSE 
+						if(is_c_style == -1){
+							is_c_style = FALSE;
+						}
+
+						//Otherwise, if this has already been declared to be a c-style switch statement, then we're
+						//attempting to mix and match here. This is also an error
+						else if(is_c_style == TRUE){
+							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
+						}
+
+						//Otherwise we should be set here, so break out
+						break;
+
+					//It's already an error, just send it up
+					case AST_NODE_CLASS_ERR_NODE:
+						return stmt;
+					//We've hit some weird error here, so we'll bail out
+					default:
+						return print_and_return_error("Switch statements may only be occupied by \"case\" or default statements", parser_line_num);
 				}
-
-				//If it's a C-style switch statement, we'll need to flag the whole thing
-				if(stmt->CLASS == AST_NODE_CLASS_C_STYLE_DEFAULT_STMT){
-
-				}
-
 
 				//We've found it
 				found_default_clause = TRUE;
@@ -5832,6 +5867,12 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//If we have an entirely empty switch statement
 	if(is_empty == TRUE){
 		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
+	}
+
+	//If we do have a c-style switch statement here, we'll need to redefine the type
+	//that the origin switch node is
+	if(is_c_style == TRUE){
+		switch_stmt_node->CLASS = AST_NODE_CLASS_C_STYLE_SWITCH_STMT; 
 	}
 	
 	//By the time we reach this, we should have seen a right curly
