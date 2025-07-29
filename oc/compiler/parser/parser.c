@@ -5732,7 +5732,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 				//the node in because of the type checking that we do
 				stmt = case_statement(fl, switch_stmt_node, values);
 
-
 				//If it fails, then we're done
 				if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
 					return stmt;
@@ -5745,6 +5744,11 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 			//Handle the default case
 			case DEFAULT:
+				//Double default - this is invalid and will lead to a compiler error
+				if(found_default_clause == TRUE){
+					return print_and_return_error("Switch statements may only have one default clause", parser_line_num);
+				}
+
 				//Handle a default statement
 				stmt = default_statement(fl);
 
