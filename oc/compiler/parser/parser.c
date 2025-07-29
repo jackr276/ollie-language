@@ -6345,8 +6345,6 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
  * <defer-statement> ::= defer <compound statement>
  */
 static generic_ast_node_t* defer_statement(FILE* fl){
-	//For searching
-	lexitem_t lookahead;
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 

@@ -4949,9 +4949,6 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	result_package.starting_block = starting_block;
 	result_package.final_block = ending_block;
 
-	//We need a quick reference to the starting block ID
-	u_int16_t starting_block_id = starting_block->block_id;
-
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
 	
