@@ -73,6 +73,8 @@ typedef struct {
 	basic_block_t* loop_stmt_start;
 	//For break statements
 	basic_block_t* loop_stmt_end;
+	//For break statements inside of c-style switch
+	basic_block_t* switch_statement_end;
 	//For any time we need to do for-loop operations
 	basic_block_t* for_loop_update_block;
 } values_package_t;

@@ -5615,6 +5615,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	u_int8_t found_default_clause = FALSE;
 
 	//Once we get here, we can allocate the root level node
+	//NOTE: we may actually switch the class to a c-style switch statement here if we
+	//find a c-style node. All of our processing depends on what the first thing that we see
+	//looks like
 	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_CLASS_SWITCH_STMT, SIDE_TYPE_LEFT);
 
 	//We will find these throughout our search
@@ -6751,6 +6754,9 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Here is the area where we're able to differentiate between an ollie style case
+	//statement(-> {}) and a C-style case statement with fallthrough, etc.
 
 	//If we don't see one, we need to scrap it
 	if(lookahead.tok != ARROW){
