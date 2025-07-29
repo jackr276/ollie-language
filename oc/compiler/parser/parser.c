@@ -5613,8 +5613,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	lexitem_t lookahead;
 	//By default we have not found one of these
 	u_int8_t found_default_clause = FALSE;
-	//Is this a c-style switch statement? By default, we assume it's not
-	u_int8_t is_c_style = FALSE;
+	//Is this a c-style switch statement? By default, we have a -1 here for "no value"
+	int8_t is_c_style = -1;
 
 	//Once we get here, we can allocate the root level node
 	//NOTE: we may actually switch the class to a c-style switch statement here if we
@@ -5699,6 +5699,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		return print_and_return_error("Left curly brace expected after expression", current_line);
 	}
 
+	//We will declare a new lexical scope here
+	initialize_variable_scope(variable_symtab);
+
 	//Push to stack for later matching
 	push_token(grouping_stack, lookahead);
 
@@ -5732,11 +5735,53 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 				//the node in because of the type checking that we do
 				stmt = case_statement(fl, switch_stmt_node, values);
 
-				//If it fails, then we're done
-				if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-					return stmt;
+				//Go based on what our class here
+				switch(stmt->CLASS){
+					//C-style case statement
+					case AST_NODE_CLASS_C_STYLE_CASE_STMT:
+						//The -1 would mean that it's not been declared yet.
+						//As such, since this is the first thing that we're seeing,
+						//we'll set this to be TRUE
+						if(is_c_style == -1){
+							is_c_style = TRUE;
+
+						//Otherwise, if this has already been declared as
+						//not being a c-style switch statement, we have an error
+						//here
+						} else if(is_c_style == FALSE){
+							return print_and_return_error("C-style and Ollie-style case statements cannot be combined in the same switch statement", parser_line_num);
+						}
+
+						//Otherwise we should be set here, so break out
+						break;
+
+					//Regular ollie style case statement
+					case AST_NODE_CLASS_CASE_STMT:
+						//The -1 would mean that it's not been declared yet.
+						//As such, since this is the first thing that we're seeing,
+						//we'll set this to be FALSE 
+						if(is_c_style == -1){
+							is_c_style = FALSE;
+						}
+
+						//Otherwise, if this has already been declared to be a c-style switch statement, then we're
+						//attempting to mix and match here. This is also an error
+						else if(is_c_style == TRUE){
+							return print_and_return_error("C-style and Ollie-style case statements cannot be combined in the same switch statement", parser_line_num);
+						}
+
+						//Otherwise we should be set here, so break out
+						break;
+
+
+					//It's already an error, just send it up
+					case AST_NODE_CLASS_ERR_NODE:
+						return stmt;
+					//We've hit some weird error here, so we'll bail out
+					default:
+						return print_and_return_error("Switch statements may only be occupied by \"case\" or default statements", parser_line_num);
 				}
-			
+
 				//No longer empty
 				is_empty = FALSE;
 
@@ -5756,6 +5801,12 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 				if(stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
 					return stmt;
 				}
+
+				//If it's a C-style switch statement, we'll need to flag the whole thing
+				if(stmt->CLASS == AST_NODE_CLASS_C_STYLE_DEFAULT_STMT){
+
+				}
+
 
 				//We've found it
 				found_default_clause = TRUE;
@@ -5782,7 +5833,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	if(is_empty == TRUE){
 		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
 	}
-
 	
 	//By the time we reach this, we should have seen a right curly
 	//However, we could still have matching issues, so we'll check for that here
@@ -5792,6 +5842,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Return the line number
 	switch_stmt_node->line_number = current_line;
+
+	//Now that we're done, we will remove this variable scope
+	finalize_variable_scope(variable_symtab);
 
 	//If we make it here, all went well
 	return switch_stmt_node;
