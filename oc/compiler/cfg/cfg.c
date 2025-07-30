@@ -73,10 +73,10 @@ typedef struct {
 	basic_block_t* loop_stmt_start;
 	//For break statements
 	basic_block_t* loop_stmt_end;
-	//For break statements inside of c-style switch
-	basic_block_t* switch_statement_end;
 	//For any time we need to do for-loop operations
 	basic_block_t* for_loop_update_block;
+	//For break statements inside of c-style switch
+	basic_block_t* switch_statement_end;
 } cfg_parameter_package_t;
 
 
@@ -149,24 +149,6 @@ static u_int8_t is_power_of_2(int64_t value){
 	} else {
 		return FALSE;
 	}
-}
-
-
-/**
- * This is a very simple helper function that will pack values for us. This is done to avoid repeated code
- */
-static cfg_parameter_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* for_loop_update_block){
-	//Allocate it
-	cfg_parameter_package_t values;
-
-	//Pack with all of our values
-	values.initial_node = initial_node;
-	values.loop_stmt_start = loop_stmt_start;
-	values.loop_stmt_end = loop_stmt_end;
-	values.for_loop_update_block = for_loop_update_block;
-
-	//And give the copy back
-	return values;
 }
 
 
@@ -4366,11 +4348,8 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
 	
-	//Create a copy of our values here
-	cfg_parameter_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
-													 	condition_block, //Loop statement start -- for loops start at their condition
-													 	for_stmt_exit_block, //Exit block of loop
-													 	for_stmt_update_block); //For loop update block
+	//Create a copy of our values
+	cfg_parameter_package_t compound_stmt_values = {ast_cursor, condition_block, for_stmt_exit_block, for_stmt_update_block, NULL};
 
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
@@ -4457,10 +4436,7 @@ static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* va
 	generic_ast_node_t* ast_cursor = do_while_stmt_node->first_child;
 
 	//Create a copy of our values here
-	cfg_parameter_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
-													 	do_while_stmt_entry_block, //Loop statement start
-													 	do_while_stmt_exit_block, //Exit block of loop
-													 	NULL); //For loop update block
+	cfg_parameter_package_t compound_stmt_values = {ast_cursor, do_while_stmt_entry_block, do_while_stmt_exit_block, NULL, NULL};
 
 	//We go right into the compound statement here
 	cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
@@ -4561,10 +4537,7 @@ static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* value
 	ast_cursor = ast_cursor->next_sibling;
 
 	//Create a copy of our values here
-	cfg_parameter_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
-													 	while_statement_entry_block, //Loop statement start
-													 	while_statement_end_block, //Exit block of loop
-													 	NULL); //For loop update block
+	cfg_parameter_package_t compound_stmt_values = {ast_cursor, while_statement_entry_block, while_statement_end_block, NULL, NULL};
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
@@ -4650,11 +4623,9 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
 
-	//Create a copy of our values here
-	cfg_parameter_package_t if_compound_stmt_values = pack_values(cursor, //Initial Node
-													 	values->loop_stmt_start, //Loop statement start
-													 	values->loop_stmt_end, //Exit block of loop
-													 	values->for_loop_update_block); //For loop update block
+	//This is mostly the same, with the exception of the initial node
+	cfg_parameter_package_t if_compound_stmt_values = *values;
+	if_compound_stmt_values.initial_node = cursor;
 
 	//Visit the compound statement that we're required to have here
 	cfg_result_package_t if_compound_statement_results = visit_compound_statement(&if_compound_stmt_values);
@@ -4724,11 +4695,9 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
 
-		//For compound statement handling
-		cfg_parameter_package_t else_if_compound_stmt_values = pack_values(else_if_cursor, //Initial Node
-													 	values->loop_stmt_start, //Loop statement start
-													 	values->loop_stmt_end, //Exit block of loop
-													 	values->for_loop_update_block); //For loop update block
+		//These are almost identical, except for the initial node
+		cfg_parameter_package_t else_if_compound_stmt_values = *values;
+		values->initial_node = else_if_cursor;
 
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(&else_if_compound_stmt_values);
@@ -4772,11 +4741,9 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 		//Let's handle the compound statement
 		
-		//For compound statement handling
-		cfg_parameter_package_t else_compound_stmt_values = pack_values(cursor, //Initial Node
-													 	values->loop_stmt_start, //Loop statement start
-													 	values->loop_stmt_end, //Exit block of loop
-													 	values->for_loop_update_block); //For loop update block
+		//These are almost identical, with the exception of the initial node
+		cfg_parameter_package_t else_compound_stmt_values = *values;
+		else_compound_stmt_values.initial_node = cursor;
 
 		//Grab the compound statement
 		cfg_result_package_t else_compound_statement_values = visit_compound_statement(&else_compound_stmt_values);
@@ -5310,7 +5277,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 		
 			case AST_NODE_CLASS_IF_STMT:
 				//Pack the values up accordingly
-				generic_values = pack_values(ast_cursor, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
+				generic_values = *values;
+				generic_values.initial_node = ast_cursor;
 
 				//We'll now enter the if statement
 				generic_results = visit_if_statement(&generic_values);
@@ -5553,7 +5521,7 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 				//compound statements
 				while(defer_statement_cursor != NULL){
 					//Package the values
-					cfg_parameter_package_t values = pack_values(defer_statement_cursor, NULL, NULL, NULL);
+					cfg_parameter_package_t values = {defer_statement_cursor, NULL, NULL, NULL, NULL};
 
 					//Let the helper process this
 					cfg_result_package_t compound_statement_results = visit_compound_statement(&values);
@@ -5604,7 +5572,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 
 			case AST_NODE_CLASS_SWITCH_STMT:
 				//Pack our values up here
-				generic_values = pack_values(ast_cursor, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
+				generic_values = *values;
+				generic_values.initial_node = ast_cursor;
 
 				//Visit the switch statement
 				generic_results = visit_switch_statement(&generic_values);
@@ -5632,7 +5601,7 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 
 			case AST_NODE_CLASS_COMPOUND_STMT:
 				//Pack our values up
-				generic_values = pack_values(values->initial_node, values->loop_stmt_start, values->loop_stmt_end, values->for_loop_update_block);
+				generic_values = *values;
 
 				//We'll simply recall this function and let it handle it
 				generic_results = visit_compound_statement(&generic_values);
@@ -5772,11 +5741,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//It could be null, though it usually is not
 	if(func_cursor != NULL){
 		//Package the values up
-		cfg_parameter_package_t compound_stmt_values = pack_values(func_cursor, //Initial Node
-														NULL, //Loop statement start
-														NULL, //Exit block of loop
-														NULL); //For loop update block
-
+		cfg_parameter_package_t compound_stmt_values = {func_cursor, NULL, NULL, NULL, NULL};
+		//
 		//Once we get here, we know that func cursor is the compound statement that we want
 		cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
