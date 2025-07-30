@@ -4697,7 +4697,7 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 
 		//These are almost identical, except for the initial node
 		cfg_parameter_package_t else_if_compound_stmt_values = *values;
-		values->initial_node = else_if_cursor;
+		else_if_compound_stmt_values.initial_node = else_if_cursor;
 
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(&else_if_compound_stmt_values);
@@ -5302,7 +5302,7 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 
 			case AST_NODE_CLASS_WHILE_STMT:
 				//Pack the generic values up here
-				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+				generic_values = (cfg_parameter_package_t){ast_cursor, NULL, NULL, NULL, NULL};
 
 				//Visit the while statement
 				generic_results = visit_while_statement(&generic_values);
@@ -5325,7 +5325,7 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 
 			case AST_NODE_CLASS_DO_WHILE_STMT:
 				//Pack the generic values up here
-				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+				generic_values = (cfg_parameter_package_t){ast_cursor, NULL, NULL, NULL, NULL};
 
 				//Visit the statement
 				generic_results = visit_do_while_statement(&generic_values);
@@ -5348,7 +5348,7 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 
 			case AST_NODE_CLASS_FOR_STMT:
 				//Pack the generic values up here
-				generic_values = pack_values(ast_cursor, NULL, NULL, values->for_loop_update_block);
+				generic_values = (cfg_parameter_package_t){ast_cursor, NULL, NULL, NULL, NULL};
 
 				//First visit the statement
 				generic_results = visit_for_statement(&generic_values);
