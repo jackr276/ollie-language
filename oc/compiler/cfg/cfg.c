@@ -62,7 +62,7 @@ typedef struct{
 	three_addr_var_t* assignee;
 	//What operator was used, if any
 	Token operator;
-} statement_result_package_t;
+} cfg_result_package_t;
 
 
 //A package of values that each visit function uses
@@ -77,7 +77,7 @@ typedef struct {
 	basic_block_t* switch_statement_end;
 	//For any time we need to do for-loop operations
 	basic_block_t* for_loop_update_block;
-} values_package_t;
+} cfg_parameter_package_t;
 
 
 //Are we emitting the dominance frontier or not?
@@ -96,23 +96,23 @@ typedef enum{
 
 
 //We predeclare up here to avoid needing any rearrangements
-static statement_result_package_t visit_declaration_statement(generic_ast_node_t* node);
-static statement_result_package_t visit_compound_statement(values_package_t* values);
-static statement_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
-static statement_result_package_t visit_if_statement(values_package_t* values);
-static statement_result_package_t visit_while_statement(values_package_t* values);
-static statement_result_package_t visit_do_while_statement(values_package_t* values);
-static statement_result_package_t visit_for_statement(values_package_t* values);
-static statement_result_package_t visit_case_statement(values_package_t* values);
-static statement_result_package_t visit_default_statement(values_package_t* values);
-static statement_result_package_t visit_switch_statement(values_package_t* values);
+static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node);
+static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
+static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_case_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_default_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* values);
 
-static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
-static statement_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
-static statement_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
-static statement_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
-static statement_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
+static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
@@ -155,9 +155,9 @@ static u_int8_t is_power_of_2(int64_t value){
 /**
  * This is a very simple helper function that will pack values for us. This is done to avoid repeated code
  */
-static values_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* for_loop_update_block){
+static cfg_parameter_package_t pack_values(generic_ast_node_t* initial_node, basic_block_t* loop_stmt_start, basic_block_t* loop_stmt_end, basic_block_t* for_loop_update_block){
 	//Allocate it
-	values_package_t values;
+	cfg_parameter_package_t values;
 
 	//Pack with all of our values
 	values.initial_node = initial_node;
@@ -2249,9 +2249,9 @@ static void emit_assembly_inline(basic_block_t* basic_block, generic_ast_node_t*
 /**
  * Emit the abstract machine code for a return statement
  */
-static statement_result_package_t emit_return(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_node_t* ret_node, u_int8_t is_branch_ending){
 	//For holding our temporary return variable
-	statement_result_package_t return_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t return_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Keep track of a current block here for our purposes
 	basic_block_t* current = basic_block;
@@ -2265,7 +2265,7 @@ static statement_result_package_t emit_return(basic_block_t* basic_block, generi
 	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
 		//Perform the binary operation here
-		statement_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
+		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
 
 		//If we hit a ternary here, we'll need to reassign what our current block is
 		if(expression_package.final_block != NULL && expression_package.final_block != current){
@@ -2679,9 +2679,9 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
-static statement_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Initialize these results at first
-	statement_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->CLASS){
@@ -2757,9 +2757,9 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
  * that we could see. The two that we'll need to be concerned about are construct
  * and array access
  */
-static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Our own return package - we may or may not use it
-	statement_result_package_t postfix_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t postfix_package = {basic_block, basic_block, NULL, BLANK};
 
 	//If this is itself not a postfix expression, we need to lose it here
 	if(postfix_parent->CLASS != AST_NODE_CLASS_POSTFIX_EXPR){
@@ -2779,7 +2779,7 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 	side_type_t postfix_expr_side = cursor->side;
 
 	//We should always have a primary expression first. We'll first call the primary expression
-	statement_result_package_t primary_package = emit_primary_expr_code(current, cursor, temp_assignment_required, is_branch_ending);
+	cfg_result_package_t primary_package = emit_primary_expr_code(current, cursor, temp_assignment_required, is_branch_ending);
 
 	//Move the cursor along
 	cursor = cursor->next_sibling;
@@ -2832,7 +2832,7 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 		//First of two potentialities is the array accessor
 		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
-			statement_result_package_t expression_package = emit_expression(current, cursor->first_child, is_branch_ending, FALSE);
+			cfg_result_package_t expression_package = emit_expression(current, cursor->first_child, is_branch_ending, FALSE);
 
 			//If there is a difference in current and the final block, we'll reassign here
 			if(expression_package.final_block != NULL && current != expression_package.final_block){
@@ -3046,13 +3046,13 @@ static statement_result_package_t emit_postfix_expr_code(basic_block_t* basic_bl
 /**
  * Handle a unary operator, in whatever form it may be
  */
-static statement_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Top level declarations to avoid using them in the switch statement
 	three_addr_var_t* dereferenced;
 	instruction_t* assignment;
 	three_addr_var_t* assignee;
 	//The unary expression package
-	statement_result_package_t unary_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t unary_package = {NULL, NULL, NULL, BLANK};
 
 	//We'll keep track of what the current block here is
 	basic_block_t* current_block = basic_block;
@@ -3265,7 +3265,7 @@ static statement_result_package_t emit_unary_operation(basic_block_t* basic_bloc
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static statement_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Switch based on what class this node actually is
 	switch(unary_expression->CLASS){
 		//If it's actually a unary expression, we can do some processing
@@ -3297,9 +3297,9 @@ static statement_result_package_t emit_unary_expression(basic_block_t* basic_blo
  * 	cmove a, result
  * 	cmovne b, result
  */
-static statement_result_package_t emit_ternary_expression(basic_block_t* starting_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending){
 	//Expression return package that we need
-	statement_result_package_t return_package;
+	cfg_result_package_t return_package;
 
 	//The if area block
 	basic_block_t* if_block = basic_block_alloc(1);
@@ -3323,7 +3323,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	generic_ast_node_t* cursor = ternary_operation->first_child;
 
 	//Let's first process the conditional
-	statement_result_package_t expression_package = emit_binary_expression(current_block, cursor, is_branch_ending);
+	cfg_result_package_t expression_package = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//Let's see if we need to reassign
 	if(expression_package.final_block != NULL && expression_package.final_block != current_block){
@@ -3349,7 +3349,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	cursor = cursor->next_sibling;
 
 	//Emit this in our new if block
-	statement_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending, TRUE);
+	cfg_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	if(if_branch.final_block != NULL && if_branch.final_block != if_block){
@@ -3377,7 +3377,7 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
 	cursor = cursor->next_sibling;
 
 	//Emit this in our else block
-	statement_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending, TRUE);
+	cfg_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	if(else_branch.final_block != NULL && else_branch.final_block != else_block){
@@ -3430,9 +3430,9 @@ static statement_result_package_t emit_ternary_expression(basic_block_t* startin
  * For each binary expression, we compute
  *
  */
-static statement_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending){
 	//The return package here
-	statement_result_package_t package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t package = {basic_block, basic_block, NULL, BLANK};
 
 	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
 	basic_block_t* current_block = basic_block;
@@ -3462,7 +3462,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	left_hand_type = cursor->inferred_type;
 	
 	//Emit the binary expression on the left first
-	statement_result_package_t left_side = emit_binary_expression(current_block, cursor, is_branch_ending);
+	cfg_result_package_t left_side = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//If these are different, then we'll need to reassign current
 	if(left_side.final_block != NULL && left_side.final_block != current_block){
@@ -3478,7 +3478,7 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
 	right_hand_type = cursor->inferred_type;
 
 	//Then grab the right hand temp
-	statement_result_package_t right_side = emit_binary_expression(current_block, cursor, is_branch_ending);
+	cfg_result_package_t right_side = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//If these are different, then we'll need to reassign current
 	if(right_side.final_block != NULL && right_side.final_block != current_block){
@@ -3572,12 +3572,12 @@ static statement_result_package_t emit_binary_expression(basic_block_t* basic_bl
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static statement_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition){
+static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
 	//Declare and initialize the results
-	statement_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Keep track of our current block - this may change as we go through this
 	basic_block_t* current_block = basic_block;
@@ -3592,7 +3592,7 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			cursor = expr_node->first_child;
 
 			//Emit the left hand unary expression
-			statement_result_package_t unary_package = emit_unary_expression(current_block, cursor, FALSE, is_branch_ending);
+			cfg_result_package_t unary_package = emit_unary_expression(current_block, cursor, FALSE, is_branch_ending);
 
 			//If this is different(which it could be), we'll reassign current
 			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
@@ -3610,7 +3610,7 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
 			cursor = cursor->next_sibling;
 
 			//Now emit the right hand expression
-			statement_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending, FALSE);
+			cfg_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending, FALSE);
 
 			//Again, if this is different(which it could be), we'll reassign current
 			if(expression_package.final_block != NULL && expression_package.final_block != current_block){
@@ -3676,9 +3676,9 @@ static statement_result_package_t emit_expression(basic_block_t* basic_block, ge
  * Emit a function call node. In this iteration of a function call, we will still be parameterized, so the actual 
  * node will record what needs to be passed into the function
  */
-static statement_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
 	//Initially we'll emit this, though it may change
- 	statement_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+ 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Grab this out first
 	symtab_function_record_t* func_record = function_call_node->func_record;
@@ -3720,7 +3720,7 @@ static statement_result_package_t emit_function_call(basic_block_t* basic_block,
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
-		statement_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
 
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
@@ -4062,14 +4062,14 @@ void dealloc_cfg(cfg_t* cfg){
 /**
  * Helper for returning error blocks. Error blocks always have an ID of -1
  */
-static statement_result_package_t create_and_return_err(){
+static cfg_result_package_t create_and_return_err(){
 	//Create the error
 	basic_block_t* err_block = basic_block_alloc(1);
 	//Set the ID to -1
 	err_block->block_id = -1;
 
 	//Packaage and return the results
-	statement_result_package_t results = {err_block, err_block, NULL, BLANK};
+	cfg_result_package_t results = {err_block, err_block, NULL, BLANK};
 	return results;
 }
 
@@ -4265,9 +4265,9 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  * A for-statement is another kind of control flow construct. As always the direct successor is the path that reliably
  * leads us down and out
  */
-static statement_result_package_t visit_for_statement(values_package_t* values){
+static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values){
 	//Initialize the return package
-	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our entry block. The entry block also only executes once
 	basic_block_t* for_stmt_entry_block = basic_block_alloc(1);
@@ -4292,7 +4292,7 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	//If the very first one is not blank
 	if(ast_cursor->first_child != NULL){
 		//Create this for our results here
-		statement_result_package_t first_child_result_package = {NULL, NULL, NULL, BLANK};
+		cfg_result_package_t first_child_result_package = {NULL, NULL, NULL, BLANK};
 
 		switch(ast_cursor->first_child->CLASS){
 			//We could have a let statement
@@ -4339,7 +4339,7 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	ast_cursor = ast_cursor->next_sibling;
 
 	//The condition block values package
-	statement_result_package_t condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE, TRUE);
+	cfg_result_package_t condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE, TRUE);
 
 	//We'll use our inverse jumping("jump out") strategy here. We'll need this jump for later
 	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE, is_type_signed(condition_block_vals.assignee->type));
@@ -4367,14 +4367,14 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
 	ast_cursor = ast_cursor->next_sibling;
 	
 	//Create a copy of our values here
-	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
+	cfg_parameter_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	condition_block, //Loop statement start -- for loops start at their condition
 													 	for_stmt_exit_block, //Exit block of loop
 													 	for_stmt_update_block); //For loop update block
 
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
-	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
+	cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//If it's null, that's actually ok here
 	if(compound_statement_results.starting_block == NULL){
@@ -4432,9 +4432,9 @@ static statement_result_package_t visit_for_statement(values_package_t* values){
  * A do-while statement is a simple control flow construct. As always, the direct successor path is the path that reliably
  * leads us down and out
  */
-static statement_result_package_t visit_do_while_statement(values_package_t* values){
+static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* values){
 	//First we'll allocate the result block
-	statement_result_package_t result_package;
+	cfg_result_package_t result_package;
 
 	//Create our entry block. This in reality will be the compound statement
 	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
@@ -4457,13 +4457,13 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
 	generic_ast_node_t* ast_cursor = do_while_stmt_node->first_child;
 
 	//Create a copy of our values here
-	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
+	cfg_parameter_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	do_while_stmt_entry_block, //Loop statement start
 													 	do_while_stmt_exit_block, //Exit block of loop
 													 	NULL); //For loop update block
 
 	//We go right into the compound statement here
-	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
+	cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//If this is NULL, it means that we really don't have a compound statement there
 	if(compound_statement_results.starting_block == NULL){
@@ -4488,7 +4488,7 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
 	}
 
 	//Add the conditional check into the end here
-	statement_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
+	cfg_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -4526,9 +4526,9 @@ static statement_result_package_t visit_do_while_statement(values_package_t* val
  * A while statement is a very simple control flow construct. As always, the "direct successor" path is the path
  * that reliably leads us down and out
  */
-static statement_result_package_t visit_while_statement(values_package_t* values){
+static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* values){
 	//Initialize the result package
-	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our entry block
 	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
@@ -4555,19 +4555,19 @@ static statement_result_package_t visit_while_statement(values_package_t* values
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
 	//The entry block contains our expression statement
-	statement_result_package_t package = emit_expression(while_statement_entry_block, ast_cursor, TRUE, TRUE);
+	cfg_result_package_t package = emit_expression(while_statement_entry_block, ast_cursor, TRUE, TRUE);
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
 
 	//Create a copy of our values here
-	values_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
+	cfg_parameter_package_t compound_stmt_values = pack_values(ast_cursor, //Initial Node
 													 	while_statement_entry_block, //Loop statement start
 													 	while_statement_end_block, //Exit block of loop
 													 	NULL); //For loop update block
 
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
-	statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
+	cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 	//If it's null, that means that we were given an empty while loop here
 	if(compound_statement_results.starting_block == NULL){
@@ -4623,9 +4623,9 @@ static statement_result_package_t visit_while_statement(values_package_t* values
 /**
  * Process the if-statement subtree into CFG form
  */
-static statement_result_package_t visit_if_statement(values_package_t* values){
+static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 	//The statement result package for our if statement
-	statement_result_package_t result_package;
+	cfg_result_package_t result_package;
 
 	//We always have an entry block and an exit block. We assume initially that
 	//these both happen once
@@ -4645,19 +4645,19 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 	generic_ast_node_t* cursor = values->initial_node->first_child;
 
 	//Add whatever our conditional is into the starting block
-	statement_result_package_t package = emit_expression(entry_block, cursor, TRUE, TRUE);
+	cfg_result_package_t package = emit_expression(entry_block, cursor, TRUE, TRUE);
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
 
 	//Create a copy of our values here
-	values_package_t if_compound_stmt_values = pack_values(cursor, //Initial Node
+	cfg_parameter_package_t if_compound_stmt_values = pack_values(cursor, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->for_loop_update_block); //For loop update block
 
 	//Visit the compound statement that we're required to have here
-	statement_result_package_t if_compound_statement_results = visit_compound_statement(&if_compound_stmt_values);
+	cfg_result_package_t if_compound_statement_results = visit_compound_statement(&if_compound_stmt_values);
 
 	if(if_compound_statement_results.starting_block != NULL){
 		//Add the if statement node in as a direct successor
@@ -4725,13 +4725,13 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 		else_if_cursor = else_if_cursor->next_sibling;
 
 		//For compound statement handling
-		values_package_t else_if_compound_stmt_values = pack_values(else_if_cursor, //Initial Node
+		cfg_parameter_package_t else_if_compound_stmt_values = pack_values(else_if_cursor, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->for_loop_update_block); //For loop update block
 
 		//Let this handle the compound statement
-		statement_result_package_t else_if_compound_statement_results = visit_compound_statement(&else_if_compound_stmt_values);
+		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(&else_if_compound_stmt_values);
 
 		//If it's not null, we'll process fully
 		if(else_if_compound_statement_results.starting_block != NULL){
@@ -4773,13 +4773,13 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
 		//Let's handle the compound statement
 		
 		//For compound statement handling
-		values_package_t else_compound_stmt_values = pack_values(cursor, //Initial Node
+		cfg_parameter_package_t else_compound_stmt_values = pack_values(cursor, //Initial Node
 													 	values->loop_stmt_start, //Loop statement start
 													 	values->loop_stmt_end, //Exit block of loop
 													 	values->for_loop_update_block); //For loop update block
 
 		//Grab the compound statement
-		statement_result_package_t else_compound_statement_values = visit_compound_statement(&else_compound_stmt_values);
+		cfg_result_package_t else_compound_statement_values = visit_compound_statement(&else_compound_stmt_values);
 
 		//If it's NULL, that's fine, we'll just throw a warning
 		if(else_compound_statement_values.starting_block == NULL){
@@ -4826,9 +4826,9 @@ static statement_result_package_t visit_if_statement(values_package_t* values){
  * Visit a default statement.  These statements are also handled like individual blocks that can 
  * be jumped to
  */
-static statement_result_package_t visit_default_statement(values_package_t* values){
+static cfg_result_package_t visit_default_statement(cfg_parameter_package_t* values){
 	//Declare and prepack our results
-	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
 	//For a default statement, it performs very similarly to a case statement. 
 	//It will be handled slightly differently in the jump table, but we'll get to that 
@@ -4839,12 +4839,12 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
 
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
-	values_package_t statement_values = *values;
+	cfg_parameter_package_t statement_values = *values;
 	//Only difference here is the starting place
 	statement_values.initial_node = default_stmt_cursor->first_child;
 
 	//Grab the compound statement out of here
-	statement_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
+	cfg_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
 
 	//Let this take care of it if we have an actual compound statement here
 	if(default_compound_statement_results.starting_block != NULL){
@@ -4875,9 +4875,9 @@ static statement_result_package_t visit_default_statement(values_package_t* valu
  * Visit a case statement. It is very important that case statements know
  * where the end of the switch statement is, in case break statements are used
  */
-static statement_result_package_t visit_case_statement(values_package_t* values){
+static cfg_result_package_t visit_case_statement(cfg_parameter_package_t* values){
 	//Declare and prepack our results
-	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
 	
 	//The case statement should have some kind of constant value here, whether
@@ -4890,13 +4890,13 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
 
 	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
 	//any/all statements that are below it
-	values_package_t statement_values = *values;
+	cfg_parameter_package_t statement_values = *values;
 
 	//Only difference here is the starting place
 	statement_values.initial_node = case_stmt_cursor->first_child;
 
 	//Let this take care of it
-	statement_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
+	cfg_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
 
 	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
 	if(case_compound_statement_results.starting_block != NULL){
@@ -4936,9 +4936,9 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
  * and they don't inherently use compound statements. We'll need to account for both possibilities
  * in this rule
  */
-static statement_result_package_t visit_c_style_case_statement(values_package_t* values){
+static cfg_result_package_t visit_c_style_case_statement(cfg_parameter_package_t* values){
 	//Declare and initialize off the bat
-	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Give back the final results
 	return result_package;
@@ -4949,9 +4949,9 @@ static statement_result_package_t visit_c_style_case_statement(values_package_t*
  * and they don't inherently use compound statements. We'll need to account for both possibilities
  * in this rule
  */
-static statement_result_package_t visit_c_style_default_statement(values_package_t* values){
+static cfg_result_package_t visit_c_style_default_statement(cfg_parameter_package_t* values){
 	//Declare and initialize off the bat
-	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Give back the final results
 	return result_package;
@@ -4963,9 +4963,9 @@ static statement_result_package_t visit_c_style_default_statement(values_package
  * and the older C-version as well that allows break through. To keep the order true, ollie 
  * This rule is specifically for the c-style switch statements
  */
-static statement_result_package_t visit_c_style_switch_statement(values_package_t* values){
+static cfg_result_package_t visit_c_style_switch_statement(cfg_parameter_package_t* values){
 	//Declare and initialize off the bat
-	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Th starting and ending blocks for the switch statements
 	basic_block_t* starting_block = basic_block_alloc(1);
@@ -4988,9 +4988,9 @@ static statement_result_package_t visit_c_style_switch_statement(values_package_
  * the values here will not be reordered at all. Instead, they
  * will be put in the exact orientation that the user wants
  */
-static statement_result_package_t visit_switch_statement(values_package_t* values){
+static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* values){
 	//Declare the result package off the bat
-	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//The starting block for the switch statement - we'll want this in a new
 	//block
@@ -5009,7 +5009,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	generic_ast_node_t* expression_node = case_stmt_cursor;
 
 	//The values package that we have
-	values_package_t passing_values = *values;
+	cfg_parameter_package_t passing_values = *values;
 
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block;
@@ -5020,7 +5020,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	basic_block_t* root_level_block = starting_block;
 	
 	//Let's first emit the expression. This will at least give us an assignee to work with
-	statement_result_package_t input_results = emit_expression(root_level_block, expression_node, TRUE, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, expression_node, TRUE, TRUE);
 
 	//We could have had a ternary here, so we'll need to account for that possibility
 	if(input_results.final_block != NULL && root_level_block != input_results.final_block){
@@ -5041,7 +5041,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	u_int32_t offset = values->initial_node->lower_bound - 0;
 
 	//Wipe this out here just in case
-	statement_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
 
 	//Get to the next statement. This is the first actual case 
 	//statement
@@ -5195,13 +5195,13 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
  *
  * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
  */
-static statement_result_package_t visit_compound_statement(values_package_t* values){
+static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* values){
 	//Everything to begin with is completely null'd out
-	statement_result_package_t results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 	//A generic results package that we can use in any of our processing
-	statement_result_package_t generic_results;
+	cfg_result_package_t generic_results;
 	//Generic values that we can use 
-	values_package_t generic_values;
+	cfg_parameter_package_t generic_values;
 	//A defer statement cursor
 	generic_ast_node_t* defer_statement_cursor;
 
@@ -5444,7 +5444,7 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 				//Otherwise, we have a conditional continue here
 				} else {
 					//Emit the expression code into the current statement
-					statement_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
 					//Decide the appropriate jump statement -- direct path here
 					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
 
@@ -5521,7 +5521,7 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 					basic_block_t* new_block = basic_block_alloc(1);
 
 					//First let's emit the conditional code
-					statement_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
 
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
@@ -5553,10 +5553,10 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 				//compound statements
 				while(defer_statement_cursor != NULL){
 					//Package the values
-					values_package_t values = pack_values(defer_statement_cursor, NULL, NULL, NULL);
+					cfg_parameter_package_t values = pack_values(defer_statement_cursor, NULL, NULL, NULL);
 
 					//Let the helper process this
-					statement_result_package_t compound_statement_results = visit_compound_statement(&values);
+					cfg_result_package_t compound_statement_results = visit_compound_statement(&values);
 
 					//The successor to the current block is this block
 					//If it's null then this is this block
@@ -5772,13 +5772,13 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//It could be null, though it usually is not
 	if(func_cursor != NULL){
 		//Package the values up
-		values_package_t compound_stmt_values = pack_values(func_cursor, //Initial Node
+		cfg_parameter_package_t compound_stmt_values = pack_values(func_cursor, //Initial Node
 														NULL, //Loop statement start
 														NULL, //Exit block of loop
 														NULL); //For loop update block
 
 		//Once we get here, we know that func cursor is the compound statement that we want
-		statement_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
+		cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
 
 		//Once we're done with the compound statement, we will merge it into the function
 	 	basic_block_t* compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
@@ -5820,7 +5820,7 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 /**
  * Visit a declaration statement
  */
-static statement_result_package_t visit_declaration_statement(generic_ast_node_t* node){
+static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node){
 	//What block are we emitting into?
 	basic_block_t* emitted_block = NULL;
 
@@ -5847,7 +5847,7 @@ static statement_result_package_t visit_declaration_statement(generic_ast_node_t
 	}
 
 	//Declare the result package
-	statement_result_package_t result_package = {emitted_block, emitted_block, NULL, BLANK};
+	cfg_result_package_t result_package = {emitted_block, emitted_block, NULL, BLANK};
 
 	//Give the result package back
 	return result_package;
@@ -5857,9 +5857,9 @@ static statement_result_package_t visit_declaration_statement(generic_ast_node_t
 /**
  * Visit a let statement
  */
-static statement_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
+static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Create the return package here
-	statement_result_package_t let_results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t let_results = {NULL, NULL, NULL, BLANK};
 
 	//What block are we emitting to?
 	basic_block_t* current_block = basic_block_alloc(1);
@@ -5880,7 +5880,7 @@ static statement_result_package_t visit_let_statement(generic_ast_node_t* node, 
 	let_results.assignee = left_hand_var;
 
 	//Now emit whatever binary expression code that we have
-	statement_result_package_t package = emit_expression(current_block, node->first_child, is_branch_ending, FALSE);
+	cfg_result_package_t package = emit_expression(current_block, node->first_child, is_branch_ending, FALSE);
 
 	//The current block here is whatever the final block in the package is 
 	if(package.final_block != NULL && package.final_block != current_block){
@@ -5918,7 +5918,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	//Generic block holder
 	basic_block_t* block;
 	//The values that we have to pack
-	values_package_t values;
+	cfg_parameter_package_t values;
 
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
