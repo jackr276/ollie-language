@@ -6721,6 +6721,9 @@ static generic_ast_node_t* default_statement(FILE* fl){
 				lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 			}
 
+			//Push it back for something else to process
+			push_back_token(lookahead);
+
 			break;
 
 		//We've hit some kind of issue here
@@ -6950,6 +6953,9 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				//And refresh the token to keep processing
 				lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 			}
+
+			//Push it back for something else to process
+			push_back_token(lookahead);
 
 			break;
 
