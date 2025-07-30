@@ -6703,14 +6703,14 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//Switch compound statement node for later on
+	generic_ast_node_t* switch_compound_statement;
 
-	//Push this onto the stack as a nesting level
-	push_nesting_level(nesting_stack, CASE_STATEMENT);
-	
 	//Remember that we've already seen the first "case" keyword here, so now we need
 	//to consume whatever comes after it(constant or enum value)
 	
-	//Create the node
+	//Create the node. This could change later on based on whether we have a c-style switch
+	//statement or not
 	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT, SIDE_TYPE_LEFT);
 	
 	//Let's now lookahead and see if we have a valid constant or not
@@ -6856,25 +6856,61 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//Push this onto the stack as a nesting level
+	push_nesting_level(nesting_stack, CASE_STATEMENT);
+
 	//Here is the area where we're able to differentiate between an ollie style case
 	//statement(-> {}) and a C-style case statement with fallthrough, etc.
+	switch(lookahead.tok){
+		case ARROW:
+			//We'll let the helper deal with it
+			switch_compound_statement = compound_statement(fl);
 
-	//If we don't see one, we need to scrap it
-	if(lookahead.tok != ARROW){
-		return print_and_return_error("Arrow required after case statement", current_line);
+			//If this is an error, we fail out
+			if(switch_compound_statement != NULL && switch_compound_statement->CLASS == AST_NODE_CLASS_ERR_NODE){
+				//Send it back up
+				return switch_compound_statement;
+			}
+
+			//Otherwise, we add this in as a child
+			add_child_node(case_stmt, switch_compound_statement);
+			
+			//Head out of here
+			break;
+
+		//This now means that we're in a c-style case statement
+		case COLON:
+			//We'll need to reassign the value of the original case statement
+			case_stmt->CLASS = AST_NODE_CLASS_C_STYLE_CASE_STMT;
+			
+			//Grab the next token to do our search
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//So long as we don't see another case, another default, or an R-curly, we keep
+			//processing statements and adding them as children
+			while(lookahead.tok != CASE && lookahead.tok != DEFAULT && lookahead.tok != R_CURLY){
+				//Put the token back
+				push_back_token(lookahead);
+
+				//Process the next statement
+				generic_ast_node_t* child = statement(fl);
+
+				//If this is not null and in an error, we'll return that
+				if(child != NULL && child->CLASS == AST_NODE_CLASS_ERR_NODE){
+					return child;
+				}
+
+				//Otherwise, we'll add this as a child
+				add_child_node(case_stmt, child);
+
+				//And refresh the token to keep processing
+				lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			}
+
+		//We've hit some kind of issue here
+		default:
+			return print_and_return_error("-> or : required after case statement", parser_line_num);
 	}
-
-	//We'll let the helper deal with it
-	generic_ast_node_t* switch_compound_stmt = compound_statement(fl);
-
-	//If this is an error, we fail out
-	if(switch_compound_stmt != NULL && switch_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
-		//Send it back up
-		return switch_compound_stmt;
-	}
-
-	//Otherwise, we add this in as a child
-	add_child_node(case_stmt, switch_compound_stmt);
 
 	//And now that we're done, pop this off of the stack
 	pop_nesting_level(nesting_stack);
