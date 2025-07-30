@@ -4932,6 +4932,58 @@ static statement_result_package_t visit_case_statement(values_package_t* values)
 
 
 /**
+ * Visit a C-style case statement. These statements do allow the possibility breaks being issued,
+ * and they don't inherently use compound statements. We'll need to account for both possibilities
+ * in this rule
+ */
+static statement_result_package_t visit_c_style_case_statement(values_package_t* values){
+	//Declare and initialize off the bat
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+
+	//Give back the final results
+	return result_package;
+}
+
+/**
+ * Visit a C-style default statement. These statements do allow the possibility breaks being issued,
+ * and they don't inherently use compound statements. We'll need to account for both possibilities
+ * in this rule
+ */
+static statement_result_package_t visit_c_style_default_statement(values_package_t* values){
+	//Declare and initialize off the bat
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+
+	//Give back the final results
+	return result_package;
+}
+
+
+/**
+ * Visit a C-style switch statement. Ollie supports a new version of switch statements(with no fallthrough),
+ * and the older C-version as well that allows break through. To keep the order true, ollie 
+ * This rule is specifically for the c-style switch statements
+ */
+static statement_result_package_t visit_c_style_switch_statement(values_package_t* values){
+	//Declare and initialize off the bat
+	statement_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+
+	//Th starting and ending blocks for the switch statements
+	basic_block_t* starting_block = basic_block_alloc(1);
+	//Since C-style switches support break statements, we'll need
+	//this as well
+	basic_block_t* ending_block = basic_block_alloc(1);
+
+	//We already know what these will be, so populate them
+	result_package.starting_block = starting_block;
+	result_package.final_block = ending_block;
+
+	//TODO NOT FINISHED
+
+	return result_package;
+}
+
+
+/**
  * Visit a switch statement. In Ollie's current implementation, 
  * the values here will not be reordered at all. Instead, they
  * will be put in the exact orientation that the user wants
@@ -4943,8 +4995,7 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 	//The starting block for the switch statement - we'll want this in a new
 	//block
 	basic_block_t* starting_block = basic_block_alloc(1);
-	//We also need to know the ending block here -- Knowing
-	//this is important for break statements
+	//We also need to know the ending block here
 	basic_block_t* ending_block = basic_block_alloc(1);
 
 	//We can already fill in the result package
