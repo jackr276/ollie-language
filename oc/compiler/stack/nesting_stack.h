@@ -21,6 +21,7 @@ typedef enum {
 	NO_NESTING_LEVEL = 0, // Our default value
 	FUNCTION,
 	CASE_STATEMENT,
+	C_STYLE_CASE_STATEMENT, // This one allows breaks
 	LOOP_STATEMENT,
 	IF_STATEMENT,
 	DEFER_STATEMENT,
