@@ -5028,6 +5028,14 @@ static statement_result_package_t visit_switch_statement(values_package_t* value
 
 				break;
 
+			case AST_NODE_CLASS_C_STYLE_CASE_STMT:
+				printf("TODO: not implemented\n");
+				exit(0);
+
+			case AST_NODE_CLASS_C_STYLE_DEFAULT_STMT:
+				printf("TODO: not implemented\n");
+				exit(0);
+
 			//Otherwise we have some weird error, so we'll fail out
 			default:
 				exit(0);
@@ -5563,6 +5571,11 @@ static statement_result_package_t visit_compound_statement(values_package_t* val
 
 				//The current block is always what's directly at the end
 				current_block = generic_results.final_block;
+
+				break;
+
+			case AST_NODE_CLASS_C_STYLE_SWITCH_STMT:
+				printf("TODO: not yet implemented\n");
 
 				break;
 
