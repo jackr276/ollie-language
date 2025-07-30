@@ -5404,8 +5404,11 @@ static generic_ast_node_t* break_statement(FILE* fl){
 
 	//We need to ensure that we're in a loop here of some kind. If we aren't then this is 
 	//invalid
-	if(nesting_stack_contains_level(nesting_stack, LOOP_STATEMENT) == FALSE){
-		return print_and_return_error("Break statements must be used inside of loops", parser_line_num);
+	if(nesting_stack_contains_level(nesting_stack, LOOP_STATEMENT) == FALSE
+		&& nesting_stack_contains_level(nesting_stack, C_STYLE_CASE_STATEMENT) == FALSE){
+	
+		//Fail out here
+		return print_and_return_error("Break statements must be used inside of loops or c-style case/default statements", parser_line_num);
 	}
 
 	//Once we get here, we've already seen the break keyword, so we can make the node
@@ -6903,13 +6906,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//Push this onto the stack as a nesting level
-	push_nesting_level(nesting_stack, CASE_STATEMENT);
-
 	//Here is the area where we're able to differentiate between an ollie style case
 	//statement(-> {}) and a C-style case statement with fallthrough, etc.
 	switch(lookahead.tok){
 		case ARROW:
+			//Push this onto the stack as a nesting level
+			push_nesting_level(nesting_stack, CASE_STATEMENT);
+
 			//We'll let the helper deal with it
 			switch_compound_statement = compound_statement(fl);
 
@@ -6927,6 +6930,9 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 		//This now means that we're in a c-style case statement
 		case COLON:
+			//Push the c-style version on, to differentiate from the other type
+			push_nesting_level(nesting_stack, C_STYLE_CASE_STATEMENT);
+
 			//We'll need to reassign the value of the original case statement
 			case_stmt->CLASS = AST_NODE_CLASS_C_STYLE_CASE_STMT;
 			
