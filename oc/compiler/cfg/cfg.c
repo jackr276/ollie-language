@@ -5437,10 +5437,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 						emit_jump(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
 					}
 
-					results.starting_block = starting_block;
-					results.final_block = current_block;
-					results.assignee = NULL;
-					results.operator = BLANK;
+					//Package and return
+					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
 
 					//We're done here, so return the starting block. There is no 
 					//point in going on
@@ -5505,16 +5503,16 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 					//Mark this for later
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 
+					//Peak off of the break stack to get what we're breaking to
+					basic_block_t* breaking_to = peek(break_stack);
+
 					//We'll need to break out of the loop
-					add_successor(current_block, values->loop_stmt_end);
+					add_successor(current_block, breaking_to);
 					//We will jump to it -- this is always an uncoditional jump
-					emit_jump(current_block, values->loop_stmt_end, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, breaking_to, JUMP_TYPE_JMP, TRUE, FALSE);
 
 					//Package and return
-					results.starting_block = starting_block;
-					results.final_block = current_block;
-					results.operator = BLANK;
-					results.assignee = NULL;
+					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
 
 					//For a regular break statement, this is it, so we just get out
 					//Give back the starting block
@@ -5531,18 +5529,21 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
+					//Peak off of the break stack to get what we're breaking to
+					basic_block_t* breaking_to = peek(break_stack);
+
 					//Add a successor to the end
-					add_successor(current_block, values->loop_stmt_end);
+					add_successor(current_block, breaking_to);
+					//We will jump to it -- this jump is decided above
+					emit_jump(current_block, breaking_to, jump_type, TRUE, FALSE);
+
 					//Add the new block as a successor as well
 					add_successor(current_block, new_block);
+					//Emit a jump to the new block
+					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 					//Make sure we mark this properly
 					current_block->direct_successor = new_block;
-
-					//We will jump to it -- this jump is decided above
-					emit_jump(current_block, values->loop_stmt_end, jump_type, TRUE, FALSE);
-					//Emit a jump to the new block
-					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
