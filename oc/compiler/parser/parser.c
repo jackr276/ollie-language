@@ -5817,6 +5817,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
 						}
 
+						//We've found it
+						found_default_clause = TRUE;
+
 						//Otherwise we should be set here, so break out
 						break;
 
@@ -5835,6 +5838,12 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 							return print_and_return_error("C-style and Ollie-style case/default statements cannot be combined in the same switch statement", parser_line_num);
 						}
 
+						//No longer empty
+						is_empty = FALSE;
+
+						//We've found it
+						found_default_clause = TRUE;
+
 						//Otherwise we should be set here, so break out
 						break;
 
@@ -5845,9 +5854,6 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 					default:
 						return print_and_return_error("Switch statements may only be occupied by \"case\" or default statements", parser_line_num);
 				}
-
-				//We've found it
-				found_default_clause = TRUE;
 
 				break;
 
@@ -5862,15 +5868,15 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//If we haven't found a default clause, it's a failure
-	if(found_default_clause == FALSE){
-		return print_and_return_error("Switch statements are required to have a \"default\" clause", current_line);
-	}	
-
 	//If we have an entirely empty switch statement
 	if(is_empty == TRUE){
 		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
 	}
+
+	//If we haven't found a default clause, it's a failure
+	if(found_default_clause == FALSE){
+		return print_and_return_error("Switch statements are required to have a \"default\" clause", current_line);
+	}	
 
 	//If we do have a c-style switch statement here, we'll need to redefine the type
 	//that the origin switch node is

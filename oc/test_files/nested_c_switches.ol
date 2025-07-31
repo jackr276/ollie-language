@@ -1,0 +1,45 @@
+/**
+* Author: Jack Robbins
+* Testing nested switch statement functionality
+* with c-style switches
+*/
+
+
+fn main(argc:i32, argv:char**) -> i32 {
+	let mut x:i32 := 3;
+	let mut y:i32 := 5;
+
+	switch (argc) {
+		case 1:
+			//Fall through
+			x += y;
+
+		case 3:
+			//Nested ollie style switch switch
+			switch(y) {
+				case 11 -> {
+					x *= y;
+				}
+				
+				case 17 -> {
+					x /= y;
+					/**
+					* This is an *extremely* ill-advised and
+					* confusing thing to do. However, it should
+					* *technically* function
+					*/
+					break when(x == 5);
+				}
+
+				default -> {
+					x <<= y;
+				}
+			}
+
+		default:
+			x -= y;
+			break;
+	}
+
+	ret x;
+}
