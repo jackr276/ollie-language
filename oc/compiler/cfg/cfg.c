@@ -47,6 +47,12 @@ three_addr_var_t* stack_pointer_var = NULL;
 variable_symtab_t* variable_symtab;
 //Store this for usage
 static generic_type_t* u64 = NULL;
+//The break and continue stack will
+//hold values that we can break & continue
+//to. This is done here to avoid the need
+//to send value packages at each rule
+heap_stack_t* break_stack = NULL;
+heap_stack_t* continue_stack = NULL;
 //The current stack offset for any given function
 u_int64_t stack_offset = 0;
 //For any/all error printing
@@ -4258,6 +4264,9 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
 	//We will explicitly declare that this is an exit here
 	for_stmt_exit_block->block_type = BLOCK_TYPE_FOR_STMT_END;
 
+	//All breaks will go to the exit block
+	push(break_stack, for_stmt_exit_block);
+
 	//Once we get here, we already know what the start and exit are for this statement
 	result_package.starting_block = for_stmt_entry_block;
 	result_package.final_block = for_stmt_exit_block;
@@ -4344,6 +4353,9 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
 
 	//This node will always jump right back to the start
 	add_successor(for_stmt_update_block, condition_block);
+
+	//All continues will go to the update block
+	push(continue_stack, for_stmt_update_block);
 	
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
@@ -4366,6 +4378,10 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
 
 		//Make the condition block jump to the exit. This is an inverse jump
 		emit_jump(condition_block, for_stmt_exit_block, jump_type, TRUE, TRUE);
+
+		//Pop both values off of the stack
+		pop(continue_stack);
+		pop(break_stack);
 
 		//And we're done
 		return result_package;
@@ -4402,6 +4418,10 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
 	//The direct successor to the entry block is the exit block, for efficiency reasons
 	for_stmt_entry_block->direct_successor = for_stmt_exit_block;
 
+	//Now that we're done, we'll need to remove these both from the stack
+	pop(continue_stack);
+	pop(break_stack);
+
 	//Give back the result package here
 	return result_package;
 }
@@ -4413,7 +4433,7 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
  */
 static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* values){
 	//First we'll allocate the result block
-	cfg_result_package_t result_package;
+	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our entry block. This in reality will be the compound statement
 	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
@@ -4422,12 +4442,15 @@ static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* va
 	//We will explicitly mark that this is an exit block
 	do_while_stmt_exit_block->block_type = BLOCK_TYPE_DO_WHILE_END;
 
+	//We'll push the entry block onto the continue stack, because continues will go there.
+	push(continue_stack, do_while_stmt_entry_block);
+
+	//And we'll push the end block onto the break stack, because all breaks go there
+	push(break_stack, do_while_stmt_exit_block);
+
 	//We can add these into the result package already
 	result_package.starting_block = do_while_stmt_entry_block;
 	result_package.final_block = do_while_stmt_exit_block;
-	//These are both guaranteed to be null
-	result_package.assignee = NULL;
-	result_package.operator = BLANK;
 
 	//Grab the initial node
 	generic_ast_node_t* do_while_stmt_node = values->initial_node;
@@ -4493,6 +4516,10 @@ static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* va
 		compound_stmt_end->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
 	}
 
+	//Now that we're done here, pop the break/continue stacks to remove these blocks
+	pop(continue_stack);
+	pop(break_stack);
+
 	//Always return the entry block
 	return result_package;
 }
@@ -4512,6 +4539,12 @@ static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* value
 	basic_block_t* while_statement_end_block = basic_block_alloc(1);
 	//We will specifically mark the end block here as an ending block
 	while_statement_end_block->block_type = BLOCK_TYPE_WHILE_END;
+
+	//We'll push the entry block onto the continue stack, because continues will go there.
+	push(continue_stack, while_statement_entry_block);
+
+	//And we'll push the end block onto the break stack, because all breaks go there
+	push(break_stack, while_statement_end_block);
 
 	//We already know what to populate our result package with here
 	result_package.starting_block = while_statement_entry_block;
@@ -4587,6 +4620,10 @@ static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* value
 	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 		compound_stmt_end->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
 	}
+
+	//Now that we're done, pop these both off their respective stacks
+	pop(break_stack);
+	pop(continue_stack);
 
 	//Now we're done, so
 	return result_package;
@@ -6037,6 +6074,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	type_symtab = results->type_symtab;
 	variable_symtab = results->variable_symtab;
 
+	//Allocate these two stacks
+	break_stack = heap_stack_alloc();
+	continue_stack = heap_stack_alloc(); 
+
 	//Keep this on hand
 	u64 = lookup_type_name_only(type_symtab, "u64")->type;
 
@@ -6084,6 +6125,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 
 	//Rename all variables after we're done with the phi functions
 	rename_all_variables(cfg);
+
+	//Once we get here, we're done with these two stacks
+	heap_stack_dealloc(break_stack);	
+	heap_stack_dealloc(continue_stack);	
 
 	//Give back the reference
 	return cfg;
