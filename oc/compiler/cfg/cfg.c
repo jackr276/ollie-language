@@ -5420,22 +5420,13 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 					//Mark this for later
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
 
-					//Let's see what kind of loop we're in
-					//NON for loop
-					if(values->for_loop_update_block == NULL){
-						//Otherwise we are in a loop, so this means that we need to point the continue statement to
-						//the loop entry block
-						add_successor(current_block, values->loop_stmt_start);
-						//We always jump to the start of the loop statement unconditionally
-						emit_jump(current_block, values->loop_stmt_start, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Peek the continue block off of the stack
+					basic_block_t* continuing_to = peek(continue_stack);
 
-					//We are in a for loop
-					} else {
-						//Otherwise we are in a for loop, so we just need to point to the for loop update block
-						add_successor(current_block, values->for_loop_update_block);
-						//Emit a direct unconditional jump statement to it
-						emit_jump(current_block, values->for_loop_update_block, JUMP_TYPE_JMP, TRUE, FALSE);
-					}
+					//We'll now add a successor for this block
+					add_successor(current_block, continuing_to);
+					//We always jump to the start of the loop statement unconditionally
+					emit_jump(current_block, continuing_to, JUMP_TYPE_JMP, TRUE, FALSE);
 
 					//Package and return
 					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
@@ -5453,40 +5444,28 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 
 					//We'll need a new block here - this will count as a branch
 					basic_block_t* new_block = basic_block_alloc(1);
-					
-					//Two divergent paths here -- whether or not we have a for loop
-					//Not a for loop
-					if(values->for_loop_update_block == NULL){
-						//Otherwise we are in a loop, so this means that we need to point the continue statement to
-						//the loop entry block
-						//Add the successor in
-						add_successor(current_block, values->loop_stmt_start);
-						//Add this new block in as a successor
-						add_successor(current_block, new_block);
-						//Restore the direct successor
-						current_block->direct_successor = new_block;
-						//We always jump to the start of the loop statement unconditionally
-						emit_jump(current_block, values->loop_stmt_start, jump_type, TRUE, FALSE);
-						//The other end of the conditional continue will be jumping to this new block
-						emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
-					//We are in a for loop
-					} else {
-						//Otherwise we are in a for loop, so we just need to point to the for loop update block
-						//Add the successor in
-						add_successor(current_block, values->for_loop_update_block);
-						//Add this new block in as a successor
-						add_successor(current_block, new_block);
-						//Restore the direct successor
-						current_block->direct_successor = new_block;
-						//Emit a direct unconditional jump statement to it
-						emit_jump(current_block, values->for_loop_update_block, jump_type, TRUE, FALSE);
-						//The other end of the conditional continue will be jumping to this new block
-						emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
-					}
 
-						//And as we go forward, this new block will be the current block
-						current_block = new_block;
-					}
+					//Peek the continue block off of the stack
+					basic_block_t* continuing_to = peek(continue_stack);
+					
+					//Otherwise we are in a loop, so this means that we need to point the continue statement to
+					//the loop entry block
+					//Add the successor in
+					add_successor(current_block, continuing_to);
+					//We always jump to the start of the loop statement unconditionally
+					emit_jump(current_block, continuing_to, jump_type, TRUE, FALSE);
+
+					//Add this new block in as a successor
+					add_successor(current_block, new_block);
+					//The other end of the conditional continue will be jumping to this new block
+					emit_jump(current_block, new_block, JUMP_TYPE_JMP, TRUE, FALSE);
+
+					//Restore the direct successor
+					current_block->direct_successor = new_block;
+
+					//And as we go forward, this new block will be the current block
+					current_block = new_block;
+				}
 
 					break;
 
