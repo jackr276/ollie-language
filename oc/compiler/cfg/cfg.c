@@ -4910,6 +4910,7 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 	return result_package;
 }
 
+
 /**
  * Visit a C-style default statement. These statements do allow the possibility breaks being issued,
  * and they don't inherently use compound statements. We'll need to account for both possibilities
@@ -4921,6 +4922,26 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+
+	//Since a C-style case statement is just a collection of 
+	//statements, we'll use the statement sequence to process it here
+	cfg_result_package_t statement_results = visit_statement_chain(root_node->first_child); 
+
+	//This would occur whenever we don't have an empty case
+	if(statement_results.starting_block != NULL){
+		//These become our starting and final blocks
+		result_package.starting_block = statement_results.starting_block;
+		result_package.final_block = statement_results.final_block;
+
+	} else {
+		//If it is NULL, we're going to need to create our own block here
+		basic_block_t* case_block = basic_block_alloc(1);
+
+		//This is the starting and final block
+		result_package.starting_block = case_block;
+		result_package.final_block = case_block;
+
+	}
 
 	//Give back the final results
 	return result_package;
@@ -5700,7 +5721,22 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 
 			case AST_NODE_CLASS_C_STYLE_SWITCH_STMT:
-				printf("TODO: not yet implemented\n");
+				//Visit the switch statement
+				generic_results = visit_c_style_switch_statement(ast_cursor);
+
+				//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
+				//starting block's direct successor
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+				} else {
+					//Otherwise this is a direct successor
+					add_successor(current_block, generic_results.starting_block);
+					//We will also emit a jump from the current block to the entry
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				}
+
+				//The current block is always what's directly at the end
+				current_block = generic_results.final_block;
 
 				break;
 
