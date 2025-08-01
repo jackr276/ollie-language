@@ -6209,7 +6209,22 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				break;
 
 			case AST_NODE_CLASS_C_STYLE_SWITCH_STMT:
-				printf("TODO: not yet implemented\n");
+				//Visit the switch statement
+				generic_results = visit_c_style_switch_statement(ast_cursor);
+
+				//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
+				//starting block's direct successor
+				if(starting_block == NULL){
+					starting_block = generic_results.starting_block;
+				} else {
+					//Otherwise this is a direct successor
+					add_successor(current_block, generic_results.starting_block);
+					//We will also emit a jump from the current block to the entry
+					emit_jump(current_block, generic_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				}
+
+				//The current block is always what's directly at the end
+				current_block = generic_results.final_block;
 
 				break;
 
