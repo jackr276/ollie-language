@@ -4929,6 +4929,73 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	result_package.starting_block = starting_block;
 	result_package.final_block = ending_block;
 
+	//We'll grab a cursor to the first child and begin crawling through
+	generic_ast_node_t* cursor = root_node->first_child;
+
+	//We'll also have a cursor to the top level block to avoid confusion
+	basic_block_t* root_level_block = starting_block;
+
+	//We'll first need to emit the expression node
+	cfg_result_package_t input_results = emit_expression(root_level_block, root_node, TRUE, TRUE);
+
+	//Check for ternary expansion
+	if(input_results.final_block != NULL && input_results.final_block != root_level_block){
+		root_level_block = starting_block;
+	}
+
+	//This is a switch type block
+	root_level_block->block_type = BLOCK_TYPE_SWITCH;
+
+	//We'll now allocate this one's jump table
+	root_level_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
+
+	//The offset(amount that we'll need to knock down any case values by) is always the 
+	//case statement's value subtracted by the lower bound. We'll call it offset here
+	//for consistency
+	u_int32_t offset = root_node->lower_bound;
+
+	//A generic result package for all of our case/default statements
+	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
+
+	//We will eventually need to know what the default block is,
+	//so reserve a variable here
+	basic_block_t* default_block = NULL;
+
+	//Now we advance to the first real case statement
+	cursor = cursor->next_sibling;
+
+	//So long as we haven't hit the end
+	while(cursor != NULL){
+		switch(cursor->CLASS){
+			//C-style case statement, we'll let the appropriate rule handle
+			case AST_NODE_CLASS_C_STYLE_CASE_STMT:
+				//Let the helper rule handle it
+				case_default_results = visit_c_style_case_statement(cursor);
+
+				break;
+
+			//C-style default, also let the appropriate rule handle
+			case AST_NODE_CLASS_C_STYLE_DEFAULT_STMT:
+				//Let the helper rule handle it
+				case_default_results = visit_c_style_default_statement(cursor);
+
+				//This is the default block. We'll save this for later when
+				//we need to fill in the rest of the jump table
+				default_block= case_default_results.starting_block;
+
+				break;
+
+			//Some weird error, this should never happen
+			default:
+				exit(0);
+		}
+
+
+		//Advance the cursor to the next one
+		cursor = cursor->next_sibling;
+	}
+	
+
 	//TODO NOT FINISHED
 
 	return result_package;
@@ -4957,19 +5024,15 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//Grab a cursor to the case statements
 	generic_ast_node_t* case_stmt_cursor = root_node->first_child;
 	
-	//Save the expression node for now, we won't use this until later on
-	generic_ast_node_t* expression_node = case_stmt_cursor;
-
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block;
-	basic_block_t* case_block;
 	basic_block_t* default_block;
 	
 	//The current block, relative to the starting block
 	basic_block_t* root_level_block = starting_block;
 	
 	//Let's first emit the expression. This will at least give us an assignee to work with
-	cfg_result_package_t input_results = emit_expression(root_level_block, expression_node, TRUE, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE, TRUE);
 
 	//We could have had a ternary here, so we'll need to account for that possibility
 	if(input_results.final_block != NULL && root_level_block != input_results.final_block){
@@ -4987,7 +5050,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
 	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
-	u_int32_t offset = root_node->lower_bound - 0;
+	u_int32_t offset = root_node->lower_bound;
 
 	//Wipe this out here just in case
 	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
@@ -5004,8 +5067,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 			case AST_NODE_CLASS_CASE_STMT:
 				//Visit our case stmt here
 				case_default_results = visit_case_statement(case_stmt_cursor);
-				//This is the starting block
-				case_block = case_default_results.starting_block;
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
@@ -5016,11 +5077,9 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 			case AST_NODE_CLASS_DEFAULT_STMT:
 				//Visit the default statement
 				case_default_results = visit_default_statement(case_stmt_cursor);
-				//This is the starting block
-				case_block = case_default_results.starting_block;
 
 				//This is the default block, so save for now
-				default_block = case_block;
+				default_block = case_default_results.starting_block;
 
 				break;
 
@@ -5031,7 +5090,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 		//Now we'll add this one into the overall structure
 		if(case_default_results.starting_block != NULL){
-			add_successor(root_level_block, case_block);
+			add_successor(root_level_block, case_default_results.starting_block);
 
 			//Now we'll drill down to the bottom to prime the next pass
 			current_block = case_default_results.final_block;
