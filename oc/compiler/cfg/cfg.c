@@ -4961,6 +4961,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//so reserve a variable here
 	basic_block_t* default_block = NULL;
 
+	//We'll also need a current block variable for chaining things together
+	basic_block_t* current_block = NULL;
+
 	//Now we advance to the first real case statement
 	cursor = cursor->next_sibling;
 
@@ -4971,6 +4974,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			case AST_NODE_CLASS_C_STYLE_CASE_STMT:
 				//Let the helper rule handle it
 				case_default_results = visit_c_style_case_statement(cursor);
+
+				//Add this in as an entry to the jump table
+				add_jump_table_entry(root_level_block->jump_table, cursor->case_statement_value - offset, case_default_results.starting_block);
 
 				break;
 
@@ -4990,13 +4996,40 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				exit(0);
 		}
 
+		//This block counts as a successor to the root level block
+		add_successor(root_level_block, case_default_results.starting_block);
+
+		//Reassign current block
+		current_block = case_default_results.final_block;
+
+		//The final block has a successor of the ending block here(unless we end in no break(fallthrough))
+		//TODO NOT FINISHED
 
 		//Advance the cursor to the next one
 		cursor = cursor->next_sibling;
 	}
-	
 
-	//TODO NOT FINISHED
+	//Once we make it all the way down here, we know that we're at the very final block. This block
+	//is guaranteed to have the switch end block as it's successor
+	add_successor(current_block, ending_block);
+	//Emit a jump right to the end block
+	emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+
+
+	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
+	//will be set to point to the default block
+	for(u_int16_t i = 0; i < root_level_block->jump_table->num_nodes; i++){
+		//If it's null, we'll make it the default
+		if(dynamic_array_get_at(root_level_block->jump_table->nodes, i) == NULL){
+			dynamic_array_set_at(root_level_block->jump_table->nodes, default_block, i);
+		}
+	}
+
+	//Now that everything has been situated, we can start emitting the values in the initial node
+
+	//We'll need both of these as constants for our computation
+	three_addr_const_t* lower_bound = emit_int_constant_direct(root_node->lower_bound, type_symtab);
+	three_addr_const_t* upper_bound = emit_int_constant_direct(root_node->upper_bound, type_symtab);
 
 	return result_package;
 }
@@ -5070,7 +5103,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
-				add_jump_table_entry(root_level_block->jump_table, case_default_results.starting_block->case_stmt_val - offset, case_default_results.starting_block);
+				add_jump_table_entry(root_level_block->jump_table, case_stmt_cursor->case_statement_value - offset, case_default_results.starting_block);
 				break;
 
 			//Handle a default statement
