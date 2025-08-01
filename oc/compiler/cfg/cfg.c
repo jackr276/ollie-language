@@ -5002,8 +5002,22 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		//Reassign current block
 		current_block = case_default_results.final_block;
 
-		//The final block has a successor of the ending block here(unless we end in no break(fallthrough))
-		//TODO NOT FINISHED
+		//If the final block ends in a jump statement, we'll have
+		if(current_block->exit_statement != NULL 
+			&& (current_block->exit_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT
+			//This needs to be a direct jump. If it's not we'll still need to 
+			//account for fallthrough
+			|| current_block->exit_statement->jump_type != JUMP_TYPE_JMP)){
+
+			//Fallthrough the block
+			add_successor(current_block, ending_block);
+
+			//Emit the direct jump. This may be optimized away in the optimizer, but we
+			//need to guarantee behavior
+			emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		}
+
+		//Otherwise if we don't satisfy this condition, we don't need to emit any jump at all
 
 		//Advance the cursor to the next one
 		cursor = cursor->next_sibling;
@@ -5014,7 +5028,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	add_successor(current_block, ending_block);
 	//Emit a jump right to the end block
 	emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
-
 
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	//will be set to point to the default block
@@ -5031,6 +5044,63 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	three_addr_const_t* lower_bound = emit_int_constant_direct(root_node->lower_bound, type_symtab);
 	three_addr_const_t* upper_bound = emit_int_constant_direct(root_node->upper_bound, type_symtab);
 
+	/**
+	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
+	 * on the condition codes being set from the operation to take us through all three
+	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
+	 * are in the range
+	 */
+
+	//Grab the type our for convenience
+	generic_type_t* input_result_type = input_results.assignee->type;
+
+	//Grab the signedness of the result
+	u_int8_t is_signed = is_type_signed(input_results.assignee->type);
+
+	//Let's first do our lower than comparison
+	//First step -> if we're below the minimum, we jump to default 
+	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, L_THAN, lower_bound, TRUE);
+
+	//If we are lower than this(regular jump), we will go to the default block
+	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
+	//Now we'll emit our jump
+	emit_jump(root_level_block, default_block, jump_lower_than, TRUE, FALSE);
+
+	//Next step -> if we're above the maximum, jump to default
+	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
+
+	//If we are lower than this(regular jump), we will go to the default block
+	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
+	//Now we'll emit our jump
+	emit_jump(root_level_block, default_block, jump_greater_than, TRUE, FALSE);
+
+	//To avoid violating SSA rules, we'll emit a temporary assignment here
+	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
+
+	//Add it into the block
+	add_statement(root_level_block, temporary_variable_assignent);
+
+	//Now that all this is done, we can use our jump table for the rest
+	//We'll now need to cut the value down by whatever our offset was	
+	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
+
+	/**
+	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
+	 * 	base address(.JT1) + input * 8 
+	 *
+	 * We have a special kind of statement for doing this
+	 * 	
+	 */
+	//Emit the address first
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, root_level_block->jump_table, input, TRUE);
+
+	//Now we'll emit the indirect jump to the address
+	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
+
+	//Ensure that we wire this in properly
+	//result_package.starting_block->direct_successor = result_package.final_block;
+
+	//Give back the starting block
 	return result_package;
 }
 
