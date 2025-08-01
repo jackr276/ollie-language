@@ -4888,7 +4888,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
  * and they don't inherently use compound statements. We'll need to account for both possibilities
  * in this rule
  */
-static cfg_result_package_t visit_c_style_case_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
@@ -4901,7 +4901,7 @@ static cfg_result_package_t visit_c_style_case_statement(cfg_parameter_package_t
  * and they don't inherently use compound statements. We'll need to account for both possibilities
  * in this rule
  */
-static cfg_result_package_t visit_c_style_default_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
@@ -4915,7 +4915,7 @@ static cfg_result_package_t visit_c_style_default_statement(cfg_parameter_packag
  * and the older C-version as well that allows break through. To keep the order true, ollie 
  * This rule is specifically for the c-style switch statements
  */
-static cfg_result_package_t visit_c_style_switch_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
@@ -4940,7 +4940,7 @@ static cfg_result_package_t visit_c_style_switch_statement(cfg_parameter_package
  * the values here will not be reordered at all. Instead, they
  * will be put in the exact orientation that the user wants
  */
-static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node){
 	//Declare the result package off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
@@ -4955,13 +4955,10 @@ static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* valu
 	result_package.final_block = ending_block;
 
 	//Grab a cursor to the case statements
-	generic_ast_node_t* case_stmt_cursor = values->initial_node->first_child;
+	generic_ast_node_t* case_stmt_cursor = root_node->first_child;
 	
 	//Save the expression node for now, we won't use this until later on
 	generic_ast_node_t* expression_node = case_stmt_cursor;
-
-	//The values package that we have
-	cfg_parameter_package_t passing_values = *values;
 
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block;
@@ -4986,11 +4983,11 @@ static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* valu
 	
 	//Let's also allocate our jump table. We know how large the jump table needs to be from
 	//data passed in by the parser
-	root_level_block->jump_table = jump_table_alloc(values->initial_node->upper_bound - values->initial_node->lower_bound + 1);
+	root_level_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
 
 	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
 	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
-	u_int32_t offset = values->initial_node->lower_bound - 0;
+	u_int32_t offset = root_node->lower_bound - 0;
 
 	//Wipe this out here just in case
 	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
@@ -5005,10 +5002,8 @@ static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* valu
 		switch(case_stmt_cursor->CLASS){
 			//Handle a case statement
 			case AST_NODE_CLASS_CASE_STMT:
-				//Update this
-				passing_values.initial_node = case_stmt_cursor;
 				//Visit our case stmt here
-				case_default_results = visit_case_statement(&passing_values);
+				case_default_results = visit_case_statement(case_stmt_cursor);
 				//This is the starting block
 				case_block = case_default_results.starting_block;
 
@@ -5019,10 +5014,8 @@ static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* valu
 
 			//Handle a default statement
 			case AST_NODE_CLASS_DEFAULT_STMT:
-				//Update this
-				passing_values.initial_node = case_stmt_cursor;
 				//Visit the default statement
-				case_default_results = visit_default_statement(&passing_values);
+				case_default_results = visit_default_statement(case_stmt_cursor);
 				//This is the starting block
 				case_block = case_default_results.starting_block;
 
@@ -5030,14 +5023,6 @@ static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* valu
 				default_block = case_block;
 
 				break;
-
-			case AST_NODE_CLASS_C_STYLE_CASE_STMT:
-				printf("TODO: not implemented\n");
-				exit(0);
-
-			case AST_NODE_CLASS_C_STYLE_DEFAULT_STMT:
-				printf("TODO: not implemented\n");
-				exit(0);
 
 			//Otherwise we have some weird error, so we'll fail out
 			default:
@@ -5074,8 +5059,8 @@ static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* valu
 	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_int_constant_direct(values->initial_node->lower_bound, type_symtab);
-	three_addr_const_t* upper_bound = emit_int_constant_direct(values->initial_node->upper_bound, type_symtab);
+	three_addr_const_t* lower_bound = emit_int_constant_direct(root_node->lower_bound, type_symtab);
+	three_addr_const_t* upper_bound = emit_int_constant_direct(root_node->upper_bound, type_symtab);
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
@@ -5147,13 +5132,11 @@ static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* valu
  *
  * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
  */
-static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node){
 	//Everything to begin with is completely null'd out
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 	//A generic results package that we can use in any of our processing
 	cfg_result_package_t generic_results;
-	//Generic values that we can use 
-	cfg_parameter_package_t generic_values;
 	//A defer statement cursor
 	generic_ast_node_t* defer_statement_cursor;
 
@@ -5163,7 +5146,7 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 	basic_block_t* current_block = starting_block;
 
 	//Grab the initial node
-	generic_ast_node_t* compound_stmt_node = values->initial_node;
+	generic_ast_node_t* compound_stmt_node = root_node;
 
 	//Grab our very first thing here
 	generic_ast_node_t* ast_cursor = compound_stmt_node->first_child;
@@ -5261,12 +5244,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 				return results;
 		
 			case AST_NODE_CLASS_IF_STMT:
-				//Pack the values up accordingly
-				generic_values = *values;
-				generic_values.initial_node = ast_cursor;
-
 				//We'll now enter the if statement
-				generic_results = visit_if_statement(&generic_values);
+				generic_results = visit_if_statement(ast_cursor);
 			
 				//Once we have the if statement start, we'll add it in as a successor
 				if(starting_block == NULL){
@@ -5286,11 +5265,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 				break;
 
 			case AST_NODE_CLASS_WHILE_STMT:
-				//Pack the generic values up here
-				generic_values = (cfg_parameter_package_t){ast_cursor, NULL, NULL, NULL, NULL};
-
 				//Visit the while statement
-				generic_results = visit_while_statement(&generic_values);
+				generic_results = visit_while_statement(ast_cursor);
 
 				//We'll now add it in
 				if(starting_block == NULL){
@@ -5309,11 +5285,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 				break;
 
 			case AST_NODE_CLASS_DO_WHILE_STMT:
-				//Pack the generic values up here
-				generic_values = (cfg_parameter_package_t){ast_cursor, NULL, NULL, NULL, NULL};
-
 				//Visit the statement
-				generic_results = visit_do_while_statement(&generic_values);
+				generic_results = visit_do_while_statement(ast_cursor);
 
 				//We'll now add it in
 				if(starting_block == NULL){
@@ -5332,11 +5305,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 				break;
 
 			case AST_NODE_CLASS_FOR_STMT:
-				//Pack the generic values up here
-				generic_values = (cfg_parameter_package_t){ast_cursor, NULL, NULL, NULL, NULL};
-
 				//First visit the statement
-				generic_results = visit_for_statement(&generic_values);
+				generic_results = visit_for_statement(ast_cursor);
 
 				//Now we'll add it in
 				if(starting_block == NULL){
@@ -5485,11 +5455,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 				//So long as this cursor is not null, we'll keep processing and adding
 				//compound statements
 				while(defer_statement_cursor != NULL){
-					//Package the values
-					cfg_parameter_package_t values = {defer_statement_cursor, NULL, NULL, NULL, NULL};
-
 					//Let the helper process this
-					cfg_result_package_t compound_statement_results = visit_compound_statement(&values);
+					cfg_result_package_t compound_statement_results = visit_compound_statement(defer_statement_cursor);
 
 					//The successor to the current block is this block
 					//If it's null then this is this block
@@ -5536,12 +5503,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 				break;
 
 			case AST_NODE_CLASS_SWITCH_STMT:
-				//Pack our values up here
-				generic_values = *values;
-				generic_values.initial_node = ast_cursor;
-
 				//Visit the switch statement
-				generic_results = visit_switch_statement(&generic_values);
+				generic_results = visit_switch_statement(ast_cursor);
 
 				//If the starting block is NULL, then this is the starting block. Otherwise, it's the 
 				//starting block's direct successor
@@ -5565,11 +5528,8 @@ static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* va
 				break;
 
 			case AST_NODE_CLASS_COMPOUND_STMT:
-				//Pack our values up
-				generic_values = *values;
-
 				//We'll simply recall this function and let it handle it
-				generic_results = visit_compound_statement(&generic_values);
+				generic_results = visit_compound_statement(ast_cursor);
 
 				//Add in everything appropriately here
 				if(starting_block == NULL){
@@ -5705,11 +5665,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 	//It could be null, though it usually is not
 	if(func_cursor != NULL){
-		//Package the values up
-		cfg_parameter_package_t compound_stmt_values = {func_cursor, NULL, NULL, NULL, NULL};
-		//
 		//Once we get here, we know that func cursor is the compound statement that we want
-		cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
+		cfg_result_package_t compound_statement_results = visit_compound_statement(func_cursor);
 
 		//Once we're done with the compound statement, we will merge it into the function
 	 	basic_block_t* compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
@@ -5848,8 +5805,6 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
 	//Generic block holder
 	basic_block_t* block;
-	//The values that we have to pack
-	cfg_parameter_package_t values;
 
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
