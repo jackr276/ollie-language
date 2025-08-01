@@ -5088,19 +5088,17 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 				exit(0);
 		}
 
-		//Now we'll add this one into the overall structure
-		if(case_default_results.starting_block != NULL){
-			add_successor(root_level_block, case_default_results.starting_block);
+		//The starting block is a successor to the root block
+		add_successor(root_level_block, case_default_results.starting_block);
 
-			//Now we'll drill down to the bottom to prime the next pass
-			current_block = case_default_results.final_block;
+		//Now we'll drill down to the bottom to prime the next pass
+		current_block = case_default_results.final_block;
 
-			//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
-			add_successor(current_block, ending_block);
+		//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
+		add_successor(current_block, ending_block);
 
-			//We will always emit a direct jump from this block to the ending block
-			emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
-		}
+		//We will always emit a direct jump from this block to the ending block
+		emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
 		
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
