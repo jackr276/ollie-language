@@ -71,21 +71,6 @@ typedef struct{
 } cfg_result_package_t;
 
 
-//A package of values that each visit function uses
-typedef struct {
-	//The initial node
-	generic_ast_node_t* initial_node;
-	//For continue statements
-	basic_block_t* loop_stmt_start;
-	//For break statements
-	basic_block_t* loop_stmt_end;
-	//For any time we need to do for-loop operations
-	basic_block_t* for_loop_update_block;
-	//For break statements inside of c-style switch
-	basic_block_t* switch_statement_end;
-} cfg_parameter_package_t;
-
-
 //Are we emitting the dominance frontier or not?
 typedef enum{
 	EMIT_DOMINANCE_FRONTIER,
@@ -103,15 +88,15 @@ typedef enum{
 
 //We predeclare up here to avoid needing any rearrangements
 static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node);
-static cfg_result_package_t visit_compound_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
-static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values);
-static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* values);
-static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* values);
-static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values);
-static cfg_result_package_t visit_case_statement(cfg_parameter_package_t* values);
-static cfg_result_package_t visit_default_statement(cfg_parameter_package_t* values);
-static cfg_result_package_t visit_switch_statement(cfg_parameter_package_t* values);
+static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
+static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node);
+static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node);
+static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node);
+static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node);
+static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_node);
+static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node);
 
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
@@ -4253,7 +4238,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  * A for-statement is another kind of control flow construct. As always the direct successor is the path that reliably
  * leads us down and out
  */
-static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
@@ -4272,7 +4257,7 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
 	result_package.final_block = for_stmt_exit_block;
 	
 	//Grab the reference to the for statement node
-	generic_ast_node_t* for_stmt_node = values->initial_node;
+	generic_ast_node_t* for_stmt_node = root_node;
 
 	//Grab a cursor for walking the sub-tree
 	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
@@ -4360,12 +4345,9 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
 	
-	//Create a copy of our values
-	cfg_parameter_package_t compound_stmt_values = {ast_cursor, condition_block, for_stmt_exit_block, for_stmt_update_block, NULL};
-
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
-	cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
+	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//If it's null, that's actually ok here
 	if(compound_statement_results.starting_block == NULL){
@@ -4431,7 +4413,7 @@ static cfg_result_package_t visit_for_statement(cfg_parameter_package_t* values)
  * A do-while statement is a simple control flow construct. As always, the direct successor path is the path that reliably
  * leads us down and out
  */
-static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node){
 	//First we'll allocate the result block
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
@@ -4453,16 +4435,13 @@ static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* va
 	result_package.final_block = do_while_stmt_exit_block;
 
 	//Grab the initial node
-	generic_ast_node_t* do_while_stmt_node = values->initial_node;
+	generic_ast_node_t* do_while_stmt_node = root_node;
 
 	//Grab a cursor for walking the subtree
 	generic_ast_node_t* ast_cursor = do_while_stmt_node->first_child;
 
-	//Create a copy of our values here
-	cfg_parameter_package_t compound_stmt_values = {ast_cursor, do_while_stmt_entry_block, do_while_stmt_exit_block, NULL, NULL};
-
 	//We go right into the compound statement here
-	cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
+	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//If this is NULL, it means that we really don't have a compound statement there
 	if(compound_statement_results.starting_block == NULL){
@@ -4529,7 +4508,7 @@ static cfg_result_package_t visit_do_while_statement(cfg_parameter_package_t* va
  * A while statement is a very simple control flow construct. As always, the "direct successor" path is the path
  * that reliably leads us down and out
  */
-static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node){
 	//Initialize the result package
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
@@ -4558,7 +4537,7 @@ static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* value
 	while_statement_entry_block->direct_successor = while_statement_end_block;
 
 	//Grab this for convenience
-	generic_ast_node_t* while_stmt_node = values->initial_node;
+	generic_ast_node_t* while_stmt_node = root_node;
 
 	//Grab a cursor to the while statement node
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
@@ -4569,11 +4548,8 @@ static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* value
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
 
-	//Create a copy of our values here
-	cfg_parameter_package_t compound_stmt_values = {ast_cursor, while_statement_entry_block, while_statement_end_block, NULL, NULL};
-
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
-	cfg_result_package_t compound_statement_results = visit_compound_statement(&compound_stmt_values);
+	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//If it's null, that means that we were given an empty while loop here
 	if(compound_statement_results.starting_block == NULL){
@@ -4583,7 +4559,6 @@ static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* value
 		//We'll just return now
 		return result_package;
 	}
-
 
 	//We'll now determine what kind of jump statement that we have here. We want to jump to the exit if
 	//we're bad, so we'll do an inverse jump
@@ -4633,7 +4608,7 @@ static cfg_result_package_t visit_while_statement(cfg_parameter_package_t* value
 /**
  * Process the if-statement subtree into CFG form
  */
-static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//The statement result package for our if statement
 	cfg_result_package_t result_package;
 
@@ -4652,7 +4627,7 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 	result_package.operator = BLANK;
 
 	//Grab the cursor
-	generic_ast_node_t* cursor = values->initial_node->first_child;
+	generic_ast_node_t* cursor = root_node->first_child;
 
 	//Add whatever our conditional is into the starting block
 	cfg_result_package_t package = emit_expression(entry_block, cursor, TRUE, TRUE);
@@ -4660,12 +4635,8 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
 
-	//This is mostly the same, with the exception of the initial node
-	cfg_parameter_package_t if_compound_stmt_values = *values;
-	if_compound_stmt_values.initial_node = cursor;
-
 	//Visit the compound statement that we're required to have here
-	cfg_result_package_t if_compound_statement_results = visit_compound_statement(&if_compound_stmt_values);
+	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
 
 	if(if_compound_statement_results.starting_block != NULL){
 		//Add the if statement node in as a direct successor
@@ -4732,12 +4703,8 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
 
-		//These are almost identical, except for the initial node
-		cfg_parameter_package_t else_if_compound_stmt_values = *values;
-		else_if_compound_stmt_values.initial_node = else_if_cursor;
-
 		//Let this handle the compound statement
-		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(&else_if_compound_stmt_values);
+		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
 
 		//If it's not null, we'll process fully
 		if(else_if_compound_statement_results.starting_block != NULL){
@@ -4778,12 +4745,8 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
 	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
 		//Let's handle the compound statement
 		
-		//These are almost identical, with the exception of the initial node
-		cfg_parameter_package_t else_compound_stmt_values = *values;
-		else_compound_stmt_values.initial_node = cursor;
-
 		//Grab the compound statement
-		cfg_result_package_t else_compound_statement_values = visit_compound_statement(&else_compound_stmt_values);
+		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
 
 		//If it's NULL, that's fine, we'll just throw a warning
 		if(else_compound_statement_values.starting_block == NULL){
@@ -4830,7 +4793,7 @@ static cfg_result_package_t visit_if_statement(cfg_parameter_package_t* values){
  * Visit a default statement.  These statements are also handled like individual blocks that can 
  * be jumped to
  */
-static cfg_result_package_t visit_default_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_node){
 	//Declare and prepack our results
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
@@ -4839,16 +4802,10 @@ static cfg_result_package_t visit_default_statement(cfg_parameter_package_t* val
 	//later on
 
 	//Grab a cursor to our default statement
-	generic_ast_node_t* default_stmt_cursor = values->initial_node;
-
-	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
-	//any/all statements that are below it
-	cfg_parameter_package_t statement_values = *values;
-	//Only difference here is the starting place
-	statement_values.initial_node = default_stmt_cursor->first_child;
+	generic_ast_node_t* default_stmt_cursor = root_node;
 
 	//Grab the compound statement out of here
-	cfg_result_package_t default_compound_statement_results = visit_compound_statement(&statement_values);
+	cfg_result_package_t default_compound_statement_results = visit_compound_statement(default_stmt_cursor->first_child);
 
 	//Let this take care of it if we have an actual compound statement here
 	if(default_compound_statement_results.starting_block != NULL){
@@ -4879,28 +4836,19 @@ static cfg_result_package_t visit_default_statement(cfg_parameter_package_t* val
  * Visit a case statement. It is very important that case statements know
  * where the end of the switch statement is, in case break statements are used
  */
-static cfg_result_package_t visit_case_statement(cfg_parameter_package_t* values){
+static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	//Declare and prepack our results
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
-	
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
 	//done by the parser, so we're guaranteed to see something
 	//correct here
 	
-	//The first child is our enum value
-	generic_ast_node_t* case_stmt_cursor = values->initial_node;
-
-	//Now that we've actually packed up the value of the case statement here, we'll use the helper method to go through
-	//any/all statements that are below it
-	cfg_parameter_package_t statement_values = *values;
-
-	//Only difference here is the starting place
-	statement_values.initial_node = case_stmt_cursor->first_child;
+	generic_ast_node_t* case_stmt_cursor = root_node;
 
 	//Let this take care of it
-	cfg_result_package_t case_compound_statement_results = visit_compound_statement(&statement_values);
+	cfg_result_package_t case_compound_statement_results = visit_compound_statement(case_stmt_cursor->first_child);
 
 	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
 	if(case_compound_statement_results.starting_block != NULL){
