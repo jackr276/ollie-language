@@ -97,6 +97,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node);
+static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node);
 
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
@@ -4809,11 +4810,6 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 
 	//Let this take care of it if we have an actual compound statement here
 	if(default_compound_statement_results.starting_block != NULL){
-		//If we have an error
-		if(default_compound_statement_results.starting_block->block_id == -1) {
-			return create_and_return_err();
-		}
-
 		//Otherwise, we'll just copy over the starting and ending block into our results
 		results.starting_block = default_compound_statement_results.starting_block;
 		results.final_block = default_compound_statement_results.final_block;
@@ -4852,11 +4848,6 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 
 	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
 	if(case_compound_statement_results.starting_block != NULL){
-		//If we have an error(specifically, if this is non-null and a negative ID)
-		if(case_compound_statement_results.starting_block->block_id == -1){
-			return create_and_return_err();
-		}
-
 		//Once we get this back, we'll add it in to the main block
 		results.starting_block = case_compound_statement_results.starting_block;
 
@@ -4896,8 +4887,24 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Since a C-style case statement is just a collection of 
-	//statements, we'll keep going 
-	
+	//statements, we'll use the statement sequence to process it here
+	cfg_result_package_t statement_results = visit_statement_chain(root_node->first_child); 
+
+	//This would occur whenever we don't have an empty case
+	if(statement_results.starting_block != NULL){
+		//These become our starting and final blocks
+		result_package.starting_block = statement_results.starting_block;
+		result_package.final_block = statement_results.final_block;
+
+	} else {
+		//If it is NULL, we're going to need to create our own block here
+		basic_block_t* case_block = basic_block_alloc(1);
+
+		//This is the starting and final block
+		result_package.starting_block = case_block;
+		result_package.final_block = case_block;
+
+	}
 
 	//Give back the final results
 	return result_package;
@@ -4934,6 +4941,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//Since C-style switches support break statements, we'll need
 	//this as well
 	basic_block_t* ending_block = basic_block_alloc(1);
+
+	//The ending block now goes onto the breaking stack
+	push(break_stack, ending_block);
 
 	//We already know what these will be, so populate them
 	result_package.starting_block = starting_block;
@@ -5108,7 +5118,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
 
 	//Ensure that we wire this in properly
-	//result_package.starting_block->direct_successor = result_package.final_block;
+	result_package.starting_block->direct_successor = result_package.final_block;
+
+	//Remove the exit statement from the breaking stack
+	pop(break_stack);
 
 	//Give back the starting block
 	return result_package;
