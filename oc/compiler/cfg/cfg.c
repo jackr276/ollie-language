@@ -5004,6 +5004,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//We'll also need a current block variable for chaining things together
 	basic_block_t* current_block = NULL;
+	//Keep track of what the previous block was(for fall through)
+	basic_block_t* previous_block = NULL;
 
 	//Now we advance to the first real case statement
 	cursor = cursor->next_sibling;
@@ -5043,25 +5045,39 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		//Reassign current block
 		current_block = case_default_results.final_block;
 
-		//If the final block ends in a jump statement, we'll have
-		if(current_block->exit_statement != NULL){
-			switch(current_block->exit_statement->CLASS){
-				case THREE_ADDR_CODE_JUMP_STMT:
-					if(current_block->exit_statement->jump_type == JUMP_TYPE_JMP){
+		//If we have a previous block and this one has a non-jump ex
+		if(previous_block != NULL) {
+			if(previous_block->exit_statement != NULL){
+				switch(previous_block->exit_statement->CLASS){
+					case THREE_ADDR_CODE_JUMP_STMT:
+						if(previous_block->exit_statement->jump_type == JUMP_TYPE_JMP){
+							break;
+						}
+					case THREE_ADDR_CODE_RET_STMT:
 						break;
-					}
-				case THREE_ADDR_CODE_RET_STMT:
-					break;
 
-				default:
-					//Fallthrough the block
-					add_successor(current_block, ending_block);
+					default:
+						//Fallthrough the block
+						add_successor(previous_block, case_default_results.starting_block);
 
-					//Emit the direct jump. This may be optimized away in the optimizer, but we
-					//need to guarantee behavior
-					emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+						//Emit the direct jump. This may be optimized away in the optimizer, but we
+						//need to guarantee behavior
+						emit_jump(previous_block, case_default_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				}
+
+			//If it is null, then we definitiely need a jump here
+			} else {
+				//Fallthrough the block
+				add_successor(previous_block, case_default_results.starting_block);
+
+				//Emit the direct jump. This may be optimized away in the optimizer, but we
+				//need to guarantee behavior
+				emit_jump(previous_block, case_default_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
 		}
+
+		//Now the old previous block is the current block
+		previous_block = current_block;
 
 		//Otherwise if we don't satisfy this condition, we don't need to emit any jump at all
 
@@ -5069,11 +5085,37 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		cursor = cursor->next_sibling;
 	}
 
-	//Once we make it all the way down here, we know that we're at the very final block. This block
-	//is guaranteed to have the switch end block as it's successor
-	add_successor(current_block, ending_block);
-	//Emit a jump right to the end block
-	emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+	/**
+	 * Now we've hit the final block. If this one does not end in a jump or return,
+	 * then it needs to be sent to the final block
+	 */
+	if(current_block->exit_statement != NULL){
+		switch(current_block->exit_statement->CLASS){
+			case THREE_ADDR_CODE_JUMP_STMT:
+				if(current_block->exit_statement->jump_type == JUMP_TYPE_JMP){
+					break;
+				}
+			case THREE_ADDR_CODE_RET_STMT:
+				break;
+
+			default:
+				//This one's successor is the end block
+				add_successor(current_block, ending_block);
+
+				//Emit the direct jump. This may be optimized away in the optimizer, but we
+				//need to guarantee behavior
+				emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		}
+
+	//Otherwise it is null, so we definitely need a jump to the end here
+	} else {
+		//This one's successor is the end block
+		add_successor(current_block, ending_block);
+
+		//Emit the direct jump. This may be optimized away in the optimizer, but we
+		//need to guarantee behavior
+		emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+	}
 
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	//will be set to point to the default block
