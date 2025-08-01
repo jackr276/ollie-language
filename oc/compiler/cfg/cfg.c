@@ -4977,7 +4977,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	basic_block_t* root_level_block = starting_block;
 
 	//We'll first need to emit the expression node
-	cfg_result_package_t input_results = emit_expression(root_level_block, root_node, TRUE, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE, TRUE);
 
 	//Check for ternary expansion
 	if(input_results.final_block != NULL && input_results.final_block != root_level_block){
@@ -5044,18 +5044,23 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		current_block = case_default_results.final_block;
 
 		//If the final block ends in a jump statement, we'll have
-		if(current_block->exit_statement != NULL 
-			&& (current_block->exit_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT
-			//This needs to be a direct jump. If it's not we'll still need to 
-			//account for fallthrough
-			|| current_block->exit_statement->jump_type != JUMP_TYPE_JMP)){
+		if(current_block->exit_statement != NULL){
+			switch(current_block->exit_statement->CLASS){
+				case THREE_ADDR_CODE_JUMP_STMT:
+					if(current_block->exit_statement->jump_type == JUMP_TYPE_JMP){
+						break;
+					}
+				case THREE_ADDR_CODE_RET_STMT:
+					break;
 
-			//Fallthrough the block
-			add_successor(current_block, ending_block);
+				default:
+					//Fallthrough the block
+					add_successor(current_block, ending_block);
 
-			//Emit the direct jump. This may be optimized away in the optimizer, but we
-			//need to guarantee behavior
-			emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Emit the direct jump. This may be optimized away in the optimizer, but we
+					//need to guarantee behavior
+					emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+			}
 		}
 
 		//Otherwise if we don't satisfy this condition, we don't need to emit any jump at all
