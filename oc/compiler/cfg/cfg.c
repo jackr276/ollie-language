@@ -5047,15 +5047,25 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 		//If we have a previous block and this one has a non-jump ex
 		if(previous_block != NULL) {
+			//If the previous block isn't totally empty, we'll check to see if it has
+			//an exit statement or not
 			if(previous_block->exit_statement != NULL){
+				//Switch based on what is in here
 				switch(previous_block->exit_statement->CLASS){
+					//If we already have an ending that's a hard jump, we don't
+					//need to go on
 					case THREE_ADDR_CODE_JUMP_STMT:
 						if(previous_block->exit_statement->jump_type == JUMP_TYPE_JMP){
 							break;
 						}
+
+					//And of course a return statement means we can't add anything afterwards
 					case THREE_ADDR_CODE_RET_STMT:
 						break;
 
+					//If we get here though, we either have a conditional jump or some other statement.
+					//In this case, to guarantee the fallthrough property, we must
+					//add a jump here
 					default:
 						//Fallthrough the block
 						add_successor(previous_block, case_default_results.starting_block);
@@ -5063,6 +5073,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 						//Emit the direct jump. This may be optimized away in the optimizer, but we
 						//need to guarantee behavior
 						emit_jump(previous_block, case_default_results.starting_block, JUMP_TYPE_JMP, TRUE, FALSE);
+						
+						break;
 				}
 
 			//If it is null, then we definitiely need a jump here
@@ -5087,17 +5099,24 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	/**
 	 * Now we've hit the final block. If this one does not end in a jump or return,
-	 * then it needs to be sent to the final block
+	 * then it needs to be sent to the final block so that we guarantee the fall-through
+	 * property
 	 */
 	if(current_block->exit_statement != NULL){
+		//Switch based on what the end of the current block is
 		switch(current_block->exit_statement->CLASS){
+			//If it's a jump statement, we don't need to add one
 			case THREE_ADDR_CODE_JUMP_STMT:
 				if(current_block->exit_statement->jump_type == JUMP_TYPE_JMP){
 					break;
 				}
+
+			//And if it's a return statement, we also don't need to add anything
 			case THREE_ADDR_CODE_RET_STMT:
 				break;
 
+			//However if we have this, we need to ensure that we go from this final block
+			//directly to the end
 			default:
 				//This one's successor is the end block
 				add_successor(current_block, ending_block);
@@ -5105,6 +5124,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				//Emit the direct jump. This may be optimized away in the optimizer, but we
 				//need to guarantee behavior
 				emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+
+				break;
 		}
 
 	//Otherwise it is null, so we definitely need a jump to the end here
