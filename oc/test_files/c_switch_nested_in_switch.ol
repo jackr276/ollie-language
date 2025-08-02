@@ -28,7 +28,7 @@ fn main(argc:i32, argv:char**) -> i32 {
 
 				default:
 					x <<= y;
-					//Test with no brake
+					//Test with no break
 			}
 		}
 
