@@ -3862,6 +3862,56 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
+	//We know that it wasn't an error, but now we need to perform duplicate checking
+
+	//Grab this out for convenience
+	char* identifier_name = identifier_node->identifier.string;
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, identifier_name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", identifier_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Fail out
+		return FALSE;
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, identifier_name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", identifier_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Fail out
+		return FALSE;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", identifier_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Fail out
+		return FALSE;
+	}
+
+
+
+
 
 	//This worked
 	return TRUE;
