@@ -3707,6 +3707,44 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct, side_
 }
 
 
+
+
+
+/**
+ * A function pointer definer defines a function signature that can be used to dynamically call functions 
+ * of the same signature
+ *
+ * define fn(<parameter_list>) -> <type> as <identifier>;
+ *
+ * Unlike constructs & enums, we'll force the user to use an as keyword here for their type definition to
+ * enforce readability
+ *
+ * NOTE: We've already seen the "define" and "fn" keyword by the time that we arrive here
+ */
+static u_int8_t function_pointer_definer(FILE* fl){
+	//Declare a token for search-ahead
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Now we need to see an L_PAREN
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
+	}
+
+	//Otherwise push this onto the grouping stack for later
+	push_token(grouping_stack, lookahead);
+
+	//So long as we don't see an R_PAREN here, we'll keep going
+	while(lookahead.tok != R_PAREN){
+
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+
+	//This worked
+	return TRUE;
+}
+
+
 /**
  * A construct definer is the definition of a construct. We require all parts of the construct to be defined here.
  * We also allow the potential for aliasing as a different type right off of the bat here. Since this is a compiler-specific
@@ -4680,9 +4718,11 @@ static generic_type_t* type_specifier(FILE* fl){
  * top lexical scope for the function itself. Like all rules, it returns a reference to the
  * root of the subtree that it creates
  *
- * BNF Rule: <parameter-declaration> ::= {mut}? <identifier> : <type-specifier>
+ * NOTE: An identifier may or may not be required based on the type of parameter declaration that we have
+ *
+ * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
  */
-static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
+static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t identifier_required, u_int8_t current_parameter_number){
 	//Is it mutable?
 	u_int8_t is_mut = FALSE;
 	//Lookahead token
@@ -4829,7 +4869,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
  *
  * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
  */
-static generic_ast_node_t* parameter_list(FILE* fl){
+static generic_ast_node_t* parameter_list(FILE* fl, u_int8_t identifier_required){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -4894,7 +4934,7 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl, parameter_number);
+		generic_ast_node_t* param_decl = parameter_declaration(fl, parameter_number, identifier_required);
 
 		//It's invalid, we'll just send it up the chain
 		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7551,6 +7591,8 @@ static u_int8_t definition(FILE* fl){
 					return construct_definer(fl);
 				case ENUM:
 					return enum_definer(fl);
+				case FN:
+					return function_pointer_definer(fl);
 
 				default:
 					print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
@@ -7866,7 +7908,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	generic_ast_node_t* param_list_node = parameter_list(fl);
+	generic_ast_node_t* param_list_node = parameter_list(fl, TRUE);
 
 	//We have a bad parameter list
 	if(param_list_node->CLASS == AST_NODE_CLASS_ERR_NODE){

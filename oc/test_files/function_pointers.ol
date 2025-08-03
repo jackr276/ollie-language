@@ -19,14 +19,12 @@ fn subtract(mut x:i32, y:i32) -> i32{
 
 
 fn main() -> i32 {
-	//Declare x to be a function pointer
-	//that references a function with two i32 params
-	//and returns an i32
-	declare x:(fn(mut i32, i32) -> i32)*;
+	//Define an arithmetic function pointer that takes in two i32's
+	define fn(mut i32, i32) -> i32 as arithmetic_function;
 
 	//This is the add function
-	x := add;
+	x:arithmetic_function := add;
 
 	//Should call add on 1 and 3
-	ret x(1, 3);
+	ret @x(1, 3);
 }

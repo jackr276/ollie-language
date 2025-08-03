@@ -29,6 +29,8 @@ typedef struct basic_type_t basic_type_t;
 typedef struct array_type_t array_type_t;
 //A pointer type
 typedef struct pointer_type_t pointer_type_t;
+//A function type
+typedef struct function_type_t function_type_t;
 //An enumerated type
 typedef struct enumerated_type_t enumerated_type_t;
 //A constructed type
@@ -205,6 +207,18 @@ struct enumerated_type_t{
 struct aliased_type_t{
 	//What does it point to?
 	generic_type_t* aliased_type;
+};
+
+
+/**
+ * A function type is a function signature that is used for function pointers
+ * For a function type, we simply need a list of parameters and a return type
+ */
+struct function_type_t{
+	//The return type
+	generic_type_t* return_type;
+
+	//TODO ADD MORE
 };
 
 
