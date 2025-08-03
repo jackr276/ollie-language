@@ -6848,9 +6848,6 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				case INT_CONST_FORCE_U:
 				case LONG_CONST:
 				case LONG_CONST_FORCE_U:
-					if(const_node->int_long_val < 0){
-						return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-					}
 
 					//Store the value
 					case_stmt->case_statement_value = const_node->int_long_val;
