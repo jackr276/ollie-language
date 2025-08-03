@@ -7538,30 +7538,33 @@ static u_int8_t definition(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//Switch based on what we have
-	if(lookahead.tok == DEFINE){
-		//We can now see construct or enum
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	switch(lookahead.tok){
+		//Type definition
+		case DEFINE:
+			//We can now see construct or enum
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-		//Switch based on what we have here
-		if(lookahead.tok == CONSTRUCT){
-			return construct_definer(fl);
-		} else if(lookahead.tok == ENUM){
-			return enum_definer(fl);
-		//Some weird error here
-		} else {
-			print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
+			switch(lookahead.tok){
+				case CONSTRUCT:
+					return construct_definer(fl);
+				case ENUM:
+					return enum_definer(fl);
+
+				default:
+					print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
+					num_errors++;
+					return FAILURE;
+			}
+	
+		//Alias statement
+		case ALIAS:
+			return alias_statement(fl);
+
+		//Something wen wrong here
+		default:
+			print_parse_message(PARSE_ERROR, "Definition expected define or alias keywords, found neither", parser_line_num);
 			num_errors++;
 			return FAILURE;
-		}
-
-	} else if(lookahead.tok == ALIAS){
-		return alias_statement(fl);
-	//Some weird error here
-	} else {
-		print_parse_message(PARSE_ERROR, "Definition expected define or alias keywords, found neither", parser_line_num);
-		num_errors++;
-		return FAILURE;
 	}
 }
 
