@@ -23,7 +23,7 @@ fn main() -> i32 {
 	define fn(mut i32, i32) -> i32 as arithmetic_function;
 
 	//This is the add function
-	x:arithmetic_function := add;
+	let mut x:arithmetic_function := add;
 
 	//Should call add on 1 and 3
 	ret @x(1, 3);

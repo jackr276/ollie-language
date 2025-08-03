@@ -3733,6 +3733,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Otherwise push this onto the grouping stack for later
 	push_token(grouping_stack, lookahead);
 
+	//Once we've gotten past this point, we're safe to allocate this type
+	generic_type_t* function_type = create_function_pointer_type(parser_line_num); 
+
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
 	
@@ -3759,13 +3762,10 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Keep processing so long as we keep seeing commas
 	do{
 		//We've exceeded the allowed count. We'll throw an error here
-		if(parameter_count > MAX_FUNCTION_TYPE_PARAMS){
+		if(parameter_count >= MAX_FUNCTION_TYPE_PARAMS){
 			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
 			return FALSE;
 		}
-
-		//Always assume it isn't
-		is_mutable = FALSE;
 
 		//Each function pointer parameter will consist only of a type and optionally
 		//a mutable keyword
@@ -3773,7 +3773,8 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 		//Is it mutable? If this token exists then it is
 		if(lookahead.tok == MUT){
-			is_mutable = TRUE;
+			//Store that this is mutable inside of the structure
+			function_type->function_type->parameters[parameter_count].is_mutable = TRUE;
 		} else {
 			//Otherwise put this back
 			push_back_token(lookahead);
@@ -3786,6 +3787,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		if(type == NULL){
 			return FALSE;
 		}
+
+		//This is good, we'll store it in the parameter type
+		function_type->function_type->parameters[parameter_count].parameter_type = type;
 
 		//Increment the count
 		parameter_count++;
@@ -3832,6 +3836,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
+	//Let's now store the return type
+	function_type->function_type->return_type = return_type;
+
 	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
 	//confusing syntactical mess that C function pointer declarations have
 	
@@ -3845,9 +3852,15 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
-	//If we make it here then we know we're good
-	//TODO finish this out
+	//If we make it here then we know we're good to look for an identifier
+	generic_ast_node_t* identifier_node = identifier(fl, SIDE_TYPE_LEFT);
 
+	//If this is an error, then we're going to fail out
+	if(identifier_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias type", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
 
 
 	//This worked
