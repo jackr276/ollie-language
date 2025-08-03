@@ -3919,11 +3919,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
-	//Now that we've done all of our validations, we can create the aliased type
-	generic_type_t* aliased_type = create_aliased_type(identifier_node->identifier, function_type, parser_line_num);
+	//This function type has the name of the identifier
+	function_type->type_name = identifier_node->identifier;
 
 	//Now that we've created it, we'll store it in the symtab
-	symtab_type_record_t* type_record = create_type_record(aliased_type);
+	symtab_type_record_t* type_record = create_type_record(function_type);
 
 	//Now that this has been created, we'll store it
 	insert_type(type_symtab, type_record);
@@ -7640,8 +7640,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
  * BNF Rule: <alias-statement> ::= alias <type-specifier> as <identifier>;
  */
 static u_int8_t alias_statement(FILE* fl){
-	//Store the ident name locally
-	char ident_name[MAX_TYPE_NAME_LENGTH];
 	//Our lookahead token
 	lexitem_t lookahead;
 
@@ -7687,8 +7685,8 @@ static u_int8_t alias_statement(FILE* fl){
 		return FAILURE;
 	}
 
-	//Let's extract the name
-	strcpy(ident_name, ident_node->identifier.string);
+	//Grab this out for convenience
+	char* name = ident_node->identifier.string;
 
 	//Let's do our last syntax check--the semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7702,11 +7700,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, ident_name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", ident_name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -7716,11 +7714,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, ident_name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", ident_name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -7730,11 +7728,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, ident_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", ident_name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);

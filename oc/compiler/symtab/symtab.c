@@ -295,7 +295,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 */
 symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class){
 	//Allocate it
-	symtab_function_record_t* record = (symtab_function_record_t*)calloc(1, sizeof(symtab_function_record_t));
+	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
 	//Copy the name over
 	record->func_name = name;
@@ -315,7 +315,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_
  */
 symtab_type_record_t* create_type_record(generic_type_t* type){
 	//Allocate it
-	symtab_type_record_t* record = (symtab_type_record_t*)calloc(1, sizeof(symtab_type_record_t));
+	symtab_type_record_t* record = calloc(1, sizeof(symtab_type_record_t));
 
 	//Hash the type name and store it
 	record->hash = hash_type(type);
