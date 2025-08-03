@@ -6805,12 +6805,12 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 			//Otherwise we know that it is good, but is it the right type
 			//Are the types here compatible?
-			case_stmt->inferred_type = types_assignable(&(switch_stmt_node->inferred_type), &(enum_ident_node->inferred_type));
+			case_stmt->inferred_type = types_assignable(&(switch_stmt_node->inferred_type), &(enum_record->type_defined_as));
 
 			//If this fails, they're incompatible
 			if(case_stmt->inferred_type == NULL){
 				sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-							  switch_stmt_node->inferred_type->type_name.string, enum_ident_node->inferred_type->type_name.string);
+							  switch_stmt_node->inferred_type->type_name.string, enum_record->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -6818,7 +6818,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			enum_ident_node->variable = enum_record;
 
 			//Grab the value of this case statement
-			case_stmt->case_statement_value = enum_ident_node->variable->enum_member_value;
+			case_stmt->case_statement_value = enum_record->enum_member_value;
 
 			//We already have the value -- so this doesn't need to be a child node
 			break;
@@ -6848,9 +6848,6 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				case INT_CONST_FORCE_U:
 				case LONG_CONST:
 				case LONG_CONST_FORCE_U:
-					if(const_node->int_long_val < 0){
-						return print_and_return_error("Due to ollie mandating the use of a jump table, negative values may not be used in case statements.", current_line);
-					}
 
 					//Store the value
 					case_stmt->case_statement_value = const_node->int_long_val;

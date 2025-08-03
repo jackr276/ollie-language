@@ -4993,7 +4993,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//The offset(amount that we'll need to knock down any case values by) is always the 
 	//case statement's value subtracted by the lower bound. We'll call it offset here
 	//for consistency
-	u_int32_t offset = root_node->lower_bound;
+	int32_t offset = root_node->lower_bound;
 
 	//A generic result package for all of our case/default statements
 	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
@@ -5265,7 +5265,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
 	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
-	u_int32_t offset = root_node->lower_bound;
+	int32_t offset = root_node->lower_bound;
 
 	//Wipe this out here just in case
 	cfg_result_package_t case_default_results = {NULL, NULL, NULL, BLANK};
