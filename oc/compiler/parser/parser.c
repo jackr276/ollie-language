@@ -5720,6 +5720,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//We will declare a new lexical scope here
 	initialize_variable_scope(variable_symtab);
+	initialize_type_scope(type_symtab);
 
 	//Push to stack for later matching
 	push_token(grouping_stack, lookahead);
@@ -5911,6 +5912,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Now that we're done, we will remove this variable scope
 	finalize_variable_scope(variable_symtab);
+	finalize_type_scope(type_symtab);
 
 	//If we make it here, all went well
 	return switch_stmt_node;
