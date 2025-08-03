@@ -4561,6 +4561,22 @@ static generic_type_t* type_specifier(FILE* fl){
 
 	//As long as we are seeing L_BRACKETS
 	while(lookahead.tok == L_BRACKET){
+		//Scan ahead to see
+		lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+		//We could just see an empty one here. This tells us that we have 
+		//an empty array initializer. If we do see this, we can break out here
+		if(lookahead.tok == R_BRACKET){
+			//Scan ahead to see
+			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+			//Onto the next iteration
+			continue;
+		}
+
+		//Otherwise we need to put this token back
+		push_back_token(lookahead);
+
 		//The next thing that we absolutely must see is a constant. If we don't, we're
 		//done here
 		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
