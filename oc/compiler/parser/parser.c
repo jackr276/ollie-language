@@ -3867,6 +3867,16 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Grab this out for convenience
 	char* identifier_name = identifier_node->identifier.string;
 
+	//Let's close the parsing out here - we'll need to see & consume a semicolon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we didn't see it, then we fail out
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after definition statement", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
 	//Check that it isn't some duplicated function name
 	symtab_function_record_t* found_func = lookup_function(function_symtab, identifier_name);
 
@@ -3909,9 +3919,14 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
+	//Now that we've done all of our validations, we can create the aliased type
+	generic_type_t* aliased_type = create_aliased_type(identifier_node->identifier, function_type, parser_line_num);
 
+	//Now that we've created it, we'll store it in the symtab
+	symtab_type_record_t* type_record = create_type_record(aliased_type);
 
-
+	//Now that this has been created, we'll store it
+	insert_type(type_symtab, type_record);
 
 	//This worked
 	return TRUE;
