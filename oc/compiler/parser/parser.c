@@ -3730,16 +3730,34 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
 	}
 
-	//TODO convert this into do-while
-
 	//Otherwise push this onto the grouping stack for later
 	push_token(grouping_stack, lookahead);
+
+	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
+	//as an alternative way of saying this function takes no parameters
+	
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+
+	//We can optionally see a void type that we need to consume
+	switch(lookahead.tok){
+		//We just need to consume this and move along
+		case VOID:
+			//Refresh the token
+			lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+			break;
+
+		default:
+			//If we hit the default, then we need to push the token back
+			push_back_token(lookahead);
+			break;
+	}
 
 	//Keep track of the parameter count
 	u_int8_t parameter_count = 0;
 
-	//So long as we don't see an R_PAREN here, we'll keep going
-	while(lookahead.tok != R_PAREN){
+	//Keep processing so long as we keep seeing commas
+	do{
 		//We've exceeded the allowed count. We'll throw an error here
 		if(parameter_count > MAX_FUNCTION_TYPE_PARAMS){
 			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
@@ -3775,8 +3793,10 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		//Increment the count
 		parameter_count++;
 
+		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
+
+	} while(lookahead.tok == COMMA);
 
 
 	//This worked
@@ -4761,7 +4781,7 @@ static generic_type_t* type_specifier(FILE* fl){
  *
  * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
  */
-static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t identifier_required, u_int8_t current_parameter_number){
+static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
 	//Is it mutable?
 	u_int8_t is_mut = FALSE;
 	//Lookahead token
@@ -4908,7 +4928,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t identifier_r
  *
  * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
  */
-static generic_ast_node_t* parameter_list(FILE* fl, u_int8_t identifier_required){
+static generic_ast_node_t* parameter_list(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -4973,7 +4993,7 @@ static generic_ast_node_t* parameter_list(FILE* fl, u_int8_t identifier_required
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl, parameter_number, identifier_required);
+		generic_ast_node_t* param_decl = parameter_declaration(fl, parameter_number);
 
 		//It's invalid, we'll just send it up the chain
 		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -7947,7 +7967,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	generic_ast_node_t* param_list_node = parameter_list(fl, TRUE);
+	generic_ast_node_t* param_list_node = parameter_list(fl);
 
 	//We have a bad parameter list
 	if(param_list_node->CLASS == AST_NODE_CLASS_ERR_NODE){
