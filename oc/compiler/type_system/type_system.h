@@ -12,6 +12,7 @@
 #include <sys/types.h>
 
 #define OUT_OF_BOUNDS 3
+#define MAX_FUNCTION_TYPE_PARAMS 6
 
 //Type names may not exceed 200 characters in length
 #define MAX_TYPE_NAME_LENGTH 200
@@ -31,6 +32,8 @@ typedef struct array_type_t array_type_t;
 typedef struct pointer_type_t pointer_type_t;
 //A function type
 typedef struct function_type_t function_type_t;
+//A function type's individual parameter
+typedef struct function_type_parameter_t function_type_parameter_t;
 //An enumerated type
 typedef struct enumerated_type_t enumerated_type_t;
 //A constructed type
@@ -211,14 +214,25 @@ struct aliased_type_t{
 
 
 /**
+ * A type for storing the individual function parameters themselves
+ */
+struct function_type_parameter_t{
+	//What's the type
+	generic_type_t* parameter_type;
+	//Is this mutable
+	u_int8_t is_mutable;
+};
+
+
+/**
  * A function type is a function signature that is used for function pointers
  * For a function type, we simply need a list of parameters and a return type
  */
 struct function_type_t{
 	//The return type
 	generic_type_t* return_type;
-
-	//TODO ADD MORE
+	//A list of function parameters. Limited to 6
+	function_type_parameter_t parameters[MAX_FUNCTION_TYPE_PARAMS];
 };
 
 

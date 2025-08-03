@@ -3707,9 +3707,6 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct, side_
 }
 
 
-
-
-
 /**
  * A function pointer definer defines a function signature that can be used to dynamically call functions 
  * of the same signature
@@ -3725,16 +3722,58 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Declare a token for search-ahead
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//Is a function parameter mutable? We always assume no by default
+	u_int8_t is_mutable;
+
 	//Now we need to see an L_PAREN
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
 	}
 
+	//TODO convert this into do-while
+
 	//Otherwise push this onto the grouping stack for later
 	push_token(grouping_stack, lookahead);
 
+	//Keep track of the parameter count
+	u_int8_t parameter_count = 0;
+
 	//So long as we don't see an R_PAREN here, we'll keep going
 	while(lookahead.tok != R_PAREN){
+		//We've exceeded the allowed count. We'll throw an error here
+		if(parameter_count > MAX_FUNCTION_TYPE_PARAMS){
+			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			return FALSE;
+		}
+
+		//Always assume it isn't
+		is_mutable = FALSE;
+
+		//Each function pointer parameter will consist only of a type and optionally
+		//a mutable keyword
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Is it mutable? If this token exists then it is
+		if(lookahead.tok == MUT){
+			is_mutable = TRUE;
+		} else {
+			//Otherwise put this back
+			push_back_token(lookahead);
+		}
+
+		//Now we need to see a valid type
+		generic_type_t* type = type_specifier(fl);
+
+		//If this is NULL, we'll error out
+		if(type == NULL){
+			return FALSE;
+		}
+
+		//Otherwise it worked, so we can keep going
+
+
+		//Increment the count
+		parameter_count++;
 
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
