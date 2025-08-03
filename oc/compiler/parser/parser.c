@@ -3787,9 +3787,6 @@ static u_int8_t function_pointer_definer(FILE* fl){
 			return FALSE;
 		}
 
-		//Otherwise it worked, so we can keep going
-
-
 		//Increment the count
 		parameter_count++;
 
@@ -3797,6 +3794,60 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	} while(lookahead.tok == COMMA);
+
+	//Now that we're done processing the list, we need to ensure that we have a right paren
+	if(lookahead.tok != R_PAREN){
+		//Fail out
+		print_parse_message(PARSE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Ensure that we pop the grouping stack and get a match
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		//Fail out
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Now we need to see an arrow operator
+	lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+
+	//If we don't see it, we fail out
+	if(lookahead.tok != ARROW){
+		//Fail out
+		print_parse_message(PARSE_ERROR, "Arrow (->) required after function parameter list", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Now we need to see a return type
+	generic_type_t* return_type = type_specifier(fl);
+
+	//If this is NULL, then we have an invalid return type
+	if(return_type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid return type given in function type definition", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
+	//confusing syntactical mess that C function pointer declarations have
+	
+	//Refresh the token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it isn't an AS keyword, we're done
+	if(lookahead.tok != AS){
+		print_parse_message(PARSE_ERROR, "\"as\" keyword is required after function type definition", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//If we make it here then we know we're good
+	//TODO finish this out
+
 
 
 	//This worked
