@@ -111,6 +111,8 @@ struct generic_type_t{
 	basic_type_t* basic_type;
 	array_type_t* array_type;
 	pointer_type_t* pointer_type;
+	//For function pointers
+	function_type_t* function_type;
 	constructed_type_t* construct_type;
 	enumerated_type_t* enumerated_type;
 	aliased_type_t* aliased_type;
@@ -348,6 +350,11 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
  * Dynamically allocate and create an aliased type
  */
 generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number);
+
+/**
+ * Dynamically allocate and create a function pointer type
+ */
+generic_type_t* function_pointer_type(u_int32_t line_number);
 
 /**
  * Is a type signed?

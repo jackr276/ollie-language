@@ -1606,6 +1606,25 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 
 
 /**
+ * Dynamically allocate and create a function pointer type
+ */
+generic_type_t* function_pointer_type(u_int32_t line_number){
+	//First allocate the parent
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Assign the class & line number
+	type->type_class = TYPE_CLASS_FUNCTION_SIGNATURE;
+	type->line_number = line_number;
+
+	//Now we need to create the internal function pointer type
+	type->function_type = calloc(1, sizeof(generic_type_t));
+
+	//And give the type back
+	return type;
+}
+
+
+/**
  * Is a type signed?
  */
 u_int8_t is_type_signed(generic_type_t* type){
@@ -1654,19 +1673,31 @@ generic_type_t* dealias_type(generic_type_t* type){
  * Provide a way of destroying a type variable easily
 */
 void type_dealloc(generic_type_t* type){
-	//We'll take action based on what kind of type it is
-	if(type->type_class == TYPE_CLASS_BASIC){
-		free(type->basic_type);
-	} else if (type->type_class == TYPE_CLASS_ALIAS){
-		free(type->aliased_type);
-	} else if (type->type_class == TYPE_CLASS_ARRAY){
-		free(type->array_type);
-	} else if(type->type_class == TYPE_CLASS_POINTER){
-		free(type->pointer_type);
-	} else if(type->type_class == TYPE_CLASS_CONSTRUCT){
-		free(type->construct_type);
-	} else if(type->type_class == TYPE_CLASS_ENUMERATED){
-		free(type->enumerated_type);
+	//Free based on what type of type we have
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			free(type->basic_type);
+			break;
+		case TYPE_CLASS_ALIAS:
+			free(type->aliased_type);
+			break;
+		case TYPE_CLASS_ENUMERATED:
+			free(type->enumerated_type);
+			break;
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			free(type->function_type);
+			break;
+		case TYPE_CLASS_ARRAY:
+			free(type->array_type);
+			break;
+		case TYPE_CLASS_POINTER:
+			free(type->pointer_type);
+			break;
+		case TYPE_CLASS_CONSTRUCT:
+			free(type->construct_type);
+			break;
+		default:
+			break;
 	}
 
 	//Finally just free the overall pointer
