@@ -560,7 +560,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 			//Reset the registers in here while we're at it
-			memset(func_entry->function_defined_in->used_registers, 0, sizeof(u_int8_t) * 17);
+			memset(func_entry->function_defined_in->used_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
 			//Now we can go through the entire RPO set
 			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order_reverse_cfg->current_index; _++){

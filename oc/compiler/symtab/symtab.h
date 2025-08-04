@@ -82,18 +82,18 @@ struct symtab_function_record_t{
 	u_int8_t used_registers[15];
 	//The name of the function
 	dynamic_string_t func_name;
+	//The parameters
+	parameter_t func_params[MAX_FUNCTION_PARAMS];
+	//The data area for the whole function
+	stack_data_area_t data_area;
 	//The entrance CFG block to the function. There is always only one entrance
 	void* entrance_block;
 	//The associated call graph node with this function
 	void* call_graph_node;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
-	//The parameters
-	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The type of the function
 	generic_type_t* signature;
-	//The data area for the whole function
-	stack_data_area_t data_area;
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
