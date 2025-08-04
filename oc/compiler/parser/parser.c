@@ -4923,7 +4923,7 @@ static generic_type_t* type_specifier(FILE* fl){
  *
  * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
  */
-static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
+static generic_ast_node_t* parameter_declaration(FILE* fl){
 	//Is it mutable?
 	u_int8_t is_mut = FALSE;
 	//Lookahead token
@@ -5045,8 +5045,6 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	param_record->is_mutable = is_mut;
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
-	//Store the current parameter number of it
-	param_record->function_parameter_order = current_parameter_number;
 
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
@@ -5070,12 +5068,9 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
  *
  * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
  */
-static generic_ast_node_t* parameter_list(FILE* fl, generic_type_t* function_type){
+static generic_ast_node_t* parameter_list(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
-
-	//Extract this for convenience
-	function_type_t* signature = function_type->function_type;
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5132,13 +5127,10 @@ static generic_ast_node_t* parameter_list(FILE* fl, generic_type_t* function_typ
 			break;
 	}
 
-	//Keep track of the current function paremeter number
-	u_int8_t parameter_number = 1;
-
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl, parameter_number);
+		generic_ast_node_t* param_decl = parameter_declaration(fl);
 
 		//It's invalid, we'll just send it up the chain
 		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5159,18 +5151,11 @@ static generic_ast_node_t* parameter_list(FILE* fl, generic_type_t* function_typ
 		//Add this in as a child node
 		add_child_node(param_list_node, param_decl);
 
-		//Store the type and mutability
-		signature->parameters[parameter_number - 1].is_mutable = param_decl->variable->is_mutable;
-		signature->parameters[parameter_number - 1].parameter_type = param_decl->inferred_type;
-
 		//Otherwise it was valid, so we've seen one more parameter
 		param_list_node->num_params++;
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Increment this
-		parameter_number++;
 
 	//We keep going as long as we see commas
 	} while(lookahead.tok == COMMA);
@@ -8114,7 +8099,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	generic_ast_node_t* param_list_node = parameter_list(fl, function_record->function_type);
+	generic_ast_node_t* param_list_node = parameter_list(fl);
 
 	//We have a bad parameter list
 	if(param_list_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -8174,6 +8159,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Otherwise we are defining from scratch here
 	} else {
+		//Extract the function type here
+		function_type_t* signature = function_record->function_type->function_type;
+
 		//So long as this is not null
 		while(param_list_cursor != NULL){
 			//For dev use--sanity check
@@ -8186,6 +8174,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 			//We'll add it in as a reference to the function
 			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
+
+			//Store this inside of the function record
+			signature->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
+			signature->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
+
 			//Increment the parameter count
 			(function_record->number_of_params)++;
 

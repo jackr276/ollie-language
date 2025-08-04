@@ -84,12 +84,12 @@ struct symtab_function_record_t{
 	dynamic_string_t func_name;
 	//The entrance CFG block to the function. There is always only one entrance
 	void* entrance_block;
-	//The signature type of our function
-	generic_type_t* function_type;
 	//The parameters
 	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The data area for the whole function
 	stack_data_area_t data_area;
+	//The signature type of our function
+	generic_type_t* function_type;
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record

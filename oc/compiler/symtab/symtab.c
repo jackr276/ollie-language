@@ -305,8 +305,6 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, generic_
 	record->hash = hash(name.string);
 	//Store the storage class
 	record->storage_class = storage_class;
-	//Was it ever called?
-	record->called = 0;
 
 	return record;
 }

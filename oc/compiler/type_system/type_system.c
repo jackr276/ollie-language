@@ -1617,7 +1617,7 @@ generic_type_t* create_function_pointer_type(u_int32_t line_number){
 	type->line_number = line_number;
 
 	//Now we need to create the internal function pointer type
-	type->function_type = calloc(1, sizeof(generic_type_t));
+	type->function_type = calloc(1, sizeof(function_type_t));
 
 	//And give the type back
 	return type;
