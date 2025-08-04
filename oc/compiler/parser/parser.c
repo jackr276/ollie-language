@@ -8074,7 +8074,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(ident_node->identifier, create_function_pointer_type(parser_line_num), storage_class);
+		function_record = create_function_record(ident_node->identifier, storage_class);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -8179,7 +8179,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Otherwise we are defining from scratch here
 	} else {
 		//Grab this out for convenience
-		function_type_t* function_signature = function_record->signature->function_type;
+		generic_type_t* function_signature = create_function_pointer_type(parser_line_num);
 
 		//So long as this is not null
 		while(param_list_cursor != NULL){
@@ -8190,8 +8190,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
 			
 			//Store this into the function signature as well
-			function_signature->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
-			function_signature->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
+			function_signature->function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
+			function_signature->function_type->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
 
 			//Increment the parameter count
 			(function_record->number_of_params)++;
@@ -8204,7 +8204,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Copy this over for later
-		function_signature->num_params = function_record->number_of_params;
+		function_signature->function_type->num_params = function_record->number_of_params;
+
+		//Store this in here
+		function_record->signature = function_signature;
 	}
 
 	//Once we get down here, the entire parameter list has been stored properly
