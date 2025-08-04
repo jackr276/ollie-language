@@ -5070,9 +5070,12 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
  *
  * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
  */
-static generic_ast_node_t* parameter_list(FILE* fl){
+static generic_ast_node_t* parameter_list(FILE* fl, generic_type_t* function_type){
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Extract this for convenience
+	function_type_t* signature = function_type->function_type;
 
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5155,6 +5158,10 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 
 		//Add this in as a child node
 		add_child_node(param_list_node, param_decl);
+
+		//Store the type and mutability
+		signature->parameters[parameter_number - 1].is_mutable = param_decl->variable->is_mutable;
+		signature->parameters[parameter_number - 1].parameter_type = param_decl->inferred_type;
 
 		//Otherwise it was valid, so we've seen one more parameter
 		param_list_node->num_params++;
@@ -8068,7 +8075,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(ident_node->identifier, storage_class);
+		function_record = create_function_record(ident_node->identifier, create_function_pointer_type(parser_line_num), storage_class);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -8107,7 +8114,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	generic_ast_node_t* param_list_node = parameter_list(fl);
+	generic_ast_node_t* param_list_node = parameter_list(fl, function_record->function_type);
 
 	//We have a bad parameter list
 	if(param_list_node->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -8209,6 +8216,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return print_and_return_error("Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
 	}
 
+	//Store the return type in the signature
+	function_record->function_type->function_type->return_type = return_type;
+
 	//Grab the type record. A reference to this will be stored in the function symbol table. Make sure
 	//that we first dealias it
 	generic_type_t* type = dealias_type(return_type);
@@ -8228,7 +8238,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	}
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
-	if(defining_prev_implicit == 1){
+	if(defining_prev_implicit == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);

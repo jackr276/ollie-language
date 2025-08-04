@@ -80,10 +80,12 @@ struct symtab_function_record_t{
 	//Won't be important until the register allocator. Remember- the actual enum value
 	//of the register is one more than the index here
 	u_int8_t used_registers[15];
-	//The entrance CFG block to the function. There is always only one entrance
-	void* entrance_block;
 	//The name of the function
 	dynamic_string_t func_name;
+	//The entrance CFG block to the function. There is always only one entrance
+	void* entrance_block;
+	//The signature type of our function
+	generic_type_t* function_type;
 	//The parameters
 	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The data area for the whole function
@@ -347,7 +349,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);
+symtab_function_record_t* create_function_record(dynamic_string_t name, generic_type_t* function_type, STORAGE_CLASS_T storage_class);
 
 /**
  * Create a type record for the symbol table
