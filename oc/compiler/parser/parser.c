@@ -945,27 +945,40 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			}
 
 			//Now we will look this up in the variable symbol table
-			symtab_variable_record_t* found = lookup_variable(variable_symtab, var_name);
+			symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
 
-			//Record the current var for later use
-			current_var = found;
+			//Let's look and see if we have a variable for use here. If we do, then
+			//we're done with this exploration
+			if(found_var != NULL){
+				//Record the current var for later use
+				current_var = found_var;
 
-			//We now must see a variable that was intialized. If it was not
-			//initialized, then we have an issue
-			if(found == NULL){
-				sprintf(info, "Variable \"%s\" has not been declared", var_name);
-				return print_and_return_error(info, current_line);
+				//Store the inferred type
+				ident->inferred_type = found_var->type_defined_as;
+				//Store the variable that's associated
+				ident->variable = found_var;
+				//Idents are assignable
+				ident->is_assignable = ASSIGNABLE;
+
+				//Give back the ident node
+				return ident;
 			}
 
-			//Store the inferred type
-			ident->inferred_type = found->type_defined_as;
-			//Store the variable that's associated
-			ident->variable = found;
-			//Idents are assignable
-			ident->is_assignable = ASSIGNABLE;
+			//Attempt to find the function in here
+			//symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
 
-			//Give back the ident node
-			return ident;
+			//If it could be found, then we're all set
+			//if(found_func != NULL){
+				//ident->inferred_type = lo
+			//}
+
+
+			//Otherwise, if we reach all the way down to here, then we have an issue as
+			//this identifier has never been declared as a function, variable or constant.
+			//We'll through an error if this happens
+			sprintf(info, "Variable \"%s\" has not been declared", var_name);
+			return print_and_return_error(info, current_line);
+
 
 		//If we see any constant
 		case INT_CONST:
