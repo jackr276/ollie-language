@@ -84,6 +84,10 @@ struct symtab_function_record_t{
 	dynamic_string_t func_name;
 	//The entrance CFG block to the function. There is always only one entrance
 	void* entrance_block;
+	//The associated call graph node with this function
+	void* call_graph_node;
+	//In case of collisions, we can chain these records
+	symtab_function_record_t* next;
 	//The parameters
 	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The type of the function
@@ -108,10 +112,6 @@ struct symtab_function_record_t{
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
-	//The associated call graph node with this function
-	void* call_graph_node;
-	//In case of collisions, we can chain these records
-	symtab_function_record_t* next;
 };
 
 
@@ -349,7 +349,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);
+symtab_function_record_t* create_function_record(dynamic_string_t name, generic_type_t* function_type, STORAGE_CLASS_T storage_class);
 
 /**
  * Create a type record for the symbol table

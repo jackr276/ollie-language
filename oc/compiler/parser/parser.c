@@ -8068,7 +8068,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(ident_node->identifier, storage_class);
+		function_record = create_function_record(ident_node->identifier, create_function_pointer_type(parser_line_num), storage_class);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -8240,8 +8240,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Store the return type
 	function_record->return_type = type;
-
-	//Once we have the type, most nodes that we have here are useless
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition

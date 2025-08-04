@@ -293,12 +293,14 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class){
+symtab_function_record_t* create_function_record(dynamic_string_t name, generic_type_t* function_type, STORAGE_CLASS_T storage_class){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
 	//Copy the name over
 	record->func_name = name;
+	//Copy the function type in
+	record->function_type = function_type;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name.string);
 	//Store the storage class
@@ -1151,6 +1153,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			if(temp->call_graph_node != NULL){
 				free(temp->call_graph_node);
 			}
+
+			//Dealloate the function type
+			type_dealloc(temp->function_type);
 
 			//Deallocate the data area itself
 			stack_data_area_dealloc(&(temp->data_area));
