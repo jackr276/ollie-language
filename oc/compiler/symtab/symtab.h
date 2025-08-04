@@ -77,13 +77,13 @@ struct parameter_t{
  * numbers, parameter types, return types, etc.
  */
 struct symtab_function_record_t{
+	//The parameters
+	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//Won't be important until the register allocator. Remember- the actual enum value
 	//of the register is one more than the index here
 	u_int8_t used_registers[15];
 	//The name of the function
 	dynamic_string_t func_name;
-	//The parameters
-	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The entrance CFG block to the function. There is always only one entrance
@@ -94,6 +94,8 @@ struct symtab_function_record_t{
 	symtab_function_record_t* next;
 	//The type of the function
 	generic_type_t* signature;
+	//What's the return type?
+	generic_type_t* return_type;
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
@@ -106,8 +108,6 @@ struct symtab_function_record_t{
 	u_int8_t number_of_params;
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
-	//What's the return type?
-	generic_type_t* return_type;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?

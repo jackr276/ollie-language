@@ -8264,9 +8264,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Store the return type as well
 	function_record->signature->function_type->return_type = type;
 
-	//DEBUG LINE
-	print_function_pointer_type(function_record->signature);
-
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
