@@ -1651,6 +1651,38 @@ u_int8_t is_type_signed(generic_type_t* type){
 	}
 }
 
+/**
+ * Convert a generic type to a sring
+ */
+char* generic_type_to_string(basic_type_t* type){
+	switch(type->basic_type){
+		case S_INT8:
+			return "i8";
+		case U_INT8:
+			return "u8";
+		case S_INT16:
+			return "i16";
+		case U_INT16:
+			return "u16";
+
+			//TODO finish
+		default:
+			return "todo finish me";
+	}
+
+}
+
+
+/**
+ * Print a function pointer type out
+ */
+void print_function_pointer_type(generic_type_t* function_pointer_type){
+	//Extract this out
+	function_type_t* function_type = function_pointer_type->function_type;
+	//TODO finsih
+
+}
+
 
 /**
  * This function will completely strip away any aliasing and return the raw type 

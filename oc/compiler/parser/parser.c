@@ -8117,6 +8117,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return param_list_node;
 	}
 
+	//If we have more than the allowed number of parameters, we fail out
+	if(param_list_node->num_params > 6){
+		return print_and_return_error("Ollie allows only 6 parameters per function", parser_line_num);
+	}
+
 	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
 	//now parse the param_list and store records to it	
 	//Let's first add the param list in as a child
@@ -8167,18 +8172,21 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Otherwise we are defining from scratch here
 	} else {
+		//Grab this out for convenience
+		function_type_t* function_signature = function_record->function_type->function_type;
+
 		//So long as this is not null
 		while(param_list_cursor != NULL){
-			//For dev use--sanity check
-			if(param_list_cursor->CLASS != AST_NODE_CLASS_PARAM_DECL){
-				return print_and_return_error("Fatal internal compiler error. Expected declaration node in parameter list", parser_line_num);
-			}
-
 			//The variable record for this param node
 			symtab_variable_record_t* param_rec = param_list_cursor->variable;
 
 			//We'll add it in as a reference to the function
 			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
+			
+			//Store this into the function signature as well
+			function_signature->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
+			function_signature->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
+
 			//Increment the parameter count
 			(function_record->number_of_params)++;
 
@@ -8240,6 +8248,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Store the return type
 	function_record->return_type = type;
+
+	//Store the return type as well
+	function_record->function_type->function_type->return_type = type;
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition

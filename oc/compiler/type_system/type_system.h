@@ -357,6 +357,11 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 generic_type_t* create_function_pointer_type(u_int32_t line_number);
 
 /**
+ * Print a function pointer type out
+ */
+void print_function_pointer_type(generic_type_t* function_pointer_type);
+
+/**
  * Is a type signed?
  */
 u_int8_t is_type_signed(generic_type_t* type);
