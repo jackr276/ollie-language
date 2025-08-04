@@ -3944,6 +3944,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Now that this has been created, we'll store it
 	insert_type(type_symtab, type_record);
 
+	//Print this for debugging
+	print_function_pointer_type(function_type);
+
 	//This worked
 	return TRUE;
 }
@@ -8201,7 +8204,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Copy this over for later
-		function_signature->num_params = function_signature->num_params;
+		function_signature->num_params = function_record->number_of_params;
 	}
 
 	//Once we get down here, the entire parameter list has been stored properly
@@ -8257,6 +8260,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Store the return type as well
 	function_record->signature->function_type->return_type = type;
+
+	//DEBUG LINE
+	print_function_pointer_type(function_record->signature);
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition

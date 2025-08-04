@@ -1710,7 +1710,7 @@ void print_function_pointer_type(generic_type_t* function_pointer_type){
 		}
 	}
 
-	printf(") -> %s", basic_type_to_string(function_type->return_type));
+	printf(") -> %s\n", basic_type_to_string(function_type->return_type));
 }
 
 
