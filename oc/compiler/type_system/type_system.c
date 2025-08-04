@@ -1654,8 +1654,12 @@ u_int8_t is_type_signed(generic_type_t* type){
 /**
  * Convert a generic type to a sring
  */
-char* generic_type_to_string(basic_type_t* type){
-	switch(type->basic_type){
+static char* basic_type_to_string(generic_type_t* type){
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return "complex_type";
+	}
+
+	switch(type->basic_type->basic_type){
 		case S_INT8:
 			return "i8";
 		case U_INT8:
@@ -1664,12 +1668,25 @@ char* generic_type_to_string(basic_type_t* type){
 			return "i16";
 		case U_INT16:
 			return "u16";
-
-			//TODO finish
+		case S_INT32:
+			return "i32";
+		case U_INT32:
+			return "u32";
+		case S_INT64:
+			return "i64";
+		case U_INT64:
+			return "u64";
+		case CHAR:
+			return "char";
+		case VOID:
+			return "void";
+		case FLOAT32:
+			return "f32";
+		case FLOAT64:
+			return "f64";
 		default:
-			return "todo finish me";
+			return "complex_type";
 	}
-
 }
 
 
@@ -1679,8 +1696,21 @@ char* generic_type_to_string(basic_type_t* type){
 void print_function_pointer_type(generic_type_t* function_pointer_type){
 	//Extract this out
 	function_type_t* function_type = function_pointer_type->function_type;
-	//TODO finsih
 
+	printf("fn(");
+
+	for(u_int16_t i = 0; i < function_type->num_params; i++){
+		if(function_type->parameters[i].is_mutable == TRUE){
+			printf("mut ");
+		} 
+		printf("%s", basic_type_to_string(function_type->parameters[i].parameter_type));
+
+		if(i != function_type->num_params - 1){
+			printf(", ");
+		}
+	}
+
+	printf(") -> %s", basic_type_to_string(function_type->return_type));
 }
 
 

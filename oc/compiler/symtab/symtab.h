@@ -91,7 +91,7 @@ struct symtab_function_record_t{
 	//The parameters
 	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The type of the function
-	generic_type_t* function_type;
+	generic_type_t* signature;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The hash that we have

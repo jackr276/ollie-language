@@ -300,7 +300,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, generic_
 	//Copy the name over
 	record->func_name = name;
 	//Copy the function type in
-	record->function_type = function_type;
+	record->signature = function_type;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name.string);
 	//Store the storage class
@@ -1155,7 +1155,7 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			}
 
 			//Dealloate the function type
-			type_dealloc(temp->function_type);
+			type_dealloc(temp->signature);
 
 			//Deallocate the data area itself
 			stack_data_area_dealloc(&(temp->data_area));

@@ -3812,6 +3812,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 	} while(lookahead.tok == COMMA);
 
+	//Store the parameter count for down the road
+	function_type->function_type->num_params = parameter_count;
+
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
 		//Fail out
@@ -8173,7 +8176,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Otherwise we are defining from scratch here
 	} else {
 		//Grab this out for convenience
-		function_type_t* function_signature = function_record->function_type->function_type;
+		function_type_t* function_signature = function_record->signature->function_type;
 
 		//So long as this is not null
 		while(param_list_cursor != NULL){
@@ -8196,6 +8199,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//Push the cursor up by 1
 			param_list_cursor = param_list_cursor->next_sibling;
 		}
+
+		//Copy this over for later
+		function_signature->num_params = function_signature->num_params;
 	}
 
 	//Once we get down here, the entire parameter list has been stored properly
@@ -8250,7 +8256,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	function_record->return_type = type;
 
 	//Store the return type as well
-	function_record->function_type->function_type->return_type = type;
+	function_record->signature->function_type->return_type = type;
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition

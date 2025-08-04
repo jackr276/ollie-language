@@ -235,6 +235,8 @@ struct function_type_t{
 	function_type_parameter_t parameters[MAX_FUNCTION_TYPE_PARAMS];
 	//The return type
 	generic_type_t* return_type;
+	//Store the number of parameters
+	u_int8_t num_params;
 };
 
 
