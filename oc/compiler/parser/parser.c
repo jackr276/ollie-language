@@ -4923,7 +4923,7 @@ static generic_type_t* type_specifier(FILE* fl){
  *
  * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
  */
-static generic_ast_node_t* parameter_declaration(FILE* fl){
+static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
 	//Is it mutable?
 	u_int8_t is_mut = FALSE;
 	//Lookahead token
@@ -5045,6 +5045,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl){
 	param_record->is_mutable = is_mut;
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
+	//Store the current parameter number of it
+	param_record->function_parameter_order = current_parameter_number;
 
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
@@ -5127,10 +5129,13 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 			break;
 	}
 
+	//Start off at 1 
+	u_int8_t function_parameter_number = 1;
+
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl);
+		generic_ast_node_t* param_decl = parameter_declaration(fl, function_parameter_number);
 
 		//It's invalid, we'll just send it up the chain
 		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -5153,6 +5158,9 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 
 		//Otherwise it was valid, so we've seen one more parameter
 		param_list_node->num_params++;
+
+		//Increment this
+		function_parameter_number++;
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8060,7 +8068,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(ident_node->identifier, create_function_pointer_type(parser_line_num), storage_class);
+		function_record = create_function_record(ident_node->identifier, storage_class);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -8159,9 +8167,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Otherwise we are defining from scratch here
 	} else {
-		//Extract the function type here
-		function_type_t* signature = function_record->function_type->function_type;
-
 		//So long as this is not null
 		while(param_list_cursor != NULL){
 			//For dev use--sanity check
@@ -8174,11 +8179,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 			//We'll add it in as a reference to the function
 			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
-
-			//Store this inside of the function record
-			signature->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
-			signature->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
-
 			//Increment the parameter count
 			(function_record->number_of_params)++;
 
@@ -8208,9 +8208,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	if(return_type == NULL){
 		return print_and_return_error("Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
 	}
-
-	//Store the return type in the signature
-	function_record->function_type->function_type->return_type = return_type;
 
 	//Grab the type record. A reference to this will be stored in the function symbol table. Make sure
 	//that we first dealias it

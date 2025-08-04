@@ -86,10 +86,10 @@ struct symtab_function_record_t{
 	void* entrance_block;
 	//The parameters
 	parameter_t func_params[MAX_FUNCTION_PARAMS];
+	//The type of the function
+	generic_type_t* function_type;
 	//The data area for the whole function
 	stack_data_area_t data_area;
-	//The signature type of our function
-	generic_type_t* function_type;
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
@@ -349,7 +349,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, generic_type_t* function_type, STORAGE_CLASS_T storage_class);
+symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);
 
 /**
  * Create a type record for the symbol table

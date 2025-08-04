@@ -231,10 +231,10 @@ struct function_type_parameter_t{
  * For a function type, we simply need a list of parameters and a return type
  */
 struct function_type_t{
-	//The return type
-	generic_type_t* return_type;
 	//A list of function parameters. Limited to 6
 	function_type_parameter_t parameters[MAX_FUNCTION_TYPE_PARAMS];
+	//The return type
+	generic_type_t* return_type;
 };
 
 
