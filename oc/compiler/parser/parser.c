@@ -965,13 +965,19 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			}
 
 			//Attempt to find the function in here
-			//symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
+			symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
 
 			//If it could be found, then we're all set
-			//if(found_func != NULL){
-				//ident->inferred_type = lo
-			//}
+			if(found_func != NULL){
+				//This values type is the function's signature
+				ident->inferred_type = found_func->signature;
 
+				//It is not assignable
+				ident->is_assignable = ASSIGNABLE;
+
+				//Give it back
+				return ident;
+			}
 
 			//Otherwise, if we reach all the way down to here, then we have an issue as
 			//this identifier has never been declared as a function, variable or constant.

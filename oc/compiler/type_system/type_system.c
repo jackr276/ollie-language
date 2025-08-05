@@ -196,7 +196,6 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
 		default:
 			return FALSE;
 	}
-
 }
 
 
@@ -299,6 +298,14 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				//We'll give back the destination type if they are the same
 				return deref_destination_type;
 			}
+
+		/**
+		 * A function signature type is a very special casein terms of assignability
+		 */
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			printf("HERE\n");
+			return NULL;
+			
 
 		//Enumerated types are internally a u8
 		case TYPE_CLASS_ENUMERATED:
