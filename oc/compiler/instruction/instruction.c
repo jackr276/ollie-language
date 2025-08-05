@@ -213,63 +213,70 @@ variable_size_t select_type_size(generic_type_t* type){
 	//What the size will be
 	variable_size_t size;
 
-	//Probably the most common option
-	if(type->type_class == TYPE_CLASS_BASIC){
-		//Extract for convenience
-		Token basic_type = type->basic_type->basic_type;
+	switch(type->type_class){
+		//Probably the most common option
+		case TYPE_CLASS_BASIC:
+			//Switch based on this
+			switch (type->basic_type->basic_type) {
+				case U_INT8:
+				case S_INT8:
+				case CHAR:
+					size = BYTE;
+					break;
 
-		//Switch based on this
-		switch (basic_type) {
-			case U_INT8:
-			case S_INT8:
-			case CHAR:
-				size = BYTE;
-				break;
+				case U_INT16:
+				case S_INT16:
+					size = WORD;
+					break;
 
-			case U_INT16:
-			case S_INT16:
-				size = WORD;
-				break;
+				//These are 32 bit(double word)
+				case S_INT32:
+				case U_INT32:
+					size = DOUBLE_WORD;
+					break;
 
-			//These are 32 bit(double word)
-			case S_INT32:
-			case U_INT32:
-				size = DOUBLE_WORD;
-				break;
+				//This is SP
+				case FLOAT32:
+					size = SINGLE_PRECISION;
+					break;
 
-			//This is SP
-			case FLOAT32:
-				size = SINGLE_PRECISION;
-				break;
+				//This is double precision
+				case FLOAT64:
+					size = DOUBLE_PRECISION;
+					break;
 
-			//This is double precision
-			case FLOAT64:
-				size = DOUBLE_PRECISION;
-				break;
+				//These are all quad word(64 bit)
+				case U_INT64:
+				case S_INT64:
+					size = QUAD_WORD;
+					break;
+			
+				//We shouldn't get here
+				default:
+					break;
+			}
 
-			//These are all quad word(64 bit)
-			case U_INT64:
-			case S_INT64:
-				size = QUAD_WORD;
-				break;
-		
-			//We shouldn't get here
-			default:
-				break;
-		}
+			break;
 
-	//These will always be 64 bits
-	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
-				|| type->type_class == TYPE_CLASS_CONSTRUCT){
-		size = QUAD_WORD;
+		//Enumerated types are BYTES
+		case TYPE_CLASS_ENUMERATED:
+			size = BYTE;
 
-	//This should never happen, but a sane default doesn't hurt
-	} else if(type->type_class == TYPE_CLASS_ALIAS){
-		size = QUAD_WORD;
-	//Catch all down here
-	} else {
-		size = DOUBLE_WORD;
+		//These are always 64 bits
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ALIAS:
+			size = QUAD_WORD;
+			break;
+
+		//Default is also quad word
+		default:
+			size = QUAD_WORD;
+			break;
 	}
+
 
 	//Give it back
 	return size;
@@ -282,70 +289,72 @@ variable_size_t select_type_size(generic_type_t* type){
 variable_size_t select_variable_size(three_addr_var_t* variable){
 	//What the size will be
 	variable_size_t size;
-	
-	//Grab this type out of here
+	//Extract for convenience
 	generic_type_t* type = variable->type;
-	
-	//Probably the most common option
-	if(type->type_class == TYPE_CLASS_BASIC){
-		//Extract for convenience
-		Token basic_type = type->basic_type->basic_type;
 
-		//Switch based on this
-		switch (basic_type) {
-			case U_INT8:
-			case S_INT8:
-			case CHAR:
-				size = BYTE;
-				break;
+	switch(type->type_class){
+		//Probably the most common option
+		case TYPE_CLASS_BASIC:
+			//Switch based on this
+			switch (type->basic_type->basic_type) {
+				case U_INT8:
+				case S_INT8:
+				case CHAR:
+					size = BYTE;
+					break;
 
-			case U_INT16:
-			case S_INT16:
-				size = WORD;
-				break;
+				case U_INT16:
+				case S_INT16:
+					size = WORD;
+					break;
 
-			//These are 32 bit(double word)
-			case S_INT32:
-			case U_INT32:
-				size = DOUBLE_WORD;
-				break;
+				//These are 32 bit(double word)
+				case S_INT32:
+				case U_INT32:
+					size = DOUBLE_WORD;
+					break;
 
-			//This is SP
-			case FLOAT32:
-				size = SINGLE_PRECISION;
-				break;
+				//This is SP
+				case FLOAT32:
+					size = SINGLE_PRECISION;
+					break;
 
-			//This is double precision
-			case FLOAT64:
-				size = DOUBLE_PRECISION;
-				break;
+				//This is double precision
+				case FLOAT64:
+					size = DOUBLE_PRECISION;
+					break;
 
-			//These are all quad word(64 bit)
-			case U_INT64:
-			case S_INT64:
-				size = QUAD_WORD;
-				break;
-		
-			//We shouldn't get here
-			default:
-				break;
-		}
+				//These are all quad word(64 bit)
+				case U_INT64:
+				case S_INT64:
+					size = QUAD_WORD;
+					break;
+			
+				//We shouldn't get here
+				default:
+					break;
+			}
 
-	//These will always be 64 bits
-	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
-				|| type->type_class == TYPE_CLASS_CONSTRUCT){
-		size = QUAD_WORD;
+			break;
 
-	//This should never happen, but a sane default doesn't hurt
-	} else if(type->type_class == TYPE_CLASS_ALIAS){
-		size = QUAD_WORD;
-	//Catch all down here
-	} else {
-		size = DOUBLE_WORD;
+		//Enumerated types are BYTES
+		case TYPE_CLASS_ENUMERATED:
+			size = BYTE;
+
+		//These are always 64 bits
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ALIAS:
+			size = QUAD_WORD;
+			break;
+
+		//Default is also quad word
+		default:
+			size = QUAD_WORD;
+			break;
 	}
-
-	//It wouldn't hurt to store this
-	variable->variable_size = size;
 
 	//Give it back
 	return size;
