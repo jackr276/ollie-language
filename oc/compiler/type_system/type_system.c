@@ -1755,26 +1755,45 @@ static char* basic_type_to_string(generic_type_t* type){
 
 
 /**
- * Print a function pointer type out
+ * Generate the full name for the function pointer type
  */
-void print_function_pointer_type(generic_type_t* function_pointer_type){
+void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
+	//Reserve this for variable printing
+	char var_string[MAX_IDENT_LENGTH];
+
+	//Allocate the type name
+	dynamic_string_alloc(&(function_pointer_type->type_name));
+
 	//Extract this out
 	function_type_t* function_type = function_pointer_type->function_type;
 
-	printf("fn(");
+	//Set the type name initially
+	dynamic_string_set(&(function_pointer_type->type_name), "fn(");
 
 	for(u_int16_t i = 0; i < function_type->num_params; i++){
 		if(function_type->parameters[i].is_mutable == TRUE){
-			printf("mut ");
+			//Add this in dynamically
+			dynamic_string_concatenate(&(function_pointer_type->type_name), "mut ");
 		} 
-		printf("%s", basic_type_to_string(function_type->parameters[i].parameter_type));
 
+		//First put this into the buffer string
+		sprintf(var_string, "%s", basic_type_to_string(function_type->parameters[i].parameter_type));
+
+		//Then concatenate
+		dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
+
+		//Add the comma in if need be
 		if(i != function_type->num_params - 1){
-			printf(", ");
+			//Then concatenate
+			dynamic_string_concatenate(&(function_pointer_type->type_name), ", ");
 		}
 	}
 
-	printf(") -> %s\n", basic_type_to_string(function_type->return_type));
+	//First print this to the buffer
+	sprintf(var_string, ") -> %s\n", basic_type_to_string(function_type->return_type));
+
+	//Add the closing sequence
+	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
 }
 
 
