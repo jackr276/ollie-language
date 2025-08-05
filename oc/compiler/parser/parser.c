@@ -604,7 +604,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//We'll also add in that the current function has called this one
 	call_function(current_function->call_graph_node, function_record->call_graph_node);
 	//We'll now note that this was indeed called
-	function_record->called = 1;
+	function_record->called = TRUE;
 
 	//Add the inferred type in for convenience as well
 	function_call_node->inferred_type = function_record->return_type;
