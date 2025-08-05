@@ -3941,8 +3941,8 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
-	//This function type has the name of the identifier
-	function_type->type_name = identifier_node->identifier;
+	//We'll now generate the name. This essentially finalizes the whole affair
+	generate_function_pointer_type_name(function_type);
 
 	//Now that we've created it, we'll store it in the symtab
 	symtab_type_record_t* type_record = create_type_record(function_type);
@@ -3950,10 +3950,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Now that this has been created, we'll store it
 	insert_type(type_symtab, type_record);
 
-	//Print this for debugging
-	print_function_pointer_type(function_type);
-	
-	//TODO add name construction for function pointer types 
+	//Now that we've done that part, we also need to create the alias type and insert it
+	generic_type_t* alias_type = create_aliased_type(identifier_node->identifier, function_type, parser_line_num);
+
+	//Once we've created this, we'll add this into the symtab
+	insert_type(type_symtab, create_type_record(alias_type));
 
 	//This worked
 	return TRUE;
@@ -8272,6 +8273,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Store the return type as well
 	function_record->signature->function_type->return_type = type;
 
+	//Now that the function record has been finalized, we'll need to produce the type name
+	generate_function_pointer_type_name(function_record->signature);
+
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8294,10 +8298,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
-
-		//Otherwise it should be ok
-
-		//If this is the case, then we essentially have a compiler directive here. We'll return NULL
 
 		//Finalize the variable scope
 		finalize_variable_scope(variable_symtab);
