@@ -258,9 +258,10 @@ variable_size_t select_type_size(generic_type_t* type){
 
 			break;
 
-		//Enumerated types are BYTES
+		//Enumerated types are 32 bits for convenience
 		case TYPE_CLASS_ENUMERATED:
-			size = BYTE;
+			size = DOUBLE_WORD;
+			break;
 
 		//These are always 64 bits
 		case TYPE_CLASS_POINTER:
@@ -337,9 +338,10 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 
 			break;
 
-		//Enumerated types are BYTES
+		//Enumerated types are 32 bits for convenience
 		case TYPE_CLASS_ENUMERATED:
-			size = BYTE;
+			size = DOUBLE_WORD;
+			break;
 
 		//These are always 64 bits
 		case TYPE_CLASS_POINTER:
