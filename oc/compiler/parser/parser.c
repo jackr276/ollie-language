@@ -554,12 +554,12 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
  * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*)
  */
 static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
+	//For any error printing if need be
+	char error[ERROR_SIZE];
 	//The current line num
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
-	//A nicer reference that we'll keep to the function record
-	symtab_function_record_t* function_record;
 	//We'll also keep a nicer reference to the function name
 	char* function_name;
 	//The number of parameters that we've seen
@@ -579,13 +579,41 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Grab the function name out for convenience
 	function_name = ident->identifier.string;
 
-	//Let's now look up the function name in the function symtab
-	function_record = lookup_function(function_symtab, function_name);
+	/**
+	 * This identifier has the possibility of being a direct function call or a function pointer
+	 * of some kind. To determine which it is, we'll need to look the name up in both symtabs
+	 * and go accordingly
+	 */
+	
+	//Lookup the variable
+	symtab_variable_record_t* function_pointer_variable = lookup_variable(variable_symtab, function_name);
 
-	//Important check here--if this function record does not exist, it means the user is trying to 
-	//call a nonexistent function
-	if(function_record == NULL){
-		sprintf(info, "Function \"%s\" is being called before definition", function_name);
+	//Let's now look up the function name in the function symtab
+	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name);
+
+	if(function_record != NULL){
+		//TODO nothing yet, will expand
+
+
+	} else if(function_pointer_variable != NULL){
+		//Strip the type away here
+		generic_type_t* function_pointer_type = dealias_type(function_pointer_variable->type_defined_as);
+
+		//If this is not a function signature, then we can't call it as one
+		if(function_pointer_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			//Print and fail out here
+			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name, function_pointer_type->type_name.string);
+			return print_and_return_error(error, parser_line_num);
+		}
+
+		printf("FOUND ONE\n");
+		printf("%s\n", function_pointer_type->type_name.string);
+		printf("WIP\n");
+		exit(0);
+
+	//This means that they're both NULL. We'll need to throw an error here
+	} else{
+		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name);
 		//Return the error node and get out
 		return print_and_return_error(info, current_line);
 	}

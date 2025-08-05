@@ -1771,7 +1771,7 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	}
 
 	//First print this to the buffer
-	sprintf(var_string, ") -> %s\n", basic_type_to_string(function_type->return_type));
+	sprintf(var_string, ") -> %s", basic_type_to_string(function_type->return_type));
 
 	//Add the closing sequence
 	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
