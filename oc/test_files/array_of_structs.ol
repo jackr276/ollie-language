@@ -11,7 +11,7 @@ fn main(arg:i32, argv:char**) -> i32{
 	} as my_struct;
 
 	//Declare an array of such items
-	declare structure_arr:my_struct[32];
+	declare mut structure_arr:my_struct[32];
 
 	structure_arr[2]:y := 23;
 	structure_arr[2]:ch := 'a';

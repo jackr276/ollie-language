@@ -11,7 +11,7 @@ fn not_main(arg:i32, argv:char**) -> i64 {
 
 	} as my_struct;
 
-	declare structure:my_struct;
+	declare mut structure:my_struct;
 
 	structure:ch := 'a';
 	structure:x := 3;

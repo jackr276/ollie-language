@@ -52,8 +52,6 @@ static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
 static symtab_function_record_t* current_function = NULL;
-//What is the current variable that we are "in"
-static symtab_variable_record_t* current_var = NULL;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t* current_function_jump_statements = NULL;
 
@@ -950,9 +948,6 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//Let's look and see if we have a variable for use here. If we do, then
 			//we're done with this exploration
 			if(found_var != NULL){
-				//Record the current var for later use
-				current_var = found_var;
-
 				//Store the inferred type
 				ident->inferred_type = found_var->type_defined_as;
 				//Store the variable that's associated
@@ -971,6 +966,9 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			if(found_func != NULL){
 				//This values type is the function's signature
 				ident->inferred_type = found_func->signature;
+
+				//Store the function record that we've found
+				ident->func_record = found_func;
 
 				//It is not assignable
 				ident->is_assignable = ASSIGNABLE;
@@ -1159,19 +1157,22 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
+	//Extract the variable from the left side
+	symtab_variable_record_t* assignee = left_hand_unary->variable;
+
 	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
 	//this assignment is illegal
-	if(current_var->initialized == TRUE && current_var->is_mutable == FALSE){
-		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name.string);
+	if(assignee->initialized == TRUE && assignee->is_mutable == FALSE){
+		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//If it was already intialized, this means that it's been "assigned to"
-	if(current_var->initialized == TRUE){
-		current_var->assigned_to = TRUE;
+	if(assignee->initialized == TRUE){
+		assignee->assigned_to = TRUE;
 	} else {
 		//Mark that this var was in fact initialized
-		current_var->initialized = TRUE;
+		assignee->initialized = TRUE;
 	}
 
 	//Now we are required to see the := terminal
@@ -1436,9 +1437,6 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	//Store the type
 	const_access_node->inferred_type = working_type;
 
-	//Update the current variable as well, as this is a new variable
-	current_var = var_record;
-
 	//And now we're all done, so we'll just give back the root reference
 	return const_access_node;
 }
@@ -1680,6 +1678,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		push_back_token(lookahead);
 		//Assign the type
 		postfix_expr_node->inferred_type = return_type;
+		//Assign the variable
+		postfix_expr_node->variable = result->variable;
 		//This was assigned to
 		result->variable->assigned_to = TRUE;
 		//And we'll give back what we had constructed so far
