@@ -3952,6 +3952,8 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 	//Print this for debugging
 	print_function_pointer_type(function_type);
+	
+	//TODO add name construction for function pointer types 
 
 	//This worked
 	return TRUE;

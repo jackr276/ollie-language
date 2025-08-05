@@ -252,6 +252,43 @@ u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b){
 }
 
 
+/**
+ * Are two types completely identical
+ */
+static u_int8_t types_identical(generic_type_t* typeA, generic_type_t* typeB){
+	//TODO finish
+
+	return FALSE;
+}
+
+
+/**
+ * Function signatures must be absolutely identical for them to be considered assignable.
+ * If they are not 100% the same, then they are not assignable and this rule will return false
+ */
+static u_int8_t function_signatures_identical(function_type_t* a, function_type_t* b){
+	//Very quick way to eliminate things here - if their parameter counts don't match
+	if(a->num_params != b->num_params){
+		return FALSE;
+	}
+
+	//Let's first compare the return types. If these are not the exact same, then we're done here
+	generic_type_t* raw_return_a = dealias_type(a->return_type);
+	generic_type_t* raw_return_b = dealias_type(b->return_type);
+
+	//If these two types are not absolutely identical, then we fail out
+	if(types_identical(raw_return_a, raw_return_b) == FALSE){
+		return FALSE;
+	}
+
+	//Otherwise if we get here, we know that they are the same
+
+
+
+	//If we survived to down here, then we return TRUE
+	return TRUE;
+}
+
 
 /**
  * Can two types be assigned to one another? This rule will perform implicit conversions
@@ -303,8 +340,17 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 		 * A function signature type is a very special casein terms of assignability
 		 */
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
-			printf("HERE\n");
-			return NULL;
+			//If this is not also a function signature, then we're done here
+			if(deref_source_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+				return NULL;
+			}
+
+			//Otherwise, we'll need to use the helper rule to determine if it's equivalent
+			if(function_signatures_identical(deref_destination_type->function_type, deref_source_type->function_type) == TRUE){
+				return deref_destination_type;
+			} else {
+				return NULL;
+			}
 			
 
 		//Enumerated types are internally a u8
@@ -991,6 +1037,11 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 	//Just to be safe, we'll dealias is
 	type = dealias_type(type);
 
+	//Function signatures are never valid for any unary operation
+	if(type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
+		return FALSE;
+	}
+
 	//Go based on what token we're given
 	switch (unary_op) {
 		//This will pull double duty for pre/post increment operators
@@ -1093,6 +1144,12 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 
 	//Deconstructed basic type(since we'll be using it so much)
 	basic_type_t* basic_type = NULL;
+
+	//Function signatures are never valid for any binary operations
+	if(type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
+		return FALSE;
+	}
+
 
 	//Switch based on what the operator is
 	switch(binary_op){
