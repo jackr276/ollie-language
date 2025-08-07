@@ -564,8 +564,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	char* function_name;
 	//The number of parameters that we've seen
 	u_int8_t num_params = 0;
-	//The number of parameters that the function actually takes
-	u_int8_t function_num_params;
 	
 	//First grab the ident node
 	generic_ast_node_t* ident = identifier(fl, side);
@@ -579,6 +577,12 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Grab the function name out for convenience
 	function_name = ident->identifier.string;
 
+	//A pointer that holds our function call node
+	generic_ast_node_t* function_call_node;
+
+	//The generic type that holds our function signature
+	function_type_t* function_signature;
+
 	/**
 	 * This identifier has the possibility of being a direct function call or a function pointer
 	 * of some kind. To determine which it is, we'll need to look the name up in both symtabs
@@ -591,10 +595,23 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Let's now look up the function name in the function symtab
 	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name);
 
+	//This is the most common case - that we have a simple, direct function call
 	if(function_record != NULL){
-		//TODO nothing yet, will expand
+		//Allocate this as a regular function call node
+		function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL, side);
 
+		//Store the function record in the node
+		function_call_node->func_record = function_record;
 
+		//Store our function signature
+		function_signature = function_record->signature->function_type;
+
+		//We'll also add in that the current function has called this one
+		call_function(current_function->call_graph_node, function_record->call_graph_node);
+		//We'll now note that this was indeed called
+		function_record->called = TRUE;
+
+	//Otherwise if we see this case, then we have an indirect function call to deal with
 	} else if(function_pointer_variable != NULL){
 		//Strip the type away here
 		generic_type_t* function_pointer_type = dealias_type(function_pointer_variable->type_defined_as);
@@ -606,10 +623,14 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 			return print_and_return_error(error, parser_line_num);
 		}
 
-		printf("FOUND ONE\n");
-		printf("%s\n", function_pointer_type->type_name.string);
-		printf("WIP\n");
-		exit(0);
+		//Now that we know this exists, we'll allocate this one as an indirect function call
+		function_call_node = ast_node_alloc(AST_NODE_CLASS_INDIRECT_FUNCTION_CALL, side);
+
+		//Store our funcion signature
+		function_signature = function_pointer_type->function_type;
+
+		//Store the variable too
+		function_call_node->variable = function_pointer_variable;
 
 	//This means that they're both NULL. We'll need to throw an error here
 	} else{
@@ -620,19 +641,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 	//Now we can grab out some info for convenience
 	function_num_params = function_record->number_of_params;
-
-	//If we make it here, we know that our function actually exists. We can now create
-	//the appropriate node that will hold all of our data about it
-	//It is also now safe enough for us to allocate the function node
-	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL, side);
-
-	//Store the function record in the node
-	function_call_node->func_record = function_record;
-
-	//We'll also add in that the current function has called this one
-	call_function(current_function->call_graph_node, function_record->call_graph_node);
-	//We'll now note that this was indeed called
-	function_record->called = TRUE;
 
 	//Add the inferred type in for convenience as well
 	function_call_node->inferred_type = function_record->return_type;
