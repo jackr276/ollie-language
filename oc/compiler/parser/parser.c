@@ -639,11 +639,8 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		return print_and_return_error(info, current_line);
 	}
 
-	//Now we can grab out some info for convenience
-	function_num_params = function_record->number_of_params;
-
 	//Add the inferred type in for convenience as well
-	function_call_node->inferred_type = function_record->return_type;
+	function_call_node->inferred_type = function_signature->return_type;
 	
 	//We now need to see a left parenthesis for our param list
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -657,37 +654,57 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Push onto the grouping stack once we see this
 	push_token(grouping_stack, lookahead);
 
-	//If we only have one paramater for our function, we had better only see an R_PAREN here
-	if(function_num_params == 0){
-		//Grab the next token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-		
-		//If we don't see this it's bad
-		if(lookahead.tok != R_PAREN){
-			sprintf(info, "Function \"%s\" expects no parameters First declared here:", function_record->func_name.string);
-			return print_and_return_error(info, current_line);
-		}
-		
-		//Be sure to clear the stack out
-		pop_token(grouping_stack);
-
-		//Otherwise this worked just fine, so we'll jump out here
-		return function_call_node;
-	}
-
-	//Otherwise if we make it all the way here, we're going to need to do more complex checking
-
 	//A node to hold our current parameter
 	generic_ast_node_t* current_param;
 
 	//A node to hold the current function parameter
 	symtab_variable_record_t* current_function_param;
 
+	//Let's check for this easy case first. If we have no parameters, then 
+	//we'll expect to immediately see an R_PAREN
+	if(function_signature->num_params == 0){
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		
+		//If it's not an R_PAREN, then we fail
+		if(lookahead.tok != R_PAREN){
+			sprintf(info, "Function \"%s\" expects 0 parameters. First declared here:", function_name);
+			print_parse_message(PARSE_ERROR, info, current_line);
+			//Print out the actual function record as well
+			print_function_name(function_record);
+			num_errors++;
+			//Return the error node
+			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+		}
+
+		//Otherwise if it was fine, we'll now pop the grouping stack
+		pop_token(grouping_stack);
+
+		//And package up and return here
+		//Add the line number in
+		function_call_node->line_number = current_line;
+
+		//Otherwise, if we make it here, we're all good to return the function call node
+		return function_call_node;
+	}
+
+	/**
+	 * Otherwise, if we get all the way down here, we know that we expect to see at least one
+	 * value passed in as a parameter. We'll use do-while logic to process this in here
+	 */
+
+
+
 	//So long as we don't see the R_PAREN we aren't done
 	while(TRUE){
+		//Have we seen the closing parenthesis or not?
+		if(lookahead.tok == R_PAREN){
+			break;
+		}
+
 		//If we're exceeding the number of parameters, we'll fail out
-		if(num_params > function_num_params){
-			sprintf(info, "Function \"%s\" expects %d params, was given %d. First declared here:", function_name, function_num_params, num_params);
+		if(num_params > function_signature->num_params){
+			sprintf(info, "Function \"%s\" expects %d params, was given %d. First declared here:", function_name, function_signature->num_params, num_params);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			//Print out the actual function record as well
 			print_function_name(function_record);
@@ -740,11 +757,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//Refresh the token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-		//Two options here, we can either see a COMMA or an R_PAREN
-		//If it's an R_PAREN we're done
-		if(lookahead.tok == R_PAREN){
-			break;
-		}
 
 		//Otherwise it must be a comma. If it isn't we have a failure
 		if(lookahead.tok != COMMA){
@@ -774,8 +786,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 	//Add the line number in
 	function_call_node->line_number = current_line;
-
-	//Destroy the ident node, we no longer need it
 
 	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
