@@ -2402,6 +2402,10 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	if(ident_node->inferred_type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
+		if(ident_node->variable == NULL){
+			printf("It's null\n");
+		}
+
 		printf("FOUND FUNCTION SIGNATURE\n");
 		exit(0);
 	}

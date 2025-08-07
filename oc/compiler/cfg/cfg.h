@@ -12,8 +12,6 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 
-#define INITIAL_STATEMENT_SIZE 2000
-
 //The overall structure holder
 typedef struct cfg_t cfg_t;
 //Basic blocks in our CFG
