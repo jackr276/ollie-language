@@ -3628,6 +3628,10 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			//Emit the function call statement
 			return emit_function_call(current_block, expr_node, is_branch_ending);
 
+		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
+			printf("TODO\n\n");
+			exit(0);
+
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
 			//Emit the ternary expression
 			 return emit_ternary_expression(basic_block, expr_node, is_branch_ending);

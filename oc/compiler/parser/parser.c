@@ -654,11 +654,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Push onto the grouping stack once we see this
 	push_token(grouping_stack, lookahead);
 
-	//A node to hold our current parameter
-	generic_ast_node_t* current_param;
-
-	//A node to hold the current function parameter
-	symtab_variable_record_t* current_function_param;
 
 	//Let's check for this easy case first. If we have no parameters, then 
 	//we'll expect to immediately see an R_PAREN
@@ -693,28 +688,32 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	 * value passed in as a parameter. We'll use do-while logic to process this in here
 	 */
 
+	//A node to hold our current parameter
+	generic_ast_node_t* current_param;
+
+	//To hold the function's parameters from it's signature
+	function_type_parameter_t defined_parameter;
 
 
 	//So long as we don't see the R_PAREN we aren't done
-	while(TRUE){
-		//Have we seen the closing parenthesis or not?
-		if(lookahead.tok == R_PAREN){
+	do {
+		//If we've already seen more than one parameter, we'll need a comma here
+		if(num_params > 0){
+			//Otherwise it must be a comma. If it isn't we have a failure
+			if(lookahead.tok != COMMA){
+				//Create and return an error node
+				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			}
+		}
+
+		//We'll let the error below handle this, we just don't
+		//want to segfault
+		if(num_params > function_signature->num_params){
 			break;
 		}
 
-		//If we're exceeding the number of parameters, we'll fail out
-		if(num_params > function_signature->num_params){
-			sprintf(info, "Function \"%s\" expects %d params, was given %d. First declared here:", function_name, function_signature->num_params, num_params);
-			print_parse_message(PARSE_ERROR, info, current_line);
-			//Print out the actual function record as well
-			print_function_name(function_record);
-			num_errors++;
-			//Return the error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
-		}
-
 		//Grab the current function param
-		current_function_param = function_record->func_params[num_params].associate_var;
+		defined_parameter = function_signature->parameters[num_params];
 
 		//Parameters are in the form of a conditional expression
 		current_param = ternary_expression(fl, side);
@@ -725,7 +724,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		}
 	
 		//Let's grab these to check for compatibility
-		generic_type_t* param_type = current_function_param->type_defined_as;
+		generic_type_t* param_type = defined_parameter.parameter_type;
 		generic_type_t* expr_type = current_param->inferred_type;
 
 		//Let's see if we're even able to assign this here
@@ -757,20 +756,14 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//Refresh the token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//Keep going so long as we don't see a right paren
+	} while (lookahead.tok != R_PAREN);
 
-		//Otherwise it must be a comma. If it isn't we have a failure
-		if(lookahead.tok != COMMA){
-			//Create and return an error node
-			return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
-		}
-	}
 
-	/**
-	 * If we have a mismatch between what the function takes and what we want, throw an
-	 * error
-	 */
-	if(num_params != function_num_params){
-		sprintf(info, "Function %s expectects %d parameters, but was only given %d", function_record->func_name.string, function_num_params, num_params);
+	//If we have a mismatch between what the function takes and what we want, throw an
+	//error
+	if(num_params != function_signature->num_params){
+		sprintf(info, "Function %s expect %d parameters, but was given %d", function_name, function_signature->num_params, num_params);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_function_name(function_record);
 		num_errors++;
