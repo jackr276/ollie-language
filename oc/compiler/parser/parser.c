@@ -580,6 +580,9 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//A pointer that holds our function call node
 	generic_ast_node_t* function_call_node;
 
+	//Hold the overall type for error printing
+	generic_type_t* function_type;
+
 	//The generic type that holds our function signature
 	function_type_t* function_signature;
 
@@ -603,6 +606,9 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//Store the function record in the node
 		function_call_node->func_record = function_record;
 
+		//Store the overall type
+		function_type = function_record->signature;
+
 		//Store our function signature
 		function_signature = function_record->signature->function_type;
 
@@ -614,12 +620,12 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Otherwise if we see this case, then we have an indirect function call to deal with
 	} else if(function_pointer_variable != NULL){
 		//Strip the type away here
-		generic_type_t* function_pointer_type = dealias_type(function_pointer_variable->type_defined_as);
+		function_type = dealias_type(function_pointer_variable->type_defined_as);
 
 		//If this is not a function signature, then we can't call it as one
-		if(function_pointer_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+		if(function_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 			//Print and fail out here
-			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name, function_pointer_type->type_name.string);
+			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name, function_type->type_name.string);
 			return print_and_return_error(error, parser_line_num);
 		}
 
@@ -627,7 +633,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		function_call_node = ast_node_alloc(AST_NODE_CLASS_INDIRECT_FUNCTION_CALL, side);
 
 		//Store our funcion signature
-		function_signature = function_pointer_type->function_type;
+		function_signature = function_type->function_type;
 
 		//Store the variable too
 		function_call_node->variable = function_pointer_variable;
@@ -662,10 +668,9 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		
 		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
-			sprintf(info, "Function \"%s\" expects 0 parameters. First declared here:", function_name);
+			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name, function_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			//Print out the actual function record as well
-			print_function_name(function_record);
 			num_errors++;
 			//Return the error node
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
@@ -734,8 +739,8 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
-			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". First defined here:",
-		   			function_name, param_type->type_name.string, num_params, expr_type->type_name.string);
+			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". Defined as: %s",
+		   			function_name, param_type->type_name.string, num_params, expr_type->type_name.string, function_type->type_name.string);
 
 			//Use the helper to return this
 			return print_and_return_error(info, parser_line_num);
@@ -762,9 +767,9 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//If we have a mismatch between what the function takes and what we want, throw an
 	//error
 	if(num_params != function_signature->num_params){
-		sprintf(info, "Function %s expect %d parameters, but was given %d", function_name, function_signature->num_params, num_params);
+		sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
+		  function_name, function_signature->num_params, num_params, function_type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_function_name(function_record);
 		num_errors++;
 		//Error out
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
