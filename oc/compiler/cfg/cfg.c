@@ -2401,6 +2401,11 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * to move an identifier to some temporary location
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	if(ident_node->inferred_type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
+		printf("FOUND FUNCTION SIGNATURE\n");
+		exit(0);
+	}
+
 	//Handle an enumerated type right here
 	if(ident_node->variable->is_enumeration_member == TRUE) {
 		//Look up the type
@@ -2672,6 +2677,10 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 		//This could potentially have ternaries - so we'll just return whatever is in here
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent, is_branch_ending);
+
+		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(0);
 
 		//By default, we're emitting some kind of expression here
 		default:

@@ -654,7 +654,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Push onto the grouping stack once we see this
 	push_token(grouping_stack, lookahead);
 
-
 	//Let's check for this easy case first. If we have no parameters, then 
 	//we'll expect to immediately see an R_PAREN
 	if(function_signature->num_params == 0){
