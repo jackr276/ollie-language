@@ -696,8 +696,11 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 	//So long as we don't see the R_PAREN we aren't done
 	do {
+		//Record that we saw one more parameter
+		num_params++;
+
 		//If we've already seen more than one parameter, we'll need a comma here
-		if(num_params > 0){
+		if(num_params > 1){
 			//Otherwise it must be a comma. If it isn't we have a failure
 			if(lookahead.tok != COMMA){
 				//Create and return an error node
@@ -712,7 +715,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		}
 
 		//Grab the current function param
-		defined_parameter = function_signature->parameters[num_params];
+		defined_parameter = function_signature->parameters[num_params - 1];
 
 		//Parameters are in the form of a conditional expression
 		current_param = ternary_expression(fl, side);
@@ -748,9 +751,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//We can now safely add this into the function call node as a child. In the function call node, 
 		//the parameters will appear in order from left to right
 		add_child_node(function_call_node, current_param);
-
-		//Record that we saw one more parameter
-		num_params++;
 
 		//Refresh the token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

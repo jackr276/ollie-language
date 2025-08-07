@@ -1,0 +1,14 @@
+/**
+* Author: Jack Robbins
+* This file will test the parser's ability to detect mismatches in parameter list length
+*/
+
+fn tester(x:i32, y:i32) -> i32 {
+	ret x - y;
+}
+
+
+fn main() -> i32 {
+	//Too few parameters
+	ret @tester(3);
+}
