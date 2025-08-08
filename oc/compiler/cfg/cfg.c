@@ -39,10 +39,10 @@ cfg_t* cfg_ref;
 symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
 basic_block_t* function_exit_block = NULL;
-//Keep ahold of our stack pointer
-symtab_variable_record_t* stack_pointer = NULL;
 //Keep a variable for it too
 three_addr_var_t* stack_pointer_var = NULL;
+//Keep a varaible/record for the instruction pointer(rip)
+three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 variable_symtab_t* variable_symtab;
 //Store this for usage
@@ -2396,6 +2396,15 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
 }
 
 
+/**
+ * A function identifier needs to be loaded into a temporary variable by adding the function's offset to the instruction pointer(%rip)
+ *
+ * So say we had something like:
+ * let mut x:my_func := add
+ *
+ * Then we should load add like such:
+ * leaq add(%rip), <temp>
+ */
 static three_addr_var_t* emit_function_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 }
 
@@ -2679,8 +2688,6 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 		//Special kind of identifier - we'll use a different rule to emit it
 		case AST_NODE_CLASS_FUNCTION_IDENTIFIER:
 		 	result_package.assignee = emit_function_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
-			//BAILING for now
-			exit(0);
 			return result_package;
 
 		//Same in this case - just an assignee in basic block
@@ -6778,14 +6785,20 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	current_function = NULL;
 
 	//Create the stack pointer
-	stack_pointer = initialize_stack_pointer(results->type_symtab);
-	//Initialize the variable to
+	symtab_variable_record_t* stack_pointer = initialize_stack_pointer(results->type_symtab);
+	//Initialize the variable too
 	stack_pointer_var = emit_var(stack_pointer, FALSE);
 	//Mark it
 	stack_pointer_var->is_stack_pointer = TRUE;
-
 	//Store the stack pointer
 	cfg->stack_pointer = stack_pointer_var;
+
+	//Create the instruction pointer
+	symtab_variable_record_t* instruction_pointer = initialize_instruction_pointer(results->type_symtab);
+	//Initialize a three addr code var
+	instruction_pointer_var = emit_var(instruction_pointer, FALSE);
+	//Store it in the CFG
+	cfg->instruction_pointer = instruction_pointer_var;
 
 	// -1 block ID, this means that the whole thing failed
 	if(visit_prog_node(cfg, results->root) == FALSE){

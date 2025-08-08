@@ -572,6 +572,26 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 }
 
 
+/** 
+ * Create the instruction pointer(rip) variable for us to use throughout
+ */
+symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
+	//Create the var name
+	dynamic_string_t variable_name;
+	dynamic_string_alloc(&variable_name);
+
+	//Set to be instruction pointer(rip)
+	dynamic_string_set(&variable_name, "rip");
+
+	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name, STORAGE_CLASS_NORMAL);
+	//Set this type as a label(address)
+	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
+
+	//Give it back
+	return instruction_pointer;
+}
+
+
 /**
  * Lookup the record in the symtab that corresponds to the following name.
  * 

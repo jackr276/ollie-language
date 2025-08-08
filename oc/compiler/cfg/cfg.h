@@ -75,6 +75,8 @@ struct cfg_t{
 	basic_block_t* head_block;
 	//We also need to hold onto the stack pointer
 	three_addr_var_t* stack_pointer;
+	//We also need to hold onto the instruction pointer
+	three_addr_var_t* instruction_pointer;
 	//We'll want the type symtab too
 	type_symtab_t* type_symtab;
 };
