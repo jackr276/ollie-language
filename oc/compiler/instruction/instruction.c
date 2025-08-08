@@ -1535,9 +1535,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 		}
 
-		//No matter what, we'll need to see the "call" keyword, followed
-		//by the dereferencing *, then the function name
-		fprintf(fl, "call *%s(", stmt->called_function->func_name.string);
+		//The variable that stores our function is always in op1
+		fprintf(fl, "call *%s(", stmt->op1->linked_var->var_name.string);
 
 		//Grab this out
 		dynamic_array_t* func_params = stmt->function_parameters;
@@ -3552,6 +3551,26 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	stmt->function = current_function;
 	//We do NOT add parameters here, instead we had them in the CFG function
 	//Just give back the result
+	return stmt;
+}
+
+
+/**
+ * Emit an indirect function call statement. Once emitted, no paramters will have been added in
+ */
+instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to){
+	//First allocate the statement
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Populate it with the appropriate values
+	stmt->CLASS = THREE_ADDR_CODE_INDIRECT_FUNC_CALL;
+	//We will store the variable for the function that we're calling indirectly in op1
+	stmt->op1 = function_pointer;
+	//Mark the assignee
+	stmt->assignee = assigned_to;
+	//Mark what function we're in
+	stmt->function = current_function;
+
 	return stmt;
 }
 

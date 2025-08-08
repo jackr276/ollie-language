@@ -103,7 +103,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
-static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
@@ -3726,12 +3726,12 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
  *
  * Unlike in a regular call, we don't have the function record on hand to inspect. We'll instead need to rely entirely on the function signature
  */
-static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending){
 	//Initially we'll emit this, though it may change
  	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Grab the function's signature type too
-	function_type_t* signature = function_call_node->inferred_type->function_type;
+	function_type_t* signature = indirect_function_call_node->inferred_type->function_type;
 
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current = basic_block;
@@ -3739,13 +3739,102 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//The function's assignee
 	three_addr_var_t* assignee = NULL;
 
+	//May be NULL or not based on what we have as the return type
+	if(signature->returns_void == FALSE){
+		//Otherwise we have one like this
+		assignee = emit_temp_var(signature->return_type);
+	} else {
+		//We'll have a dummy one here
+		assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
+	}
 
-	exit(0);
+	//We first need to emit the function pointer variable
+	three_addr_var_t* function_pointer_var = emit_var(indirect_function_call_node->variable, FALSE);
 
-	//Give back the final result package
+	//Emit the final call here
+	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
+
+	//Mark this with whatever we have
+	func_call_stmt->is_branch_ending = is_branch_ending;
+
+	//Let's grab a param cursor for ourselves
+	generic_ast_node_t* param_cursor = indirect_function_call_node->first_child;
+
+	//If this isn't NULL, we have parameters
+	if(param_cursor != NULL){
+		//Create this
+		func_call_stmt->function_parameters = dynamic_array_alloc();
+	}
+
+	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
+	u_int8_t current_func_param_idx = 1;
+
+	//So long as this isn't NULL
+	while(param_cursor != NULL){
+		//Emit whatever we have here into the basic block
+		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+
+		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
+		//to reassign
+		if(package.final_block != NULL && package.final_block != current){
+			//We've seen a ternary, reassign current
+			current = package.final_block;
+
+			//Reassign this as well, so that we stay current
+			result_package.final_block = current;
+		}
+
+		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
+		//registers before a function call
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+		//If the package's assignee is not temporary, then this counts as a use
+		if(package.assignee->is_temporary == FALSE){
+			add_used_variable(current, package.assignee);
+		}
+
+		//Add this to the block
+		add_statement(current, assignment);
+
+		//Mark this
+		assignment->assignee->parameter_number = current_func_param_idx;
+		
+		//Add the parameter in
+		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+
+		//And move up
+		param_cursor = param_cursor->next_sibling;
+
+		//Increment this
+		current_func_param_idx++;
+	}
+
+	//Once we make it here, we should have all of the params stored in temp vars
+	//We can now add the function call statement in
+	add_statement(current, func_call_stmt);
+
+	//If this is not a void return type, we'll need to emit this temp assignment
+	if(signature->returns_void == FALSE){
+		//Emit an assignment instruction. This will become very important way down the line in register
+		//allocation to avoid interference
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+				
+		//Reassign this value
+		assignee = assignment->assignee;
+
+		//This cannot be coalesced
+		assignment->cannot_be_combined = TRUE;
+
+		//Add it in
+		add_statement(current, assignment);
+	}
+
+	//This is always the assignee we gave above
+	result_package.assignee = assignee;
+
+	//Give back what we assigned to
 	return result_package;
 }
-
 
 
 /**
@@ -3770,7 +3859,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//May be NULL or not based on what we have as the return type
 	if(signature->returns_void == FALSE){
 		//Otherwise we have one like this
-		assignee = emit_temp_var(func_record->return_type);
+		assignee = emit_temp_var(signature->return_type);
 	} else {
 		//We'll have a dummy one here
 		assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);

@@ -828,6 +828,11 @@ instruction_t* emit_direct_jmp_instruction(three_addr_var_t* jumping_to);
 instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
 
 /**
+ * Emit an indirect function call statement. Once emitted, no paramters will have been added in
+ */
+instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to);
+
+/**
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
  * by any future optimizations
  */
