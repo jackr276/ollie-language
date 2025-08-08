@@ -237,6 +237,8 @@ struct function_type_t{
 	generic_type_t* return_type;
 	//Store the number of parameters
 	u_int8_t num_params;
+	//Does this return a void type?
+	u_int8_t returns_void;
 };
 
 

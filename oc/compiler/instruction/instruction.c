@@ -1577,7 +1577,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		fprintf(fl, "\n");
 	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
 		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- neg ")
+		fprintf(fl, " <- neg ");
 		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 		fprintf(fl, "\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
