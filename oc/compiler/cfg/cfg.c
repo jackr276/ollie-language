@@ -103,6 +103,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
@@ -2736,9 +2737,9 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent, is_branch_ending);
 
+		//Emit an indirect function call here
 		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(0);
+			return emit_indirect_function_call(basic_block, primary_parent, is_branch_ending);
 
 		//By default, we're emitting some kind of expression here
 		default:
@@ -3697,8 +3698,8 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 		//Hanlde an indirect function call
 		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
-			printf("TODO\n\n");
-			exit(0);
+			//Let the helper rule deal with it
+			return emit_indirect_function_call(current_block, expr_node, is_branch_ending);
 
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
 			//Emit the ternary expression
@@ -3716,6 +3717,22 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			return emit_unary_expression(basic_block, expr_node, is_condition, is_branch_ending);
 	}
 }
+
+
+/**
+ * Emit an indirect function call like such
+ *
+ * call *<function_name>
+ */
+static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
+	//Initially we'll emit this, though it may change
+ 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+
+
+	//Give back the final result package
+	return result_package;
+}
+
 
 
 /**

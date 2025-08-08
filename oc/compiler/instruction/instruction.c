@@ -1526,6 +1526,39 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		//Now at the very end, close the whole thing out
 		fprintf(fl, ")\n");
 
+	//Handle the case of an indirect function call
+	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIRECT_FUNC_CALL){
+		//First we'll print out the assignment, if one exists
+		if(stmt->assignee != NULL){
+			//Print the variable and assop out
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+		}
+
+		//No matter what, we'll need to see the "call" keyword, followed
+		//by the dereferencing *, then the function name
+		fprintf(fl, "call *%s(", stmt->called_function->func_name.string);
+
+		//Grab this out
+		dynamic_array_t* func_params = stmt->function_parameters;
+
+		//Now we can go through and print out all of our parameters here
+		for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
+			//Grab it out
+			three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
+			
+			//Print this out here
+			print_variable(fl, func_param, PRINTING_VAR_INLINE);
+
+			//If we need to, print out a comma
+			if(i != func_params->current_index - 1){
+				fprintf(fl, ", ");
+			}
+		}
+
+		//Now at the very end, close the whole thing out
+		fprintf(fl, ")\n");
+
 	//If we have a binary operator with a constant
 	} else if (stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//TODO MAY OR MAY NOT NEED
@@ -1544,7 +1577,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		fprintf(fl, "\n");
 	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
 		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- neg ");
+		fprintf(fl, " <- neg ")
 		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 		fprintf(fl, "\n");
 	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){

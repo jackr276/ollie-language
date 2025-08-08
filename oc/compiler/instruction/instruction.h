@@ -333,8 +333,10 @@ typedef enum{
 	THREE_ADDR_CODE_DIR_JUMP_STMT,
 	//A label statement
 	THREE_ADDR_CODE_LABEL_STMT,
-	//A function call node
+	//A function call statement 
 	THREE_ADDR_CODE_FUNC_CALL,
+	//And indirect function call statement
+	THREE_ADDR_CODE_INDIRECT_FUNC_CALL,
 	//An idle statement(nop)
 	THREE_ADDR_CODE_IDLE_STMT,
 	//A negation statement
