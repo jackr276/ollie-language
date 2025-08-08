@@ -2056,6 +2056,24 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 
 
 /**
+ * Emit a special kind of lea that takes in a function name and calculates the offset of RIP that it is
+ *
+ * leaq <function_name>(%rip), result
+ */
+static three_addr_var_t* emit_function_pointer_offset_calculation_lea(basic_block_t* basic_block, three_addr_var_t* function_var, u_int8_t is_branch_ending){
+	//Emit a temporary variable with the same type as the function
+	three_addr_var_t* assignee = emit_temp_var(function_var->type);
+
+	//This now counts as used
+	if(function_var->is_temporary == FALSE){
+		add_used_variable(basic_block, function_var);
+	}
+
+
+}
+
+
+/**
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
@@ -2408,6 +2426,11 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
 static three_addr_var_t* emit_function_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//This is how we'll eventually call it
 	three_addr_var_t* function_identifier = emit_var_from_function(ident_node->func_record, FALSE);
+
+	//Now that we have this emitted, we need to emit a special lea function that allows us to load the offset to this 
+	//function off of the instruction pointer(%rip)
+	
+
 
 	//Just gracefully leave for now
 	exit(0);

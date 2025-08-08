@@ -755,6 +755,26 @@ instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_v
 
 
 /**
+ * Emit a lea statement with no type size multiplier on it
+ */
+instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->CLASS = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op2 = op2;
+	//What function are we in
+	stmt->function = current_function;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
  * Emit a statement that is in LEA form
  */
 instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
