@@ -1007,8 +1007,9 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 
 			//If it could be found, then we're all set
 			if(found_func != NULL){
-				//TODO HERE - need some kind of special function identifier class to use
-
+				//We'll change the type of this node from an identifier to a function
+				//identifier
+				ident->CLASS = AST_NODE_CLASS_FUNCTION_IDENTIFIER;
 
 				//This values type is the function's signature
 				ident->inferred_type = found_func->signature;

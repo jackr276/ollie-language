@@ -2396,6 +2396,9 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
 }
 
 
+static three_addr_var_t* emit_function_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+}
+
 /**
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
@@ -2671,6 +2674,13 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 		//In this case we'll only worry about the assignee
 		case AST_NODE_CLASS_IDENTIFIER:
 		 	result_package.assignee = emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
+			return result_package;
+
+		//Special kind of identifier - we'll use a different rule to emit it
+		case AST_NODE_CLASS_FUNCTION_IDENTIFIER:
+		 	result_package.assignee = emit_function_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
+			//BAILING for now
+			exit(0);
 			return result_package;
 
 		//Same in this case - just an assignee in basic block
