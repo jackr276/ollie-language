@@ -3768,12 +3768,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	three_addr_var_t* assignee = NULL;
 
 	//May be NULL or not based on what we have as the return type
-	if(signature->return_type->type_class == TYPE_CLASS_BASIC && signature->return_type->basic_type->basic_type == VOID){
-		//We'll have a dummy one here
-		assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
-	} else {
+	if(signature->returns_void == FALSE){
 		//Otherwise we have one like this
 		assignee = emit_temp_var(func_record->return_type);
+	} else {
+		//We'll have a dummy one here
+		assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
 	}
 
 	//Emit the final call here
@@ -3838,18 +3838,21 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//We can now add the function call statement in
 	add_statement(current, func_call_stmt);
 
-	//Emit an assignment instruction. This will become very important way down the line in register
-	//allocation to avoid interference
-	instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-			
-	//Reassign this value
-	assignee = assignment->assignee;
+	//If this is not a void return type, we'll need to emit this temp assignment
+	if(signature->returns_void == FALSE){
+		//Emit an assignment instruction. This will become very important way down the line in register
+		//allocation to avoid interference
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+				
+		//Reassign this value
+		assignee = assignment->assignee;
 
-	//This cannot be coalesced
-	assignment->cannot_be_combined = TRUE;
+		//This cannot be coalesced
+		assignment->cannot_be_combined = TRUE;
 
-	//Add it in
-	add_statement(current, assignment);
+		//Add it in
+		add_statement(current, assignment);
+	}
 
 	//This is always the assignee we gave above
 	result_package.assignee = assignee;

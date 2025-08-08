@@ -2133,13 +2133,13 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
 
 	//You can never cast a "void" to anything
-	if(being_casted_type->type_class == TYPE_CLASS_BASIC && being_casted_type->basic_type->basic_type == VOID){
+	if(is_void_type(being_casted_type) == TRUE){
 		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Likewise, you can never cast anything to void
-	if(casting_to_type->type_class == TYPE_CLASS_BASIC && casting_to_type->basic_type->basic_type == VOID){
+	if(is_void_type(casting_to_type) == TRUE){
 		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -3907,6 +3907,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 	//Let's now store the return type
 	function_type->function_type->return_type = return_type;
+
+	//Mark whether or not it's void as well
+	function_type->function_type->returns_void = is_void_type(return_type);
 
 	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
 	//confusing syntactical mess that C function pointer declarations have
@@ -5824,8 +5827,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//If we see a semicolon, we can just leave
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
-		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
-			&& current_function->return_type->basic_type->basic_type != VOID){
+		if(current_function->signature->function_type->returns_void == FALSE){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -5839,8 +5841,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	} else {
 		//If we get here, but we do expect a void return, then this is an issue
-		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
-			&& current_function->return_type->basic_type->basic_type == VOID){
+		if(current_function->signature->function_type->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -7613,7 +7614,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 	
 	//One thing here, we aren't allowed to see void
-	if(type_spec->type_class == TYPE_CLASS_BASIC && type_spec->basic_type->basic_type == VOID){
+	if(is_void_type(type_spec) == TRUE){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
@@ -8316,6 +8317,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Store the return type
 	function_record->return_type = type;
+
+	//Record whether or not it's a void type
+	function_record->signature->function_type->returns_void = is_void_type(type);
 
 	//Store the return type as well
 	function_record->signature->function_type->return_type = type;

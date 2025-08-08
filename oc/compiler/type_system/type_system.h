@@ -279,6 +279,11 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b);
 
 /**
+ * Simple helper to check if a function is void
+ */
+u_int8_t is_void_type(generic_type_t* type);
+
+/**
  * Determine the compatibility of two types and coerce appropraitely. The double pointer
  * reference exists so that this method may transform types as appropriate
  */

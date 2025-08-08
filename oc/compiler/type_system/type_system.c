@@ -67,6 +67,22 @@ u_int8_t is_type_32_bit_int(generic_type_t* type){
 
 
 /**
+ * Simple helper to check if a type is void
+ */
+u_int8_t is_void_type(generic_type_t* type){
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return FALSE;
+	}
+
+	if(type->basic_type->basic_type != VOID){
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
+/**
  * Get the referenced type regardless of how many indirection levels there are
  */
 generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t indirection_level){
