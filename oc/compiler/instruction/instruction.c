@@ -563,6 +563,15 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
 
 
 /**
+ * Create and return a three address var from an existing function name. If 
+ * we are assigning to a variable, that will create a new generation of variable.
+*/
+three_addr_var_t* emit_var_from_function(symtab_function_record_t* function, u_int8_t is_label){
+
+}
+
+
+/**
  * Create and return a temporary variable from a live range
 */
 three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){

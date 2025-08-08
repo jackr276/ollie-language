@@ -2406,6 +2406,12 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * leaq add(%rip), <temp>
  */
 static three_addr_var_t* emit_function_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//This is how we'll eventually call it
+	three_addr_var_t* function_identifier = emit_var_from_function(ident_node->func_record, FALSE);
+
+	//Just gracefully leave for now
+	exit(0);
+
 }
 
 /**

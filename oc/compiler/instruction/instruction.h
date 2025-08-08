@@ -394,6 +394,8 @@ struct live_range_t{
 struct three_addr_var_t{
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
+	//Link to the function record(NULL if not there)
+	symtab_function_record_t* linked_function;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What is this related to the writing of?
@@ -631,9 +633,14 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 /**
  * Create and return a three address var from an existing variable. If 
  * we are assigning to a variable, that will create a new generation of variable.
- * As such, we will pass 1 in as a flag here
 */
 three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label);
+
+/**
+ * Create and return a three address var from an existing function name. If 
+ * we are assigning to a variable, that will create a new generation of variable.
+*/
+three_addr_var_t* emit_var_from_function(symtab_function_record_t* function, u_int8_t is_label);
 
 /**
  * Emit a variable copied from another variable
