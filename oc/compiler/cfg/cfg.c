@@ -3727,11 +3727,13 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
  * Unlike in a regular call, we don't have the function record on hand to inspect. We'll instead need to rely entirely on the function signature
  */
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending){
+	printf("IN INDIRECT FUNC CALL\n\n");
+
 	//Initially we'll emit this, though it may change
  	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Grab the function's signature type too
-	function_type_t* signature = indirect_function_call_node->inferred_type->function_type;
+	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->function_type;
 
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current = basic_block;
