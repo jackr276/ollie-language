@@ -425,6 +425,8 @@ struct three_addr_var_t{
 	u_int8_t is_temporary;
 	//Is this a stack pointer?
 	u_int8_t is_stack_pointer;
+	//Is this a function variable
+	u_int8_t is_function_variable;
 	//What is the parameter number of this var? Used for parameter passing. If
 	//it is 0, it's ignored
 	u_int8_t parameter_number;

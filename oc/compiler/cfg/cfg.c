@@ -1905,17 +1905,17 @@ static void rename_block(basic_block_t* entry){
 			//If we get here we know that we don't have a phi function
 
 			//If we have a non-temp variable, rename it
-			if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
+			if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE && cursor->op1->is_function_variable == FALSE){
 				rhs_new_name(cursor->op1);
 			}
 
 			//If we have a non-temp variable, rename it
-			if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE){
+			if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE && cursor->op2->is_function_variable == FALSE){
 				rhs_new_name(cursor->op2);
 			}
 
 			//Same goes for the assignee, except this one is the LHS
-			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE && cursor->assignee->is_function_variable == FALSE){
 				lhs_new_name(cursor->assignee);
 			}
 

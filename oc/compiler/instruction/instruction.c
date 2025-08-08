@@ -565,6 +565,11 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
 /**
  * Create and return a three address var from an existing function name. If 
  * we are assigning to a variable, that will create a new generation of variable.
+ *
+ * NOTE: These variables are not considered temporary, but they will not be picked
+ * up by the SSA transformer either because they can never be reassigned. They are
+ * in essence constant memory address locations that have a name(function name)
+ * attached to them
 */
 three_addr_var_t* emit_var_from_function(symtab_function_record_t* function, u_int8_t is_label){
 	//Let's first create it
@@ -574,12 +579,13 @@ three_addr_var_t* emit_var_from_function(symtab_function_record_t* function, u_i
 	emitted_var->next_created = emitted_vars;
 	emitted_vars = emitted_var;
 
-	//This can effectively be considered temporary
-	emitted_var->is_temporary = TRUE;
 	//And store the function type of this variable
 	emitted_var->type = function->signature;
 	//Link the function in too
 	emitted_var->linked_function = function;
+
+	//Mark that this is a function variable
+	emitted_var->is_function_variable = TRUE;
 
 	//Select the size of the variable
 	emitted_var->variable_size = select_variable_size(emitted_var);
@@ -1198,6 +1204,12 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 	} else if(variable->is_temporary == TRUE){
 		//Print out it's temp var number
 		fprintf(fl, "t%d", variable->temp_var_number);
+	
+	//We could see a function variable
+	} else if(variable->is_function_variable == TRUE){
+		//We'll print out the name of our function
+		fprintf(fl, "%s", variable->linked_function->func_name.string);
+
 	} else {
 		//Otherwise, print out the SSA generation along with the variable
 		fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
