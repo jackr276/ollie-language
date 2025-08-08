@@ -2069,7 +2069,16 @@ static three_addr_var_t* emit_function_pointer_offset_calculation_lea(basic_bloc
 		add_used_variable(basic_block, function_var);
 	}
 
+	//Now we'll emit the lea instruction
+	instruction_t* lea_instruction = emit_lea_instruction_no_mulitplier(assignee, function_var, instruction_pointer_var);
+	lea_instruction->is_branch_ending = is_branch_ending;
 
+	//Now add this into the block
+	add_statement(basic_block, lea_instruction);
+
+	//The assignee of this lea instruction is our result
+	
+	return assignee;
 }
 
 
@@ -2429,13 +2438,12 @@ static three_addr_var_t* emit_function_identifier(basic_block_t* basic_block, ge
 
 	//Now that we have this emitted, we need to emit a special lea function that allows us to load the offset to this 
 	//function off of the instruction pointer(%rip)
-	
+	three_addr_var_t* assignee = emit_function_pointer_offset_calculation_lea(basic_block, function_identifier, is_branch_ending);
 
-
-	//Just gracefully leave for now
-	exit(0);
-
+	//Now that we've done this, we've fully emitted everything that we need
+	return assignee;
 }
+
 
 /**
  * Emit the identifier machine code. This function is to be used in the instance where we want
@@ -3687,6 +3695,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			//Emit the function call statement
 			return emit_function_call(current_block, expr_node, is_branch_ending);
 
+		//Hanlde an indirect function call
 		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
 			printf("TODO\n\n");
 			exit(0);

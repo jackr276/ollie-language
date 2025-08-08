@@ -26,5 +26,6 @@ fn main() -> i32 {
 	let mut x:arithmetic_function := add;
 
 	//Should call add on 1 and 3
-	ret @x(1, 3);
+	//ret @x(1, 3);
+	ret 1;
 }

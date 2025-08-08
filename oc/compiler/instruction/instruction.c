@@ -574,8 +574,8 @@ three_addr_var_t* emit_var_from_function(symtab_function_record_t* function, u_i
 	emitted_var->next_created = emitted_vars;
 	emitted_vars = emitted_var;
 
-	//This is not temporary
-	emitted_var->is_temporary = FALSE;
+	//This can effectively be considered temporary
+	emitted_var->is_temporary = TRUE;
 	//And store the function type of this variable
 	emitted_var->type = function->signature;
 	//Link the function in too
@@ -789,6 +789,9 @@ instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t
 	stmt->lea_multiplicator = type_size;
 	//What function are we in
 	stmt->function = current_function;
+
+	//This has a multiplicator, so indicate that
+	stmt->has_multiplicator = TRUE;
 
 	//And now we give it back
 	return stmt;
@@ -1585,8 +1588,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		} else {
 			//Then we have the third one, times some multiplier
 			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
-			//And the finishing sequence
-			fprintf(fl, " * %ld\n", stmt->lea_multiplicator);
+
+			//If we have a multiplicator, then we can print it
+			if(stmt->has_multiplicator == TRUE){
+				//And the finishing sequence
+				fprintf(fl, " * %ld", stmt->lea_multiplicator);
+			}
+
+			fprintf(fl, "\n");
 		}
 	//Print out a phi function 
 	} else if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
