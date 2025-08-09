@@ -1444,7 +1444,7 @@ static void mark(cfg_t* cfg){
 				//always count becuase we do not know whether or not the indirectly
 				//called function performs some important task. As such, we will 
 				//mark it as important
-				case THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT:
+				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(worklist, current_stmt);
