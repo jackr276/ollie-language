@@ -1547,8 +1547,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- ");
 		}
 
-		//The variable that stores our function is always in op1
-		fprintf(fl, "call *%s(", stmt->op1->linked_var->var_name.string);
+		//Print out the call here
+		fprintf(fl, "call *");
+
+		//Now we'll use the helper to print the variable name
+		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+		//Now we can print the opening parenthesis
+		fprintf(fl, "(");
 
 		//Grab this out
 		dynamic_array_t* func_params = stmt->function_parameters;
