@@ -1401,74 +1401,105 @@ static void mark(cfg_t* cfg){
 		instruction_t* current_stmt = current->leader_statement;
 
 		//Now we'll run through every statement(operation) in this block
-		//TODO this is NOT complete
 		while(current_stmt != NULL){
 			//Clear it's mark
 			current_stmt->mark = FALSE;
 
-			//Is it a return stmt? If so, whatever it's returning is useful
-			if(current_stmt->CLASS == THREE_ADDR_CODE_RET_STMT){
-				//Mark this as useful
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
+			//Go through statement by statement. In these
+			//special types of statements like return statements,
+			//function call statements, etc, we'll mark values as
+			//important
+			switch(current_stmt->CLASS){
+				case THREE_ADDR_CODE_RET_STMT:
+					//Mark this as useful
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
 
-			//Asm inline statements are always useful
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			//Is it a function call? Always useful as well
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			//We need to check - are we manipulating any global variables here? If we
-			//are, those are also considered important
-			} else if(current_stmt->assignee != NULL && current_stmt->assignee->is_temporary == FALSE){
-				//If we have an assignee and that assignee is a global variable, then this is marked as
+				//These are added by the user and considered to
+				//always be of use
+				case THREE_ADDR_CODE_ASM_INLINE_STMT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				//Since we don't know whether or not a function
+				//that is being called performs an important task,
+				//we also always consider it to be important
+				case THREE_ADDR_CODE_FUNC_CALL:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				//Direct jumps are also added by the user and as such are always
 				//important
-				if(current_stmt->assignee->linked_var->is_global == TRUE){
+				case THREE_ADDR_CODE_DIR_JUMP_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
-				//If we have a pointer type and are assigning to a derefence of a function parameter(inout mode), we are modifying the value of that pointer
-				} else if(current_stmt->assignee->linked_var->is_function_paramater == TRUE 
-						&& current_stmt->assignee->type->type_class == TYPE_CLASS_POINTER 
-						&& current_stmt->assignee->indirection_level > 0){
-					//Mark it
+					break;
+	
+				//Same goes for labels in memory
+				case THREE_ADDR_CODE_LABEL_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
-				}
+					break;
+
+				//And finally idle statements are considered important
+				//because they literally do nothing, so if the user
+				//put them there, we'll assume that it was for a good reason
+				case THREE_ADDR_CODE_IDLE_STMT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+
+				//Let's see what other special cases we have
+				default:
+					//We can leave right now if this is the case
+					if(current_stmt->assignee == NULL || current_stmt->assignee->is_temporary == TRUE){
+						break;
+					}
+
+					//Otherwise, we may have some special cases that we'll need to account for
+					//If we have an assignee and that assignee is a global variable, then this is marked as
+					//important
+					if(current_stmt->assignee->linked_var->is_global == TRUE){
+						current_stmt->mark = TRUE;
+						//Add it to the list
+						dynamic_array_add(worklist, current_stmt);
+						//The block now has a mark
+						current->contains_mark = TRUE;
+
+					//If we have a pointer type and are assigning to a derefence of a function parameter
+					//(inout mode), we are modifying the value of that pointer
+					} else if(current_stmt->assignee->linked_var->is_function_paramater == TRUE 
+							&& current_stmt->assignee->type->type_class == TYPE_CLASS_POINTER 
+							&& current_stmt->assignee->indirection_level > 0){
+						//Mark it
+						current_stmt->mark = TRUE;
+						//Add it to the list
+						dynamic_array_add(worklist, current_stmt);
+						//The block now has a mark
+						current->contains_mark = TRUE;
+					}
+					
+					break;
 			}
 
 			//Advance the current statement up
