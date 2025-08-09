@@ -1440,6 +1440,18 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
+				//Indirect function calls are the same as function calls. They will
+				//always count becuase we do not know whether or not the indirectly
+				//called function performs some important task. As such, we will 
+				//mark it as important
+				case THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
 				//Direct jumps are also added by the user and as such are always
 				//important
 				case THREE_ADDR_CODE_DIR_JUMP_STMT:
