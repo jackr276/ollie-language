@@ -1512,32 +1512,62 @@ static void mark(cfg_t* cfg){
 	while(dynamic_array_is_empty(worklist) == FALSE){
 		//Grab out the operation from the worklist(delete from back-most efficient)
 		instruction_t* stmt = dynamic_array_delete_from_back(worklist);
+		//Generic array for holding parameters
+		dynamic_array_t* params;
 
-		//If it's a phi function, now we need to go back and mark everything that it came from
-		if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
-			dynamic_array_t* phi_function_parameters = stmt->phi_function_parameters;
-			//Add this in here
-			for(u_int16_t i = 0; phi_function_parameters != NULL && i < phi_function_parameters->current_index; i++){
-				//Grab the param out
-				three_addr_var_t* phi_func_param = dynamic_array_get_at(phi_function_parameters, i);
+		//There are several unique cases that require extra attention
+		switch(stmt->CLASS){
+			//If it's a phi function, now we need to go back and mark everything that it came from
+			case THREE_ADDR_CODE_PHI_FUNC:
+				params = stmt->phi_function_parameters;
+				//Add this in here
+				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
+					//Grab the param out
+					three_addr_var_t* phi_func_param = dynamic_array_get_at(params, i);
 
-				//Add the definitions in
-				mark_and_add_definition(cfg, stmt, phi_func_param, stmt->function, worklist);
-			}
+					//Add the definitions in
+					mark_and_add_definition(cfg, stmt, phi_func_param, stmt->function, worklist);
+				}
 
-		//Otherwise if we have a function call, every single thing in that function call is important
-		} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
-			//Grab the parameters out
-			dynamic_array_t* params = stmt->function_parameters;
+				break;
 
-			//Run through them all and mark them
-			for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-				mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
-			}
-		} else {
-			//We need to mark the place where each definition is set
-			mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
-			mark_and_add_definition(cfg, stmt, stmt->op2, stmt->function, worklist);
+			//If we have a function call, everything in the function call
+			//is important
+			case THREE_ADDR_CODE_FUNC_CALL:
+				//Grab the parameters out
+				params = stmt->function_parameters;
+
+				//Run through them all and mark them
+				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
+					mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
+				}
+
+				break;
+
+			//An indirect function call behaves similarly to a function call, but we'll also
+			//need to mark it's "op1" value as important. This is the value that stores
+			//the memory address of the function that we're calling
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				//Mark the op1 of this function as being important
+				mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
+
+				//Grab the parameters out
+				params = stmt->function_parameters;
+
+				//Run through them all and mark them
+				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
+					mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
+				}
+
+				break;
+
+			//In all other cases, we'll just mark and add the two operands 
+			default:
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt, stmt->op2, stmt->function, worklist);
+
+				break;
 		}
 
 		//Grab this out for convenience
