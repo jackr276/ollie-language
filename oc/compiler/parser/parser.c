@@ -1005,11 +1005,12 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//Attempt to find the function in here
 			symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
 
+			//Since a function value is constant and never changes, we will classify this record as a constant
 			//If it could be found, then we're all set
 			if(found_func != NULL){
 				//We'll change the type of this node from an identifier to a function
 				//identifier
-				ident->CLASS = AST_NODE_CLASS_FUNCTION_IDENTIFIER;
+				ident->CLASS = AST_NODE_CLASS_CONSTANT;
 
 				//This values type is the function's signature
 				ident->inferred_type = found_func->signature;
@@ -1018,7 +1019,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 				ident->func_record = found_func;
 
 				//It is not assignable
-				ident->is_assignable = ASSIGNABLE;
+				ident->is_assignable = NOT_ASSIGNABLE;
 
 				//Give it back
 				return ident;

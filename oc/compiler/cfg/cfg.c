@@ -2723,11 +2723,6 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 		 	result_package.assignee = emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
 			return result_package;
 
-		//Special kind of identifier - we'll use a different rule to emit it
-		case AST_NODE_CLASS_FUNCTION_IDENTIFIER:
-		 	result_package.assignee = emit_function_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
-			return result_package;
-
 		//Same in this case - just an assignee in basic block
 		case AST_NODE_CLASS_CONSTANT:
 			result_package.assignee = emit_constant_assignment(basic_block, primary_parent, is_branch_ending);

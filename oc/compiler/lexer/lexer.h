@@ -95,6 +95,7 @@ typedef enum {
 	IDENT,
 	LABEL_IDENT, /* Label idents always start with $ */
 	POUND, /* # */
+	FUNC_CONST,
 	INT_CONST,
 	//Forced to unsigned
 	INT_CONST_FORCE_U,
