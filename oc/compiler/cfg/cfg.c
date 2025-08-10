@@ -1905,17 +1905,17 @@ static void rename_block(basic_block_t* entry){
 			//If we get here we know that we don't have a phi function
 
 			//If we have a non-temp variable, rename it
-			if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE && cursor->op1->is_function_variable == FALSE){
+			if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
 				rhs_new_name(cursor->op1);
 			}
 
 			//If we have a non-temp variable, rename it
-			if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE && cursor->op2->is_function_variable == FALSE){
+			if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE){
 				rhs_new_name(cursor->op2);
 			}
 
 			//Same goes for the assignee, except this one is the LHS
-			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE && cursor->assignee->is_function_variable == FALSE){
+			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
 				lhs_new_name(cursor->assignee);
 			}
 
@@ -2408,25 +2408,6 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
 
 	//Now give back the assignee variable
 	return const_var->assignee;
-}
-
-
-/**
- * A function identifier needs to be loaded into a temporary variable by adding the function's offset to the instruction pointer(%rip)
- *
- * So say we had something like:
- * let mut x:my_func := add
- *
- * Then we should load add like such:
- * leaq add(%rip), <temp>
- */
-static three_addr_var_t* emit_function_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
-	//Now that we have this emitted, we need to emit a special lea function that allows us to load the offset to this 
-	//function off of the instruction pointer(%rip)
-	three_addr_var_t* assignee = emit_function_pointer_offset_calculation_lea(basic_block, function_identifier, is_branch_ending);
-
-	//Now that we've done this, we've fully emitted everything that we need
-	return assignee;
 }
 
 

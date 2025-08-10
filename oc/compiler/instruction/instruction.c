@@ -1171,11 +1171,6 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 	} else if(variable->is_temporary == TRUE){
 		//Print out it's temp var number
 		fprintf(fl, "t%d", variable->temp_var_number);
-	
-	//We could see a function variable
-	} else if(variable->is_function_variable == TRUE){
-		//We'll print out the name of our function
-		fprintf(fl, "%s", variable->linked_function->func_name.string);
 
 	} else {
 		//Otherwise, print out the SSA generation along with the variable
@@ -1201,17 +1196,28 @@ void print_live_range(FILE* fl, live_range_t* live_range){
  * Print a constant. This is a helper method to avoid excessive code duplication
  */
 static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
-	//We'll now interpret what we have here
-	if(constant->const_type == INT_CONST){
-		fprintf(fl, "%d", constant->int_const);
-	} else if(constant->const_type == LONG_CONST){
-		fprintf(fl, "%ld", constant->long_const);
-	} else if(constant->const_type == FLOAT_CONST){
-		fprintf(fl, "%f", constant->float_const);
-	} else if(constant->const_type == CHAR_CONST){
-		fprintf(fl, "'%c'", constant->char_const);
-	} else {
-		fprintf(fl, "\"%s\"", constant->string_constant.string);
+	switch(constant->const_type){
+		case INT_CONST:
+			fprintf(fl, "%d", constant->int_const);
+			break;
+		case LONG_CONST:
+			fprintf(fl, "%ld", constant->long_const);
+			break;
+		case CHAR_CONST:
+			fprintf(fl, "'%c'", constant->char_const);
+			break;
+		case STR_CONST:
+			fprintf(fl, "\"%s\"", constant->string_constant.string);
+			break;
+		case FLOAT_CONST:
+			fprintf(fl, "%f", constant->float_const);
+			break;
+		case FUNC_CONST:
+			fprintf(fl, "%s", constant->function_name->func_name.string);
+			break;
+		//To stop compiler warnings
+		default:
+			break;
 	}
 }
 
