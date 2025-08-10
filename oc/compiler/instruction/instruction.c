@@ -3120,6 +3120,13 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 				constant->is_value_0 = TRUE;
 			}
 			break;
+		//If we have a function constant, we'll add the function record in
+		//as a value
+		case FUNC_CONST:
+			//Store the function name
+			constant->function_name = const_node->func_record;
+			break;
+
 		//Some very weird error here
 		default:
 			fprintf(stderr, "Unrecognizable constant type found in constant\n");

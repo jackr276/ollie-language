@@ -448,6 +448,8 @@ struct three_addr_const_t{
 	dynamic_string_t string_constant;
 	//For memory management
 	three_addr_const_t* next_created;
+	//The constant's function record
+	symtab_function_record_t* function_name;
 	//We hold the type info
 	generic_type_t* type;
 	//And we hold everything relevant about the constant

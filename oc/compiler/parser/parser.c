@@ -1008,9 +1008,11 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//Since a function value is constant and never changes, we will classify this record as a constant
 			//If it could be found, then we're all set
 			if(found_func != NULL){
-				//We'll change the type of this node from an identifier to a function
-				//identifier
+				//We'll change the type of this node from an identifier to a constant
 				ident->CLASS = AST_NODE_CLASS_CONSTANT;
+
+				//The type of this value is a function constant
+				ident->constant_type = FUNC_CONST;
 
 				//This values type is the function's signature
 				ident->inferred_type = found_func->signature;

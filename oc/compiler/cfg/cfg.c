@@ -2057,33 +2057,6 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 
 
 /**
- * Emit a special kind of lea that takes in a function name and calculates the offset of RIP that it is
- *
- * leaq <function_name>(%rip), result
- */
-static three_addr_var_t* emit_function_pointer_offset_calculation_lea(basic_block_t* basic_block, three_addr_var_t* function_var, u_int8_t is_branch_ending){
-	//Emit a temporary variable with the same type as the function
-	three_addr_var_t* assignee = emit_temp_var(function_var->type);
-
-	//This now counts as used
-	if(function_var->is_temporary == FALSE){
-		add_used_variable(basic_block, function_var);
-	}
-
-	//Now we'll emit the lea instruction
-	instruction_t* lea_instruction = emit_lea_instruction_no_mulitplier(assignee, function_var, instruction_pointer_var);
-	lea_instruction->is_branch_ending = is_branch_ending;
-
-	//Now add this into the block
-	add_statement(basic_block, lea_instruction);
-
-	//The assignee of this lea instruction is our result
-	
-	return assignee;
-}
-
-
-/**
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
@@ -2392,17 +2365,31 @@ void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr,
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node, u_int8_t is_branch_ending){
-	//We'll use the constant var feature here
-	instruction_t* const_var = emit_assignment_with_const_instruction(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
+	//First we'll emit the constant
+	three_addr_const_t* const_val = emit_constant(constant_node);
+
+	instruction_t* const_assignment;
+
+	//The most common case - that we just have a regular constant. We'll handle
+	//this with a simple assignment
+	if(const_val->const_type != FUNC_CONST){
+		//We'll use the constant var feature here
+		const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_node->inferred_type), const_val);
+
+	//Otherwise we do have a function constant, so we'll need to do a special kind of load to make this owrk
+	} else {
+		//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+		const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+	}
 
 	//Mark this with whatever was passed through
-	const_var->is_branch_ending = is_branch_ending;
+	const_assignment->is_branch_ending = is_branch_ending;
 	
 	//Add this into the basic block
-	add_statement(basic_block, const_var);
+	add_statement(basic_block, const_assignment);
 
 	//Now give back the assignee variable
-	return const_var->assignee;
+	return const_assignment->assignee;
 }
 
 
@@ -2434,9 +2421,6 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * leaq add(%rip), <temp>
  */
 static three_addr_var_t* emit_function_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
-	//This is how we'll eventually call it
-	three_addr_var_t* function_identifier = emit_var_from_function(ident_node->func_record, FALSE);
-
 	//Now that we have this emitted, we need to emit a special lea function that allows us to load the offset to this 
 	//function off of the instruction pointer(%rip)
 	three_addr_var_t* assignee = emit_function_pointer_offset_calculation_lea(basic_block, function_identifier, is_branch_ending);
