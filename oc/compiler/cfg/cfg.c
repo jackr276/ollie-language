@@ -6014,6 +6014,17 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 		}
 
+		//If this is the exit block, it means that we returned through every control path
+		//in here and there is no point in moving forward. We'll simply return
+		if(current_block == function_exit_block){
+			//Warn that we have unreachable code here
+			if(ast_cursor->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
+			}
+
+			break;
+		}
+
 		//Advance to the next child
 		ast_cursor = ast_cursor->next_sibling;
 	}
@@ -6421,14 +6432,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//The current block is always what's directly at the end
 				current_block = generic_results.final_block;
 
-				//If this is the exit block, it means that we returned through every control path
-				//in here
-				if(current_block == function_exit_block){
-					results.starting_block = starting_block;
-					results.final_block = current_block;
-					return results;
-				}
-
 				break;
 
 			case AST_NODE_CLASS_C_STYLE_SWITCH_STMT:
@@ -6508,6 +6511,17 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				emit_expression(current_block, ast_cursor, FALSE, FALSE);
 				
 				break;
+		}
+
+		//If this is the exit block, it means that we returned through every control path
+		//in here and there is no point in moving forward. We'll simply return
+		if(current_block == function_exit_block){
+			//Warn that we have unreachable code here
+			if(ast_cursor->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
+			}
+
+			break;
 		}
 
 		//Advance to the next child

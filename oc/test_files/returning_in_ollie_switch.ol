@@ -26,6 +26,9 @@ fn return_ollie_switch(arg:i32) -> i32{
 			ret 111;
 		}
 	}
+
+	//Shouldn't even touch this
+	ret 22;
 }
 
 fn main(arg:i32, argv:char**) -> i32{
