@@ -11,7 +11,7 @@ fn main(arg:i32, argv:char**) -> i32{
 
 	} as my_struct;
 
-	declare structure:my_struct;
+	declare mut structure:my_struct;
 
 	structure:ch := 'a';
 	structure:x[3] := 3;

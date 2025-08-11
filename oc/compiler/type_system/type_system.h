@@ -12,6 +12,7 @@
 #include <sys/types.h>
 
 #define OUT_OF_BOUNDS 3
+#define MAX_FUNCTION_TYPE_PARAMS 6
 
 //Type names may not exceed 200 characters in length
 #define MAX_TYPE_NAME_LENGTH 200
@@ -29,6 +30,10 @@ typedef struct basic_type_t basic_type_t;
 typedef struct array_type_t array_type_t;
 //A pointer type
 typedef struct pointer_type_t pointer_type_t;
+//A function type
+typedef struct function_type_t function_type_t;
+//A function type's individual parameter
+typedef struct function_type_parameter_t function_type_parameter_t;
 //An enumerated type
 typedef struct enumerated_type_t enumerated_type_t;
 //A constructed type
@@ -85,6 +90,7 @@ typedef enum TYPE_CLASS{
 	TYPE_CLASS_CONSTRUCT,
 	TYPE_CLASS_ENUMERATED,
 	TYPE_CLASS_POINTER,
+	TYPE_CLASS_FUNCTION_SIGNATURE, /* Function pointer type */
 	TYPE_CLASS_ALIAS /* Alias types */
 } TYPE_CLASS;
 
@@ -105,6 +111,8 @@ struct generic_type_t{
 	basic_type_t* basic_type;
 	array_type_t* array_type;
 	pointer_type_t* pointer_type;
+	//For function pointers
+	function_type_t* function_type;
 	constructed_type_t* construct_type;
 	enumerated_type_t* enumerated_type;
 	aliased_type_t* aliased_type;
@@ -208,6 +216,33 @@ struct aliased_type_t{
 
 
 /**
+ * A type for storing the individual function parameters themselves
+ */
+struct function_type_parameter_t{
+	//What's the type
+	generic_type_t* parameter_type;
+	//Is this mutable
+	u_int8_t is_mutable;
+};
+
+
+/**
+ * A function type is a function signature that is used for function pointers
+ * For a function type, we simply need a list of parameters and a return type
+ */
+struct function_type_t{
+	//A list of function parameters. Limited to 6
+	function_type_parameter_t parameters[MAX_FUNCTION_TYPE_PARAMS];
+	//The return type
+	generic_type_t* return_type;
+	//Store the number of parameters
+	u_int8_t num_params;
+	//Does this return a void type?
+	u_int8_t returns_void;
+};
+
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -242,6 +277,11 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type);
  * Is a type conversion needed between these two types for b to fit into a
  */
 u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b);
+
+/**
+ * Simple helper to check if a function is void
+ */
+u_int8_t is_void_type(generic_type_t* type);
 
 /**
  * Determine the compatibility of two types and coerce appropraitely. The double pointer
@@ -319,6 +359,16 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
  * Dynamically allocate and create an aliased type
  */
 generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number);
+
+/**
+ * Dynamically allocate and create a function pointer type
+ */
+generic_type_t* create_function_pointer_type(u_int32_t line_number);
+
+/**
+ * Print a function pointer type out
+ */
+void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
 
 /**
  * Is a type signed?

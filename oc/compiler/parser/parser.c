@@ -52,8 +52,6 @@ static generic_ast_node_t* prog = NULL;
 
 //What is the current function that we are "in"
 static symtab_function_record_t* current_function = NULL;
-//What is the current variable that we are "in"
-static symtab_variable_record_t* current_var = NULL;
 //The queue that holds all of our jump statements for a given function
 static heap_queue_t* current_function_jump_statements = NULL;
 
@@ -556,18 +554,16 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
  * BNF Rule: <function-call> ::= @<identifier>({<ternary_expression>}?{, <ternary_expression>}*)
  */
 static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
+	//For any error printing if need be
+	char error[ERROR_SIZE];
 	//The current line num
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
-	//A nicer reference that we'll keep to the function record
-	symtab_function_record_t* function_record;
 	//We'll also keep a nicer reference to the function name
 	char* function_name;
 	//The number of parameters that we've seen
 	u_int8_t num_params = 0;
-	//The number of parameters that the function actually takes
-	u_int8_t function_num_params;
 	
 	//First grab the ident node
 	generic_ast_node_t* ident = identifier(fl, side);
@@ -581,35 +577,76 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Grab the function name out for convenience
 	function_name = ident->identifier.string;
 
-	//Let's now look up the function name in the function symtab
-	function_record = lookup_function(function_symtab, function_name);
+	//A pointer that holds our function call node
+	generic_ast_node_t* function_call_node;
 
-	//Important check here--if this function record does not exist, it means the user is trying to 
-	//call a nonexistent function
-	if(function_record == NULL){
-		sprintf(info, "Function \"%s\" is being called before definition", function_name);
+	//Hold the overall type for error printing
+	generic_type_t* function_type;
+
+	//The generic type that holds our function signature
+	function_type_t* function_signature;
+
+	/**
+	 * This identifier has the possibility of being a direct function call or a function pointer
+	 * of some kind. To determine which it is, we'll need to look the name up in both symtabs
+	 * and go accordingly
+	 */
+	
+	//Lookup the variable
+	symtab_variable_record_t* function_pointer_variable = lookup_variable(variable_symtab, function_name);
+
+	//Let's now look up the function name in the function symtab
+	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name);
+
+	//This is the most common case - that we have a simple, direct function call
+	if(function_record != NULL){
+		//Allocate this as a regular function call node
+		function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL, side);
+
+		//Store the function record in the node
+		function_call_node->func_record = function_record;
+
+		//Store the overall type
+		function_type = function_record->signature;
+
+		//Store our function signature
+		function_signature = function_record->signature->function_type;
+
+		//We'll also add in that the current function has called this one
+		call_function(current_function->call_graph_node, function_record->call_graph_node);
+		//We'll now note that this was indeed called
+		function_record->called = TRUE;
+
+	//Otherwise if we see this case, then we have an indirect function call to deal with
+	} else if(function_pointer_variable != NULL){
+		//Strip the type away here
+		function_type = dealias_type(function_pointer_variable->type_defined_as);
+
+		//If this is not a function signature, then we can't call it as one
+		if(function_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			//Print and fail out here
+			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name, function_type->type_name.string);
+			return print_and_return_error(error, parser_line_num);
+		}
+
+		//Now that we know this exists, we'll allocate this one as an indirect function call
+		function_call_node = ast_node_alloc(AST_NODE_CLASS_INDIRECT_FUNCTION_CALL, side);
+
+		//Store our funcion signature
+		function_signature = function_type->function_type;
+
+		//Store the variable too
+		function_call_node->variable = function_pointer_variable;
+
+	//This means that they're both NULL. We'll need to throw an error here
+	} else{
+		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name);
 		//Return the error node and get out
 		return print_and_return_error(info, current_line);
 	}
 
-	//Now we can grab out some info for convenience
-	function_num_params = function_record->number_of_params;
-
-	//If we make it here, we know that our function actually exists. We can now create
-	//the appropriate node that will hold all of our data about it
-	//It is also now safe enough for us to allocate the function node
-	generic_ast_node_t* function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL, side);
-
-	//Store the function record in the node
-	function_call_node->func_record = function_record;
-
-	//We'll also add in that the current function has called this one
-	call_function(current_function->call_graph_node, function_record->call_graph_node);
-	//We'll now note that this was indeed called
-	function_record->called = 1;
-
 	//Add the inferred type in for convenience as well
-	function_call_node->inferred_type = function_record->return_type;
+	function_call_node->inferred_type = function_signature->return_type;
 	
 	//We now need to see a left parenthesis for our param list
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -623,47 +660,67 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//Push onto the grouping stack once we see this
 	push_token(grouping_stack, lookahead);
 
-	//If we only have one paramater for our function, we had better only see an R_PAREN here
-	if(function_num_params == 0){
-		//Grab the next token
+	//Let's check for this easy case first. If we have no parameters, then 
+	//we'll expect to immediately see an R_PAREN
+	if(function_signature->num_params == 0){
+		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 		
-		//If we don't see this it's bad
+		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
-			sprintf(info, "Function \"%s\" expects no parameters First declared here:", function_record->func_name.string);
-			return print_and_return_error(info, current_line);
-		}
-		
-		//Be sure to clear the stack out
-		pop_token(grouping_stack);
-
-		//Otherwise this worked just fine, so we'll jump out here
-		return function_call_node;
-	}
-
-	//Otherwise if we make it all the way here, we're going to need to do more complex checking
-
-	//A node to hold our current parameter
-	generic_ast_node_t* current_param;
-
-	//A node to hold the current function parameter
-	symtab_variable_record_t* current_function_param;
-
-	//So long as we don't see the R_PAREN we aren't done
-	while(TRUE){
-		//If we're exceeding the number of parameters, we'll fail out
-		if(num_params > function_num_params){
-			sprintf(info, "Function \"%s\" expects %d params, was given %d. First declared here:", function_name, function_num_params, num_params);
+			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name, function_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			//Print out the actual function record as well
-			print_function_name(function_record);
 			num_errors++;
 			//Return the error node
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 		}
 
+		//Otherwise if it was fine, we'll now pop the grouping stack
+		pop_token(grouping_stack);
+
+		//And package up and return here
+		//Add the line number in
+		function_call_node->line_number = current_line;
+
+		//Otherwise, if we make it here, we're all good to return the function call node
+		return function_call_node;
+	}
+
+	/**
+	 * Otherwise, if we get all the way down here, we know that we expect to see at least one
+	 * value passed in as a parameter. We'll use do-while logic to process this in here
+	 */
+
+	//A node to hold our current parameter
+	generic_ast_node_t* current_param;
+
+	//To hold the function's parameters from it's signature
+	function_type_parameter_t defined_parameter;
+
+
+	//So long as we don't see the R_PAREN we aren't done
+	do {
+		//Record that we saw one more parameter
+		num_params++;
+
+		//If we've already seen more than one parameter, we'll need a comma here
+		if(num_params > 1){
+			//Otherwise it must be a comma. If it isn't we have a failure
+			if(lookahead.tok != COMMA){
+				//Create and return an error node
+				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			}
+		}
+
+		//We'll let the error below handle this, we just don't
+		//want to segfault
+		if(num_params > function_signature->num_params){
+			break;
+		}
+
 		//Grab the current function param
-		current_function_param = function_record->func_params[num_params].associate_var;
+		defined_parameter = function_signature->parameters[num_params - 1];
 
 		//Parameters are in the form of a conditional expression
 		current_param = ternary_expression(fl, side);
@@ -674,7 +731,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		}
 	
 		//Let's grab these to check for compatibility
-		generic_type_t* param_type = current_function_param->type_defined_as;
+		generic_type_t* param_type = defined_parameter.parameter_type;
 		generic_type_t* expr_type = current_param->inferred_type;
 
 		//Let's see if we're even able to assign this here
@@ -682,8 +739,8 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
-			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". First defined here:",
-		   			function_name, param_type->type_name.string, num_params, expr_type->type_name.string);
+			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". Defined as: %s",
+		   			function_name, param_type->type_name.string, num_params, expr_type->type_name.string, function_type->type_name.string);
 
 			//Use the helper to return this
 			return print_and_return_error(info, parser_line_num);
@@ -700,33 +757,19 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//the parameters will appear in order from left to right
 		add_child_node(function_call_node, current_param);
 
-		//Record that we saw one more parameter
-		num_params++;
-
 		//Refresh the token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-		//Two options here, we can either see a COMMA or an R_PAREN
-		//If it's an R_PAREN we're done
-		if(lookahead.tok == R_PAREN){
-			break;
-		}
+	//Keep going so long as we don't see a right paren
+	} while (lookahead.tok != R_PAREN);
 
-		//Otherwise it must be a comma. If it isn't we have a failure
-		if(lookahead.tok != COMMA){
-			//Create and return an error node
-			return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
-		}
-	}
 
-	/**
-	 * If we have a mismatch between what the function takes and what we want, throw an
-	 * error
-	 */
-	if(num_params != function_num_params){
-		sprintf(info, "Function %s expectects %d parameters, but was only given %d", function_record->func_name.string, function_num_params, num_params);
+	//If we have a mismatch between what the function takes and what we want, throw an
+	//error
+	if(num_params != function_signature->num_params){
+		sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
+		  function_name, function_signature->num_params, num_params, function_type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_function_name(function_record);
 		num_errors++;
 		//Error out
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
@@ -740,8 +783,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 	//Add the line number in
 	function_call_node->line_number = current_line;
-
-	//Destroy the ident node, we no longer need it
 
 	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
@@ -945,27 +986,53 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			}
 
 			//Now we will look this up in the variable symbol table
-			symtab_variable_record_t* found = lookup_variable(variable_symtab, var_name);
+			symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
 
-			//Record the current var for later use
-			current_var = found;
+			//Let's look and see if we have a variable for use here. If we do, then
+			//we're done with this exploration
+			if(found_var != NULL){
+				//Store the inferred type
+				ident->inferred_type = found_var->type_defined_as;
+				//Store the variable that's associated
+				ident->variable = found_var;
+				//Idents are assignable
+				ident->is_assignable = ASSIGNABLE;
 
-			//We now must see a variable that was intialized. If it was not
-			//initialized, then we have an issue
-			if(found == NULL){
-				sprintf(info, "Variable \"%s\" has not been declared", var_name);
-				return print_and_return_error(info, current_line);
+				//Give back the ident node
+				return ident;
 			}
 
-			//Store the inferred type
-			ident->inferred_type = found->type_defined_as;
-			//Store the variable that's associated
-			ident->variable = found;
-			//Idents are assignable
-			ident->is_assignable = ASSIGNABLE;
+			//Attempt to find the function in here
+			symtab_function_record_t* found_func = lookup_function(function_symtab, var_name);
 
-			//Give back the ident node
-			return ident;
+			//Since a function value is constant and never changes, we will classify this record as a constant
+			//If it could be found, then we're all set
+			if(found_func != NULL){
+				//We'll change the type of this node from an identifier to a constant
+				ident->CLASS = AST_NODE_CLASS_CONSTANT;
+
+				//The type of this value is a function constant
+				ident->constant_type = FUNC_CONST;
+
+				//This values type is the function's signature
+				ident->inferred_type = found_func->signature;
+
+				//Store the function record that we've found
+				ident->func_record = found_func;
+
+				//It is not assignable
+				ident->is_assignable = NOT_ASSIGNABLE;
+
+				//Give it back
+				return ident;
+			}
+
+			//Otherwise, if we reach all the way down to here, then we have an issue as
+			//this identifier has never been declared as a function, variable or constant.
+			//We'll through an error if this happens
+			sprintf(info, "Variable \"%s\" has not been declared", var_name);
+			return print_and_return_error(info, current_line);
+
 
 		//If we see any constant
 		case INT_CONST:
@@ -1140,19 +1207,22 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
+	//Extract the variable from the left side
+	symtab_variable_record_t* assignee = left_hand_unary->variable;
+
 	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
 	//this assignment is illegal
-	if(current_var->initialized == TRUE && current_var->is_mutable == FALSE){
-		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", current_var->var_name.string);
+	if(assignee->initialized == TRUE && assignee->is_mutable == FALSE){
+		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//If it was already intialized, this means that it's been "assigned to"
-	if(current_var->initialized == TRUE){
-		current_var->assigned_to = TRUE;
+	if(assignee->initialized == TRUE){
+		assignee->assigned_to = TRUE;
 	} else {
 		//Mark that this var was in fact initialized
-		current_var->initialized = TRUE;
+		assignee->initialized = TRUE;
 	}
 
 	//Now we are required to see the := terminal
@@ -1417,9 +1487,6 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	//Store the type
 	const_access_node->inferred_type = working_type;
 
-	//Update the current variable as well, as this is a new variable
-	current_var = var_record;
-
 	//And now we're all done, so we'll just give back the root reference
 	return const_access_node;
 }
@@ -1661,6 +1728,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		push_back_token(lookahead);
 		//Assign the type
 		postfix_expr_node->inferred_type = return_type;
+		//Assign the variable
+		postfix_expr_node->variable = result->variable;
 		//This was assigned to
 		result->variable->assigned_to = TRUE;
 		//And we'll give back what we had constructed so far
@@ -2067,13 +2136,13 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
 
 	//You can never cast a "void" to anything
-	if(being_casted_type->type_class == TYPE_CLASS_BASIC && being_casted_type->basic_type->basic_type == VOID){
+	if(is_void_type(being_casted_type) == TRUE){
 		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Likewise, you can never cast anything to void
-	if(casting_to_type->type_class == TYPE_CLASS_BASIC && casting_to_type->basic_type->basic_type == VOID){
+	if(is_void_type(casting_to_type) == TRUE){
 		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -3708,6 +3777,244 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct, side_
 
 
 /**
+ * A function pointer definer defines a function signature that can be used to dynamically call functions 
+ * of the same signature
+ *
+ * define fn(<parameter_list>) -> <type> as <identifier>;
+ *
+ * Unlike constructs & enums, we'll force the user to use an as keyword here for their type definition to
+ * enforce readability
+ *
+ * NOTE: We've already seen the "define" and "fn" keyword by the time that we arrive here
+ */
+static u_int8_t function_pointer_definer(FILE* fl){
+	//Declare a token for search-ahead
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Is a function parameter mutable? We always assume no by default
+	u_int8_t is_mutable;
+
+	//Now we need to see an L_PAREN
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
+	}
+
+	//Otherwise push this onto the grouping stack for later
+	push_token(grouping_stack, lookahead);
+
+	//Once we've gotten past this point, we're safe to allocate this type
+	generic_type_t* function_type = create_function_pointer_type(parser_line_num); 
+
+	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
+	//as an alternative way of saying this function takes no parameters
+	
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+
+	//We can optionally see a void type that we need to consume
+	switch(lookahead.tok){
+		//We just need to consume this and move along
+		case VOID:
+			//Refresh the token
+			lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+			break;
+
+		default:
+			//If we hit the default, then we need to push the token back
+			push_back_token(lookahead);
+			break;
+	}
+
+	//Keep track of the parameter count
+	u_int8_t parameter_count = 0;
+
+	//Keep processing so long as we keep seeing commas
+	do{
+		//We've exceeded the allowed count. We'll throw an error here
+		if(parameter_count >= MAX_FUNCTION_TYPE_PARAMS){
+			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			return FALSE;
+		}
+
+		//Each function pointer parameter will consist only of a type and optionally
+		//a mutable keyword
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Is it mutable? If this token exists then it is
+		if(lookahead.tok == MUT){
+			//Store that this is mutable inside of the structure
+			function_type->function_type->parameters[parameter_count].is_mutable = TRUE;
+		} else {
+			//Otherwise put this back
+			push_back_token(lookahead);
+		}
+
+		//Now we need to see a valid type
+		generic_type_t* type = type_specifier(fl);
+
+		//If this is NULL, we'll error out
+		if(type == NULL){
+			return FALSE;
+		}
+
+		//This is good, we'll store it in the parameter type
+		function_type->function_type->parameters[parameter_count].parameter_type = type;
+
+		//Increment the count
+		parameter_count++;
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	} while(lookahead.tok == COMMA);
+
+	//Store the parameter count for down the road
+	function_type->function_type->num_params = parameter_count;
+
+	//Now that we're done processing the list, we need to ensure that we have a right paren
+	if(lookahead.tok != R_PAREN){
+		//Fail out
+		print_parse_message(PARSE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Ensure that we pop the grouping stack and get a match
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		//Fail out
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Now we need to see an arrow operator
+	lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+
+	//If we don't see it, we fail out
+	if(lookahead.tok != ARROW){
+		//Fail out
+		print_parse_message(PARSE_ERROR, "Arrow (->) required after function parameter list", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Now we need to see a return type
+	generic_type_t* return_type = type_specifier(fl);
+
+	//If this is NULL, then we have an invalid return type
+	if(return_type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid return type given in function type definition", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Let's now store the return type
+	function_type->function_type->return_type = return_type;
+
+	//Mark whether or not it's void as well
+	function_type->function_type->returns_void = is_void_type(return_type);
+
+	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
+	//confusing syntactical mess that C function pointer declarations have
+	
+	//Refresh the token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it isn't an AS keyword, we're done
+	if(lookahead.tok != AS){
+		print_parse_message(PARSE_ERROR, "\"as\" keyword is required after function type definition", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//If we make it here then we know we're good to look for an identifier
+	generic_ast_node_t* identifier_node = identifier(fl, SIDE_TYPE_LEFT);
+
+	//If this is an error, then we're going to fail out
+	if(identifier_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias type", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//We know that it wasn't an error, but now we need to perform duplicate checking
+
+	//Grab this out for convenience
+	char* identifier_name = identifier_node->identifier.string;
+
+	//Let's close the parsing out here - we'll need to see & consume a semicolon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we didn't see it, then we fail out
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after definition statement", parser_line_num);
+		num_errors++;
+		return FALSE;
+	}
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, identifier_name);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", identifier_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Fail out
+		return FALSE;
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, identifier_name);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", identifier_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Fail out
+		return FALSE;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", identifier_name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Fail out
+		return FALSE;
+	}
+
+	//We'll now generate the name. This essentially finalizes the whole affair
+	generate_function_pointer_type_name(function_type);
+
+	//Now that we've created it, we'll store it in the symtab
+	symtab_type_record_t* type_record = create_type_record(function_type);
+
+	//Now that this has been created, we'll store it
+	insert_type(type_symtab, type_record);
+
+	//Now that we've done that part, we also need to create the alias type and insert it
+	generic_type_t* alias_type = create_aliased_type(identifier_node->identifier, function_type, parser_line_num);
+
+	//Once we've created this, we'll add this into the symtab
+	insert_type(type_symtab, create_type_record(alias_type));
+
+	//This worked
+	return TRUE;
+}
+
+
+/**
  * A construct definer is the definition of a construct. We require all parts of the construct to be defined here.
  * We also allow the potential for aliasing as a different type right off of the bat here. Since this is a compiler-specific
  * rule, we only return success or failer
@@ -4680,7 +4987,9 @@ static generic_type_t* type_specifier(FILE* fl){
  * top lexical scope for the function itself. Like all rules, it returns a reference to the
  * root of the subtree that it creates
  *
- * BNF Rule: <parameter-declaration> ::= {mut}? <identifier> : <type-specifier>
+ * NOTE: An identifier may or may not be required based on the type of parameter declaration that we have
+ *
+ * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
  */
 static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
 	//Is it mutable?
@@ -4888,13 +5197,13 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 			break;
 	}
 
-	//Keep track of the current function paremeter number
-	u_int8_t parameter_number = 1;
+	//Start off at 1 
+	u_int8_t function_parameter_number = 1;
 
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl, parameter_number);
+		generic_ast_node_t* param_decl = parameter_declaration(fl, function_parameter_number);
 
 		//It's invalid, we'll just send it up the chain
 		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -4918,11 +5227,11 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 		//Otherwise it was valid, so we've seen one more parameter
 		param_list_node->num_params++;
 
+		//Increment this
+		function_parameter_number++;
+
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Increment this
-		parameter_number++;
 
 	//We keep going as long as we see commas
 	} while(lookahead.tok == COMMA);
@@ -5521,8 +5830,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//If we see a semicolon, we can just leave
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
-		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
-			&& current_function->return_type->basic_type->basic_type != VOID){
+		if(current_function->signature->function_type->returns_void == FALSE){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -5536,8 +5844,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	} else {
 		//If we get here, but we do expect a void return, then this is an issue
-		if(current_function->return_type->type_class == TYPE_CLASS_BASIC 
-			&& current_function->return_type->basic_type->basic_type == VOID){
+		if(current_function->signature->function_type->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -5720,6 +6027,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//We will declare a new lexical scope here
 	initialize_variable_scope(variable_symtab);
+	initialize_type_scope(type_symtab);
 
 	//Push to stack for later matching
 	push_token(grouping_stack, lookahead);
@@ -5911,6 +6219,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//Now that we're done, we will remove this variable scope
 	finalize_variable_scope(variable_symtab);
+	finalize_type_scope(type_symtab);
 
 	//If we make it here, all went well
 	return switch_stmt_node;
@@ -7308,7 +7617,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 	
 	//One thing here, we aren't allowed to see void
-	if(type_spec->type_class == TYPE_CLASS_BASIC && type_spec->basic_type->basic_type == VOID){
+	if(is_void_type(type_spec) == TRUE){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
@@ -7410,8 +7719,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
  * BNF Rule: <alias-statement> ::= alias <type-specifier> as <identifier>;
  */
 static u_int8_t alias_statement(FILE* fl){
-	//Store the ident name locally
-	char ident_name[MAX_TYPE_NAME_LENGTH];
 	//Our lookahead token
 	lexitem_t lookahead;
 
@@ -7457,8 +7764,8 @@ static u_int8_t alias_statement(FILE* fl){
 		return FAILURE;
 	}
 
-	//Let's extract the name
-	strcpy(ident_name, ident_node->identifier.string);
+	//Grab this out for convenience
+	char* name = ident_node->identifier.string;
 
 	//Let's do our last syntax check--the semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7472,11 +7779,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, ident_name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", ident_name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -7486,11 +7793,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, ident_name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", ident_name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -7500,11 +7807,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, ident_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", ident_name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -7538,30 +7845,35 @@ static u_int8_t definition(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//Switch based on what we have
-	if(lookahead.tok == DEFINE){
-		//We can now see construct or enum
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	switch(lookahead.tok){
+		//Type definition
+		case DEFINE:
+			//We can now see construct or enum
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-		//Switch based on what we have here
-		if(lookahead.tok == CONSTRUCT){
-			return construct_definer(fl);
-		} else if(lookahead.tok == ENUM){
-			return enum_definer(fl);
-		//Some weird error here
-		} else {
-			print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
+			switch(lookahead.tok){
+				case CONSTRUCT:
+					return construct_definer(fl);
+				case ENUM:
+					return enum_definer(fl);
+				case FN:
+					return function_pointer_definer(fl);
+
+				default:
+					print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
+					num_errors++;
+					return FAILURE;
+			}
+	
+		//Alias statement
+		case ALIAS:
+			return alias_statement(fl);
+
+		//Something wen wrong here
+		default:
+			print_parse_message(PARSE_ERROR, "Definition expected define or alias keywords, found neither", parser_line_num);
 			num_errors++;
 			return FAILURE;
-		}
-
-	} else if(lookahead.tok == ALIAS){
-		return alias_statement(fl);
-	//Some weird error here
-	} else {
-		print_parse_message(PARSE_ERROR, "Definition expected define or alias keywords, found neither", parser_line_num);
-		num_errors++;
-		return FAILURE;
 	}
 }
 
@@ -7871,6 +8183,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return param_list_node;
 	}
 
+	//If we have more than the allowed number of parameters, we fail out
+	if(param_list_node->num_params > 6){
+		return print_and_return_error("Ollie allows only 6 parameters per function", parser_line_num);
+	}
+
 	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
 	//now parse the param_list and store records to it	
 	//Let's first add the param list in as a child
@@ -7885,12 +8202,14 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		u_int8_t param_count = 0;
 		//The internal function record param
 		symtab_variable_record_t* func_param;
+		//Grab the function signature out for processing
+		function_type_t* function_signature_type = function_record->signature->function_type;
 
 		//So long as this isn't null
 		while(param_list_cursor != NULL){
 			//If at any point this is more than the number of parameters this function is meant to have,
 			//we bail
-			if(param_count > function_record->number_of_params){
+			if(param_count > function_signature_type->num_params){
 				sprintf(info, "Function \"%s\" was defined implicitly to only have %d parameters. First defined here:", function_record->func_name.string, function_record->number_of_params);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Print the function out too
@@ -7899,19 +8218,17 @@ static generic_ast_node_t* function_definition(FILE* fl){
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
-			//Grab this out for reference
-			func_param = function_record->func_params[param_count].associate_var;
-			//The variable record for this param node
-			symtab_variable_record_t* param_rec = param_list_cursor->variable;
+			//Grab the type out for validation 
+			generic_type_t* parameter_type = function_signature_type->parameters[param_count].parameter_type;
 
 			//Let's now compare the types here
-			if(types_assignable(&(func_param->type_defined_as), &(param_rec->type_defined_as)) == NULL){
+			if(types_assignable(&(func_param->type_defined_as), &(parameter_type)) == NULL){
 				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
 			//Otherwise it's fine, so we'll overwrite the entire thing in the record
-			function_record->func_params[param_count].associate_var = param_rec;
+			function_record->func_params[param_count].associate_var = param_list_cursor->variable;
 
 			//Advance this
 			param_list_cursor = param_list_cursor->next_sibling;
@@ -7921,18 +8238,21 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Otherwise we are defining from scratch here
 	} else {
+		//Grab this out for convenience
+		generic_type_t* function_signature = create_function_pointer_type(parser_line_num);
+
 		//So long as this is not null
 		while(param_list_cursor != NULL){
-			//For dev use--sanity check
-			if(param_list_cursor->CLASS != AST_NODE_CLASS_PARAM_DECL){
-				return print_and_return_error("Fatal internal compiler error. Expected declaration node in parameter list", parser_line_num);
-			}
-
 			//The variable record for this param node
 			symtab_variable_record_t* param_rec = param_list_cursor->variable;
 
 			//We'll add it in as a reference to the function
 			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
+			
+			//Store this into the function signature as well
+			function_signature->function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
+			function_signature->function_type->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
+
 			//Increment the parameter count
 			(function_record->number_of_params)++;
 
@@ -7942,6 +8262,12 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//Push the cursor up by 1
 			param_list_cursor = param_list_cursor->next_sibling;
 		}
+
+		//Copy this over for later
+		function_signature->function_type->num_params = function_record->number_of_params;
+
+		//Store this in here
+		function_record->signature = function_signature;
 	}
 
 	//Once we get down here, the entire parameter list has been stored properly
@@ -7982,7 +8308,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	}
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
-	if(defining_prev_implicit == 1){
+	if(defining_prev_implicit == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
@@ -7995,7 +8321,14 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Store the return type
 	function_record->return_type = type;
 
-	//Once we have the type, most nodes that we have here are useless
+	//Record whether or not it's a void type
+	function_record->signature->function_type->returns_void = is_void_type(type);
+
+	//Store the return type as well
+	function_record->signature->function_type->return_type = type;
+
+	//Now that the function record has been finalized, we'll need to produce the type name
+	generate_function_pointer_type_name(function_record->signature);
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition
@@ -8019,10 +8352,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			num_errors++;
 			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 		}
-
-		//Otherwise it should be ok
-
-		//If this is the case, then we essentially have a compiler directive here. We'll return NULL
 
 		//Finalize the variable scope
 		finalize_variable_scope(variable_symtab);

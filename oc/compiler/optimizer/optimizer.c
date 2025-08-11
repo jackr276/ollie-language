@@ -1401,74 +1401,117 @@ static void mark(cfg_t* cfg){
 		instruction_t* current_stmt = current->leader_statement;
 
 		//Now we'll run through every statement(operation) in this block
-		//TODO this is NOT complete
 		while(current_stmt != NULL){
 			//Clear it's mark
 			current_stmt->mark = FALSE;
 
-			//Is it a return stmt? If so, whatever it's returning is useful
-			if(current_stmt->CLASS == THREE_ADDR_CODE_RET_STMT){
-				//Mark this as useful
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
+			//Go through statement by statement. In these
+			//special types of statements like return statements,
+			//function call statements, etc, we'll mark values as
+			//important
+			switch(current_stmt->CLASS){
+				case THREE_ADDR_CODE_RET_STMT:
+					//Mark this as useful
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
 
-			//Asm inline statements are always useful
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			//Is it a function call? Always useful as well
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			} else if(current_stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
-				current_stmt->mark = TRUE;
-				//Add it to the list
-				dynamic_array_add(worklist, current_stmt);
-				//The block now has a mark
-				current->contains_mark = TRUE;
-			//We need to check - are we manipulating any global variables here? If we
-			//are, those are also considered important
-			} else if(current_stmt->assignee != NULL && current_stmt->assignee->is_temporary == FALSE){
-				//If we have an assignee and that assignee is a global variable, then this is marked as
+				//These are added by the user and considered to
+				//always be of use
+				case THREE_ADDR_CODE_ASM_INLINE_STMT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				//Since we don't know whether or not a function
+				//that is being called performs an important task,
+				//we also always consider it to be important
+				case THREE_ADDR_CODE_FUNC_CALL:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				//Indirect function calls are the same as function calls. They will
+				//always count becuase we do not know whether or not the indirectly
+				//called function performs some important task. As such, we will 
+				//mark it as important
+				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				//Direct jumps are also added by the user and as such are always
 				//important
-				if(current_stmt->assignee->linked_var->is_global == TRUE){
+				case THREE_ADDR_CODE_DIR_JUMP_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
-				//If we have a pointer type and are assigning to a derefence of a function parameter(inout mode), we are modifying the value of that pointer
-				} else if(current_stmt->assignee->linked_var->is_function_paramater == TRUE 
-						&& current_stmt->assignee->type->type_class == TYPE_CLASS_POINTER 
-						&& current_stmt->assignee->indirection_level > 0){
-					//Mark it
+					break;
+	
+				//Same goes for labels in memory
+				case THREE_ADDR_CODE_LABEL_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
-				}
+					break;
+
+				//And finally idle statements are considered important
+				//because they literally do nothing, so if the user
+				//put them there, we'll assume that it was for a good reason
+				case THREE_ADDR_CODE_IDLE_STMT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+
+				//Let's see what other special cases we have
+				default:
+					//We can leave right now if this is the case
+					if(current_stmt->assignee == NULL || current_stmt->assignee->is_temporary == TRUE){
+						break;
+					}
+
+					//Otherwise, we may have some special cases that we'll need to account for
+					//If we have an assignee and that assignee is a global variable, then this is marked as
+					//important
+					if(current_stmt->assignee->linked_var->is_global == TRUE){
+						current_stmt->mark = TRUE;
+						//Add it to the list
+						dynamic_array_add(worklist, current_stmt);
+						//The block now has a mark
+						current->contains_mark = TRUE;
+
+					//If we have a pointer type and are assigning to a derefence of a function parameter
+					//(inout mode), we are modifying the value of that pointer
+					} else if(current_stmt->assignee->linked_var->is_function_paramater == TRUE 
+							&& current_stmt->assignee->type->type_class == TYPE_CLASS_POINTER 
+							&& current_stmt->assignee->indirection_level > 0){
+						//Mark it
+						current_stmt->mark = TRUE;
+						//Add it to the list
+						dynamic_array_add(worklist, current_stmt);
+						//The block now has a mark
+						current->contains_mark = TRUE;
+					}
+					
+					break;
 			}
 
 			//Advance the current statement up
@@ -1481,32 +1524,62 @@ static void mark(cfg_t* cfg){
 	while(dynamic_array_is_empty(worklist) == FALSE){
 		//Grab out the operation from the worklist(delete from back-most efficient)
 		instruction_t* stmt = dynamic_array_delete_from_back(worklist);
+		//Generic array for holding parameters
+		dynamic_array_t* params;
 
-		//If it's a phi function, now we need to go back and mark everything that it came from
-		if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
-			dynamic_array_t* phi_function_parameters = stmt->phi_function_parameters;
-			//Add this in here
-			for(u_int16_t i = 0; phi_function_parameters != NULL && i < phi_function_parameters->current_index; i++){
-				//Grab the param out
-				three_addr_var_t* phi_func_param = dynamic_array_get_at(phi_function_parameters, i);
+		//There are several unique cases that require extra attention
+		switch(stmt->CLASS){
+			//If it's a phi function, now we need to go back and mark everything that it came from
+			case THREE_ADDR_CODE_PHI_FUNC:
+				params = stmt->phi_function_parameters;
+				//Add this in here
+				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
+					//Grab the param out
+					three_addr_var_t* phi_func_param = dynamic_array_get_at(params, i);
 
-				//Add the definitions in
-				mark_and_add_definition(cfg, stmt, phi_func_param, stmt->function, worklist);
-			}
+					//Add the definitions in
+					mark_and_add_definition(cfg, stmt, phi_func_param, stmt->function, worklist);
+				}
 
-		//Otherwise if we have a function call, every single thing in that function call is important
-		} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
-			//Grab the parameters out
-			dynamic_array_t* params = stmt->function_parameters;
+				break;
 
-			//Run through them all and mark them
-			for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-				mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
-			}
-		} else {
-			//We need to mark the place where each definition is set
-			mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
-			mark_and_add_definition(cfg, stmt, stmt->op2, stmt->function, worklist);
+			//If we have a function call, everything in the function call
+			//is important
+			case THREE_ADDR_CODE_FUNC_CALL:
+				//Grab the parameters out
+				params = stmt->function_parameters;
+
+				//Run through them all and mark them
+				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
+					mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
+				}
+
+				break;
+
+			//An indirect function call behaves similarly to a function call, but we'll also
+			//need to mark it's "op1" value as important. This is the value that stores
+			//the memory address of the function that we're calling
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				//Mark the op1 of this function as being important
+				mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
+
+				//Grab the parameters out
+				params = stmt->function_parameters;
+
+				//Run through them all and mark them
+				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
+					mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
+				}
+
+				break;
+
+			//In all other cases, we'll just mark and add the two operands 
+			default:
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt, stmt->op2, stmt->function, worklist);
+
+				break;
 		}
 
 		//Grab this out for convenience

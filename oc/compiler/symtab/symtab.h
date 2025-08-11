@@ -77,17 +77,25 @@ struct parameter_t{
  * numbers, parameter types, return types, etc.
  */
 struct symtab_function_record_t{
+	//The parameters
+	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//Won't be important until the register allocator. Remember- the actual enum value
 	//of the register is one more than the index here
 	u_int8_t used_registers[15];
-	//The entrance CFG block to the function. There is always only one entrance
-	void* entrance_block;
 	//The name of the function
 	dynamic_string_t func_name;
-	//The parameters
-	parameter_t func_params[MAX_FUNCTION_PARAMS];
 	//The data area for the whole function
 	stack_data_area_t data_area;
+	//The entrance CFG block to the function. There is always only one entrance
+	void* entrance_block;
+	//The associated call graph node with this function
+	void* call_graph_node;
+	//In case of collisions, we can chain these records
+	symtab_function_record_t* next;
+	//The type of the function
+	generic_type_t* signature;
+	//What's the return type?
+	generic_type_t* return_type;
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
@@ -100,16 +108,10 @@ struct symtab_function_record_t{
 	u_int8_t number_of_params;
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
-	//What's the return type?
-	generic_type_t* return_type;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
-	//The associated call graph node with this function
-	void* call_graph_node;
-	//In case of collisions, we can chain these records
-	symtab_function_record_t* next;
 };
 
 
@@ -390,6 +392,11 @@ void add_all_basic_types(type_symtab_t* symtab);
  * Initialize the global stack pointer variable for us to use
  */
 symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types);
+
+/** 
+ * Create the instruction pointer(rip) variable for us to use throughout
+ */
+symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types);
 
 /**
  * Lookup a function name in the symtab

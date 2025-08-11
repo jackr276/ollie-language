@@ -295,7 +295,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 */
 symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class){
 	//Allocate it
-	symtab_function_record_t* record = (symtab_function_record_t*)calloc(1, sizeof(symtab_function_record_t));
+	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
 	//Copy the name over
 	record->func_name = name;
@@ -303,8 +303,6 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_
 	record->hash = hash(name.string);
 	//Store the storage class
 	record->storage_class = storage_class;
-	//Was it ever called?
-	record->called = 0;
 
 	return record;
 }
@@ -315,7 +313,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_
  */
 symtab_type_record_t* create_type_record(generic_type_t* type){
 	//Allocate it
-	symtab_type_record_t* record = (symtab_type_record_t*)calloc(1, sizeof(symtab_type_record_t));
+	symtab_type_record_t* record = calloc(1, sizeof(symtab_type_record_t));
 
 	//Hash the type name and store it
 	record->hash = hash_type(type);
@@ -571,6 +569,26 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 
 	//Give it back
 	return stack_pointer;
+}
+
+
+/** 
+ * Create the instruction pointer(rip) variable for us to use throughout
+ */
+symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
+	//Create the var name
+	dynamic_string_t variable_name;
+	dynamic_string_alloc(&variable_name);
+
+	//Set to be instruction pointer(rip)
+	dynamic_string_set(&variable_name, "rip");
+
+	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name, STORAGE_CLASS_NORMAL);
+	//Set this type as a label(address)
+	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
+
+	//Give it back
+	return instruction_pointer;
 }
 
 
@@ -1153,6 +1171,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			if(temp->call_graph_node != NULL){
 				free(temp->call_graph_node);
 			}
+
+			//Dealloate the function type
+			type_dealloc(temp->signature);
 
 			//Deallocate the data area itself
 			stack_data_area_dealloc(&(temp->data_area));

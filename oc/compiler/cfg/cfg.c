@@ -39,10 +39,10 @@ cfg_t* cfg_ref;
 symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
 basic_block_t* function_exit_block = NULL;
-//Keep ahold of our stack pointer
-symtab_variable_record_t* stack_pointer = NULL;
 //Keep a variable for it too
 three_addr_var_t* stack_pointer_var = NULL;
+//Keep a varaible/record for the instruction pointer(rip)
+three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 variable_symtab_t* variable_symtab;
 //Store this for usage
@@ -103,6 +103,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
@@ -2364,17 +2365,31 @@ void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr,
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node, u_int8_t is_branch_ending){
-	//We'll use the constant var feature here
-	instruction_t* const_var = emit_assignment_with_const_instruction(emit_temp_var(constant_node->inferred_type), emit_constant(constant_node));
+	//First we'll emit the constant
+	three_addr_const_t* const_val = emit_constant(constant_node);
+
+	instruction_t* const_assignment;
+
+	//The most common case - that we just have a regular constant. We'll handle
+	//this with a simple assignment
+	if(const_val->const_type != FUNC_CONST){
+		//We'll use the constant var feature here
+		const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_node->inferred_type), const_val);
+
+	//Otherwise we do have a function constant, so we'll need to do a special kind of load to make this owrk
+	} else {
+		//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+		const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+	}
 
 	//Mark this with whatever was passed through
-	const_var->is_branch_ending = is_branch_ending;
+	const_assignment->is_branch_ending = is_branch_ending;
 	
 	//Add this into the basic block
-	add_statement(basic_block, const_var);
+	add_statement(basic_block, const_assignment);
 
 	//Now give back the assignee variable
-	return const_var->assignee;
+	return const_assignment->assignee;
 }
 
 
@@ -2672,6 +2687,10 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 		//This could potentially have ternaries - so we'll just return whatever is in here
 		case AST_NODE_CLASS_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent, is_branch_ending);
+
+		//Emit an indirect function call here
+		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
+			return emit_indirect_function_call(basic_block, primary_parent, is_branch_ending);
 
 		//By default, we're emitting some kind of expression here
 		default:
@@ -3628,6 +3647,11 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			//Emit the function call statement
 			return emit_function_call(current_block, expr_node, is_branch_ending);
 
+		//Hanlde an indirect function call
+		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
+			//Let the helper rule deal with it
+			return emit_indirect_function_call(current_block, expr_node, is_branch_ending);
+
 		case AST_NODE_CLASS_TERNARY_EXPRESSION:
 			//Emit the ternary expression
 			 return emit_ternary_expression(basic_block, expr_node, is_branch_ending);
@@ -3647,6 +3671,124 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 
 /**
+ * Emit an indirect function call like such
+ *
+ * call *<function_name>
+ *
+ * Unlike in a regular call, we don't have the function record on hand to inspect. We'll instead need to rely entirely on the function signature
+ */
+static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending){
+	//Initially we'll emit this, though it may change
+ 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+
+	//Grab the function's signature type too
+	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->function_type;
+
+	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
+	basic_block_t* current = basic_block;
+
+	//The function's assignee
+	three_addr_var_t* assignee = NULL;
+
+	//May be NULL or not based on what we have as the return type
+	if(signature->returns_void == FALSE){
+		//Otherwise we have one like this
+		assignee = emit_temp_var(signature->return_type);
+	} else {
+		//We'll have a dummy one here
+		assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
+	}
+
+	//We first need to emit the function pointer variable
+	three_addr_var_t* function_pointer_var = emit_var(indirect_function_call_node->variable, FALSE);
+
+	//Emit the final call here
+	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
+
+	//Mark this with whatever we have
+	func_call_stmt->is_branch_ending = is_branch_ending;
+
+	//Let's grab a param cursor for ourselves
+	generic_ast_node_t* param_cursor = indirect_function_call_node->first_child;
+
+	//If this isn't NULL, we have parameters
+	if(param_cursor != NULL){
+		//Create this
+		func_call_stmt->function_parameters = dynamic_array_alloc();
+	}
+
+	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
+	u_int8_t current_func_param_idx = 1;
+
+	//So long as this isn't NULL
+	while(param_cursor != NULL){
+		//Emit whatever we have here into the basic block
+		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+
+		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
+		//to reassign
+		if(package.final_block != NULL && package.final_block != current){
+			//We've seen a ternary, reassign current
+			current = package.final_block;
+
+			//Reassign this as well, so that we stay current
+			result_package.final_block = current;
+		}
+
+		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
+		//registers before a function call
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+		//If the package's assignee is not temporary, then this counts as a use
+		if(package.assignee->is_temporary == FALSE){
+			add_used_variable(current, package.assignee);
+		}
+
+		//Add this to the block
+		add_statement(current, assignment);
+
+		//Mark this
+		assignment->assignee->parameter_number = current_func_param_idx;
+		
+		//Add the parameter in
+		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+
+		//And move up
+		param_cursor = param_cursor->next_sibling;
+
+		//Increment this
+		current_func_param_idx++;
+	}
+
+	//Once we make it here, we should have all of the params stored in temp vars
+	//We can now add the function call statement in
+	add_statement(current, func_call_stmt);
+
+	//If this is not a void return type, we'll need to emit this temp assignment
+	if(signature->returns_void == FALSE){
+		//Emit an assignment instruction. This will become very important way down the line in register
+		//allocation to avoid interference
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+				
+		//Reassign this value
+		assignee = assignment->assignee;
+
+		//This cannot be coalesced
+		assignment->cannot_be_combined = TRUE;
+
+		//Add it in
+		add_statement(current, assignment);
+	}
+
+	//This is always the assignee we gave above
+	result_package.assignee = assignee;
+
+	//Give back what we assigned to
+	return result_package;
+}
+
+
+/**
  * Emit a function call node. In this iteration of a function call, we will still be parameterized, so the actual 
  * node will record what needs to be passed into the function
  */
@@ -3656,6 +3798,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	//Grab this out first
 	symtab_function_record_t* func_record = function_call_node->func_record;
+	//Grab the function's signature type too
+	function_type_t* signature = func_record->signature->function_type;
 
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current = basic_block;
@@ -3663,18 +3807,17 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//The function's assignee
 	three_addr_var_t* assignee = NULL;
 
-	instruction_t* func_call_stmt;
-
 	//May be NULL or not based on what we have as the return type
-	if(func_record->return_type->type_class == TYPE_CLASS_BASIC && func_record->return_type->basic_type->basic_type == VOID){
-		//We'll have a dummy one here
-		three_addr_var_t* temp_var = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
-		func_call_stmt = emit_function_call_instruction(func_record, temp_var);
-	} else {
+	if(signature->returns_void == FALSE){
 		//Otherwise we have one like this
-		assignee = emit_temp_var(func_record->return_type);
-		func_call_stmt = emit_function_call_instruction(func_record, assignee);
+		assignee = emit_temp_var(signature->return_type);
+	} else {
+		//We'll have a dummy one here
+		assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
 	}
+
+	//Emit the final call here
+	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, assignee);
 
 	//Mark this with whatever we have
 	func_call_stmt->is_branch_ending = is_branch_ending;
@@ -3735,14 +3878,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//We can now add the function call statement in
 	add_statement(current, func_call_stmt);
 
-	//We'll always have an assignment instruction
-	instruction_t* assignment;
-
-	//Emit an assignment instruction. This will become very important way down the line in register
-	//allocation to avoid interference
-	if(assignee != NULL){
-		//Emit it
-		assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+	//If this is not a void return type, we'll need to emit this temp assignment
+	if(signature->returns_void == FALSE){
+		//Emit an assignment instruction. This will become very important way down the line in register
+		//allocation to avoid interference
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 				
 		//Reassign this value
 		assignee = assignment->assignee;
@@ -3752,7 +3892,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//Add it in
 		add_statement(current, assignment);
-	} 
+	}
 
 	//This is always the assignee we gave above
 	result_package.assignee = assignee;
@@ -6751,14 +6891,20 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	current_function = NULL;
 
 	//Create the stack pointer
-	stack_pointer = initialize_stack_pointer(results->type_symtab);
-	//Initialize the variable to
+	symtab_variable_record_t* stack_pointer = initialize_stack_pointer(results->type_symtab);
+	//Initialize the variable too
 	stack_pointer_var = emit_var(stack_pointer, FALSE);
 	//Mark it
 	stack_pointer_var->is_stack_pointer = TRUE;
-
 	//Store the stack pointer
 	cfg->stack_pointer = stack_pointer_var;
+
+	//Create the instruction pointer
+	symtab_variable_record_t* instruction_pointer = initialize_instruction_pointer(results->type_symtab);
+	//Initialize a three addr code var
+	instruction_pointer_var = emit_var(instruction_pointer, FALSE);
+	//Store it in the CFG
+	cfg->instruction_pointer = instruction_pointer_var;
 
 	// -1 block ID, this means that the whole thing failed
 	if(visit_prog_node(cfg, results->root) == FALSE){

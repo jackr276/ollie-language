@@ -12,8 +12,6 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 
-#define INITIAL_STATEMENT_SIZE 2000
-
 //The overall structure holder
 typedef struct cfg_t cfg_t;
 //Basic blocks in our CFG
@@ -77,6 +75,8 @@ struct cfg_t{
 	basic_block_t* head_block;
 	//We also need to hold onto the stack pointer
 	three_addr_var_t* stack_pointer;
+	//We also need to hold onto the instruction pointer
+	three_addr_var_t* instruction_pointer;
 	//We'll want the type symtab too
 	type_symtab_t* type_symtab;
 };

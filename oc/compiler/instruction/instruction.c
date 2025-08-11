@@ -213,63 +213,71 @@ variable_size_t select_type_size(generic_type_t* type){
 	//What the size will be
 	variable_size_t size;
 
-	//Probably the most common option
-	if(type->type_class == TYPE_CLASS_BASIC){
-		//Extract for convenience
-		Token basic_type = type->basic_type->basic_type;
+	switch(type->type_class){
+		//Probably the most common option
+		case TYPE_CLASS_BASIC:
+			//Switch based on this
+			switch (type->basic_type->basic_type) {
+				case U_INT8:
+				case S_INT8:
+				case CHAR:
+					size = BYTE;
+					break;
 
-		//Switch based on this
-		switch (basic_type) {
-			case U_INT8:
-			case S_INT8:
-			case CHAR:
-				size = BYTE;
-				break;
+				case U_INT16:
+				case S_INT16:
+					size = WORD;
+					break;
 
-			case U_INT16:
-			case S_INT16:
-				size = WORD;
-				break;
+				//These are 32 bit(double word)
+				case S_INT32:
+				case U_INT32:
+					size = DOUBLE_WORD;
+					break;
 
-			//These are 32 bit(double word)
-			case S_INT32:
-			case U_INT32:
-				size = DOUBLE_WORD;
-				break;
+				//This is SP
+				case FLOAT32:
+					size = SINGLE_PRECISION;
+					break;
 
-			//This is SP
-			case FLOAT32:
-				size = SINGLE_PRECISION;
-				break;
+				//This is double precision
+				case FLOAT64:
+					size = DOUBLE_PRECISION;
+					break;
 
-			//This is double precision
-			case FLOAT64:
-				size = DOUBLE_PRECISION;
-				break;
+				//These are all quad word(64 bit)
+				case U_INT64:
+				case S_INT64:
+					size = QUAD_WORD;
+					break;
+			
+				//We shouldn't get here
+				default:
+					break;
+			}
 
-			//These are all quad word(64 bit)
-			case U_INT64:
-			case S_INT64:
-				size = QUAD_WORD;
-				break;
-		
-			//We shouldn't get here
-			default:
-				break;
-		}
+			break;
 
-	//These will always be 64 bits
-	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
-				|| type->type_class == TYPE_CLASS_CONSTRUCT){
-		size = QUAD_WORD;
+		//Enumerated types are 32 bits for convenience
+		case TYPE_CLASS_ENUMERATED:
+			size = DOUBLE_WORD;
+			break;
 
-	//This should never happen, but a sane default doesn't hurt
-	} else if(type->type_class == TYPE_CLASS_ALIAS){
-		size = QUAD_WORD;
-	//Catch all down here
-	} else {
-		size = DOUBLE_WORD;
+		//These are always 64 bits
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ALIAS:
+			size = QUAD_WORD;
+			break;
+
+		//Default is also quad word
+		default:
+			size = QUAD_WORD;
+			break;
 	}
+
 
 	//Give it back
 	return size;
@@ -282,70 +290,73 @@ variable_size_t select_type_size(generic_type_t* type){
 variable_size_t select_variable_size(three_addr_var_t* variable){
 	//What the size will be
 	variable_size_t size;
-	
-	//Grab this type out of here
+	//Extract for convenience
 	generic_type_t* type = variable->type;
-	
-	//Probably the most common option
-	if(type->type_class == TYPE_CLASS_BASIC){
-		//Extract for convenience
-		Token basic_type = type->basic_type->basic_type;
 
-		//Switch based on this
-		switch (basic_type) {
-			case U_INT8:
-			case S_INT8:
-			case CHAR:
-				size = BYTE;
-				break;
+	switch(type->type_class){
+		//Probably the most common option
+		case TYPE_CLASS_BASIC:
+			//Switch based on this
+			switch (type->basic_type->basic_type) {
+				case U_INT8:
+				case S_INT8:
+				case CHAR:
+					size = BYTE;
+					break;
 
-			case U_INT16:
-			case S_INT16:
-				size = WORD;
-				break;
+				case U_INT16:
+				case S_INT16:
+					size = WORD;
+					break;
 
-			//These are 32 bit(double word)
-			case S_INT32:
-			case U_INT32:
-				size = DOUBLE_WORD;
-				break;
+				//These are 32 bit(double word)
+				case S_INT32:
+				case U_INT32:
+					size = DOUBLE_WORD;
+					break;
 
-			//This is SP
-			case FLOAT32:
-				size = SINGLE_PRECISION;
-				break;
+				//This is SP
+				case FLOAT32:
+					size = SINGLE_PRECISION;
+					break;
 
-			//This is double precision
-			case FLOAT64:
-				size = DOUBLE_PRECISION;
-				break;
+				//This is double precision
+				case FLOAT64:
+					size = DOUBLE_PRECISION;
+					break;
 
-			//These are all quad word(64 bit)
-			case U_INT64:
-			case S_INT64:
-				size = QUAD_WORD;
-				break;
-		
-			//We shouldn't get here
-			default:
-				break;
-		}
+				//These are all quad word(64 bit)
+				case U_INT64:
+				case S_INT64:
+					size = QUAD_WORD;
+					break;
+			
+				//We shouldn't get here
+				default:
+					break;
+			}
 
-	//These will always be 64 bits
-	} else if(type->type_class == TYPE_CLASS_POINTER || type->type_class == TYPE_CLASS_ARRAY
-				|| type->type_class == TYPE_CLASS_CONSTRUCT){
-		size = QUAD_WORD;
+			break;
 
-	//This should never happen, but a sane default doesn't hurt
-	} else if(type->type_class == TYPE_CLASS_ALIAS){
-		size = QUAD_WORD;
-	//Catch all down here
-	} else {
-		size = DOUBLE_WORD;
+		//Enumerated types are 32 bits for convenience
+		case TYPE_CLASS_ENUMERATED:
+			size = DOUBLE_WORD;
+			break;
+
+		//These are always 64 bits
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ALIAS:
+			size = QUAD_WORD;
+			break;
+
+		//Default is also quad word
+		default:
+			size = QUAD_WORD;
+			break;
 	}
-
-	//It wouldn't hurt to store this
-	variable->variable_size = size;
 
 	//Give it back
 	return size;
@@ -717,6 +728,26 @@ instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_v
 
 
 /**
+ * Emit a lea statement with no type size multiplier on it
+ */
+instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->CLASS = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op2 = op2;
+	//What function are we in
+	stmt->function = current_function;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
  * Emit a statement that is in LEA form
  */
 instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
@@ -731,6 +762,9 @@ instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t
 	stmt->lea_multiplicator = type_size;
 	//What function are we in
 	stmt->function = current_function;
+
+	//This has a multiplicator, so indicate that
+	stmt->has_multiplicator = TRUE;
 
 	//And now we give it back
 	return stmt;
@@ -1137,6 +1171,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 	} else if(variable->is_temporary == TRUE){
 		//Print out it's temp var number
 		fprintf(fl, "t%d", variable->temp_var_number);
+
 	} else {
 		//Otherwise, print out the SSA generation along with the variable
 		fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
@@ -1161,17 +1196,28 @@ void print_live_range(FILE* fl, live_range_t* live_range){
  * Print a constant. This is a helper method to avoid excessive code duplication
  */
 static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
-	//We'll now interpret what we have here
-	if(constant->const_type == INT_CONST){
-		fprintf(fl, "%d", constant->int_const);
-	} else if(constant->const_type == LONG_CONST){
-		fprintf(fl, "%ld", constant->long_const);
-	} else if(constant->const_type == FLOAT_CONST){
-		fprintf(fl, "%f", constant->float_const);
-	} else if(constant->const_type == CHAR_CONST){
-		fprintf(fl, "'%c'", constant->char_const);
-	} else {
-		fprintf(fl, "\"%s\"", constant->string_constant.string);
+	switch(constant->const_type){
+		case INT_CONST:
+			fprintf(fl, "%d", constant->int_const);
+			break;
+		case LONG_CONST:
+			fprintf(fl, "%ld", constant->long_const);
+			break;
+		case CHAR_CONST:
+			fprintf(fl, "'%c'", constant->char_const);
+			break;
+		case STR_CONST:
+			fprintf(fl, "\"%s\"", constant->string_constant.string);
+			break;
+		case FLOAT_CONST:
+			fprintf(fl, "%f", constant->float_const);
+			break;
+		case FUNC_CONST:
+			fprintf(fl, "%s", constant->function_name->func_name.string);
+			break;
+		//To stop compiler warnings
+		default:
+			break;
 	}
 }
 
@@ -1465,6 +1511,44 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		//Now at the very end, close the whole thing out
 		fprintf(fl, ")\n");
 
+	//Handle the case of an indirect function call
+	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIRECT_FUNC_CALL){
+		//First we'll print out the assignment, if one exists
+		if(stmt->assignee != NULL){
+			//Print the variable and assop out
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+		}
+
+		//Print out the call here
+		fprintf(fl, "call *");
+
+		//Now we'll use the helper to print the variable name
+		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+		//Now we can print the opening parenthesis
+		fprintf(fl, "(");
+
+		//Grab this out
+		dynamic_array_t* func_params = stmt->function_parameters;
+
+		//Now we can go through and print out all of our parameters here
+		for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
+			//Grab it out
+			three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
+			
+			//Print this out here
+			print_variable(fl, func_param, PRINTING_VAR_INLINE);
+
+			//If we need to, print out a comma
+			if(i != func_params->current_index - 1){
+				fprintf(fl, ", ");
+			}
+		}
+
+		//Now at the very end, close the whole thing out
+		fprintf(fl, ")\n");
+
 	//If we have a binary operator with a constant
 	} else if (stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//TODO MAY OR MAY NOT NEED
@@ -1527,8 +1611,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		} else {
 			//Then we have the third one, times some multiplier
 			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
-			//And the finishing sequence
-			fprintf(fl, " * %ld\n", stmt->lea_multiplicator);
+
+			//If we have a multiplicator, then we can print it
+			if(stmt->has_multiplicator == TRUE){
+				//And the finishing sequence
+				fprintf(fl, " * %ld", stmt->lea_multiplicator);
+			}
+
+			fprintf(fl, "\n");
 		}
 	//Print out a phi function 
 	} else if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
@@ -1624,16 +1714,26 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
  * Print a constant as an immediate($ prefixed) value
  */
 static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
-	//We'll now interpret what we have here
-	if(constant->const_type == INT_CONST){
-		fprintf(fl, "$%d", constant->int_const);
-	} else if(constant->const_type == LONG_CONST){
-		fprintf(fl, "$%ld", constant->long_const);
-	} else if(constant->const_type == FLOAT_CONST){
-		fprintf(fl, "$%f", constant->float_const);
-	} else if(constant->const_type == CHAR_CONST){
-		fprintf(fl, "$%d", constant->char_const);
-	} 
+	switch(constant->const_type){
+		case INT_CONST:
+			fprintf(fl, "$%d", constant->int_const);
+			break;
+		case LONG_CONST:
+			fprintf(fl, "$%ld", constant->long_const);
+			break;
+		case CHAR_CONST:
+			fprintf(fl, "$%d", constant->char_const);
+			break;
+		case FLOAT_CONST:
+			fprintf(fl, "$%f", constant->float_const);
+			break;
+		case FUNC_CONST:
+			fprintf(fl, "%s", constant->function_name->func_name.string);
+			break;
+		//To avoid compiler complaints
+		default:
+			break;
+	}
 }
 
 
@@ -1641,16 +1741,26 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
  * Print a constant as an immediate(not $ prefixed) value
  */
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
-	//We'll now interpret what we have here
-	if(constant->const_type == INT_CONST){
-		fprintf(fl, "%d", constant->int_const);
-	} else if(constant->const_type == LONG_CONST){
-		fprintf(fl, "%ld", constant->long_const);
-	} else if(constant->const_type == FLOAT_CONST){
-		fprintf(fl, "%f", constant->float_const);
-	} else if(constant->const_type == CHAR_CONST){
-		fprintf(fl, "%d", constant->char_const);
-	} 
+	switch(constant->const_type){
+		case INT_CONST:
+			fprintf(fl, "%d", constant->int_const);
+			break;
+		case LONG_CONST:
+			fprintf(fl, "%ld", constant->long_const);
+			break;
+		case CHAR_CONST:
+			fprintf(fl, "%d", constant->char_const);
+			break;
+		case FLOAT_CONST:
+			fprintf(fl, "%f", constant->float_const);
+			break;
+		case FUNC_CONST:
+			fprintf(fl, "%s", constant->function_name->func_name.string);
+			break;
+		//To avoid compiler complaints
+		default:
+			break;
+	}
 }
 
 
@@ -2693,6 +2803,19 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			}
 			fprintf(fl, " */\n");
 			break;
+		case INDIRECT_CALL:
+			//Indirect function calls store the location of the call in op1
+			fprintf(fl, "call *");
+			print_variable(fl, instruction->op1, mode);
+
+			if(instruction->destination_register != NULL){
+				fprintf(fl, " /* --> ");
+				print_variable(fl, instruction->destination_register, mode);
+			}
+
+			fprintf(fl, " */\n");
+			break;
+
 		case PUSH:
 			fprintf(fl, "push ");
 			print_variable(fl, instruction->source_register, mode);
@@ -3036,6 +3159,13 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 				constant->is_value_0 = TRUE;
 			}
 			break;
+		//If we have a function constant, we'll add the function record in
+		//as a value
+		case FUNC_CONST:
+			//Store the function name
+			constant->function_name = const_node->func_record;
+			break;
+
 		//Some very weird error here
 		default:
 			fprintf(stderr, "Unrecognizable constant type found in constant\n");
@@ -3452,6 +3582,26 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	stmt->function = current_function;
 	//We do NOT add parameters here, instead we had them in the CFG function
 	//Just give back the result
+	return stmt;
+}
+
+
+/**
+ * Emit an indirect function call statement. Once emitted, no paramters will have been added in
+ */
+instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to){
+	//First allocate the statement
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Populate it with the appropriate values
+	stmt->CLASS = THREE_ADDR_CODE_INDIRECT_FUNC_CALL;
+	//We will store the variable for the function that we're calling indirectly in op1
+	stmt->op1 = function_pointer;
+	//Mark the assignee
+	stmt->assignee = assigned_to;
+	//Mark what function we're in
+	stmt->function = current_function;
+
 	return stmt;
 }
 

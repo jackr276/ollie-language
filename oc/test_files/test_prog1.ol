@@ -37,7 +37,7 @@ fn test_func(mut i:u32) -> void{
 
 fn main(argc:i32, argv:char**) -> i32{
 	//Allocate a struct
-	declare my_structure:my_struct;
+	declare mut my_structure:my_struct;
 
 	my_structure:a := 2;
 	my_structure:b := 3;
@@ -75,6 +75,4 @@ fn main(argc:i32, argv:char**) -> i32{
 
 
 	ret my_structure:b;
-
-	let my_integer:u32 := 0x02;
 }

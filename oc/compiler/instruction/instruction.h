@@ -47,6 +47,7 @@ typedef enum{
 	PHI_FUNCTION, //Not really an instruction, but we still need to account for these
 	RET,
 	CALL,
+	INDIRECT_CALL, //For function pointers
 	MOVB,
 	MOVW, //Regular register-to-register or immediate to register
 	MOVL,
@@ -333,8 +334,10 @@ typedef enum{
 	THREE_ADDR_CODE_DIR_JUMP_STMT,
 	//A label statement
 	THREE_ADDR_CODE_LABEL_STMT,
-	//A function call node
+	//A function call statement 
 	THREE_ADDR_CODE_FUNC_CALL,
+	//And indirect function call statement
+	THREE_ADDR_CODE_INDIRECT_FUNC_CALL,
 	//An idle statement(nop)
 	THREE_ADDR_CODE_IDLE_STMT,
 	//A negation statement
@@ -394,6 +397,8 @@ struct live_range_t{
 struct three_addr_var_t{
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
+	//Link to the function record(NULL if not there)
+	symtab_function_record_t* linked_function;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What is this related to the writing of?
@@ -442,6 +447,8 @@ struct three_addr_const_t{
 	dynamic_string_t string_constant;
 	//For memory management
 	three_addr_const_t* next_created;
+	//The constant's function record
+	symtab_function_record_t* function_name;
 	//We hold the type info
 	generic_type_t* type;
 	//And we hold everything relevant about the constant
@@ -527,6 +534,8 @@ struct instruction_t{
 	u_int8_t cannot_be_combined;
 	//Is this a converting move of some kind?
 	u_int8_t is_converting_move;
+	//Does this have a multiplicator
+	u_int8_t has_multiplicator;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
 	//If this is a conditional move statement, what's the class?
@@ -631,7 +640,6 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 /**
  * Create and return a three address var from an existing variable. If 
  * we are assigning to a variable, that will create a new generation of variable.
- * As such, we will pass 1 in as a flag here
 */
 three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label);
 
@@ -688,6 +696,11 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee);
  * This is used for when we need extra moves(after a division/modulus)
  */
 instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_var_t* source);
+
+/**
+ * Emit a lea statement with no type size multiplier on it
+ */
+instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
 
 /**
  * Emit a statement that is in LEA form
@@ -810,6 +823,11 @@ instruction_t* emit_direct_jmp_instruction(three_addr_var_t* jumping_to);
  * Emit a function call statement. Once emitted, no paramters will have been added in
  */
 instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
+
+/**
+ * Emit an indirect function call statement. Once emitted, no paramters will have been added in
+ */
+instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to);
 
 /**
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
