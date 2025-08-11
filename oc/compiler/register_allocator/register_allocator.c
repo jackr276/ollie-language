@@ -994,6 +994,7 @@ static void pre_color(instruction_t* instruction){
 
 		//Function calls always return through rax
 		case CALL:
+		case INDIRECT_CALL:
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
 				instruction->destination_register->associated_live_range->reg = RAX;
