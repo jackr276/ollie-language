@@ -428,11 +428,6 @@ static void update_spill_cost(live_range_t* live_range, basic_block_t* block, th
  * Add a variable to a live range, if it isn't already in there
  */
 static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
-	//If it's the stack pointer just get out
-	if(variable->is_stack_pointer == TRUE){
-		return;
-	}
-
 	//If the literal memory address is already in here, then all we need to do is update
 	//the cost
 	if(dynamic_array_contains(live_range->variables, variable) != NOT_FOUND){
@@ -1250,6 +1245,32 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 
 
 /**
+ * Create the instruction pointer live range
+ */
+static live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* instruction_pointer){
+	//Before we go any further, we'll construct the live
+	//range for the instruction pointer.
+	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
+	//This is guaranteed to be RSP - so it's already been allocated
+	instruction_pointer_live_range->reg = RIP;
+	//And we absolutely *can not* spill it
+	instruction_pointer_live_range->spill_cost = INT16_MAX;
+
+	//This is precolor
+	instruction_pointer_live_range->is_precolored = TRUE;
+
+	//Add the stack pointer to the dynamic array
+	dynamic_array_add(instruction_pointer_live_range->variables, instruction_pointer);
+	
+	//Store this here as well
+	instruction_pointer->associated_live_range = instruction_pointer_live_range;
+
+	//Give it back
+	return instruction_pointer_live_range;
+}
+
+
+/**
  * Construct the live ranges for all variables that we'll need to concern ourselves with
  *
  * Conveniently, all code in OIR is translated into SSA form by the front end. In doing this, we're able
@@ -1271,10 +1292,11 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 
 	//Add it into the dynamic array
 	dynamic_array_add(live_ranges, construct_stack_pointer_live_range(cfg->stack_pointer));
+	//Add it into the dynamic array
+	dynamic_array_add(live_ranges, construct_instruction_pointer_live_range(cfg->instruction_pointer));
 
 	//Since the blocks are already ordered, this is very simple
 	basic_block_t* current = cfg->head_block;
-
 
 	//Run through every single block
 	while(current != NULL){
