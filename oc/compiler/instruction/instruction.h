@@ -47,6 +47,7 @@ typedef enum{
 	PHI_FUNCTION, //Not really an instruction, but we still need to account for these
 	RET,
 	CALL,
+	INDIRECT_CALL, //For function pointers
 	MOVB,
 	MOVW, //Regular register-to-register or immediate to register
 	MOVL,

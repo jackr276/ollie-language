@@ -2910,6 +2910,16 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			//The destination register is itself the assignee
 			instruction->destination_register = instruction->assignee;
 			break;
+		//Similarly, an indirect function call also has it's own kind of
+		//instruction
+		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			instruction->instruction_type = INDIRECT_CALL;
+			//In this case, the source register is the function name
+			instruction->source_register = instruction->op1;
+			//The destination register is itself the assignee
+			instruction->destination_register = instruction->assignee;
+			break;
+			
 		//Let the helper deal with this
 		case THREE_ADDR_CODE_INC_STMT:
 			handle_inc_instruction(instruction);

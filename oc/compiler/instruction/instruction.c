@@ -2803,6 +2803,19 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			}
 			fprintf(fl, " */\n");
 			break;
+		case INDIRECT_CALL:
+			//Indirect function calls store the location of the call in op1
+			fprintf(fl, "call *");
+			print_variable(fl, instruction->op1, mode);
+
+			if(instruction->destination_register != NULL){
+				fprintf(fl, " /* --> ");
+				print_variable(fl, instruction->destination_register, mode);
+			}
+
+			fprintf(fl, " */\n");
+			break;
+
 		case PUSH:
 			fprintf(fl, "push ");
 			print_variable(fl, instruction->source_register, mode);
