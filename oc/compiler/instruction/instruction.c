@@ -1714,16 +1714,26 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
  * Print a constant as an immediate($ prefixed) value
  */
 static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
-	//We'll now interpret what we have here
-	if(constant->const_type == INT_CONST){
-		fprintf(fl, "$%d", constant->int_const);
-	} else if(constant->const_type == LONG_CONST){
-		fprintf(fl, "$%ld", constant->long_const);
-	} else if(constant->const_type == FLOAT_CONST){
-		fprintf(fl, "$%f", constant->float_const);
-	} else if(constant->const_type == CHAR_CONST){
-		fprintf(fl, "$%d", constant->char_const);
-	} 
+	switch(constant->const_type){
+		case INT_CONST:
+			fprintf(fl, "$%d", constant->int_const);
+			break;
+		case LONG_CONST:
+			fprintf(fl, "$%ld", constant->long_const);
+			break;
+		case CHAR_CONST:
+			fprintf(fl, "$%d", constant->char_const);
+			break;
+		case FLOAT_CONST:
+			fprintf(fl, "$%f", constant->float_const);
+			break;
+		case FUNC_CONST:
+			fprintf(fl, "%s", constant->function_name->func_name.string);
+			break;
+		//To avoid compiler complaints
+		default:
+			break;
+	}
 }
 
 
@@ -1731,16 +1741,26 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
  * Print a constant as an immediate(not $ prefixed) value
  */
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
-	//We'll now interpret what we have here
-	if(constant->const_type == INT_CONST){
-		fprintf(fl, "%d", constant->int_const);
-	} else if(constant->const_type == LONG_CONST){
-		fprintf(fl, "%ld", constant->long_const);
-	} else if(constant->const_type == FLOAT_CONST){
-		fprintf(fl, "%f", constant->float_const);
-	} else if(constant->const_type == CHAR_CONST){
-		fprintf(fl, "%d", constant->char_const);
-	} 
+	switch(constant->const_type){
+		case INT_CONST:
+			fprintf(fl, "%d", constant->int_const);
+			break;
+		case LONG_CONST:
+			fprintf(fl, "%ld", constant->long_const);
+			break;
+		case CHAR_CONST:
+			fprintf(fl, "%d", constant->char_const);
+			break;
+		case FLOAT_CONST:
+			fprintf(fl, "%f", constant->float_const);
+			break;
+		case FUNC_CONST:
+			fprintf(fl, "%s", constant->function_name->func_name.string);
+			break;
+		//To avoid compiler complaints
+		default:
+			break;
+	}
 }
 
 
