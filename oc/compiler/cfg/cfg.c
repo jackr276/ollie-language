@@ -4156,7 +4156,7 @@ void dealloc_cfg(cfg_t* cfg){
 	//Run through all of the blocks here and delete them
 	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
 		//Use this to deallocate
-		basic_block_dealloc(dynamic_array_get_at(cfg->created_blocks, i));
+		//basic_block_dealloc(dynamic_array_get_at(cfg->created_blocks, i));
 	}
 
 	//Destroy all variables
@@ -4331,6 +4331,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//If b has a jump table, we'll need to add this in as well
 	a->jump_table = b->jump_table;
+	b->jump_table = NULL;
 
 	//If b executes more than A and it's now a part of A, we'll need to bump up A appropriately
 	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
@@ -6419,6 +6420,14 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block is always what's directly at the end
 				current_block = generic_results.final_block;
+
+				//If this is the exit block, it means that we returned through every control path
+				//in here
+				if(current_block == function_exit_block){
+					results.starting_block = starting_block;
+					results.final_block = current_block;
+					return results;
+				}
 
 				break;
 
