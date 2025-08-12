@@ -1782,10 +1782,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	//We'll need a heap stack to do this
 	heap_stack_t* stack = heap_stack_alloc();
 
-	//These variables will be convenient for dealing with the addition of instructions
-	instruction_t* call_instruction = instruction;
-	instruction_t* before_push = call_instruction->previous_statement;
-
 	//Once we make it all the way down here, we know exactly which registers that we need to save before this function call.
 	//We can now run through the saving array to do this
 	for(u_int16_t i = 0; i < saving_array->current_index; i++){
@@ -1807,16 +1803,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		//We can now push this new lr onto the stack
 		push(stack, range);
 
-		//We always put this push instruction above the function call, in between it and whatever else was last there
-		before_push->next_statement = push_inst;
-		push_inst->previous_statement = before_push;
-
-		//Link it in with the call instruction
-		push_inst->next_statement = call_instruction;
-		call_instruction->previous_statement = push_inst;
-
-		//Update what this is
-		before_push = push_inst;
+		//Insert the push instruction directly before the call instruction
+		insert_instruction_before_given(push_inst, instruction);
 	}
 
 	//And now, we'll need to go through the stack and add these all back in reverse-order. We'll
@@ -1833,17 +1821,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		//Emit the pop instruction for this
 		instruction_t* pop_inst = emit_pop_instruction(dynamic_array_get_at(current->variables, 0));
 
-		//Tie this in to what comes after it
-		pop_inst->next_statement = last_instruction->next_statement;
-
-		//Tie it in with the previous as well
-		if(pop_inst->next_statement != NULL){
-			pop_inst->next_statement->previous_statement = pop_inst;
-		}
-
-		//And now we'll tie in the last instruction
-		last_instruction->next_statement = pop_inst;
-		pop_inst->previous_statement = last_instruction;
+		//Insert this instruction directly after the last one we saw
+		insert_instruction_after_given(pop_inst, last_instruction);
 
 		//The pop inst now is the last instruction we've seen
 		last_instruction = pop_inst;
@@ -1867,7 +1846,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* function_defined_in, instruction_t* instruction){
 	//Placeholding for now
 	printf("HERE\n");
-	exit(0);
+	return instruction;
 }
 
 
