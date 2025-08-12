@@ -44,10 +44,20 @@ fn lcount_r(mut x:u32) -> u32 {
 
 
 fn main(argv:char**, argc:i32) -> i32 {
+	declare mut a:u32;
+	let mut x:u32 := 433;
+
+	a := (x * -128) + (x - 11);
+	x := x / 9;
+	x := x && 21;
+	x := x || 32;
+	x := a - 3 + x;
+	x := x && 21;
+
 	//Both defined indirectly
-	let x:count_function := pcount_r;
+	let z:count_function := pcount_r;
 	let y:count_function := lcount_r;
 
-	ret @x(32) + @y(17);
+	ret @z(32) + @y(17) + x;
 }
 
