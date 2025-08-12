@@ -5279,6 +5279,12 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
+	//If the ending block has no successors at all, that means that we've returned through every control path. Instead
+	//of using the ending block, we can change it to be the function ending block
+	if(ending_block->successors == NULL || ending_block->successors->current_index == 0){
+		result_package.final_block = function_exit_block;
+	}
+
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	//will be set to point to the default block
 	for(u_int16_t i = 0; i < root_level_block->jump_table->num_nodes; i++){

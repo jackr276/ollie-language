@@ -8,7 +8,7 @@ fn return_c_switch(arg:i32) -> i32{
 		case 2:
 			ret 32;
 
-		case 1;
+		case 1:
 			ret 2;
 
 		case 7:
