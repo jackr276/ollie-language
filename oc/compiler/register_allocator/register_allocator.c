@@ -1740,7 +1740,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	dynamic_array_t* saving_array = dynamic_array_alloc();
 
 	//If we get here we know that we have a call instruction. Let's
-	//grab whatever it's calling out
+	//grab whatever it's calling out. We're able to do this for a direct call,
+	//whereas in an indirect call we are not
 	symtab_function_record_t* callee = instruction->called_function;
 
 	//Every function is guaranteed to have a return value/result
@@ -1761,8 +1762,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 			continue;
 		}
 
-		//If the interference array is true *and* it's a neighbor's
-		//register, we'll save it
+		//If we get a live range like this, we know for a fact that
+		//this register needs to be saved because it's live at the time
+		//of the function call and the function that we're calling uses it
 		if(callee->used_registers[reg - 1] == TRUE){
 			//Flag this LR in here
 			dynamic_array_add(saving_array, lr);
@@ -1791,7 +1793,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		live_range_t* lr = dynamic_array_get_at(saving_array, i);
 
 		//Create the current live range here
-		live_range_t* range = live_range_alloc(function, QUAD_WORD);
+		live_range_t* range = live_range_alloc(function_defined_in, QUAD_WORD);
 
 		//Duplicate the register value here
 		range->reg = lr->reg;
@@ -1852,6 +1854,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	//Destroy the dynamic array
 	dynamic_array_dealloc(saving_array);
 
+	//We'll save time for ourselves here by always returning the very last pop instruction that we emitted
+	return last_instruction;
 }
 
 
