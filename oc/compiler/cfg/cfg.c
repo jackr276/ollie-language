@@ -4156,7 +4156,7 @@ void dealloc_cfg(cfg_t* cfg){
 	//Run through all of the blocks here and delete them
 	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
 		//Use this to deallocate
-		//basic_block_dealloc(dynamic_array_get_at(cfg->created_blocks, i));
+		basic_block_dealloc(dynamic_array_get_at(cfg->created_blocks, i));
 	}
 
 	//Destroy all variables
@@ -5281,7 +5281,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//If the ending block has no successors at all, that means that we've returned through every control path. Instead
 	//of using the ending block, we can change it to be the function ending block
-	if(ending_block->successors == NULL || ending_block->successors->current_index == 0){
+	if(ending_block->predecessors == NULL || ending_block->predecessors->current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
 
