@@ -4331,6 +4331,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//If b has a jump table, we'll need to add this in as well
 	a->jump_table = b->jump_table;
+	b->jump_table = NULL;
 
 	//If b executes more than A and it's now a part of A, we'll need to bump up A appropriately
 	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
@@ -5278,6 +5279,12 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
+	//If the ending block has no successors at all, that means that we've returned through every control path. Instead
+	//of using the ending block, we can change it to be the function ending block
+	if(ending_block->predecessors == NULL || ending_block->predecessors->current_index == 0){
+		result_package.final_block = function_exit_block;
+	}
+
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	//will be set to point to the default block
 	for(u_int16_t i = 0; i < root_level_block->jump_table->num_nodes; i++){
@@ -5449,11 +5456,14 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		//Now we'll drill down to the bottom to prime the next pass
 		current_block = case_default_results.final_block;
 
-		//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
-		add_successor(current_block, ending_block);
+		//If we don't have a return terminal type, we can add the ending block as a successor
+		if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
+			add_successor(current_block, ending_block);
 
-		//We will always emit a direct jump from this block to the ending block
-		emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+			//We will always emit a direct jump from this block to the ending block
+			emit_jump(current_block, ending_block, JUMP_TYPE_JMP, TRUE, FALSE);
+		}
 		
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
@@ -5466,6 +5476,12 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		if(dynamic_array_get_at(root_level_block->jump_table->nodes, _) == NULL){
 			dynamic_array_set_at(root_level_block->jump_table->nodes, default_block, _);
 		}
+	}
+
+	//If we have no predecessors, that means that every case statement ended in a return statement.
+	//If this is the case, then the final block should not be the ending block, it should be the function ending block
+	if(ending_block->predecessors == NULL || ending_block->predecessors->current_index == 0){
+		result_package.final_block = function_exit_block;
 	}
 
 	//Now that everything has been situated, we can start emitting the values in the initial node
@@ -5529,9 +5545,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Now we'll emit the indirect jump to the address
 	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
-
-	//Ensure that we wire this in properly
-	//result_package.starting_block->direct_successor = result_package.final_block;
 
 	//Give back the starting block
 	return result_package;
@@ -6005,6 +6018,17 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				emit_expression(current_block, ast_cursor, FALSE, FALSE);
 				
 				break;
+		}
+
+		//If this is the exit block, it means that we returned through every control path
+		//in here and there is no point in moving forward. We'll simply return
+		if(current_block == function_exit_block){
+			//Warn that we have unreachable code here
+			if(ast_cursor->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
+			}
+
+			break;
 		}
 
 		//Advance to the next child
@@ -6493,6 +6517,17 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				emit_expression(current_block, ast_cursor, FALSE, FALSE);
 				
 				break;
+		}
+
+		//If this is the exit block, it means that we returned through every control path
+		//in here and there is no point in moving forward. We'll simply return
+		if(current_block == function_exit_block){
+			//Warn that we have unreachable code here
+			if(ast_cursor->next_sibling != NULL){
+				print_cfg_message(WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
+			}
+
+			break;
 		}
 
 		//Advance to the next child
