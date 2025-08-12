@@ -632,6 +632,26 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
 
 
 /**
+ * Sometimes we just want to push a given register. We're able to do this
+ * by directly emitting a push instruction with the register in it. This
+ * saves us allocation overhead
+ */
+instruction_t* emit_direct_register_push_instruction(register_holder_t reg){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = PUSH_DIRECT;
+
+	//Now we'll set the register
+	instruction->push_or_pop_reg = reg;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
  * Emit a movzx(zero extend) instruction
  */
 instruction_t* emit_movzx_instruction(three_addr_var_t* source, three_addr_var_t* destination){
@@ -684,6 +704,26 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
 	instruction->source_register = popee;
 
 	//Finally give it back
+	return instruction;
+}
+
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ */
+instruction_t* emit_direct_register_pop_instruction(register_holder_t reg){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = POP_DIRECT;
+
+	//Now we'll set the register
+	instruction->push_or_pop_reg = reg;
+
+	//Now give it back
 	return instruction;
 }
 

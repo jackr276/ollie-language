@@ -1735,6 +1735,10 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
  * possible for indirect function calls, which is the reason for the distinction
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* function_defined_in, instruction_t* instruction){
+	//By default we're optimistic and assume that we won't need to insert
+	//any caller saving logic at all
+	u_int8_t caller_saving_required = FALSE;
+
 	//Define a dynamic array for saving the live ranges that will
 	//need to be saved
 	dynamic_array_t* saving_array = dynamic_array_alloc();
@@ -1768,14 +1772,20 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		if(callee->used_registers[reg - 1] == TRUE){
 			//Flag this LR in here
 			dynamic_array_add(saving_array, lr);
+
+			//Mark that we do need to pursue caller saving
+			caller_saving_required = TRUE;
 		}
 	}
 
-	//If we don't have at least one, just skip on to the next one
-	if(saving_array->current_index == 0){
+	//If we don't require caller saving at all, we're
+	//done here. We can just give back the instruction that we
+	//started with and move on
+	if(caller_saving_required == FALSE){
 		//Destroy the saving array
 		dynamic_array_dealloc(saving_array);
 
+		//Give back what we started off with
 		return instruction;
 	}
 	
