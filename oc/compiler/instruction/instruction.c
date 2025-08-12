@@ -2861,11 +2861,27 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, "\n");
 			break;
+
+		case PUSH_DIRECT:
+			fprintf(fl, "push ");
+			//We have to print a register here, there's no choice
+			print_64_bit_register_name(fl, instruction->push_or_pop_reg);
+			fprintf(fl, "\n");
+			break;
+
 		case POP:
 			fprintf(fl, "pop ");
 			print_variable(fl, instruction->source_register, mode);
 			fprintf(fl, "\n");
 			break;
+
+		case POP_DIRECT:
+			fprintf(fl, "pop ");
+			//We have to print a register here, there's no choice
+			print_64_bit_register_name(fl, instruction->push_or_pop_reg);
+			fprintf(fl, "\n");
+			break;
+
 		case INCL:
 		case INCQ:
 		case INCW:

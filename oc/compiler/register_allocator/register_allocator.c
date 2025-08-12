@@ -1739,10 +1739,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	//any caller saving logic at all
 	u_int8_t caller_saving_required = FALSE;
 
-	//Define a dynamic array for saving the live ranges that will
-	//need to be saved
-	dynamic_array_t* saving_array = dynamic_array_alloc();
-
 	//If we get here we know that we have a call instruction. Let's
 	//grab whatever it's calling out. We're able to do this for a direct call,
 	//whereas in an indirect call we are not
@@ -1750,6 +1746,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 
 	//Every function is guaranteed to have a return value/result
 	live_range_t* result_lr = instruction->destination_register->associated_live_range; 
+
+	//Start off with this as the last instruction
+	instruction_t* last_instruction = instruction;
 
 	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
 	//we know what is interfering, we can see which registers they use and compare that 
@@ -1770,80 +1769,32 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		//this register needs to be saved because it's live at the time
 		//of the function call and the function that we're calling uses it
 		if(callee->used_registers[reg - 1] == TRUE){
-			//Flag this LR in here
-			dynamic_array_add(saving_array, lr);
+			//Emit a direct push with this live range's register
+			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
+
+			//Emit the pop instruction for this
+			instruction_t* pop_inst = emit_direct_register_pop_instruction(reg);
+
+			//Insert the push instruction directly before the call instruction
+			insert_instruction_before_given(push_inst, instruction);
+
+			//Insert the pop instruction directly after the last instruction
+			insert_instruction_after_given(pop_inst, instruction);
+
+			//If the last instruction still is the original instruction. That
+			//means that this is the first pop instruction that we're inserting.
+			//As such, we'll set the last instruction to be this pop instruction
+			//to save ourselves time down the line
+			if(last_instruction == instruction){
+				last_instruction = pop_inst;
+			}
 
 			//Mark that we do need to pursue caller saving
 			caller_saving_required = TRUE;
 		}
 	}
 
-	//If we don't require caller saving at all, we're
-	//done here. We can just give back the instruction that we
-	//started with and move on
-	if(caller_saving_required == FALSE){
-		//Destroy the saving array
-		dynamic_array_dealloc(saving_array);
-
-		//Give back what we started off with
-		return instruction;
-	}
-	
-	//We'll need a heap stack to do this
-	heap_stack_t* stack = heap_stack_alloc();
-
-	//Once we make it all the way down here, we know exactly which registers that we need to save before this function call.
-	//We can now run through the saving array to do this
-	for(u_int16_t i = 0; i < saving_array->current_index; i++){
-		//Grab the live-range out
-		live_range_t* lr = dynamic_array_get_at(saving_array, i);
-
-		//Create the current live range here
-		live_range_t* range = live_range_alloc(function_defined_in, QUAD_WORD);
-
-		//Duplicate the register value here
-		range->reg = lr->reg;
-	
-		//Now we'll need a variable to carry this live range in it
-		three_addr_var_t* var = emit_temp_var_from_live_range(range);
-
-		//Emit a push instruction with the live range as the source
-		instruction_t* push_inst = emit_push_instruction(var);
-
-		//We can now push this new lr onto the stack
-		push(stack, range);
-
-		//Insert the push instruction directly before the call instruction
-		insert_instruction_before_given(push_inst, instruction);
-	}
-
-	//And now, we'll need to go through the stack and add these all back in reverse-order. We'll
-	//always be adding after what we most recently added
-	
-	//The last instruction is always the call instruction first
-	instruction_t* last_instruction = instruction;
-
-	//So long as the stack isn't empty
-	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
-		//Grab the live range off of it
-		live_range_t* current = pop(stack);
-
-		//Emit the pop instruction for this
-		instruction_t* pop_inst = emit_pop_instruction(dynamic_array_get_at(current->variables, 0));
-
-		//Insert this instruction directly after the last one we saw
-		insert_instruction_after_given(pop_inst, last_instruction);
-
-		//The pop inst now is the last instruction we've seen
-		last_instruction = pop_inst;
-	}
-	
-	//Destroy the heapstack
-	heap_stack_dealloc(stack);
-	//Destroy the dynamic array
-	dynamic_array_dealloc(saving_array);
-
-	//We'll save time for ourselves here by always returning the very last pop instruction that we emitted
+	//Return whatever this ended up being
 	return last_instruction;
 }
 
