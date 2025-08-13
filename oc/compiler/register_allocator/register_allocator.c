@@ -1905,8 +1905,10 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		//Grab the function defined in as well
 		symtab_function_record_t* function = current_function_entry->function_defined_in;
 
-		//Initially the leader instruction starts off as the first in the block
-		instruction_t* leader_instruction = current_function_entry->leader_statement;
+		//Keep a reference to the original entry instruction that we had before
+		//we insert any pushes. This will be important for when we need to
+		//reassign the function's leader statement
+		instruction_t* entry_instruction = current_function_entry->leader_statement;
 
 		//We need to see which registers that we use
 		for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
@@ -1940,13 +1942,15 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 			instruction_t* push = emit_push_instruction(var);
 
 			//Insert this push before the leader instruction
-			insert_instruction_before_given(push, leader_instruction);
+			insert_instruction_before_given(push, entry_instruction);
 
-			//Now we'll update what the leader instruction is
-			leader_instruction = push;
-
-			//Update what the current function's leader statement is
-			current_function_entry->leader_statement = leader_instruction;
+			//If the entry instruction is still the function's leader statement, then
+			//we'll need to update it. This only happens on the very first push. For
+			//everyting subsequent, we won't need to do this
+			if(entry_instruction == current_function_entry->leader_statement){
+				//Reassign this to be the very first push
+				current_function_entry->leader_statement = push;
+			}
 		}
 		
 		//Now we need to go through this entire function and find any/all return statements. They would always
