@@ -12,7 +12,6 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../interference_graph/interference_graph.h"
 #include "../cfg/cfg.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1872,17 +1871,20 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		//Reset the heap stack every time
 		reset_heap_stack(heap_stack);
 
-		//Important to maintain this, it's initially null
-		instruction_t* last_push_instruction = NULL;
-
 		//Grab it out
 		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 		//Grab the function defined in as well
 		symtab_function_record_t* function = current_function_entry->function_defined_in;
 
+		//We'll save this for allocations down the road
+		instruction_t* first_non_push_statement = current_function_entry->leader_statement;
+
+		//Initially the leader instruction starts off as the first in the block
+		instruction_t* leader_instruction = current_function_entry->leader_statement;
+
 		//We need to see which registers that we use
-		for(u_int16_t i = 0; i < 15; i++){
+		for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
 			//We don't use this register, so move on
 			if(function->used_registers[i] == FALSE){
 				continue;
@@ -1912,40 +1914,14 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 			//Now we'll need to add an instruction to push this at the entry point of our function
 			instruction_t* push = emit_push_instruction(var);
 
-			//Now we'll add this right after the last push instruction. This is important because we need
-			//to maintain the stack structure for popping
-			if(last_push_instruction == NULL){
-				//Forward link to the head
-				push->next_statement = current_function_entry->leader_statement;
+			//Insert this push before the leader instruction
+			insert_instruction_before_given(push, leader_instruction);
 
-				//Link this backwards too
-				if(current_function_entry->leader_statement != NULL){
-					current_function_entry->leader_statement->previous_statement = push;
-				}
+			//Now we'll update what the leader instruction is
+			leader_instruction = push;
 
-				//This now is the head
-				current_function_entry->leader_statement = push;
-
-				//This now is the last push instruction
-				last_push_instruction = push;
-
-			//Otherwise it wasn't null, so we'll need to add it after the last push instruction
-			} else {
-				//This one's next now points to the last one's next
-				push->next_statement = last_push_instruction->next_statement;
-
-				//Backwards link it too
-				if(push->next_statement != NULL){
-					push->next_statement->previous_statement = push;
-				}
-
-				//Link these in as well
-				last_push_instruction->next_statement = push;
-				push->previous_statement = last_push_instruction;
-
-				//Save for the next go around
-				last_push_instruction = push;
-			}
+			//Update what the current function's leader statement is
+			current_function_entry->leader_statement = leader_instruction;
 		}
 
 		//We'll also need it's stack data area
@@ -1962,7 +1938,7 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 			instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
 
 			//Stack allocation always goes after the last push instruction, or it becomes the head
-			if(last_push_instruction == NULL){
+			if(first_non_push_statement == NULL){
 				current_function_entry->leader_statement->previous_statement = stack_allocation;
 				stack_allocation->next_statement = current_function_entry->leader_statement;
 
@@ -1972,11 +1948,11 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 			//If we get here, we know that we need to go after the last push instruction
 			} else {
 				//Link this one's next in here
-				stack_allocation->next_statement = last_push_instruction->next_statement;
-				last_push_instruction->next_statement->previous_statement = stack_allocation;
+				stack_allocation->next_statement = first_non_push_statement->next_statement;
+				first_non_push_statement->next_statement->previous_statement = stack_allocation;
 
-				last_push_instruction->next_statement = stack_allocation;
-				stack_allocation->previous_statement = last_push_instruction;
+				first_non_push_statement->next_statement = stack_allocation;
+				stack_allocation->previous_statement = first_non_push_statement;
 			}
 		}
 		
