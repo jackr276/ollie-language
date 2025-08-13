@@ -1856,6 +1856,13 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 
 
 /**
+ * Separate function for callee saving logic
+ */
+//TODO
+
+
+
+/**
  * Now that we are done spilling, we need to insert all of the stack logic,
  * including additions and subtractions, into the functions. We also need
  * to insert pushing of any/all callee saved and caller saved registers to maintain
@@ -1874,11 +1881,29 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		//Grab it out
 		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
+		//We'll also need it's stack data area
+		stack_data_area_t area = current_function_entry->function_defined_in->data_area;
+
+		//Align it
+		align_stack_data_area(&area);
+
+		//Grab the total size out
+		u_int32_t total_size = area.total_size;
+
+		//If we have a total size to emit, we'll add it in here
+		if(total_size != 0){
+			//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+			instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+			//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
+			insert_instruction_before_given(stack_allocation, current_function_entry->leader_statement);
+
+			//Update this to be the stack allocation statement
+			current_function_entry->leader_statement = stack_allocation;
+		}
+
 		//Grab the function defined in as well
 		symtab_function_record_t* function = current_function_entry->function_defined_in;
-
-		//We'll save this for allocations down the road
-		instruction_t* first_non_push_statement = current_function_entry->leader_statement;
 
 		//Initially the leader instruction starts off as the first in the block
 		instruction_t* leader_instruction = current_function_entry->leader_statement;
@@ -1922,38 +1947,6 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 
 			//Update what the current function's leader statement is
 			current_function_entry->leader_statement = leader_instruction;
-		}
-
-		//We'll also need it's stack data area
-		stack_data_area_t area = current_function_entry->function_defined_in->data_area;
-
-		//Align it
-		align_stack_data_area(&area);
-
-		//Grab the total size out
-		u_int32_t total_size = area.total_size;
-
-		if(total_size != 0){
-			//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
-			instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-			//Stack allocation always goes after the last push instruction, or it becomes the head
-			if(first_non_push_statement == NULL){
-				current_function_entry->leader_statement->previous_statement = stack_allocation;
-				stack_allocation->next_statement = current_function_entry->leader_statement;
-
-				//This is now the head
-				current_function_entry->leader_statement = stack_allocation;
-
-			//If we get here, we know that we need to go after the last push instruction
-			} else {
-				//Link this one's next in here
-				stack_allocation->next_statement = first_non_push_statement->next_statement;
-				first_non_push_statement->next_statement->previous_statement = stack_allocation;
-
-				first_non_push_statement->next_statement = stack_allocation;
-				stack_allocation->previous_statement = first_non_push_statement;
-			}
 		}
 		
 		//Now we need to go through this entire function and find any/all return statements. They would always
