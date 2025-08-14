@@ -14,7 +14,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/ucontext.h>
 #include "../queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
 
