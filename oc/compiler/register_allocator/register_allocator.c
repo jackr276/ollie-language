@@ -1924,27 +1924,33 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//go through and add it at the exit(s) as well. Note that we're given the function exit block
 	//as an input value here
 	
+	printf("Function exit is block:\n");
+	print_block_with_live_ranges(function_exit);
+
+	
 	//For each and every predecessor of the function exit block
 	for(u_int16_t i = 0; i < function_exit->predecessors->current_index; i++){
 		//Grab the given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(function_exit->predecessors, i);
 
+		printf("GOT BLOCK: .L%d\n", predecessor->block_id);
+
 		//If the area has a larger total size than 0, we'll need to add in the deallocation
 		//before every return statement
 		if(total_size > 0){
 			//Emit the stack deallocation statement
-			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size > 0);
+			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
 
 			//We will insert this right before the very last statement in each predecessor
 			insert_instruction_before_given(stack_deallocation, predecessor->exit_statement);
 		}
 
-		//Now we'll go through the saved registers but in reverse order. Since we went in order
-		//for the first set, going in reverse order will mimic the effect of the stack(Last on, first off)
-		//and result in a proper deallocation structure
-	
-		//Run through the registers in reverse
-		for(int16_t j = K_COLORS_GEN_USE; j >= 0; j--){
+		//Now we'll go through the registers in the same order. This time, when we hit one that
+		//is callee-saved and used, we'll emit the push instruction and insert it directly before
+		//the "ret". This will ensure that our LIFO structure for pushing/popping is maintained
+
+		//Run through all the registers
+		for(u_int16_t j = 0; j < K_COLORS_GEN_USE; j++){
 			//If we haven't used this register, then skip it
 			if(function->used_registers[j] == FALSE){
 				continue;
@@ -1959,8 +1965,12 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 				continue;
 			}
 
+			//If we make it here, we know that we'll need to save this register
+			instruction_t* pop_instruction = emit_direct_register_pop_instruction(used_reg);
+
+			//Insert it before the ret
+			insert_instruction_before_given(pop_instruction, predecessor->exit_statement);
 		}
-	
 	}
 }
 
