@@ -1856,10 +1856,55 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 
 
 /**
- * Separate function for callee saving logic
+ * This function handles all callee saving logic for each function that we have
  */
-//TODO
+static void insert_callee_saving_logic(symtab_function_record_t* function, basic_block_t* function_entry, basic_block_t* function_exit){
+	//Keep a reference to the original entry instruction that we had before
+	//we insert any pushes. This will be important for when we need to
+	//reassign the function's leader statement
+	instruction_t* entry_instruction = function_entry->leader_statement;
 
+	//We need to see which registers that we use
+	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
+		//We don't use this register, so move on
+		if(function->used_registers[i] == FALSE){
+			continue;
+		}
+
+		//Otherwise if we get here, we know that we use it. Remember
+		//the register value is always offset by one
+		register_holder_t used_reg = i + 1;
+
+		//If this isn't callee saved, then we know to move on
+		if(is_register_callee_saved(used_reg) == FALSE){
+			continue;
+		}
+
+		//Create the current live range here
+		live_range_t* range = live_range_alloc(function, QUAD_WORD);
+		
+		//Give it the appropriate register
+		range->reg = used_reg;
+
+		//Now we'll need a variable to carry this live range in it
+		three_addr_var_t* var = emit_temp_var_from_live_range(range);
+
+		//Now we'll need to add an instruction to push this at the entry point of our function
+		instruction_t* push = emit_push_instruction(var);
+
+		//Insert this push before the leader instruction
+		insert_instruction_before_given(push, entry_instruction);
+
+		//If the entry instruction is still the function's leader statement, then
+		//we'll need to update it. This only happens on the very first push. For
+		//everyting subsequent, we won't need to do this
+		if(entry_instruction == function_entry->leader_statement){
+			//Reassign this to be the very first push
+			function_entry->leader_statement = push;
+		}
+	}
+
+}
 
 
 /**
@@ -1868,7 +1913,7 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
  * to insert pushing of any/all callee saved and caller saved registers to maintain
  * our calling convention
  */
-static void insert_all_stack_and_saving_logic(cfg_t* cfg){
+static void insert_saving_logic(cfg_t* cfg){
 	//We need to run through all of the used registers and make a note of all callee-saved registers
 	//in here we'll use a lightstack to keep track of the pushing/popping logic in here as well
 	heap_stack_t* heap_stack = heap_stack_alloc();
@@ -1957,6 +2002,9 @@ static void insert_all_stack_and_saving_logic(cfg_t* cfg){
 		//be exit statements, so this is how we will hunt for them
 		basic_block_t* cursor = current_function_entry;
 
+		//TODO this seems to be completely wrong. We need to add a stack deallocation statement before every return,
+		//not just the first return that we find
+		
 		//Crawl through the whole thing until we hit the end of the function
 		while((total_size != 0 || heap_stack_is_empty(heap_stack) == HEAP_STACK_NOT_EMPTY)
 				&& cursor != NULL && cursor->function_defined_in == current_function_entry->function_defined_in){
@@ -2089,7 +2137,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	allocate_registers(cfg, live_ranges, graph);
 
 	//Once registers are allocated, we need to crawl and insert all stack allocations/subtractions
-	insert_all_stack_and_saving_logic(cfg);
+	insert_saving_logic(cfg);
 
 	//One final print post allocation
 	if(print_irs == TRUE){
