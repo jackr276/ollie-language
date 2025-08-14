@@ -58,6 +58,6 @@ fn main(argv:char**, argc:i32) -> i32 {
 	let z:count_function := pcount_r;
 	let y:count_function := lcount_r;
 
-	ret @z(32) + @y(17) + x;
+	ret @z(32) + @z(32) + @y(17) + x;
 }
 
