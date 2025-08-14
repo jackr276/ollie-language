@@ -1858,11 +1858,35 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 /**
  * This function handles all callee saving logic for each function that we have
  */
-static void insert_callee_saving_logic(symtab_function_record_t* function, basic_block_t* function_entry, basic_block_t* function_exit){
+static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
 	//Keep a reference to the original entry instruction that we had before
 	//we insert any pushes. This will be important for when we need to
 	//reassign the function's leader statement
 	instruction_t* entry_instruction = function_entry->leader_statement;
+	
+	//Grab the function record out now too
+	symtab_function_record_t* function = function_entry->function_defined_in;
+
+	//We'll also need it's stack data area
+	stack_data_area_t area = function_entry->function_defined_in->data_area;
+
+	//Align it
+	align_stack_data_area(&area);
+
+	//Grab the total size out
+	u_int32_t total_size = area.total_size;
+
+	//If we have a total size to emit, we'll add it in here
+	if(total_size != 0){
+		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
+		insert_instruction_before_given(stack_allocation, function_entry->leader_statement);
+
+		//Update this to be the stack allocation statement
+		function_entry->leader_statement = stack_allocation;
+	}
 
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
@@ -1904,6 +1928,28 @@ static void insert_callee_saving_logic(symtab_function_record_t* function, basic
 		}
 	}
 
+	//Now that we've added all of the callee saving logic at the function entry, we'll need to
+	//go through and add it at the exit(s) as well. Note that we're given the function exit block
+	//as an input value here
+	
+	//For each and every predecessor of the function exit block
+	for(u_int16_t i = 0; i < function_exit->predecessors->current_index; i++){
+		//Grab the given predecessor out
+		basic_block_t* predecessor = dynamic_array_get_at(function_exit->predecessors, i);
+
+		//If the area has a larger total size than 0, we'll need to add in the deallocation
+		//before every return statement
+		if(total_size > 0){
+			//Emit the stack deallocation statement
+			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size > 0);
+
+			//We will insert this right before the very last statement in each predecessor
+			insert_instruction_before_given(stack_deallocation, predecessor->exit_statement);
+		}
+
+		//TODO add the unsaving logic here
+	
+	}
 }
 
 
