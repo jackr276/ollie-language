@@ -1804,9 +1804,55 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
  * at the time that the function is called
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* function_defined_in, instruction_t* instruction){
-	//Placeholding for now
-	printf("HERE\n");
-	return instruction;
+	//For this given instruction, we'll need to first see what currently interferes with it by looking at what interferes with the result
+	//register
+	
+	//Extract this out
+	live_range_t* result_live_range = instruction->destination_register->associated_live_range;
+
+	//This really rarely happens, but we still must account for it. If the neighbors array is NULL
+	//or empty, we leave
+	if(result_live_range->neighbors == NULL || result_live_range->neighbors->current_index == 0){
+		return instruction;
+	}
+
+	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
+	//have, but will change to be the first pop instruction that we make 
+	instruction_t* last_instruction = instruction;
+
+
+	//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
+	for(u_int16_t i = 0; i < result_live_range->neighbors->current_index; i++){
+		//Grab the given live range out
+		live_range_t* interferee = dynamic_array_get_at(result_live_range->neighbors, i);
+
+		//And we'll extract the interfering register
+		register_holder_t interfering_register = interferee->reg;
+
+		//If this is not caller saved, then we don't care about it
+		if(is_register_caller_saved(interfering_register) == FALSE){
+			continue;
+		}
+
+		//Otherwise if we get here then we know it is caller saved, so we'll need to 
+		//emit the push/pop pair here
+		instruction_t* push_instruction = emit_direct_register_push_instruction(interfering_register);
+		instruction_t* pop_instruction = emit_direct_register_pop_instruction(interfering_register);
+
+		//Now we'll insert the push directly before the call
+		insert_instruction_before_given(push_instruction, instruction);
+		
+		//And to maintain the stack structure, we'll now put the pop instruction directly after the call
+		insert_instruction_after_given(pop_instruction, instruction);
+
+		//If this is the first pop instruction that we emitted, it will become the new "last_instruction"
+		if(last_instruction == instruction){
+			last_instruction = pop_instruction;
+		}
+	}
+
+	//Return the last instruction to save time when drilling
+	return last_instruction;
 }
 
 
