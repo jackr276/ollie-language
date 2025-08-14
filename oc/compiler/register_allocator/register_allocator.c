@@ -1905,17 +1905,8 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 			continue;
 		}
 
-		//Create the current live range here
-		live_range_t* range = live_range_alloc(function, QUAD_WORD);
-		
-		//Give it the appropriate register
-		range->reg = used_reg;
-
-		//Now we'll need a variable to carry this live range in it
-		three_addr_var_t* var = emit_temp_var_from_live_range(range);
-
 		//Now we'll need to add an instruction to push this at the entry point of our function
-		instruction_t* push = emit_push_instruction(var);
+		instruction_t* push = emit_direct_register_push_instruction(used_reg);
 
 		//Insert this push before the leader instruction
 		insert_instruction_before_given(push, entry_instruction);
@@ -1951,8 +1942,24 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		//Now we'll go through the saved registers but in reverse order. Since we went in order
 		//for the first set, going in reverse order will mimic the effect of the stack(Last on, first off)
 		//and result in a proper deallocation structure
+	
+		//Run through the registers in reverse
+		for(int16_t j = K_COLORS_GEN_USE; j >= 0; j--){
+			//If we haven't used this register, then skip it
+			if(function->used_registers[j] == FALSE){
+				continue;
+			}
 
-		//TODO add the unsaving logic here
+			//Remember that our positional coding is off by 1(0 is NO_REG value), so we'll
+			//add 1 to make the value correct
+			register_holder_t used_reg = j + 1;
+
+			//If it's not callee saved then we don't care
+			if(is_register_callee_saved(used_reg) == FALSE){
+				continue;
+			}
+
+		}
 	
 	}
 }
