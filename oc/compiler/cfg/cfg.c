@@ -4797,7 +4797,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			add_successor(if_compound_stmt_end, exit_block);
 		} else {
 			//If this is the case, the end block is a successor of the if_stmt end
-			add_successor(if_compound_stmt_end, exit_block);
+			add_successor(if_compound_stmt_end, function_exit_block);
 		}
 
 	//If this is null, it's fine, but we should throw a warning
@@ -4864,9 +4864,8 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 				emit_jump(else_if_compound_stmt_exit, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				//If this is the case, the end block is a successor of the if_stmt end
 				add_successor(else_if_compound_stmt_exit, exit_block);
-
 			} else {
-				add_successor(else_if_compound_stmt_exit, exit_block);
+				add_successor(else_if_compound_stmt_exit, function_exit_block);
 			}
 
 		//If this is NULL, it's fine, but we should warn
@@ -4911,7 +4910,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 				//If this is the case, the end block is a successor of the if_stmt end
 				add_successor(else_compound_statement_exit, exit_block);
 			} else {
-				add_successor(else_compound_statement_exit, exit_block);
+				add_successor(else_compound_statement_exit, function_exit_block);
 			}
 		}
 
@@ -4923,7 +4922,16 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		emit_jump(current_entry_block, exit_block, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
-	entry_block->direct_successor = exit_block;
+	//If we have an exit block that has no predecessors, that means that we return through every
+	//control path. In this instance, we need to set the result package's final block to be the
+	//exit block
+	if(exit_block->predecessors == NULL || exit_block->predecessors->current_index == 0){
+		result_package.final_block = function_exit_block;
+		//Also set the direct successor here
+		entry_block->direct_successor = function_exit_block;
+	} else {
+		entry_block->direct_successor = exit_block;
+	}
 
 	//Give back the result package
 	return result_package;

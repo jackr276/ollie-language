@@ -1924,16 +1924,10 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//go through and add it at the exit(s) as well. Note that we're given the function exit block
 	//as an input value here
 	
-	printf("Function exit is block:\n");
-	print_block_with_live_ranges(function_exit);
-
-	
 	//For each and every predecessor of the function exit block
 	for(u_int16_t i = 0; i < function_exit->predecessors->current_index; i++){
 		//Grab the given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(function_exit->predecessors, i);
-
-		printf("GOT BLOCK: .L%d\n", predecessor->block_id);
 
 		//If the area has a larger total size than 0, we'll need to add in the deallocation
 		//before every return statement
@@ -1945,12 +1939,12 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 			insert_instruction_before_given(stack_deallocation, predecessor->exit_statement);
 		}
 
-		//Now we'll go through the registers in the same order. This time, when we hit one that
+		//Now we'll go through the registers in the reverse order. This time, when we hit one that
 		//is callee-saved and used, we'll emit the push instruction and insert it directly before
 		//the "ret". This will ensure that our LIFO structure for pushing/popping is maintained
 
-		//Run through all the registers
-		for(u_int16_t j = 0; j < K_COLORS_GEN_USE; j++){
+		//Run through all the registers backwards
+		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
 			//If we haven't used this register, then skip it
 			if(function->used_registers[j] == FALSE){
 				continue;
