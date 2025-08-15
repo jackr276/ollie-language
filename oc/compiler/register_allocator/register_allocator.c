@@ -12,7 +12,6 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../interference_graph/interference_graph.h"
 #include "../cfg/cfg.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1729,16 +1728,145 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
 
 
 /**
+ * Insert caller saved logic for a direct function call. In a direct function call, we'll know what
+ * registers are being used by the function being called. As such, we can be precise about what
+ * we push/pop onto and off of the stack and have for a more efficient saving regime. This is not
+ * possible for indirect function calls, which is the reason for the distinction
+ */
+static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* function_defined_in, instruction_t* instruction){
+	//By default we're optimistic and assume that we won't need to insert
+	//any caller saving logic at all
+	u_int8_t caller_saving_required = FALSE;
+
+	//If we get here we know that we have a call instruction. Let's
+	//grab whatever it's calling out. We're able to do this for a direct call,
+	//whereas in an indirect call we are not
+	symtab_function_record_t* callee = instruction->called_function;
+
+	//Every function is guaranteed to have a return value/result
+	live_range_t* result_lr = instruction->destination_register->associated_live_range; 
+
+	//Start off with this as the last instruction
+	instruction_t* last_instruction = instruction;
+
+	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
+	//we know what is interfering, we can see which registers they use and compare that 
+	//with the register array
+	for(u_int16_t i = 0; result_lr->neighbors != NULL && i < result_lr->neighbors->current_index; i++){
+		//Grab the neighbor out
+		live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
+
+		//And grab it's register out
+		register_holder_t reg = lr->reg;
+
+		//If it isn't caller saved, we don't care
+		if(is_register_caller_saved(reg) == FALSE){
+			continue;
+		}
+
+		//If we get a live range like this, we know for a fact that
+		//this register needs to be saved because it's live at the time
+		//of the function call and the function that we're calling uses it
+		if(callee->used_registers[reg - 1] == TRUE){
+			//Emit a direct push with this live range's register
+			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
+
+			//Emit the pop instruction for this
+			instruction_t* pop_inst = emit_direct_register_pop_instruction(reg);
+
+			//Insert the push instruction directly before the call instruction
+			insert_instruction_before_given(push_inst, instruction);
+
+			//Insert the pop instruction directly after the last instruction
+			insert_instruction_after_given(pop_inst, instruction);
+
+			//If the last instruction still is the original instruction. That
+			//means that this is the first pop instruction that we're inserting.
+			//As such, we'll set the last instruction to be this pop instruction
+			//to save ourselves time down the line
+			if(last_instruction == instruction){
+				last_instruction = pop_inst;
+			}
+
+			//Mark that we do need to pursue caller saving
+			caller_saving_required = TRUE;
+		}
+	}
+
+	//Return whatever this ended up being
+	return last_instruction;
+}
+
+
+/**
+ * For an indirect call, we can not know for certain what registers are and are not used
+ * inside of the function. As such, we'll need to save any/all caller saved registers that are in use
+ * at the time that the function is called
+ */
+static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* function_defined_in, instruction_t* instruction){
+	//For this given instruction, we'll need to first see what currently interferes with it by looking at what interferes with the result
+	//register
+	
+	//Extract this out
+	live_range_t* result_live_range = instruction->destination_register->associated_live_range;
+
+	//This really rarely happens, but we still must account for it. If the neighbors array is NULL
+	//or empty, we leave
+	if(result_live_range->neighbors == NULL || result_live_range->neighbors->current_index == 0){
+		return instruction;
+	}
+
+	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
+	//have, but will change to be the first pop instruction that we make 
+	instruction_t* last_instruction = instruction;
+
+
+	//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
+	for(u_int16_t i = 0; i < result_live_range->neighbors->current_index; i++){
+		//Grab the given live range out
+		live_range_t* interferee = dynamic_array_get_at(result_live_range->neighbors, i);
+
+		//And we'll extract the interfering register
+		register_holder_t interfering_register = interferee->reg;
+
+		//If this is not caller saved, then we don't care about it
+		if(is_register_caller_saved(interfering_register) == FALSE){
+			continue;
+		}
+
+		//Otherwise if we get here then we know it is caller saved, so we'll need to 
+		//emit the push/pop pair here
+		instruction_t* push_instruction = emit_direct_register_push_instruction(interfering_register);
+		instruction_t* pop_instruction = emit_direct_register_pop_instruction(interfering_register);
+
+		//Now we'll insert the push directly before the call
+		insert_instruction_before_given(push_instruction, instruction);
+		
+		//And to maintain the stack structure, we'll now put the pop instruction directly after the call
+		insert_instruction_after_given(pop_instruction, instruction);
+
+		//If this is the first pop instruction that we emitted, it will become the new "last_instruction"
+		if(last_instruction == instruction){
+			last_instruction = pop_instruction;
+		}
+	}
+
+	//Return the last instruction to save time when drilling
+	return last_instruction;
+}
+
+
+/**
  * Run through the current function and insert all needed save/restore logic
  * for caller-saved registers
  */
-static void insert_caller_saved_register_logic(basic_block_t* current_function){
+static void insert_caller_saved_register_logic(basic_block_t* function_entry_block){
 	//We'll grab out everything we need from this function
 	//Extract this for convenience
-	symtab_function_record_t* function = current_function->function_defined_in;
+	symtab_function_record_t* function = function_entry_block->function_defined_in;
 
 	//Define a cursor for crawling
-	basic_block_t* cursor = current_function;
+	basic_block_t* cursor = function_entry_block;
 
 	//So long as we're in this current function, keep going
 	while(cursor != NULL && cursor->function_defined_in == function){
@@ -1747,131 +1875,21 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function){
 
 		//Now we'll run through every single instruction in here
 		while(instruction != NULL){
-			//If this is not a function call, we don't really care, so
-			//just advance(most likely case)
-			if(instruction->instruction_type != CALL){
-				instruction = instruction->next_statement;
-				continue;
+			switch(instruction->instruction_type){
+				//Use the helper for a direct call
+				case CALL:
+					instruction = insert_caller_saved_logic_for_direct_call(function, instruction);
+					break;
+					
+				//Use the helper for an indirect call
+				case INDIRECT_CALL:
+					instruction = insert_caller_saved_logic_for_indirect_call(function, instruction);
+					break;
+
+				//By default we leave and just advance
+				default:
+					break;
 			}
-
-			//Define a dynamic array for saving the live ranges that will
-			//need to be saved
-			dynamic_array_t* saving_array = dynamic_array_alloc();
-
-			//If we get here we know that we have a call instruction. Let's
-			//grab whatever it's calling out
-			symtab_function_record_t* callee = instruction->called_function;
-
-			//Every function is guaranteed to have a return value/result
-			live_range_t* result_lr = instruction->destination_register->associated_live_range; 
-
-			//We can crawl this Live Range's neighbors to see what is interefering with it. Once
-			//we know what is interfering, we can see which registers they use and compare that 
-			//with the register array
-			for(u_int16_t i = 0; result_lr->neighbors != NULL && i < result_lr->neighbors->current_index; i++){
-				//Grab the neighbor out
-				live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
-
-				//And grab it's register out
-				register_holder_t reg = lr->reg;
-
-				//If it isn't caller saved, we don't care
-				if(is_register_caller_saved(reg) == FALSE){
-					continue;
-				}
-
-				//If the interference array is true *and* it's a neighbor's
-				//register, we'll save it
-				if(callee->used_registers[reg - 1] == TRUE){
-					//Flag this LR in here
-					dynamic_array_add(saving_array, lr);
-				}
-			}
-
-			//If we don't have at least one, just skip on to the next one
-			if(saving_array->current_index == 0){
-				//Destroy the saving array
-				dynamic_array_dealloc(saving_array);
-
-				//Go onto the next one
-				instruction = instruction->next_statement;
-				continue;
-			}
-			
-			//We'll need a heap stack to do this
-			heap_stack_t* stack = heap_stack_alloc();
-
-			//These variables will be convenient for dealing with the addition of instructions
-			instruction_t* call_instruction = instruction;
-			instruction_t* before_push = call_instruction->previous_statement;
-
-			//Once we make it all the way down here, we know exactly which registers that we need to save before this function call.
-			//We can now run through the saving array to do this
-			for(u_int16_t i = 0; i < saving_array->current_index; i++){
-				//Grab the live-range out
-				live_range_t* lr = dynamic_array_get_at(saving_array, i);
-
-				//Create the current live range here
-				live_range_t* range = live_range_alloc(function, QUAD_WORD);
-
-				//Duplicate the register value here
-				range->reg = lr->reg;
-			
-				//Now we'll need a variable to carry this live range in it
-				three_addr_var_t* var = emit_temp_var_from_live_range(range);
-
-				//Emit a push instruction with the live range as the source
-				instruction_t* push_inst = emit_push_instruction(var);
-
-				//We can now push this new lr onto the stack
-				push(stack, range);
-
-				//We always put this push instruction above the function call, in between it and whatever else was last there
-				before_push->next_statement = push_inst;
-				push_inst->previous_statement = before_push;
-
-				//Link it in with the call instruction
-				push_inst->next_statement = call_instruction;
-				call_instruction->previous_statement = push_inst;
-
-				//Update what this is
-				before_push = push_inst;
-			}
-
-			//And now, we'll need to go through the stack and add these all back in reverse-order. We'll
-			//always be adding after what we most recently added
-			
-			//The last instruction is always the call instruction first
-			instruction_t* last_instruction = instruction;
-
-			//So long as the stack isn't empty
-			while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
-				//Grab the live range off of it
-				live_range_t* current = pop(stack);
-
-				//Emit the pop instruction for this
-				instruction_t* pop_inst = emit_pop_instruction(dynamic_array_get_at(current->variables, 0));
-
-				//Tie this in to what comes after it
-				pop_inst->next_statement = last_instruction->next_statement;
-
-				//Tie it in with the previous as well
-				if(pop_inst->next_statement != NULL){
-					pop_inst->next_statement->previous_statement = pop_inst;
-				}
-
-				//And now we'll tie in the last instruction
-				last_instruction->next_statement = pop_inst;
-				pop_inst->previous_statement = last_instruction;
-
-				//The pop inst now is the last instruction we've seen
-				last_instruction = pop_inst;
-			}
-			
-			//Destroy the heapstack
-			heap_stack_dealloc(stack);
-			//Destroy the dynamic array
-			dynamic_array_dealloc(saving_array);
 
 			//Onto the next instruction
 			instruction = instruction->next_statement;
@@ -1884,213 +1902,141 @@ static void insert_caller_saved_register_logic(basic_block_t* current_function){
 
 
 /**
+ * This function handles all callee saving logic for each function that we have on top off emitting
+ * the stack allocation and deallocation statements that we need for each function
+ */
+static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
+	//Keep a reference to the original entry instruction that we had before
+	//we insert any pushes. This will be important for when we need to
+	//reassign the function's leader statement
+	instruction_t* entry_instruction = function_entry->leader_statement;
+	
+	//Grab the function record out now too
+	symtab_function_record_t* function = function_entry->function_defined_in;
+
+	//We'll also need it's stack data area
+	stack_data_area_t area = function_entry->function_defined_in->data_area;
+
+	//Align it
+	align_stack_data_area(&area);
+
+	//Grab the total size out
+	u_int32_t total_size = area.total_size;
+
+	//We need to see which registers that we use
+	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
+		//We don't use this register, so move on
+		if(function->used_registers[i] == FALSE){
+			continue;
+		}
+
+		//Otherwise if we get here, we know that we use it. Remember
+		//the register value is always offset by one
+		register_holder_t used_reg = i + 1;
+
+		//If this isn't callee saved, then we know to move on
+		if(is_register_callee_saved(used_reg) == FALSE){
+			continue;
+		}
+
+		//Now we'll need to add an instruction to push this at the entry point of our function
+		instruction_t* push = emit_direct_register_push_instruction(used_reg);
+
+		//Insert this push before the leader instruction
+		insert_instruction_before_given(push, entry_instruction);
+
+		//If the entry instruction is still the function's leader statement, then
+		//we'll need to update it. This only happens on the very first push. For
+		//everyting subsequent, we won't need to do this
+		if(entry_instruction == function_entry->leader_statement){
+			//Reassign this to be the very first push
+			function_entry->leader_statement = push;
+		}
+	}
+
+	//If we have a total size to emit, we'll add it in here
+	if(total_size != 0){
+		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
+		insert_instruction_before_given(stack_allocation, entry_instruction);
+
+		//If the entry instruction was the function's leader statement, then this now will be the leader statement
+		if(entry_instruction == function_entry->leader_statement){
+			function_entry->leader_statement = entry_instruction;
+		}
+	}
+
+
+	//Now that we've added all of the callee saving logic at the function entry, we'll need to
+	//go through and add it at the exit(s) as well. Note that we're given the function exit block
+	//as an input value here
+	
+	//For each and every predecessor of the function exit block
+	for(u_int16_t i = 0; i < function_exit->predecessors->current_index; i++){
+		//Grab the given predecessor out
+		basic_block_t* predecessor = dynamic_array_get_at(function_exit->predecessors, i);
+
+		//If the area has a larger total size than 0, we'll need to add in the deallocation
+		//before every return statement
+		if(total_size > 0){
+			//Emit the stack deallocation statement
+			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+			//We will insert this right before the very last statement in each predecessor
+			insert_instruction_before_given(stack_deallocation, predecessor->exit_statement);
+		}
+
+		//Now we'll go through the registers in the reverse order. This time, when we hit one that
+		//is callee-saved and used, we'll emit the push instruction and insert it directly before
+		//the "ret". This will ensure that our LIFO structure for pushing/popping is maintained
+
+		//Run through all the registers backwards
+		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
+			//If we haven't used this register, then skip it
+			if(function->used_registers[j] == FALSE){
+				continue;
+			}
+
+			//Remember that our positional coding is off by 1(0 is NO_REG value), so we'll
+			//add 1 to make the value correct
+			register_holder_t used_reg = j + 1;
+
+			//If it's not callee saved then we don't care
+			if(is_register_callee_saved(used_reg) == FALSE){
+				continue;
+			}
+
+			//If we make it here, we know that we'll need to save this register
+			instruction_t* pop_instruction = emit_direct_register_pop_instruction(used_reg);
+
+			//Insert it before the ret
+			insert_instruction_before_given(pop_instruction, predecessor->exit_statement);
+		}
+	}
+}
+
+
+/**
  * Now that we are done spilling, we need to insert all of the stack logic,
  * including additions and subtractions, into the functions. We also need
  * to insert pushing of any/all callee saved and caller saved registers to maintain
  * our calling convention
  */
-static void insert_all_stack_and_saving_logic(cfg_t* cfg){
-	//We need to run through all of the used registers and make a note of all callee-saved registers
-	//in here we'll use a lightstack to keep track of the pushing/popping logic in here as well
-	heap_stack_t* heap_stack = heap_stack_alloc();
-
+static void insert_saving_logic(cfg_t* cfg){
 	//Run through every function entry point in the CFG
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-		//Reset the heap stack every time
-		reset_heap_stack(heap_stack);
-
-		//Important to maintain this, it's initially null
-		instruction_t* last_push_instruction = NULL;
-
-		//Grab it out
+		//Grab out the function exit and entry blocks
 		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* current_function_exit = dynamic_array_get_at(cfg->function_exit_blocks, i);
 
-		//Grab the function defined in as well
-		symtab_function_record_t* function = current_function_entry->function_defined_in;
-
-		//We need to see which registers that we use
-		for(u_int16_t i = 0; i < 15; i++){
-			//We don't use this register, so move on
-			if(function->used_registers[i] == FALSE){
-				continue;
-			}
-
-			//Otherwise if we get here, we know that we use it. Remember
-			//the register value is always offset by one
-			register_holder_t used_reg = i + 1;
-
-			//If this isn't callee saved, then we know to move on
-			if(is_register_callee_saved(used_reg) == FALSE){
-				continue;
-			}
-
-			//Create the current live range here
-			live_range_t* range = live_range_alloc(function, QUAD_WORD);
-			
-			//Give it the appropriate register
-			range->reg = used_reg;
-
-			//Now we'll need a variable to carry this live range in it
-			three_addr_var_t* var = emit_temp_var_from_live_range(range);
-
-			//Add this onto the stack
-			push(heap_stack, var);
-
-			//Now we'll need to add an instruction to push this at the entry point of our function
-			instruction_t* push = emit_push_instruction(var);
-
-			//Now we'll add this right after the last push instruction. This is important because we need
-			//to maintain the stack structure for popping
-			if(last_push_instruction == NULL){
-				//Forward link to the head
-				push->next_statement = current_function_entry->leader_statement;
-
-				//Link this backwards too
-				if(current_function_entry->leader_statement != NULL){
-					current_function_entry->leader_statement->previous_statement = push;
-				}
-
-				//This now is the head
-				current_function_entry->leader_statement = push;
-
-				//This now is the last push instruction
-				last_push_instruction = push;
-
-			//Otherwise it wasn't null, so we'll need to add it after the last push instruction
-			} else {
-				//This one's next now points to the last one's next
-				push->next_statement = last_push_instruction->next_statement;
-
-				//Backwards link it too
-				if(push->next_statement != NULL){
-					push->next_statement->previous_statement = push;
-				}
-
-				//Link these in as well
-				last_push_instruction->next_statement = push;
-				push->previous_statement = last_push_instruction;
-
-				//Save for the next go around
-				last_push_instruction = push;
-			}
-		}
-
-		//We'll also need it's stack data area
-		stack_data_area_t area = current_function_entry->function_defined_in->data_area;
-
-		//Align it
-		align_stack_data_area(&area);
-
-		//Grab the total size out
-		u_int32_t total_size = area.total_size;
-
-		if(total_size != 0){
-			//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
-			instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-			//Stack allocation always goes after the last push instruction, or it becomes the head
-			if(last_push_instruction == NULL){
-				current_function_entry->leader_statement->previous_statement = stack_allocation;
-				stack_allocation->next_statement = current_function_entry->leader_statement;
-
-				//This is now the head
-				current_function_entry->leader_statement = stack_allocation;
-
-			//If we get here, we know that we need to go after the last push instruction
-			} else {
-				//Link this one's next in here
-				stack_allocation->next_statement = last_push_instruction->next_statement;
-				last_push_instruction->next_statement->previous_statement = stack_allocation;
-
-				last_push_instruction->next_statement = stack_allocation;
-				stack_allocation->previous_statement = last_push_instruction;
-			}
-		}
-		
-		//Now we need to go through this entire function and find any/all return statements. They would always
-		//be exit statements, so this is how we will hunt for them
-		basic_block_t* cursor = current_function_entry;
-
-		//Crawl through the whole thing until we hit the end of the function
-		while((total_size != 0 || heap_stack_is_empty(heap_stack) == HEAP_STACK_NOT_EMPTY)
-				&& cursor != NULL && cursor->function_defined_in == current_function_entry->function_defined_in){
-			//If we have an empty block for some reason or we don't have a return we're done, so move on
-			if(cursor->exit_statement == NULL || cursor->exit_statement->instruction_type != RET){
-				cursor = cursor->direct_successor;
-				continue;
-			}
-
-			//Now that we got here, we know that the exit statement is a ret statement
-			instruction_t* ret_stmt = cursor->exit_statement;
-			//Grab the previous statement too
-			instruction_t* previous = ret_stmt->previous_statement;
-
-			//We need to add all of the popping of our callee-saved registers here. We will crawl
-			//through the stack without damaging it, because there may be more than one return statement
-			//that is in need of this popping logic
-			stack_node_t* current = heap_stack->top;
-
-			//Run through and add them all in
-			while(current != NULL){
-				//Emit the pop instruction
-				instruction_t* pop = emit_pop_instruction(current->data);
-
-				//We'll now tie this in here
-				pop->previous_statement = previous;
-
-				//Most common case
-				if(previous != NULL){
-					previous->next_statement = pop;
-				} else {
-					//This is the leader statement(exceptionally rare)
-					cursor->leader_statement = pop;
-				}
-
-				//Add this one in too
-				pop->next_statement = ret_stmt;
-				ret_stmt->previous_statement = pop;
-
-				//IMPORTANT - update "previous" so that the next iteration
-				//knows what to do
-				previous = pop;
-
-				//Advance the stack node
-				current = current->next;
-			}
-
-			//Here is our deallocation statement
-			if(total_size != 0){
-				instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-				//Tie these too together
-				ret_stmt->previous_statement = stack_deallocation;
-				stack_deallocation->next_statement = ret_stmt;
-
-				//Tie this one into previous
-				stack_deallocation->previous_statement = previous;
-
-				//Most common case
-				if(previous != NULL){
-					previous->next_statement = stack_deallocation;
-				} else {
-					//This is the leader statement(exceptionally rare)
-					cursor->leader_statement = stack_deallocation;
-				}
-			}
-
-			//Advance the cursor up
-			cursor = cursor->direct_successor;
-		}
-		
-		//Reset the heapstack once more
-		reset_heap_stack(heap_stack);
+		//We'll first insert the callee-saved stack and register logic
+		insert_stack_and_callee_saving_logic(cfg, current_function_entry, current_function_exit);
 
 		//And now we'll let the helper insert all of the caller-saved register logic
 		insert_caller_saved_register_logic(current_function_entry);
 	}
-
-	//Destroy the heapstack
-	heap_stack_dealloc(heap_stack);
 }
 
 
@@ -2143,7 +2089,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	allocate_registers(cfg, live_ranges, graph);
 
 	//Once registers are allocated, we need to crawl and insert all stack allocations/subtractions
-	insert_all_stack_and_saving_logic(cfg);
+	insert_saving_logic(cfg);
 
 	//One final print post allocation
 	if(print_irs == TRUE){

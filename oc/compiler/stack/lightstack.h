@@ -67,6 +67,6 @@ void reset_lightstack(lightstack_t* stack);
 /**
  * Grab the top of the stack without removing it
 */
-u_int16_t lightstack_peek(lightstack_t* stack);
+u_int32_t lightstack_peek(lightstack_t* stack);
 
 #endif /* LIGHT_STACK_H */

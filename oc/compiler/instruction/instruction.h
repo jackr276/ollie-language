@@ -170,7 +170,9 @@ typedef enum{
 	TESTL,
 	TESTQ,
 	PUSH,
+	PUSH_DIRECT, //Bypass live_ranges entirely
 	POP,
+	POP_DIRECT, //Bypass live_ranges entirely
 	SETE, //Set if equal
 	SETNE, //Set if not equal
 	SETGE, //Set >= signed
@@ -544,6 +546,8 @@ struct instruction_t{
 	TYPE_CLASS access_class;
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
+	//The register that we're popping or pushing
+	register_holder_t push_or_pop_reg;
 };
 
 /**
@@ -675,6 +679,13 @@ three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* sy
 instruction_t* emit_push_instruction(three_addr_var_t* pushee);
 
 /**
+ * Sometimes we just want to push a given register. We're able to do this
+ * by directly emitting a push instruction with the register in it. This
+ * saves us allocation overhead
+ */
+instruction_t* emit_direct_register_push_instruction(register_holder_t reg);
+
+/**
  * Emit a movzx(zero extend) instruction
  */
 instruction_t* emit_movzx_instruction(three_addr_var_t* source, three_addr_var_t* destination);
@@ -689,6 +700,13 @@ instruction_t* emit_movsx_instruction(three_addr_var_t* source, three_addr_var_t
  * deal with getting granular when popping 
  */
 instruction_t* emit_pop_instruction(three_addr_var_t* popee);
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ */
+instruction_t* emit_direct_register_pop_instruction(register_holder_t reg);
 
 /**
  * Emit a movX instruction
