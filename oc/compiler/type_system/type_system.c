@@ -386,8 +386,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
-			//If we have a basic type
-			if(deref_source_type->type_class == TYPE_CLASS_BASIC){
+			switch(deref_source_type->type_class){
+				case TYPE_CLASS_BASIC:
 				//This needs to be a u64, otherwise it's invalid
 				if(deref_source_type->basic_type->basic_type == U_INT64){
 					//We will keep this as the pointer
@@ -397,38 +397,38 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 					return NULL;
 				}
 
-			//If we have an array type, then the values that these two point
-			//to must be the exact same
-			} else if(deref_source_type->type_class == TYPE_CLASS_ARRAY){
-				//If these are the exact same types, then we're set
-				if(types_equivalent(deref_destination_type->pointer_type->points_to, deref_source_type->array_type->member_type) == TRUE){
-					return deref_destination_type;
-				//Otherwise this won't work at all
-				} else{
-					return NULL;
-				}
-
-			//This is the most interesting case that we have...pointers being assigned to eachother
-			} else if(deref_source_type->type_class == TYPE_CLASS_POINTER){
-				//If this itself is a void pointer, then we're good
-				if(deref_source_type->pointer_type->is_void_pointer == TRUE){
-					return deref_destination_type;
-				//This is also fine, we just give the destination type back
-				} else if(deref_destination_type->pointer_type->is_void_pointer == TRUE){
-					return deref_destination_type;
-				//Let's see if what they point to is the exact same
-				} else {
-					//They need to be the exact same
-					if(types_equivalent(deref_source_type->pointer_type->points_to, deref_destination_type->pointer_type->points_to) == TRUE){
+				case TYPE_CLASS_ARRAY:
+					//If these are the exact same types, then we're set
+					if(types_equivalent(deref_destination_type->pointer_type->points_to, deref_source_type->array_type->member_type) == TRUE){
 						return deref_destination_type;
-					} else {
+					//Otherwise this won't work at all
+					} else{
 						return NULL;
 					}
-				}
-				
-			//We've exhausted all options, this is a no
-			} else {
-				return NULL;
+		
+				//Likely the most common case
+				case TYPE_CLASS_POINTER:
+					//If this itself is a void pointer, then we're good
+					if(deref_source_type->pointer_type->is_void_pointer == TRUE){
+						return deref_destination_type;
+					//This is also fine, we just give the destination type back
+					} else if(deref_destination_type->pointer_type->is_void_pointer == TRUE){
+						return deref_destination_type;
+					//Let's see if what they point to is the exact same
+					} else {
+						//They need to be the exact same
+						if(types_equivalent(deref_source_type->pointer_type->points_to, deref_destination_type->pointer_type->points_to) == TRUE){
+							return deref_destination_type;
+						} else {
+							return NULL;
+						}
+					}
+
+
+				//Otherwise it's bad here
+				default:
+					return NULL;
+		
 			}
 	
 		/**
