@@ -380,8 +380,29 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				return NULL;
 			}
 
-		//Arrays are not assignable at all - this one is easy
+		//Only one type of array is assignable - and that would be a char[] to a char*
 		case TYPE_CLASS_ARRAY:
+			//If this isn't a char[], we're done
+			if(deref_destination_type->array_type->member_type->type_class != TYPE_CLASS_BASIC
+				|| deref_destination_type->array_type->member_type->basic_type->basic_type != CHAR){
+				return NULL;
+			}
+
+			//If it's a pointer
+			if(deref_source_type->type_class == TYPE_CLASS_POINTER){
+				generic_type_t* points_to = deref_source_type->pointer_type->points_to;
+
+				//If it's not a basic type then leave
+				if(points_to->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//If it's a char, then we're set
+				if(points_to->basic_type->basic_type == CHAR){
+					return deref_destination_type;
+				}
+			}
+
 			return NULL;
 
 		//Refer to the rules above for details
