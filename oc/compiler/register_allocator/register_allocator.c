@@ -1923,18 +1923,6 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//Grab the total size out
 	u_int32_t total_size = area.total_size;
 
-	//If we have a total size to emit, we'll add it in here
-	if(total_size != 0){
-		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
-		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
-		insert_instruction_before_given(stack_allocation, function_entry->leader_statement);
-
-		//Update this to be the stack allocation statement
-		function_entry->leader_statement = stack_allocation;
-	}
-
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
@@ -1965,6 +1953,21 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 			function_entry->leader_statement = push;
 		}
 	}
+
+	//If we have a total size to emit, we'll add it in here
+	if(total_size != 0){
+		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
+		insert_instruction_before_given(stack_allocation, entry_instruction);
+
+		//If the entry instruction was the function's leader statement, then this now will be the leader statement
+		if(entry_instruction == function_entry->leader_statement){
+			function_entry->leader_statement = entry_instruction;
+		}
+	}
+
 
 	//Now that we've added all of the callee saving logic at the function entry, we'll need to
 	//go through and add it at the exit(s) as well. Note that we're given the function exit block
