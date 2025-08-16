@@ -8012,12 +8012,42 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	u_int8_t defining_prev_implicit = FALSE;
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
+	//Is this function public or private? Unless explicitly stated, all functions are private
+	u_int8_t is_public = FALSE;
+
+	//Grab the token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We could see pub fn or fn here, so we need to process both cases
+	switch(lookahead.tok){
+		//Explicit declaration that this function is visible to other partial programs
+		case PUB:
+			//Flag that it is public
+			is_public = TRUE;
+
+			//Refresh the lookahead token
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//Now we need to ensure that this is the FN keyword, if it isn't, we fail out
+			if(lookahead.tok != FN){
+				return print_and_return_error("\"fn\" keyword is required after \"pub\" keyword", parser_line_num);
+			}
+
+			//Otherwise we're all good if we get here, so break out
+			break;
+
+		//Nothing more to do here, just leave
+		case FN:
+			break;
+		
+		//It would be bizarre if we got here, but just in case
+		default:
+			sprintf(info, "Expected \"pub\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
+	}
 
 	//We also need to mark that we're in a function using the nesting stack
 	push_nesting_level(nesting_stack, FUNCTION);
-
-	//What is the function's storage class? Normal by default
-	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
 
 	//We need a stack for storing jump statements. We need to check these later because if
 	//we check them as we go, we don't get full jump functionality
@@ -8027,29 +8057,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//It also requires a symtab record of the function, but this will be assigned
 	//later once we have it
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF, SIDE_TYPE_LEFT);
-
-	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//We've seen the option for a function specifier. 
-	if(lookahead.tok == COLON){
-		//We need to see the optional static keyword here
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//This is our fail case here
-		if(lookahead.tok != STATIC){
-			return print_and_return_error("Static keyword expected after colon in function definition", parser_line_num);
-		}
-
-		//Otherwise, we know that we have a static storage class
-		storage_class = STORAGE_CLASS_STATIC;
-	//Otherwise it's just the normal storage class
-	} else {
-		//Otherwise put the token back in the stream
-		push_back_token(lookahead);
-		//Normal storage class
-		storage_class = STORAGE_CLASS_NORMAL;
-	}
 
 	//Now we must see a valid identifier as the name
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
@@ -8592,7 +8599,12 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 
 	//Switch based on the token
 	switch(lookahead.tok){
+		//We can either see the "pub"(public) keyword or we can see a straight fn keyword
+		case PUB:
 		case FN:
+			//Put the token back, we'll let the rule handle it
+			push_back_token(lookahead);
+
 			//We'll just let the function definition rule handle this. If it fails, 
 			//that will be caught above
 			return function_definition(fl);
