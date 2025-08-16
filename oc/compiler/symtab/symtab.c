@@ -918,7 +918,11 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 			continue;	
 		}
 
-		//Otherwise, we'll begin to print
+		//Otherwise, we'll begin to print, starting with the constant name
+		fprintf(fl, ".LC%d:\n", constant->local_constant_id);
+
+		//Now we print out the .string specifier, followed by the name
+		fprintf(fl, "\t.string \"%s\"\n", constant->value.string);
 	}
 }
 

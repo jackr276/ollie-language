@@ -374,6 +374,9 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Print the block's ID or the function name
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//Print out any/all local constants
+		print_local_constants(stdout, block->function_defined_in);
+		//Now the block name
 		printf("%s", block->function_defined_in->func_name.string);
 	} else {
 		printf(".L%d", block->block_id);
