@@ -7994,6 +7994,55 @@ static int8_t check_jump_labels(){
 
 
 /**
+ * Perform validation on the parameter & return type & order
+ * for the main function
+ */
+static u_int8_t validate_main_function(function_type_t* signature){
+	//If the main function is not public, then we fail
+	if(signature->is_public == FALSE){
+		print_parse_message(PARSE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
+		return FALSE;
+	}
+
+	//For storing parameter types
+	generic_type_t* parameter_type;
+
+	//Let's first validate the parameter count. The main function can
+	//either have 0 or 2 parameters
+	
+	switch(signature->num_params){
+		//This is allowed
+		case 0:
+			break;
+
+		//If we have two, we need to validate the type of each parameter
+		case 2:
+			//Extract the first parameter
+			parameter_type = signature->parameters[0].parameter_type;
+			
+			//If it isn't a basic type and it isn't an i32, we fail
+			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type->basic_type != S_INT32){
+				print_parse_message(PARSE_ERROR, "The first parameter of the main function must be an i32", parser_line_num);
+				return FALSE;
+			}
+
+			//Now let's grab the second parameter
+			parameter_type = signature->parameters[1].parameter_type;
+
+
+		//We'll print an error and leave if this is the case
+		default:
+			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given %d", signature->num_params);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			return FALSE;
+	}
+
+	//If we make it here, then we know it's true
+	return TRUE;
+}
+
+
+/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
@@ -8273,6 +8322,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Copy this over for later
 		function_signature->function_type->num_params = function_record->number_of_params;
 
+		//Store whether or not this function is public
+		function_signature->function_type->is_public = is_public;
+
 		//Store this in here
 		function_record->signature = function_signature;
 	}
@@ -8301,7 +8353,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	generic_type_t* type = dealias_type(return_type);
 
 	//SPECIAL CASE : The main function must return a type of s_int32
-	if(is_main_function == 1){
+	if(is_main_function == TRUE){
+
+		//Validate the type of the main function
+
 		//If it's not a basic type we fail
 		if(type->type_class != TYPE_CLASS_BASIC){
 			return print_and_return_error("The main function must return a type of i32.", parser_line_num);

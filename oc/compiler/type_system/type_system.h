@@ -239,6 +239,8 @@ struct function_type_t{
 	u_int8_t num_params;
 	//Does this return a void type?
 	u_int8_t returns_void;
+	//Is this function public? By default it is not
+	u_int8_t is_public;
 };
 
 
