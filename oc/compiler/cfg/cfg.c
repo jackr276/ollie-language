@@ -717,6 +717,12 @@ void delete_statement(instruction_t* stmt){
 	//Grab the block out
 	basic_block_t* block = stmt->block_contained_in;
 
+	//If we have a string constant and we're doing this, we'll need to decrement the reference
+	//count by 1 because we are losing a reference to it
+	if(stmt->op1_const != NULL && stmt->op1_const->const_type == STR_CONST){
+		stmt->op1_const->local_constant->reference_count--;
+	}
+
 	//If it's the leader statement, we'll just update the references
 	if(block->leader_statement == stmt){
 		//Special case - it's the only statement. We'll just delete it here
