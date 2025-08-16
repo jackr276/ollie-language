@@ -43,6 +43,6 @@ fn tester(param:my_enum_type) -> i32{
 }
 
 
-fn main() -> i32{
+pub fn main() -> i32{
 	@tester(TYPE_ONE);
 }

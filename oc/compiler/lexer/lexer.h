@@ -144,6 +144,7 @@ typedef enum {
 	FLOAT32,
 	FLOAT64,
 	CHAR,
+	PUB,
 } Token;
 
 //The lexitem_t struct

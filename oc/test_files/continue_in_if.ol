@@ -3,7 +3,7 @@
 * This file tests the case where an invalid continue is attempted
 */
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	let mut x:i32 := 3;
 	let mut y:i32 := 3;
 

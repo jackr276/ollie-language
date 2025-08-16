@@ -4,10 +4,10 @@
 * with a ternary input
 */
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(argc:i32, argv:char**) -> i32{
 	let mut x:i32 := 32;
 
-	switch(arg < 2 ? x else arg){
+	switch(argc < 2 ? x else argc){
 		case 2 -> {
 			x := 32;
 		}

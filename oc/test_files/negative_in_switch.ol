@@ -60,7 +60,7 @@ fn negative_ollie_style(arg:i32) -> i32{
 
 
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	@negative_c_style(3);
 	@negative_ollie_style(3);
 

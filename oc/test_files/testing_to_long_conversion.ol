@@ -24,7 +24,7 @@ fn test() -> u64 {
 }
 
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	@test();
 	ret 0;
 }

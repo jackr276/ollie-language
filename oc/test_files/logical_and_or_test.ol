@@ -4,7 +4,7 @@
 
 
 
-fn main(arc:i32, argv:char**) -> i32 {
+pub fn main(arc:i32, argv:char**) -> i32 {
 	let mut x:i32 := 73;
 	let mut y:i32 := 88;
 

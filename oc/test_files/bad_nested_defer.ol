@@ -3,7 +3,7 @@
 * Testing scenarios with illegal nested defers
 */
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	let mut x:i32 := 0;
 	let mut y:i32 := 0;
 	let mut z:i32 := 0;

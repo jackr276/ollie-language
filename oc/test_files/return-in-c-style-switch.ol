@@ -3,7 +3,7 @@
 * This program is made to test C-style switch statements
 */
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(arg:i32, argv:char**) -> i32{
 	let mut x:i32 := 32;
 
 	switch(arg){

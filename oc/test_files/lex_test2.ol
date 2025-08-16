@@ -1,6 +1,6 @@
 
 
-fn:static main() -> i32 {
+pub fn main() -> i32 {
 	let i:u32 := 0;
 	//Useless, just testing
 	defer i++;

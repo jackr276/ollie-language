@@ -20,7 +20,7 @@ fn pcount_r(mut x:u64) -> u64 {
 	ret x * 3 + y;
 }
 
-fn main(argv:char**, argc:i32) -> i32 {
+pub fn main(argc:i32, argv:char**) -> i32 {
 	@pcount_r(78l);
 
 	ret 2;

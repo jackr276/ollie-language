@@ -13,6 +13,6 @@ fn tester() -> u8 {
 	ret z;
 }
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	ret @tester();
 }

@@ -10,7 +10,7 @@ fn tester() -> u32 {
 }
 
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	let i:u16 := 0;
 	let j:u16 := 0;
 	

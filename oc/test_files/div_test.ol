@@ -1,4 +1,4 @@
-fn main() -> i32{
+pub fn main() -> i32{
 	let mut x:i32 := 3;
 	let mut y:i32 := x - 1;
 

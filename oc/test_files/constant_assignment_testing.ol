@@ -7,7 +7,7 @@ fn test() -> u32{
 	ret 2;
 }
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	let mut a:i32 := 3;
 	let mut b:i16 := 3;
 

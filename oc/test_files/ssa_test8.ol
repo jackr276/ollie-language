@@ -8,7 +8,7 @@ fn println(a:i32) -> void{
 	ret;
 }
 
-fn main() -> i32{
+pub fn main() -> i32{
 	let mut x:i32 := 33;
 	let mut y:i32 := 3232;
 

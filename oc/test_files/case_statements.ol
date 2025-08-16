@@ -2,7 +2,7 @@
 * This program is made for the purposes of testing case statements
 */
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(arg:i32, argv:char**) -> i32{
 	let mut x:i32 := 32;
 
 	switch(x){

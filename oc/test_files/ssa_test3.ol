@@ -2,7 +2,7 @@
 * SSA Testing
 */
 
-fn main() -> i32{
+pub fn main() -> i32{
 	let mut x:u32 := 33;
 
 	if( x == 3222) {

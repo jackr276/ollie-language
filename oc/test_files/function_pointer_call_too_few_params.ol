@@ -8,7 +8,7 @@ fn tester(x:i32, y:i32) -> i32 {
 }
 
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	//Define the type
 	define fn(i32, i32) -> i32 as test_func;
 

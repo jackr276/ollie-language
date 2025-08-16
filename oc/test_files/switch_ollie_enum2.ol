@@ -43,6 +43,6 @@ fn tester(param:i32) -> i32{
 }
 
 
-fn main() -> i32{
+pub fn main() -> i32{
 	@tester(TYPE_ONE);
 }

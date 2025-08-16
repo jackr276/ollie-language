@@ -12,7 +12,7 @@ fn my_func(mut i:u32, mut j:u32) -> i32{
 }
 
 
-fn my_fn(mut argc:u32, mut argv:char**)->i32{
+fn my_fn(mut argc:i32, mut argv:char**)->i32{
 	let mut i:i32 := 0;
 	let mut a:i32 := 0;
 	let v:i32 := 0;

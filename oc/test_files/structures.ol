@@ -2,7 +2,7 @@
 * This program is made for the purposes of testing structures
 */
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(arg:i32, argv:char**) -> i32{
 	define construct s {
 		x:i32;
 		y:i32;

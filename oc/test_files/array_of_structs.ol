@@ -2,7 +2,7 @@
 * This program is made for the purposes of testing arrays
 */
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(arg:i32, argv:char**) -> i32{
 	define construct my_struct{
 		mut ch:char;
 		mut lch:char;

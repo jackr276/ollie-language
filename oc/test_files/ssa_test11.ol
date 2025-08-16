@@ -2,7 +2,7 @@
 * SSA Testing
 */
 
-fn main() -> i32{
+pub fn main() -> i32{
 	let mut x:i32 := 33;
 	let mut y:i32 := 3232;
 

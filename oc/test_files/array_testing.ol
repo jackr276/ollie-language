@@ -2,7 +2,7 @@
 * This program is made for the purposes of testing arrays
 */
 
-fn main(mut arg:i32, argv:char**) -> i32{
+pub fn main(mut arg:i32, argv:char**) -> i32{
 	//The array that we have
 	declare mut arr:i32[14][17];
 	declare mut oneD:i64[2];

@@ -29,6 +29,6 @@ fn return_c_switch(arg:i32) -> i32{
 	ret 22;
 }
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(arg:i32, argv:char**) -> i32{
 	ret @return_c_switch(arg);
 }

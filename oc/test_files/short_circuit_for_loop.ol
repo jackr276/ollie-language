@@ -6,7 +6,7 @@ fn tester(arg:i32) -> void{
 	arg++;
 }
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(arg:i32, argv:char**) -> i32{
 	let mut x:u32 := 232;
 
 	//Assign B a start

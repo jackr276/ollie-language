@@ -108,7 +108,7 @@ fn test_left_shift() -> i32 {
 }
 
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	ret 0;
 }
 
