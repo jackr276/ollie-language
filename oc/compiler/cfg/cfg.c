@@ -374,6 +374,9 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Print the block's ID or the function name
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//Print out any/all local constants
+		print_local_constants(stdout, block->function_defined_in);
+		//Now the block name
 		printf("%s", block->function_defined_in->func_name.string);
 	} else {
 		printf(".L%d", block->block_id);
@@ -713,6 +716,12 @@ void add_statement(basic_block_t* target, instruction_t* statement_node){
 void delete_statement(instruction_t* stmt){
 	//Grab the block out
 	basic_block_t* block = stmt->block_contained_in;
+
+	//If we have a string constant and we're doing this, we'll need to decrement the reference
+	//count by 1 because we are losing a reference to it
+	if(stmt->op1_const != NULL && stmt->op1_const->const_type == STR_CONST){
+		stmt->op1_const->local_constant->reference_count--;
+	}
 
 	//If it's the leader statement, we'll just update the references
 	if(block->leader_statement == stmt){
@@ -2365,20 +2374,36 @@ void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr,
  */
 static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node, u_int8_t is_branch_ending){
 	//First we'll emit the constant
-	three_addr_const_t* const_val = emit_constant(constant_node);
-
+	three_addr_const_t* const_val;
+	//Holder for the constant assignment
 	instruction_t* const_assignment;
 
-	//The most common case - that we just have a regular constant. We'll handle
-	//this with a simple assignment
-	if(const_val->const_type != FUNC_CONST){
-		//We'll use the constant var feature here
-		const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_node->inferred_type), const_val);
+	//There are several constant types that require special treatment
+	switch(constant_node->constant_type){
+		case STR_CONST:
+			//Here's our constant value
+			const_val = emit_string_constant(basic_block->function_defined_in, constant_node);
 
-	//Otherwise we do have a function constant, so we'll need to do a special kind of load to make this owrk
-	} else {
-		//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-		const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+			break;
+
+		case FUNC_CONST:
+			//Emit the constant value
+			const_val = emit_constant(constant_node);
+
+			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+			break;
+			
+		//The most commmon case
+		default:
+			//Emit the constant value
+			const_val = emit_constant(constant_node);
+
+			//We'll use the constant var feature here
+			const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_node->inferred_type), const_val);
+			break;
 	}
 
 	//Mark this with whatever was passed through

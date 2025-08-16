@@ -169,6 +169,9 @@ static void print_block_with_live_ranges(basic_block_t* block){
 
 	//If it's a function entry block, we need to print this out
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//First print out the function's local constants
+		print_local_constants(stdout, block->function_defined_in);
+		//Now the function name
 		printf("%s:\n", block->function_defined_in->func_name.string);
 		print_stack_data_area(&(block->function_defined_in->data_area));
 	} else {
@@ -285,8 +288,10 @@ static void print_block_with_registers(basic_block_t* block){
 
 	//If it's a function entry block, we need to print this out
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//First print out the function's local constants
+		print_local_constants(stdout, block->function_defined_in);
+		//Now the function name
 		printf("%s:\n", block->function_defined_in->func_name.string);
-
 		//We'd only want to print the stack if this is not the final run
 		print_stack_data_area(&(block->function_defined_in->data_area));
 
@@ -1733,11 +1738,7 @@ static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interfe
  * we push/pop onto and off of the stack and have for a more efficient saving regime. This is not
  * possible for indirect function calls, which is the reason for the distinction
  */
-static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* function_defined_in, instruction_t* instruction){
-	//By default we're optimistic and assume that we won't need to insert
-	//any caller saving logic at all
-	u_int8_t caller_saving_required = FALSE;
-
+static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* instruction){
 	//If we get here we know that we have a call instruction. Let's
 	//grab whatever it's calling out. We're able to do this for a direct call,
 	//whereas in an indirect call we are not
@@ -1787,9 +1788,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 			if(last_instruction == instruction){
 				last_instruction = pop_inst;
 			}
-
-			//Mark that we do need to pursue caller saving
-			caller_saving_required = TRUE;
 		}
 	}
 
@@ -1803,7 +1801,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
  * inside of the function. As such, we'll need to save any/all caller saved registers that are in use
  * at the time that the function is called
  */
-static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* function_defined_in, instruction_t* instruction){
+static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
 	//For this given instruction, we'll need to first see what currently interferes with it by looking at what interferes with the result
 	//register
 	
@@ -1878,12 +1876,12 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 			switch(instruction->instruction_type){
 				//Use the helper for a direct call
 				case CALL:
-					instruction = insert_caller_saved_logic_for_direct_call(function, instruction);
+					instruction = insert_caller_saved_logic_for_direct_call(instruction);
 					break;
 					
 				//Use the helper for an indirect call
 				case INDIRECT_CALL:
-					instruction = insert_caller_saved_logic_for_indirect_call(function, instruction);
+					instruction = insert_caller_saved_logic_for_indirect_call(instruction);
 					break;
 
 				//By default we leave and just advance

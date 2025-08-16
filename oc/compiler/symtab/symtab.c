@@ -14,6 +14,17 @@
 #define TRUE 1
 #define FALSE 0
 
+//Keep an atomically incrementing integer for the local constant ID
+static u_int32_t local_constant_id = 0;
+
+
+/**
+ * Atomically increment and return the local constant id
+ */
+static u_int32_t increment_and_get_local_constant_id(){
+	return local_constant_id++;
+}
+
 
 /**
  * Print a generic warning for the type system. This is used when variables/functions are 
@@ -348,9 +359,6 @@ symtab_constant_record_t* create_constant_record(dynamic_string_t name){
  * RETURNS 0 if no collision, 1 if collision
  */
 u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record){
-	//While we're at it store this
-	record->lexical_level = symtab->current_lexical_scope;
-	
 	//If there's no collision
 	if(symtab->records[record->hash] == NULL){
 		//Store it and get out
@@ -753,6 +761,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 	return NULL;
 }
 
+
 /**
  * Lookup a type name in the symtab by the name only. This does not
  * do the array bound comparison that we need for strict equality
@@ -785,7 +794,39 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
 
 	//We found nothing
 	return NULL;
+}
 
+
+/**
+ * Create a local constant and return the pointer to it
+ */
+local_constant_t* local_constant_alloc(dynamic_string_t* value){
+	//Dynamically allocate it
+	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
+
+	//Copy the dynamic string in
+	local_const->value = clone_dynamic_string(value);
+
+	//Now we'll add the ID
+	local_const->local_constant_id = increment_and_get_local_constant_id();
+
+	//And finally we'll add it back in
+	return local_const;
+}
+
+
+/**
+ * Add a local constant to a function
+ */
+void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant){
+	//If we have no local constants, then we'll need to allocate
+	//the array
+	if(function->local_constants == NULL){
+		function->local_constants = dynamic_array_alloc();
+	}
+
+	//And add the function in
+	dynamic_array_add(function->local_constants, constant);
 }
 
 
@@ -852,10 +893,39 @@ void print_function_record(symtab_function_record_t* record){
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->func_name.string);
 	printf("Hash: %d,\n", record->hash);
-	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("Offset: %p\n", (void*)(record->offset));
 	printf("}\n");
 }
+
+
+/**
+ * Print the local constants(.LCx) that are inside of a function
+ */
+void print_local_constants(FILE* fl, symtab_function_record_t* record){
+	//This means that we have no local constants(which is a very common case), so we leave
+	if(record->local_constants == NULL || record->local_constants->current_index == 0){
+		return;
+	}
+
+	//Otherwise, we do have local constants, so we will run through and print ones that have a reference
+	//count that is more than 0
+	for(u_int16_t i = 0; i < record->local_constants->current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_array_get_at(record->local_constants, i);
+
+		//If this has no references, we leave
+		if(constant->reference_count == 0){
+			continue;	
+		}
+
+		//Otherwise, we'll begin to print, starting with the constant name
+		fprintf(fl, ".LC%d:\n", constant->local_constant_id);
+
+		//Now we print out the .string specifier, followed by the name
+		fprintf(fl, "\t.string \"%s\"\n", constant->value.string);
+	}
+}
+
 
 /**
  * A record printer that is used for development/error messages
@@ -1172,6 +1242,18 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				free(temp->call_graph_node);
 			}
 
+			//If we have local constants, these will
+			//also need deallocation
+			if(temp->local_constants != NULL){
+				//Deallocate each local constant
+				for(u_int16_t i = 0; i < temp->local_constants->current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(temp->local_constants, i));
+				}
+
+				//Then destroy the whole array
+				dynamic_array_dealloc(temp->local_constants);
+			}
+
 			//Dealloate the function type
 			type_dealloc(temp->signature);
 
@@ -1299,4 +1381,16 @@ void constants_symtab_dealloc(constants_symtab_t* symtab){
 
 	//Once, we're done, free the overall thing
 	free(symtab);
+}
+
+
+/**
+ * Destroy a local constant
+ */
+void local_constant_dealloc(local_constant_t* constant){
+	//First we'll deallocate the dynamic string
+	dynamic_string_dealloc(&(constant->value));
+
+	//Then we'll free the entire thing
+	free(constant);
 }

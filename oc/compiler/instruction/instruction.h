@@ -445,12 +445,12 @@ struct three_addr_var_t{
  * A three address constant always holds the value of the constant
  */
 struct three_addr_const_t{
-	//The string constant
-	dynamic_string_t string_constant;
 	//For memory management
 	three_addr_const_t* next_created;
 	//The constant's function record
 	symtab_function_record_t* function_name;
+	//This is for string constants
+	local_constant_t* local_constant;
 	//We hold the type info
 	generic_type_t* type;
 	//And we hold everything relevant about the constant
@@ -656,6 +656,12 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var);
  * Create and return a constant three address var
  */
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
+
+/**
+ * Emit a three_addr_const_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the string constant to the function as a local function reference
+ */
+three_addr_const_t* emit_string_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
 
 /**
  * Emit an int constant in a very direct way

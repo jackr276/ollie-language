@@ -380,55 +380,76 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				return NULL;
 			}
 
-		//Arrays are not assignable at all - this one is easy
+		//Only one type of array is assignable - and that would be a char[] to a char*
 		case TYPE_CLASS_ARRAY:
+			//If this isn't a char[], we're done
+			if(deref_destination_type->array_type->member_type->type_class != TYPE_CLASS_BASIC
+				|| deref_destination_type->array_type->member_type->basic_type->basic_type != CHAR){
+				return NULL;
+			}
+
+			//If it's a pointer
+			if(deref_source_type->type_class == TYPE_CLASS_POINTER){
+				generic_type_t* points_to = deref_source_type->pointer_type->points_to;
+
+				//If it's not a basic type then leave
+				if(points_to->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//If it's a char, then we're set
+				if(points_to->basic_type->basic_type == CHAR){
+					return deref_destination_type;
+				}
+			}
+
 			return NULL;
 
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
-			//If we have a basic type
-			if(deref_source_type->type_class == TYPE_CLASS_BASIC){
-				//This needs to be a u64, otherwise it's invalid
-				if(deref_source_type->basic_type->basic_type == U_INT64){
-					//We will keep this as the pointer
-					return deref_destination_type;
-				//Any other basic type will not work here
-				} else {
-					return NULL;
-				}
-
-			//If we have an array type, then the values that these two point
-			//to must be the exact same
-			} else if(deref_source_type->type_class == TYPE_CLASS_ARRAY){
-				//If these are the exact same types, then we're set
-				if(types_equivalent(deref_destination_type->pointer_type->points_to, deref_source_type->array_type->member_type) == TRUE){
-					return deref_destination_type;
-				//Otherwise this won't work at all
-				} else{
-					return NULL;
-				}
-
-			//This is the most interesting case that we have...pointers being assigned to eachother
-			} else if(deref_source_type->type_class == TYPE_CLASS_POINTER){
-				//If this itself is a void pointer, then we're good
-				if(deref_source_type->pointer_type->is_void_pointer == TRUE){
-					return deref_destination_type;
-				//This is also fine, we just give the destination type back
-				} else if(deref_destination_type->pointer_type->is_void_pointer == TRUE){
-					return deref_destination_type;
-				//Let's see if what they point to is the exact same
-				} else {
-					//They need to be the exact same
-					if(types_equivalent(deref_source_type->pointer_type->points_to, deref_destination_type->pointer_type->points_to) == TRUE){
+			switch(deref_source_type->type_class){
+				case TYPE_CLASS_BASIC:
+					//This needs to be a u64, otherwise it's invalid
+					if(deref_source_type->basic_type->basic_type == U_INT64){
+						//We will keep this as the pointer
 						return deref_destination_type;
+					//Any other basic type will not work here
 					} else {
 						return NULL;
 					}
-				}
-				
-			//We've exhausted all options, this is a no
-			} else {
-				return NULL;
+
+				case TYPE_CLASS_ARRAY:
+					//If these are the exact same types, then we're set
+					if(types_equivalent(deref_destination_type->pointer_type->points_to, deref_source_type->array_type->member_type) == TRUE){
+						return deref_destination_type;
+					//Otherwise this won't work at all
+					} else{
+						return NULL;
+					}
+		
+				//Likely the most common case
+				case TYPE_CLASS_POINTER:
+					//If this itself is a void pointer, then we're good
+					if(deref_source_type->pointer_type->is_void_pointer == TRUE){
+						return deref_destination_type;
+					//This is also fine, we just give the destination type back
+					} else if(deref_destination_type->pointer_type->is_void_pointer == TRUE){
+						return deref_destination_type;
+					//Let's see if what they point to is the exact same
+					} else {
+						//They need to be the exact same
+						if(types_equivalent(deref_source_type->pointer_type->points_to, deref_destination_type->pointer_type->points_to) == TRUE){
+							return deref_destination_type;
+						} else {
+							return NULL;
+						}
+					}
+
+
+				//Otherwise it's bad here
+				default:
+					return NULL;
+		
 			}
 	
 		/**
@@ -446,75 +467,80 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 			//Extract the destination's basic type
 			dest_basic_type = deref_destination_type->basic_type->basic_type;
 
-			//If this is the case, we're done. Nothing can be assigned to void
-			if(dest_basic_type == VOID){
-				return NULL;
-
-			//Float64's can only be assigned other float64's
-			} else if(dest_basic_type == FLOAT64){
-				//We must see another f64 or an f32(widening) here
-				if(deref_source_type->type_class == TYPE_CLASS_BASIC
-					&& (deref_source_type->basic_type->basic_type == FLOAT64
-					|| deref_source_type->basic_type->basic_type == FLOAT32)){
-					return deref_destination_type;
-
-				//Otherwise nothing here will work
-				} else {
+			//Switch based on the type that we have here
+			switch(dest_basic_type){
+				case VOID:
 					return NULL;
-				}
-			
-			//Let's see if we have an f32
-			} else if(dest_basic_type == FLOAT32){
-				//We must see another an f32 here
-				if(deref_source_type->type_class == TYPE_CLASS_BASIC
-					&& deref_source_type->basic_type->basic_type == FLOAT32){
-					return deref_destination_type;
 
-				//Otherwise nothing here will work
-				} else {
-					return NULL;
-				}
+				//Float64's can only be assigned to other float64's
+				case FLOAT64:
+					//We must see another f64 or an f32(widening) here
+					if(deref_source_type->type_class == TYPE_CLASS_BASIC
+						&& (deref_source_type->basic_type->basic_type == FLOAT64
+						|| deref_source_type->basic_type->basic_type == FLOAT32)){
+						return deref_destination_type;
 
-			//Once we get to this point, we know that we have something
-			//in this set for destination type: U64, I64, U32, I32, U16, I16, U8, I8, Char
-			//From here, we'll go based on the type size of the source type *if* the source
-			//type is also a basic type. 
-			} else {
-				//Special exception - the source type is an enum. These are good to be used with ints
-				if(deref_source_type->type_class == TYPE_CLASS_ENUMERATED){
-					return deref_destination_type;
-				}
+					//Otherwise nothing here will work
+					} else {
+						return NULL;
+					}
 
-				//Now if the source type is not a basic type, we're done here
-				if(deref_source_type->type_class != TYPE_CLASS_BASIC){
-					return NULL;
-				}
+				case FLOAT32:
+					//We must see another an f32 here
+					if(deref_source_type->type_class == TYPE_CLASS_BASIC
+						&& deref_source_type->basic_type->basic_type == FLOAT32){
+						return deref_destination_type;
 
-				//Once we get here, we know that the source type is a basic type. We now
-				//need to check that it's not a float or void
-				source_basic_type = deref_source_type->basic_type->basic_type;
+					//Otherwise nothing here will work
+					} else {
+						return NULL;
+					}
 
-				//All of these cannot be assigned to an int
-				if(source_basic_type == FLOAT32 || source_basic_type == FLOAT64 || source_basic_type == VOID){
-					return NULL;
-				}
+				//Once we get to this point, we know that we have something
+				//in this set for destination type: U64, I64, U32, I32, U16, I16, U8, I8, Char
+				//From here, we'll go based on the type size of the source type *if* the source
+				//type is also a basic type. 
+				default:
+					//Special exception - the source type is an enum. These are good to be used with ints
+					if(deref_source_type->type_class == TYPE_CLASS_ENUMERATED){
+						return deref_destination_type;
+					}
 
-				//These are generic types here - they will always work no matter what
-				if(source_basic_type == UNSIGNED_INT_CONST || source_basic_type == SIGNED_INT_CONST){
-					//Reassign source type to be whatever this destination ends up being
-					*source_type = deref_destination_type;
-					return deref_destination_type;
-				}
+					//Now if the source type is not a basic type, we're done here
+					if(deref_source_type->type_class != TYPE_CLASS_BASIC){
+						return NULL;
+					}
+					
+					//Once we get here, we know that the source type is a basic type. We now
+					//need to check that it's not a float or void
+					source_basic_type = deref_source_type->basic_type->basic_type;
 
-				//Otherwise, once we make it here we know that the source type is a basic type and
-				//and integer/char type. We can now just compare the sizes and if the destination is more
-				//than or equal to the source, we're good
-				if(deref_source_type->type_size <= deref_destination_type->type_size){
-					return deref_destination_type;
-				} else {
-					//These wouldn't fit
-					return NULL;
-				}
+					//Go based on what we have here
+					switch(source_basic_type){
+						//If we have these, we can't assign them to an int
+						case FLOAT32:
+						case FLOAT64:
+						case VOID:
+							return NULL;
+
+						//These generic constant types will always work
+						case UNSIGNED_INT_CONST:
+						case SIGNED_INT_CONST:
+							//Reassign source type to be whatever this destination ends up being
+							*source_type = deref_destination_type;
+							return deref_destination_type;
+
+						//Otherwise, once we make it here we know that the source type is a basic type and
+						//and integer/char type. We can now just compare the sizes and if the destination is more
+						//than or equal to the source, we're good
+						default:
+							if(deref_source_type->type_size <= deref_destination_type->type_size){
+								return deref_destination_type;
+							} else {
+								//These wouldn't fit
+								return NULL;
+							}
+					}
 			}
 
 		//We should never get here

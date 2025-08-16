@@ -47,6 +47,8 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 typedef struct symtab_type_record_t symtab_type_record_t;
 //The records in a constants symtab
 typedef struct symtab_constant_record_t symtab_constant_record_t;
+//The definition of a local constant(.LCx) block
+typedef struct local_constant_t local_constant_t;
 
 //Parameter type
 typedef struct parameter_t parameter_t;
@@ -73,6 +75,21 @@ struct parameter_t{
 
 
 /**
+ * A local constant(.LCx) is a value like a string that is intended to 
+ * be used by a function. We define them separately because they have many less
+ * fields than an actual basic block
+ */
+struct local_constant_t{
+	//The actual string value of it
+	dynamic_string_t value;
+	//And the ID of it
+	u_int16_t local_constant_id;
+	//The reference count of the local constant
+	u_int16_t reference_count;
+};
+
+
+/**
  * The symtab function record. This stores data about the function's name, parameter
  * numbers, parameter types, return types, etc.
  */
@@ -86,6 +103,8 @@ struct symtab_function_record_t{
 	dynamic_string_t func_name;
 	//The data area for the whole function
 	stack_data_area_t data_area;
+	//Will be used later, the offset for the address in the data area
+	u_int64_t offset;
 	//The entrance CFG block to the function. There is always only one entrance
 	void* entrance_block;
 	//The associated call graph node with this function
@@ -96,14 +115,13 @@ struct symtab_function_record_t{
 	generic_type_t* signature;
 	//What's the return type?
 	generic_type_t* return_type;
+	//The local constants array. Not all functions 
+	//have this populated
+	dynamic_array_t* local_constants;
 	//The hash that we have
 	u_int16_t hash;
-	//The lexical level of this record
-	int16_t lexical_level;
 	//The line number
 	u_int16_t line_number;
-	//Will be used later, the offset for the address in the data area
-	u_int64_t offset;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//What's the storage class?
@@ -436,6 +454,16 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type);
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name);
 
 /**
+ * Create a local constant
+ */
+local_constant_t* local_constant_alloc(dynamic_string_t* value);
+
+/**
+ * Add a local constant to a function
+ */
+void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant);
+
+/**
  * Check for and print out any unused functions
  */
 void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings);
@@ -464,6 +492,11 @@ void print_type_record(symtab_type_record_t* record);
  * A helper method for function name printing
  */
 void print_function_name(symtab_function_record_t* record);
+
+/**
+ * Print the local constants(.LCx) that are inside of a function
+ */
+void print_local_constants(FILE* fl, symtab_function_record_t* record);
 
 /**
  * A helper method for variable name printing
@@ -499,5 +532,10 @@ void type_symtab_dealloc(type_symtab_t* symtab);
  * Destroy a constants symtab
  */
 void constants_symtab_dealloc(constants_symtab_t* symtab);
+
+/**
+ * Destroy a local constant
+ */
+void local_constant_dealloc(local_constant_t* constant);
 
 #endif /* SYMTAB_H */
