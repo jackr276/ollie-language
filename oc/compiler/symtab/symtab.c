@@ -897,6 +897,32 @@ void print_function_record(symtab_function_record_t* record){
 	printf("}\n");
 }
 
+
+/**
+ * Print the local constants(.LCx) that are inside of a function
+ */
+void print_local_constants(FILE* fl, symtab_function_record_t* record){
+	//This means that we have no local constants(which is a very common case), so we leave
+	if(record->local_constants == NULL || record->local_constants->current_index == 0){
+		return;
+	}
+
+	//Otherwise, we do have local constants, so we will run through and print ones that have a reference
+	//count that is more than 0
+	for(u_int16_t i = 0; i < record->local_constants->current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_array_get_at(record->local_constants, i);
+
+		//If this has no references, we leave
+		if(constant->reference_count == 0){
+			continue;	
+		}
+
+		//Otherwise, we'll begin to print
+	}
+}
+
+
 /**
  * A record printer that is used for development/error messages
  */

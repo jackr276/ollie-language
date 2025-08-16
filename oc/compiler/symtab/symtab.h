@@ -494,6 +494,11 @@ void print_type_record(symtab_type_record_t* record);
 void print_function_name(symtab_function_record_t* record);
 
 /**
+ * Print the local constants(.LCx) that are inside of a function
+ */
+void print_local_constants(FILE* fl, symtab_function_record_t* record);
+
+/**
  * A helper method for variable name printing
  */
 void print_variable_name(symtab_variable_record_t* record);

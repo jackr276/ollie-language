@@ -3255,6 +3255,9 @@ three_addr_const_t* emit_string_constant(symtab_function_record_t* function, gen
 	constant->const_type = const_node->constant_type; 
 	constant->type = const_node->inferred_type;
 
+	//Increment the reference count
+	(local_constant->reference_count)++;
+
 	//Add this value in
 	constant->local_constant = local_constant;
 
