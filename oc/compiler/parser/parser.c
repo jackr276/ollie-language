@@ -8029,12 +8029,26 @@ static u_int8_t validate_main_function(function_type_t* signature){
 			//Now let's grab the second parameter
 			parameter_type = signature->parameters[1].parameter_type;
 
+			//This must be a char** type. If it's not, we fail out
+			if(is_type_string_array(parameter_type) == FALSE){
+				print_parse_message(PARSE_ERROR, "The second parameter of the main function must of type char**", parser_line_num);
+				return FALSE;
+			}
+
+			//If we make it all the way down here, then we know that we're set
+			break;
 
 		//We'll print an error and leave if this is the case
 		default:
 			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given %d", signature->num_params);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			return FALSE;
+	}
+
+	//Finally, we'll validate the return type of the main function. It must also always be an i32
+	if(signature->return_type != TYPE_CLASS_BASIC || signature->return_type->basic_type->basic_type != S_INT32){
+		print_parse_message(PARSE_ERROR, "The main function must return a value of type i32", parser_line_num);
+		return FALSE;
 	}
 
 	//If we make it here, then we know it's true
@@ -8352,23 +8366,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//that we first dealias it
 	generic_type_t* type = dealias_type(return_type);
 
-	//SPECIAL CASE : The main function must return a type of s_int32
-	if(is_main_function == TRUE){
-
-		//Validate the type of the main function
-
-		//If it's not a basic type we fail
-		if(type->type_class != TYPE_CLASS_BASIC){
-			return print_and_return_error("The main function must return a type of i32.", parser_line_num);
-		}
-
-		//Now we know that it is a basic type, but is it an s_int32?
-		if(type->basic_type->basic_type != S_INT32){
-			return print_and_return_error("The main function must return a type of i32.", parser_line_num);
-		}
-		//Otherwise it's fine
-	}
-
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(defining_prev_implicit == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
@@ -8391,6 +8388,13 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Now that the function record has been finalized, we'll need to produce the type name
 	generate_function_pointer_type_name(function_record->signature);
+
+	//If we're dealing with the main function, we need to validate that the parameter order, visibility
+	//of the function, and return type are valid
+	if(is_main_function == TRUE && validate_main_function(function_record->signature->function_type) == FALSE){
+		//Error out here
+		return print_and_return_error("Invalid definition for main() function", parser_line_num);
+	}
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition

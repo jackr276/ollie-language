@@ -378,6 +378,12 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
 u_int8_t is_type_signed(generic_type_t* type);
 
 /**
+ * Is this type equivalent to a char**? This is used
+ * exclusively for main function validation
+ */
+u_int8_t is_type_string_array(generic_type_t* type);
+
+/**
  * Destroy a type that is no longer in use
 */
 void type_dealloc(generic_type_t* type);
