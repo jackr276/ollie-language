@@ -84,6 +84,8 @@ struct local_constant_t{
 	dynamic_string_t value;
 	//And the ID of it
 	u_int16_t local_constant_id;
+	//The reference count of the local constant
+	u_int16_t reference_count;
 };
 
 
@@ -111,6 +113,9 @@ struct symtab_function_record_t{
 	generic_type_t* signature;
 	//What's the return type?
 	generic_type_t* return_type;
+	//The local constants array. Not all functions 
+	//have this populated
+	dynamic_array_t* local_constants;
 	//The hash that we have
 	u_int16_t hash;
 	//The lexical level of this record
@@ -458,7 +463,7 @@ local_constant_t* local_constant_alloc(dynamic_string_t* value);
 /**
  * Add a local constant to a function
  */
-void add_local_constant_to_function(local_constant_t* constant);
+void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant);
 
 /**
  * Check for and print out any unused functions

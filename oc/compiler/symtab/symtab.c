@@ -819,6 +819,21 @@ local_constant_t* local_constant_alloc(dynamic_string_t* value){
 
 
 /**
+ * Add a local constant to a function
+ */
+void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant){
+	//If we have no local constants, then we'll need to allocate
+	//the array
+	if(function->local_constants == NULL){
+		function->local_constants = dynamic_array_alloc();
+	}
+
+	//And add the function in
+	dynamic_array_add(function->local_constants, constant);
+}
+
+
+/**
  * Lookup the record in the symtab that corresponds to the following name.
  * 
  * We are ALWAYS biased to the most local(in scope) version of the name. If we
@@ -1201,6 +1216,18 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				free(temp->call_graph_node);
 			}
 
+			//If we have local constants, these will
+			//also need deallocation
+			if(temp->local_constants != NULL){
+				//Deallocate each local constant
+				for(u_int16_t i = 0; i < temp->local_constants->current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(temp->local_constants, i));
+				}
+
+				//Then destroy the whole array
+				dynamic_array_dealloc(temp->local_constants);
+			}
+
 			//Dealloate the function type
 			type_dealloc(temp->signature);
 
@@ -1328,4 +1355,16 @@ void constants_symtab_dealloc(constants_symtab_t* symtab){
 
 	//Once, we're done, free the overall thing
 	free(symtab);
+}
+
+
+/**
+ * Destroy a local constant
+ */
+void local_constant_dealloc(local_constant_t* constant){
+	//First we'll deallocate the dynamic string
+	dynamic_string_dealloc(&(constant->value));
+
+	//Then we'll free the entire thing
+	free(constant);
 }
