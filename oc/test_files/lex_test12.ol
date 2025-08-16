@@ -17,7 +17,7 @@ fn my_func(argv:char**) -> void{
 	let a:char** := argv;
 }
 
-fn main(argv:char**, argc:i8) -> i32{
+pub fn main(argc:i32, argv:char**) -> i32{
 	let a:my_enum_type := TYPE_STRONG;
 	let mut b:u32 := 9 * 7 + 3 + a;
 	//Should fail

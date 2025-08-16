@@ -3,7 +3,7 @@
 * Testing simple for loop functionality
 */
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	declare mut x:i32;
 	let mut y:i32 := 3;
 

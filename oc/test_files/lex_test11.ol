@@ -7,7 +7,7 @@ fn example(mut my_arr:i32*, max:u32) -> void{
 	ret;
 }
 
-fn main(argc:i32, argv:char**) -> i32 {
+pub fn main(argc:i32, argv:char**) -> i32 {
 	declare mut my_arr : i32[400];
 	my_arr[0] := 3;
 

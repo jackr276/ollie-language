@@ -3,7 +3,7 @@
 * Testing if assignment
 */
 
-fn main(argc:i32, argv:char**) -> i32{
+pub fn main(argc:i32, argv:char**) -> i32{
 	declare mut x:i32;
 
 	if(argc == 3) {

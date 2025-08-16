@@ -8046,7 +8046,7 @@ static u_int8_t validate_main_function(function_type_t* signature){
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
-	if(signature->return_type != TYPE_CLASS_BASIC || signature->return_type->basic_type->basic_type != S_INT32){
+	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type->basic_type != S_INT32){
 		print_parse_message(PARSE_ERROR, "The main function must return a value of type i32", parser_line_num);
 		return FALSE;
 	}

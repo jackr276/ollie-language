@@ -14,7 +14,7 @@ fn handling_string(a:char*, b:char*) -> char{
 
 
 
-fn main(argc:i32, argv:char**) -> i32 {
+pub fn main(argc:i32, argv:char**) -> i32 {
 	let my_string:char* := "Hello";
 	//This should be useless and optimized away
 	let string_arr:char* := " world";

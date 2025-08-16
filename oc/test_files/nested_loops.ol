@@ -2,7 +2,7 @@
 * Test loop nesting
 */
 
-fn main(argv:char**, argc:i32) -> i32 {
+pub fn main(argc:i32, argv:char**) -> i32 {
 	let mut x:i32 := 3;
 	let mut y:i32 := -1;
 

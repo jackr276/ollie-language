@@ -28,7 +28,7 @@ fn modulus() -> u32 {
 }
 
 
-fn main(arg:i32, argv:char**) -> i32 {
+pub fn main(arg:i32, argv:char**) -> i32 {
 	let mut a:i32 := 3;
 	let mut x:i32 := !a;
 	let mut y:i32 := -3;

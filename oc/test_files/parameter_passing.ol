@@ -38,7 +38,7 @@ fn pcount_r(mut x:u64) -> u64 {
 }
 
 
-fn main() -> i32{
+pub fn main() -> i32{
 	let mut x:i32 := 3;
 	let mut y:i32 := x - 1;
 	let mut aa:i32 := x - y;

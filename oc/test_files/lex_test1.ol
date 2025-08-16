@@ -30,7 +30,7 @@ fn never_defined(example:f64) -> i32{
 	ret 2;
 }
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	let mut i:u32 := 1;
 	let j:u32 := 1;
 	let j_ptr:u32* := &j;

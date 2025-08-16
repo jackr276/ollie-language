@@ -43,7 +43,7 @@ fn lcount_r(mut x:u32) -> u32 {
 }
 
 
-fn main(argv:char**, argc:i32) -> i32 {
+pub fn main(argc:i32, argv:char**) -> i32 {
 	declare mut a:u32;
 	let mut x:u32 := 433;
 

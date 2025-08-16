@@ -2,7 +2,7 @@
 /**
  * For multi-layer array access
  */
-fn main() -> i32{
+pub fn main() -> i32{
 	let a:i32 := 23;
 	let mut b:i32 := 3232;
 	let c:i32 := 322322;

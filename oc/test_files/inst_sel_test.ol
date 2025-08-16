@@ -11,7 +11,7 @@ fn unsigned_shift() -> u32 {
 }
 
 
-fn main(arg:i32, argv:char**) -> i32 {
+pub fn main(arg:i32, argv:char**) -> i32 {
 
 	let mut z:i32 := 33;
 	let mut c:i32 := z - 1;

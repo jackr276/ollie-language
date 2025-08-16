@@ -4,7 +4,7 @@
 */
 
 
-fn main(void, argc:i32, argv:char**) -> i32{
+pub fn main(void, argc:i32, argv:char**) -> i32{
 	let mut x:i32 := 32;
 
 	switch(x){

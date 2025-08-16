@@ -35,7 +35,7 @@ fn test_func(mut i:u32) -> void{
 }
 
 
-fn main(argc:i32, argv:char**) -> i32{
+pub fn main(argc:i32, argv:char**) -> i32{
 	//Allocate a struct
 	declare mut my_structure:my_struct;
 

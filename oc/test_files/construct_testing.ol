@@ -37,7 +37,7 @@ fn not_main(arg:i32, argv:char**) -> i64 {
 }
 
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(arg:i32, argv:char**) -> i32{
 	@not_main(arg, argv);
 	ret arg;
 }
