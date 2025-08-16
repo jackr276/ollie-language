@@ -374,8 +374,17 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Print the block's ID or the function name
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//Extract this for ease of use
+		function_type_t* type = block->function_defined_in->signature->function_type;
+
 		//Print out any/all local constants
 		print_local_constants(stdout, block->function_defined_in);
+
+		//Print out the public keyword here
+		if(type->is_public == TRUE){
+			printf("pub ");
+		}
+
 		//Now the block name
 		printf("%s", block->function_defined_in->func_name.string);
 	} else {
