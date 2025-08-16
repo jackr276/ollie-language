@@ -6,7 +6,7 @@ fn my_fn() -> void{
 }
 */
 
-fn:static test(argv:char**) -> i32{
+fn:static test(argc:i32, argv:char**) -> i32{
 	declare mut a:u32;
 	declare mut b:u32;
 	declare mut c:u32;

@@ -51,7 +51,7 @@ fn test_func() -> i32 {
 	ret 32;
 }
 
-fn main(argc:u32, argv:char**)->i32{
+fn main(argc:i32, argv:char**)->i32{
 	let i:u32 := 0;
 	let mut a:u32 := 0;
 	let v:u32 := 0;
