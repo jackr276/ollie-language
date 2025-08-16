@@ -2,7 +2,7 @@
 * This one should not work
 */
 
-fn:static example(mut my_arr:i32*, max:u32) -> void{
+fn example(mut my_arr:i32*, max:u32) -> void{
 	*my_arr := 2+3 + 6-1;
 	ret;
 }
