@@ -47,6 +47,8 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 typedef struct symtab_type_record_t symtab_type_record_t;
 //The records in a constants symtab
 typedef struct symtab_constant_record_t symtab_constant_record_t;
+//The definition of a local constant(.LCx) block
+typedef struct local_constant_t local_constant_t;
 
 //Parameter type
 typedef struct parameter_t parameter_t;
@@ -69,6 +71,19 @@ struct parameter_t{
 	symtab_variable_record_t* associate_var;
 	//Was it ever referenced?
 	u_int8_t referenced;
+};
+
+
+/**
+ * A local constant(.LCx) is a value like a string that is intended to 
+ * be used by a function. We define them separately because they have many less
+ * fields than an actual basic block
+ */
+struct local_constant_t{
+	//The actual string value of it
+	dynamic_string_t value;
+	//And the ID of it
+	u_int16_t local_constant_id;
 };
 
 
@@ -436,6 +451,16 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type);
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name);
 
 /**
+ * Create a local constant
+ */
+local_constant_t* local_constant_alloc(dynamic_string_t* value);
+
+/**
+ * Add a local constant to a function
+ */
+void add_local_constant_to_function(local_constant_t* constant);
+
+/**
  * Check for and print out any unused functions
  */
 void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings);
@@ -499,5 +524,10 @@ void type_symtab_dealloc(type_symtab_t* symtab);
  * Destroy a constants symtab
  */
 void constants_symtab_dealloc(constants_symtab_t* symtab);
+
+/**
+ * Destroy a local constant
+ */
+void local_constant_dealloc(local_constant_t* constant);
 
 #endif /* SYMTAB_H */

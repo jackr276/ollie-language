@@ -14,6 +14,17 @@
 #define TRUE 1
 #define FALSE 0
 
+//Keep an atomically incrementing integer for the local constant ID
+static u_int32_t local_constant_id = 0;
+
+
+/**
+ * Atomically increment and return the local constant id
+ */
+static u_int32_t increment_and_get_local_constant_id(){
+	return local_constant_id++;
+}
+
 
 /**
  * Print a generic warning for the type system. This is used when variables/functions are 
@@ -753,6 +764,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 	return NULL;
 }
 
+
 /**
  * Lookup a type name in the symtab by the name only. This does not
  * do the array bound comparison that we need for strict equality
@@ -785,7 +797,24 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
 
 	//We found nothing
 	return NULL;
+}
 
+
+/**
+ * Create a local constant and return the pointer to it
+ */
+local_constant_t* local_constant_alloc(dynamic_string_t* value){
+	//Dynamically allocate it
+	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
+
+	//Copy the dynamic string in
+	local_const->value = clone_dynamic_string(value);
+
+	//Now we'll add the ID
+	local_const->local_constant_id = increment_and_get_local_constant_id();
+
+	//And finally we'll add it back in
+	return local_const;
 }
 
 
