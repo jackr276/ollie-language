@@ -172,14 +172,6 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		//First print out the function's local constants
 		print_local_constants(stdout, block->function_defined_in);
 
-		//Extract this for ease of use
-		function_type_t* type = block->function_defined_in->signature->function_type;
-
-		//Print out the public keyword here
-		if(type->is_public == TRUE){
-			printf("pub ");
-		}
-
 		//Now the function name
 		printf("%s:\n", block->function_defined_in->func_name.string);
 		print_stack_data_area(&(block->function_defined_in->data_area));
@@ -299,14 +291,6 @@ static void print_block_with_registers(basic_block_t* block){
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		//First print out the function's local constants
 		print_local_constants(stdout, block->function_defined_in);
-
-		//Extract this for ease of use
-		function_type_t* type = block->function_defined_in->signature->function_type;
-
-		//Print out the public keyword here
-		if(type->is_public == TRUE){
-			printf("pub ");
-		}
 
 		//Now the function name
 		printf("%s:\n", block->function_defined_in->func_name.string);

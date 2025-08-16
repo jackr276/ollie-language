@@ -4122,14 +4122,6 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
 
 	//If it's a function entry block, we need to print this out
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		//Extract this for ease of use
-		function_type_t* type = block->function_defined_in->signature->function_type;
-
-		//Print out the public keyword here
-		if(type->is_public == TRUE){
-			printf("pub ");
-		}
-
 		printf("%s:\n", block->function_defined_in->func_name.string);
 		print_stack_data_area(&(block->function_defined_in->data_area));
 	} else {
