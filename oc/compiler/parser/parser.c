@@ -8227,12 +8227,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		 * system
 		 */
 		if(strcmp("main", function_name) == 0){
-			//By default, this function has been called
-			function_record->called = TRUE;
 			//It is the main function
 			is_main_function = TRUE;
-			//And furthermore, it was called by the os
-			call_function(os, function_record->call_graph_node);
 		}
 	}
 
@@ -8478,6 +8474,13 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_parse_message(WARNING, info, parser_line_num);
 		}
 
+		//If this is the main funcition, it has been called implicitly
+		if(is_main_function == TRUE){
+			//Mark that it's been called
+			function_record->called = TRUE;
+			//Call it
+			call_function(os, function_record->call_graph_node);
+		}
 		
 		//Finalize the variable scope for the parameter list
 		finalize_variable_scope(variable_symtab);
@@ -8857,7 +8860,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	prog = program(fl);
 
 	//We'll only perform these tests if we want debug printing enabled
-	if(enable_debug_printing == TRUE){
+	if(enable_debug_printing == TRUE && prog->CLASS != AST_NODE_CLASS_ERR_NODE){
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations

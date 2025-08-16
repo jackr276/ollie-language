@@ -964,8 +964,11 @@ void print_type_record(symtab_type_record_t* record){
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){
-	//TODO Change for pub/private
-	printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
+	if(record->signature->function_type->is_public == TRUE){
+		printf("\t---> %d | pub fn %s(", record->line_number, record->func_name.string);
+	} else {
+		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
+	}
 
 	//Print out the params
 	for(u_int8_t i = 0; i < record->number_of_params; i++){
