@@ -22,6 +22,9 @@ static void print_assembly_block(FILE* fl, basic_block_t* block){
 
 	//If it's a function entry block, we need to print this out
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//First we print out the local constants that the block has
+		print_local_constants(fl, block->function_defined_in);
+		//Then the function name
 		fprintf(fl, "%s:\n", block->function_defined_in->func_name.string);
 	} else {
 		fprintf(fl, ".L%d:\n", block->block_id);
