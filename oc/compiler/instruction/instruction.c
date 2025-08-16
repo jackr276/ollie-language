@@ -1772,6 +1772,11 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
 			break;
+		//String constants are a special case because they are represented by
+		//local constants, not immediate values
+		case STR_CONST:
+			fprintf(fl, ".LC%d", constant->local_constant->local_constant_id);
+			break;
 		//To avoid compiler complaints
 		default:
 			break;
@@ -1799,6 +1804,12 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
 			break;
+		//String constants are a special case because they are represented by
+		//local constants, not immediate values
+		case STR_CONST:
+			fprintf(fl, ".LC%d", constant->local_constant->local_constant_id);
+			break;
+
 		//To avoid compiler complaints
 		default:
 			break;
