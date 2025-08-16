@@ -103,6 +103,8 @@ struct symtab_function_record_t{
 	dynamic_string_t func_name;
 	//The data area for the whole function
 	stack_data_area_t data_area;
+	//Will be used later, the offset for the address in the data area
+	u_int64_t offset;
 	//The entrance CFG block to the function. There is always only one entrance
 	void* entrance_block;
 	//The associated call graph node with this function
@@ -118,12 +120,8 @@ struct symtab_function_record_t{
 	dynamic_array_t* local_constants;
 	//The hash that we have
 	u_int16_t hash;
-	//The lexical level of this record
-	int16_t lexical_level;
 	//The line number
 	u_int16_t line_number;
-	//Will be used later, the offset for the address in the data area
-	u_int64_t offset;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//What's the storage class?

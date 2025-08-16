@@ -359,9 +359,6 @@ symtab_constant_record_t* create_constant_record(dynamic_string_t name){
  * RETURNS 0 if no collision, 1 if collision
  */
 u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record){
-	//While we're at it store this
-	record->lexical_level = symtab->current_lexical_scope;
-	
 	//If there's no collision
 	if(symtab->records[record->hash] == NULL){
 		//Store it and get out
@@ -896,7 +893,6 @@ void print_function_record(symtab_function_record_t* record){
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->func_name.string);
 	printf("Hash: %d,\n", record->hash);
-	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("Offset: %p\n", (void*)(record->offset));
 	printf("}\n");
 }
