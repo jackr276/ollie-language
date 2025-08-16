@@ -8134,7 +8134,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(ident_node->identifier, storage_class);
+		function_record = create_function_record(ident_node->identifier);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing

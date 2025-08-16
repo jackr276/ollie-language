@@ -124,8 +124,6 @@ struct symtab_function_record_t{
 	u_int16_t line_number;
 	//Number of parameters
 	u_int8_t number_of_params;
-	//What's the storage class?
-	STORAGE_CLASS_T storage_class;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
@@ -367,7 +365,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);
+symtab_function_record_t* create_function_record(dynamic_string_t name);
 
 /**
  * Create a type record for the symbol table
