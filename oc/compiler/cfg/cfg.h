@@ -83,6 +83,13 @@ struct cfg_t{
 
 
 /**
+ * A local constant(.LCx) is a value like a string that is intended to 
+ * be used by a function. We define them separately because they have many less
+ * fields than an actual basic block
+ */
+
+
+/**
  * Define: a basic block is a sequence of consecutive 
  * intermediate language statements in which flow of 
  * control can only enter at the beginning and leave at the end 
