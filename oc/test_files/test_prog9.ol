@@ -6,7 +6,7 @@ fn tester(i:u32) -> i32{
 /**
  * For switch statement testing
  */
-fn main() -> i32{
+pub fn main() -> i32{
 	
 	let mut a:i32 := 23;
 	

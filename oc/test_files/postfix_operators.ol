@@ -1,4 +1,4 @@
-fn main(arg:i32, argv:char**) -> i32 {
+pub fn main(arg:i32, argv:char**) -> i32 {
 	//The array that we have
 	declare mut arr:i32[14][2];
 	declare mut oneD:i64[2];

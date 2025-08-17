@@ -9,7 +9,7 @@ fn tester(x:i32, y:i32) -> i32 {
 }
 
 
-fn main() -> i32 {
+pub fn main() -> i32 {
 	//No comma between parameters
 	ret @tester(3 4);
 }

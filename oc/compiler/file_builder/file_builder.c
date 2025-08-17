@@ -24,6 +24,17 @@ static void print_assembly_block(FILE* fl, basic_block_t* block){
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		//First we print out the local constants that the block has
 		print_local_constants(fl, block->function_defined_in);
+
+		//If this is a public function, we'll print out the ".globl" so
+		//that it can be exposed to ld
+		if(block->function_defined_in->signature->function_type->is_public == TRUE){
+			fprintf(fl, "\t.globl %s\n", block->function_defined_in->func_name.string);
+		}
+
+		//Now regardless of what kind of function it is, we'll use the @function tag
+		//to tell AS that this is a function
+		fprintf(fl, "\t.type %s, @function\n", block->function_defined_in->func_name.string);
+
 		//Then the function name
 		fprintf(fl, "%s:\n", block->function_defined_in->func_name.string);
 	} else {

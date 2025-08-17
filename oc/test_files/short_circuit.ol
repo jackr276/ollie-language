@@ -12,7 +12,7 @@ fn really_long_function(arg:i32) -> i32 {
 	ret arg;
 }
 
-fn main(arg:i32, argv:char**) -> i32{
+pub fn main(arg:i32, argv:char**) -> i32{
 	let mut x:u32 := 232;
 
 	defer {

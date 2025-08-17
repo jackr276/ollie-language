@@ -1,4 +1,4 @@
-fn main(mut argc:u32) -> i32 {
+pub fn main() -> i32 {
 	let mut x:u32 := 2;
 	let mut y:i32 := 3;
 	let mut k:char := 'a';

@@ -304,7 +304,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_CLASS_T storage_class){
+symtab_function_record_t* create_function_record(dynamic_string_t name){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -312,8 +312,6 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, STORAGE_
 	record->func_name = name;
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name.string);
-	//Store the storage class
-	record->storage_class = storage_class;
 
 	return record;
 }
@@ -966,9 +964,8 @@ void print_type_record(symtab_type_record_t* record){
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){
-	//If it's static we'll add the keyword in
-	if(record->storage_class == STORAGE_CLASS_STATIC){
-		printf("\t---> %d | fn:static %s(", record->line_number, record->func_name.string);
+	if(record->signature->function_type->is_public == TRUE){
+		printf("\t---> %d | pub fn %s(", record->line_number, record->func_name.string);
 	} else {
 		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
 	}

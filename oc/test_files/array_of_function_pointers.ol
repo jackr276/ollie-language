@@ -24,7 +24,7 @@ fn multiply(mut x:i32, y:i32) -> i32{
 	ret x * y;
 }
 
-fn main() -> i32{
+pub fn main() -> i32{
 	//Define an arithmetic function pointer that takes in two i32's
 	define fn(mut i32, i32) -> i32 as arithmetic_function;
 

@@ -18,7 +18,7 @@ fn tester() -> i32 {
 
 
 
-fn main() -> i32{
+pub fn main() -> i32{
 	let mut y:i32 := 23;
 	let mut x:i32 := 3;
 	let mut z:i32 := 322;

@@ -7994,6 +7994,75 @@ static int8_t check_jump_labels(){
 
 
 /**
+ * Perform validation on the parameter & return type & order
+ * for the main function
+ */
+static u_int8_t validate_main_function(generic_type_t* type){
+	//Let's extract the signature first for convenience
+	function_type_t* signature = type->function_type;
+
+	//If the main function is not public, then we fail
+	if(signature->is_public == FALSE){
+		print_parse_message(PARSE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
+		return FALSE;
+	}
+
+	//For storing parameter types
+	generic_type_t* parameter_type;
+
+	//Let's first validate the parameter count. The main function can
+	//either have 0 or 2 parameters
+	
+	switch(signature->num_params){
+		//This is allowed
+		case 0:
+			break;
+
+		//If we have two, we need to validate the type of each parameter
+		case 2:
+			//Extract the first parameter
+			parameter_type = signature->parameters[0].parameter_type;
+			
+			//If it isn't a basic type and it isn't an i32, we fail
+			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type->basic_type != S_INT32){
+				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				return FALSE;
+			}
+
+			//Now let's grab the second parameter
+			parameter_type = signature->parameters[1].parameter_type;
+
+			//This must be a char** type. If it's not, we fail out
+			if(is_type_string_array(parameter_type) == FALSE){
+				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				return FALSE;
+			}
+
+			//If we make it all the way down here, then we know that we're set
+			break;
+
+		//We'll print an error and leave if this is the case
+		default:
+			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", type->type_name.string);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			return FALSE;
+	}
+
+	//Finally, we'll validate the return type of the main function. It must also always be an i32
+	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type->basic_type != S_INT32){
+		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		return FALSE;
+	}
+
+	//If we make it here, then we know it's true
+	return TRUE;
+}
+
+
+/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
@@ -8012,12 +8081,42 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	u_int8_t defining_prev_implicit = FALSE;
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
+	//Is this function public or private? Unless explicitly stated, all functions are private
+	u_int8_t is_public = FALSE;
+
+	//Grab the token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We could see pub fn or fn here, so we need to process both cases
+	switch(lookahead.tok){
+		//Explicit declaration that this function is visible to other partial programs
+		case PUB:
+			//Flag that it is public
+			is_public = TRUE;
+
+			//Refresh the lookahead token
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//Now we need to ensure that this is the FN keyword, if it isn't, we fail out
+			if(lookahead.tok != FN){
+				return print_and_return_error("\"fn\" keyword is required after \"pub\" keyword", parser_line_num);
+			}
+
+			//Otherwise we're all good if we get here, so break out
+			break;
+
+		//Nothing more to do here, just leave
+		case FN:
+			break;
+		
+		//It would be bizarre if we got here, but just in case
+		default:
+			sprintf(info, "Expected \"pub\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
+	}
 
 	//We also need to mark that we're in a function using the nesting stack
 	push_nesting_level(nesting_stack, FUNCTION);
-
-	//What is the function's storage class? Normal by default
-	STORAGE_CLASS_T storage_class = STORAGE_CLASS_REGISTER;
 
 	//We need a stack for storing jump statements. We need to check these later because if
 	//we check them as we go, we don't get full jump functionality
@@ -8027,29 +8126,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//It also requires a symtab record of the function, but this will be assigned
 	//later once we have it
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF, SIDE_TYPE_LEFT);
-
-	//REMEMBER: by the time we get here, we've already seen and consumed "FUNC"
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//We've seen the option for a function specifier. 
-	if(lookahead.tok == COLON){
-		//We need to see the optional static keyword here
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//This is our fail case here
-		if(lookahead.tok != STATIC){
-			return print_and_return_error("Static keyword expected after colon in function definition", parser_line_num);
-		}
-
-		//Otherwise, we know that we have a static storage class
-		storage_class = STORAGE_CLASS_STATIC;
-	//Otherwise it's just the normal storage class
-	} else {
-		//Otherwise put the token back in the stream
-		push_back_token(lookahead);
-		//Normal storage class
-		storage_class = STORAGE_CLASS_NORMAL;
-	}
 
 	//Now we must see a valid identifier as the name
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
@@ -8134,7 +8210,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(ident_node->identifier, storage_class);
+		function_record = create_function_record(ident_node->identifier);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -8157,12 +8233,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		 * system
 		 */
 		if(strcmp("main", function_name) == 0){
-			//By default, this function has been called
-			function_record->called = TRUE;
 			//It is the main function
 			is_main_function = TRUE;
-			//And furthermore, it was called by the os
-			call_function(os, function_record->call_graph_node);
 		}
 	}
 
@@ -8266,6 +8338,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Copy this over for later
 		function_signature->function_type->num_params = function_record->number_of_params;
 
+		//Store whether or not this function is public
+		function_signature->function_type->is_public = is_public;
+
 		//Store this in here
 		function_record->signature = function_signature;
 	}
@@ -8293,20 +8368,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//that we first dealias it
 	generic_type_t* type = dealias_type(return_type);
 
-	//SPECIAL CASE : The main function must return a type of s_int32
-	if(is_main_function == 1){
-		//If it's not a basic type we fail
-		if(type->type_class != TYPE_CLASS_BASIC){
-			return print_and_return_error("The main function must return a type of i32.", parser_line_num);
-		}
-
-		//Now we know that it is a basic type, but is it an s_int32?
-		if(type->basic_type->basic_type != S_INT32){
-			return print_and_return_error("The main function must return a type of i32.", parser_line_num);
-		}
-		//Otherwise it's fine
-	}
-
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(defining_prev_implicit == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
@@ -8329,6 +8390,13 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Now that the function record has been finalized, we'll need to produce the type name
 	generate_function_pointer_type_name(function_record->signature);
+
+	//If we're dealing with the main function, we need to validate that the parameter order, visibility
+	//of the function, and return type are valid
+	if(is_main_function == TRUE && validate_main_function(function_record->signature) == FALSE){
+		//Error out here
+		return print_and_return_error("Invalid definition for main() function", parser_line_num);
+	}
 
 	//Now we have a fork in the road here. We can either define the function implicitly here
 	//or we can do a full definition
@@ -8412,6 +8480,13 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_parse_message(WARNING, info, parser_line_num);
 		}
 
+		//If this is the main funcition, it has been called implicitly
+		if(is_main_function == TRUE){
+			//Mark that it's been called
+			function_record->called = TRUE;
+			//Call it
+			call_function(os, function_record->call_graph_node);
+		}
 		
 		//Finalize the variable scope for the parameter list
 		finalize_variable_scope(variable_symtab);
@@ -8592,7 +8667,12 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 
 	//Switch based on the token
 	switch(lookahead.tok){
+		//We can either see the "pub"(public) keyword or we can see a straight fn keyword
+		case PUB:
 		case FN:
+			//Put the token back, we'll let the rule handle it
+			push_back_token(lookahead);
+
 			//We'll just let the function definition rule handle this. If it fails, 
 			//that will be caught above
 			return function_definition(fl);
@@ -8786,7 +8866,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	prog = program(fl);
 
 	//We'll only perform these tests if we want debug printing enabled
-	if(enable_debug_printing == TRUE){
+	if(enable_debug_printing == TRUE && prog->CLASS != AST_NODE_CLASS_ERR_NODE){
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations

@@ -1,6 +1,6 @@
 
 
-fn main(argc:u32, argv:char**) -> i32 {
+pub fn main(argc:i32, argv:char**) -> i32 {
 	let x : char := 'a';
 	let y : char := 'c';
 

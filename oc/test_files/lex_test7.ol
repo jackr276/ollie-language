@@ -10,7 +10,7 @@ define construct con{
 	b:char*[32];
 };
 
-fn main(argc:u32, argv:char**) -> i32
+pub fn main(argc:i32, argv:char**) -> i32
 {
 	if(argv) {
 		let i:str := "hi";

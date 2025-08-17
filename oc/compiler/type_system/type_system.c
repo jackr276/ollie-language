@@ -1746,7 +1746,7 @@ u_int8_t is_type_signed(generic_type_t* type){
  */
 static char* basic_type_to_string(generic_type_t* type){
 	if(type->type_class != TYPE_CLASS_BASIC){
-		return "complex_type";
+		return type->type_name.string;
 	}
 
 	switch(type->basic_type->basic_type){
@@ -1775,7 +1775,7 @@ static char* basic_type_to_string(generic_type_t* type){
 		case FLOAT64:
 			return "f64";
 		default:
-			return "complex_type";
+			return type->type_name.string;
 	}
 }
 
@@ -1820,6 +1820,40 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 
 	//Add the closing sequence
 	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
+}
+
+
+/**
+ * Is this type equivalent to a char**? This is used
+ * exclusively for main function validation
+ */
+u_int8_t is_type_string_array(generic_type_t* type){
+	//Grab the first level
+	generic_type_t* first_level = dealias_type(type);
+
+	//If it isn't a pointer, we fail out
+	if(first_level->type_class != TYPE_CLASS_POINTER){
+		return FALSE;
+	}
+
+	//Now we go one level deeper
+	generic_type_t* second_level = dealias_type(first_level->pointer_type->points_to);
+
+	//If it isn't a pointer, we fail out
+	if(second_level->type_class != TYPE_CLASS_POINTER){
+		return FALSE;
+	}
+
+	//Now we get to the base type
+	generic_type_t* base_type = dealias_type(second_level->pointer_type->points_to);
+
+	//If this isn't a char, we fail
+	if(base_type->type_class != TYPE_CLASS_BASIC || base_type->basic_type->basic_type != CHAR){
+		return FALSE;
+	}
+
+	//If we make it here, we know we have char**
+	return TRUE;
 }
 
 

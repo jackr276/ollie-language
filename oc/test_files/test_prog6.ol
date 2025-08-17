@@ -48,7 +48,7 @@ fn tester() -> void{
 /**
  * Demonstrate the functionality of saturating add for positive and negative overflows
  */
-fn main() -> i32{
+pub fn main() -> i32{
 
 	let mut x:i32 := -2U;
 	let mut my_float:f32 := -0.23;

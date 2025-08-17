@@ -171,6 +171,7 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		//First print out the function's local constants
 		print_local_constants(stdout, block->function_defined_in);
+
 		//Now the function name
 		printf("%s:\n", block->function_defined_in->func_name.string);
 		print_stack_data_area(&(block->function_defined_in->data_area));
@@ -290,6 +291,7 @@ static void print_block_with_registers(basic_block_t* block){
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		//First print out the function's local constants
 		print_local_constants(stdout, block->function_defined_in);
+
 		//Now the function name
 		printf("%s:\n", block->function_defined_in->func_name.string);
 		//We'd only want to print the stack if this is not the final run

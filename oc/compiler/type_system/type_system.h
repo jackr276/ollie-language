@@ -239,6 +239,8 @@ struct function_type_t{
 	u_int8_t num_params;
 	//Does this return a void type?
 	u_int8_t returns_void;
+	//Is this function public? By default it is not
+	u_int8_t is_public;
 };
 
 
@@ -374,6 +376,12 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
  * Is a type signed?
  */
 u_int8_t is_type_signed(generic_type_t* type);
+
+/**
+ * Is this type equivalent to a char**? This is used
+ * exclusively for main function validation
+ */
+u_int8_t is_type_string_array(generic_type_t* type);
 
 /**
  * Destroy a type that is no longer in use
