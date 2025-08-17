@@ -1162,7 +1162,6 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 					dynamic_array_add(live_now, operation->address_calc_reg2->associated_live_range);
 				}
 
-
 				operation = operation->previous_statement;
 				continue;
 			}
@@ -1185,6 +1184,17 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				if(dynamic_array_contains(live_now, operation->destination_register->associated_live_range) == NOT_FOUND){
 					dynamic_array_add(live_now, operation->destination_register->associated_live_range);
 				}
+
+			//If the destination register is being dereferenced, then it does count as live because we need
+			//the internal value to remain untouched. An example of this would be:
+			// movq %rax, (%rcx)
+			// Even though RCX is the destination register, we aren't actually overwriting it, so it will still be live
+			} else if(operation->destination_register->indirection_level > 0){
+				//This will also count as a source, so we must add it
+				if(dynamic_array_contains(live_now, operation->destination_register->associated_live_range) == NOT_FOUND){
+					dynamic_array_add(live_now, operation->destination_register->associated_live_range);
+				}
+
 			//Otherwise we can delete
 			} else {
 				dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
