@@ -7997,7 +7997,10 @@ static int8_t check_jump_labels(){
  * Perform validation on the parameter & return type & order
  * for the main function
  */
-static u_int8_t validate_main_function(function_type_t* signature){
+static u_int8_t validate_main_function(generic_type_t* type){
+	//Let's extract the signature first for convenience
+	function_type_t* signature = type->function_type;
+
 	//If the main function is not public, then we fail
 	if(signature->is_public == FALSE){
 		print_parse_message(PARSE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
@@ -8022,7 +8025,8 @@ static u_int8_t validate_main_function(function_type_t* signature){
 			
 			//If it isn't a basic type and it isn't an i32, we fail
 			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type->basic_type != S_INT32){
-				print_parse_message(PARSE_ERROR, "The first parameter of the main function must be an i32", parser_line_num);
+				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				return FALSE;
 			}
 
@@ -8031,7 +8035,8 @@ static u_int8_t validate_main_function(function_type_t* signature){
 
 			//This must be a char** type. If it's not, we fail out
 			if(is_type_string_array(parameter_type) == FALSE){
-				print_parse_message(PARSE_ERROR, "The second parameter of the main function must of type char**", parser_line_num);
+				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				return FALSE;
 			}
 
@@ -8040,14 +8045,15 @@ static u_int8_t validate_main_function(function_type_t* signature){
 
 		//We'll print an error and leave if this is the case
 		default:
-			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given %d", signature->num_params);
+			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			return FALSE;
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
 	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type->basic_type != S_INT32){
-		print_parse_message(PARSE_ERROR, "The main function must return a value of type i32", parser_line_num);
+		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FALSE;
 	}
 
@@ -8387,7 +8393,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//If we're dealing with the main function, we need to validate that the parameter order, visibility
 	//of the function, and return type are valid
-	if(is_main_function == TRUE && validate_main_function(function_record->signature->function_type) == FALSE){
+	if(is_main_function == TRUE && validate_main_function(function_record->signature) == FALSE){
 		//Error out here
 		return print_and_return_error("Invalid definition for main() function", parser_line_num);
 	}

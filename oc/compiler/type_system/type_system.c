@@ -1746,7 +1746,7 @@ u_int8_t is_type_signed(generic_type_t* type){
  */
 static char* basic_type_to_string(generic_type_t* type){
 	if(type->type_class != TYPE_CLASS_BASIC){
-		return "complex_type";
+		return type->type_name.string;
 	}
 
 	switch(type->basic_type->basic_type){
@@ -1775,7 +1775,7 @@ static char* basic_type_to_string(generic_type_t* type){
 		case FLOAT64:
 			return "f64";
 		default:
-			return "complex_type";
+			return type->type_name.string;
 	}
 }
 
