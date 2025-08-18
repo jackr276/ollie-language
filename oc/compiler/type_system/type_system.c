@@ -1622,7 +1622,7 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 /**
  * Does this construct contain said member? Return the variable if yes, NULL if not
  */
-struct_type_field_t* get_construct_member(struct_type_t* construct, char* name){
+struct_type_field_t* get_struct_member(struct_type_t* construct, char* name){
 	//The current variable that we have
 	symtab_variable_record_t* var;
 
@@ -1651,7 +1651,7 @@ struct_type_field_t* get_construct_member(struct_type_t* construct, char* name){
  * of it's largest field. We keep track of the largest field
  * throughout the entirety of construction, so this should be easy
  */
-void finalize_construct_alignment(generic_type_t* type){
+void finalize_struct_alignment(generic_type_t* type){
 	//Let's see how far off we are from being a multiple of the
 	//final address
 	u_int32_t needed_padding = type->type_size % type->struct_type->largest_member_size;

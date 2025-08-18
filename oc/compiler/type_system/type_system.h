@@ -340,12 +340,12 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 /**
  * Add a value into a construct's table
  */
-u_int8_t add_construct_member(generic_type_t* type, void* member_var);
+u_int8_t add_struct_member(generic_type_t* type, void* member_var);
 
 /**
- * Finalize the construct alignment
+ * Finalize the struct alignment
  */
-void finalize_construct_alignment(generic_type_t* type);
+void finalize_struct_alignment(generic_type_t* type);
 
 /**
  * Does a constructed type contain a given member variable?

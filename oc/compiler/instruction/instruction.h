@@ -543,7 +543,7 @@ struct instruction_t{
 	//If this is a conditional move statement, what's the class?
 	conditional_move_type_t move_type;
 	//Memory access type
-	TYPE_CLASS access_class;
+	type_class_t access_class;
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
 	//The register that we're popping or pushing

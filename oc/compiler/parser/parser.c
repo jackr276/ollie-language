@@ -3696,7 +3696,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	member_record->is_mutable = is_mutable;
 
 	//Add it to the construct
-	add_construct_member(construct, member_record);
+	add_struct_member(construct, member_record);
 
 	//Insert into the variable symtab
 	insert_variable(variable_symtab, member_record);
@@ -3769,7 +3769,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct, side_typ
 	finalize_variable_scope(variable_symtab);
 
 	//Once done, we need to finalize the alignment for the construct table
-	finalize_construct_alignment(construct);
+	finalize_struct_alignment(construct);
 
 	//Give the member list back
 	return SUCCESS;
