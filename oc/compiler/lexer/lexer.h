@@ -45,7 +45,6 @@ typedef enum {
 	WHILE,
 	FOR,
 	AT,
-	ARROW_EQ,
 	CASE,
 	BREAK,
 	CONTINUE,

@@ -1419,7 +1419,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	generic_type_t* referenced_type;
 
 	//If we have a =>, we need to have seen a pointer to a struct
-	if(lookahead.tok == ARROW_EQ){
+	if(lookahead.tok == DOUBLE_COLON){
 		//We need to specifically see a pointer to a struct for the current type
 		//If it's something else, we fail out here
 		if(working_type->type_class != TYPE_CLASS_POINTER){
@@ -1612,7 +1612,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	switch(lookahead.tok){
 		case L_BRACKET:
 		case COLON:
-		case ARROW_EQ:
+		case DOUBLE_COLON:
 		case PLUSPLUS:
 		case MINUSMINUS:
 			//We need to keep going here, so leave
@@ -1651,7 +1651,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	postfix_expr_node->is_assignable = ASSIGNABLE;
 
 	//Now we can see as many construct accessor and array accessors as we can take
-	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == ARROW_EQ){
+	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == DOUBLE_COLON){
 		//Let's see which rule it is
 		//We have an array accessor
 		if(lookahead.tok == L_BRACKET){
@@ -4615,7 +4615,7 @@ static u_int8_t enum_definer(FILE* fl){
  * 						   | f64 
  * 						   | char 
  * 						   | enum <identifier>
- * 						   | construct <identifier>
+ * 						   | struct <identifier>
  * 						   | <identifier>
  */
 static symtab_type_record_t* type_name(FILE* fl){

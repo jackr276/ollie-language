@@ -387,11 +387,6 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 							lex_item.tok = DOUBLE_EQUALS;
 							lex_item.line_num = line_num;
 							return lex_item;
-						} else if(ch2 == '>'){
-							//Prepare and return
-							lex_item.tok = ARROW_EQ;
-							lex_item.line_num = line_num;
-							return lex_item;
 						} else {
 							//"Put back" the char
 							put_back_char(fl);
@@ -964,8 +959,6 @@ char* operator_to_string(Token op){
 			return "|";
 		case OREQ:
 			return "|=";
-		case ARROW_EQ:
-			return "=>";
 		case MODEQ:
 			return "%=";
 		case COLON:
