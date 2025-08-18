@@ -2139,9 +2139,9 @@ static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, th
 
 
 /**
- * Emit a construct access lea statement
+ * Emit a struct access lea statement
  */
-static three_addr_var_t* emit_construct_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(u64);
 
@@ -2772,7 +2772,7 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
 
 /**
  * Emit the abstract machine code for various different kinds of postfix expressions
- * that we could see. The two that we'll need to be concerned about are construct
+ * that we could see. The two that we'll need to be concerned about are struct
  * and array access
  */
 static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
@@ -2831,7 +2831,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 		return postfix_package;
 	}
 
-	//If we get here we know that we have at least one construct/array access statement
+	//If we get here we know that we have at least one struct/array access statement
 
 	//The currently calculated address
 	three_addr_var_t* current_address = NULL;
@@ -2846,7 +2846,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 	//So long as we're hitting arrays or constructs, we need to be memory conscious
 	while(cursor != NULL &&
-		(cursor->CLASS == AST_NODE_CLASS_CONSTRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR)){
+		(cursor->CLASS == AST_NODE_CLASS_STRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR)){
 		//First of two potentialities is the array accessor
 		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
@@ -2902,7 +2902,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//Now this is the current address
 			current_address = address;
 
-			//If we see that the next sibling is NULL or it's not an array accessor(i.e. construct accessor),
+			//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
 			//we're done here. We'll emit our memory code and leave this part of the loop
 			if(cursor->next_sibling == NULL){
 				//We're using indirection, address is being wiped out
@@ -2951,13 +2951,13 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				current_var = address;
 			}
 
-		//This has to be a construct accessor, we've no other choice
+		//This has to be a struct accessor, we've no other choice
 		} else {
 			//What we'll do first is grab the associated fields that we need out
 			symtab_variable_record_t* var = cursor->variable;
 
-			//Remember - when we get here, current var will hold the base address of the construct
-			//If current var is a pointer, then we need to dereference it to get the actual construct type	
+			//Remember - when we get here, current var will hold the base address of the struct
+			//If current var is a pointer, then we need to dereference it to get the actual struct type	
 			if(current_type->type_class == TYPE_CLASS_POINTER){
 				//We need to first dereference this
 				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->pointer_type->points_to);
@@ -2973,8 +2973,8 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				current_type = current_type->pointer_type->points_to;
 			}
 
-			//Now we'll grab the associated construct record
-			constructed_type_field_t* field = get_construct_member(current_type->construct_type, var->var_name.string);
+			//Now we'll grab the associated nstruct record
+			struct_type_field_t* field = get_struct_member(current_type->struct_type, var->var_name.string);
 
 			//The field we have
 			symtab_variable_record_t* member = field->variable;
@@ -2990,9 +2990,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 			//we've already gotten
 			if(current_address == NULL){
-				address = emit_construct_address_calculation(current, current_var, offset, is_branch_ending);
+				address = emit_struct_address_calculation(current, current_var, offset, is_branch_ending);
 			} else {
-				address = emit_construct_address_calculation(basic_block, current_address, offset, is_branch_ending);
+				address = emit_struct_address_calculation(basic_block, current_address, offset, is_branch_ending);
 			}
 
 			//Do we need to do more memory work? We can tell if the array accessor node is next
@@ -3639,7 +3639,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				expression_package.final_block = current_block;
 			}
 
-			//Finally we'll construct the whole thing
+			//Finally we'll struct the whole thing
 			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, expression_package.assignee);
 
 			//If this is not a temp var, then we can flag it as being assigned
@@ -6693,7 +6693,7 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 	generic_type_t* type = node->variable->type_defined_as;
 
 	//If we have an array, we'll need to decrement the stack
-	if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
+	if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
 		//If we're doing something like this, we'll actually need to allocate
 		emitted_block = basic_block_alloc(1);
 
