@@ -1,7 +1,7 @@
 /**
 * This program is made for the purposes of testing case statements
 */
-define construct my_struct{
+define struct my_struct{
 		mut ch:char;
 		mut x:i64;
 		mut lch:char;

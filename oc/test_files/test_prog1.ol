@@ -1,5 +1,5 @@
 
-define construct my_struct {
+define struct my_struct {
 	a:u32;
 	b:u32;
 	c:u32;

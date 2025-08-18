@@ -2,7 +2,7 @@
 * Bad parens in here
 */
 
-define construct my_struct{
+define struct my_struct{
 	i:u32*;
 	a:i8;
 	c:i8;
