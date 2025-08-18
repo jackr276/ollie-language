@@ -81,6 +81,8 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ELABORATIVE_PARAM,
 	//For assembly inline statements
 	AST_NODE_CLASS_ASM_INLINE_STMT,
+	//An array initializer node
+	AST_NODE_CLASS_ARRAY_INITIALIZER,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 

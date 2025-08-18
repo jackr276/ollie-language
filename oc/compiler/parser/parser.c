@@ -7331,12 +7331,9 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	//If we see a specifier here, we'll record it
-	if(lookahead.tok == REGISTER){
-		storage_class = STORAGE_CLASS_REGISTER;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	} else if(lookahead.tok == STATIC){
+
+	//If we see static here, we'll make a note of that
+	if(lookahead.tok == STATIC){
 		storage_class = STORAGE_CLASS_STATIC;
 		//Refresh token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7509,12 +7506,8 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we see a specifier here, we'll record it
-	if(lookahead.tok == REGISTER){
-		storage_class = STORAGE_CLASS_REGISTER;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	} else if(lookahead.tok == STATIC){
+	//If we see static here, we'll make a note of that
+	if(lookahead.tok == STATIC){
 		storage_class = STORAGE_CLASS_STATIC;
 		//Refresh token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
