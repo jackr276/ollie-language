@@ -84,7 +84,7 @@ typedef enum {
 	DEFINE,
 	AS,
 	ENUM,
-	CONSTRUCT,
+	STRUCT,
 	MINUS,
 	MINUSMINUS,
 	STAR,

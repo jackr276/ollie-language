@@ -52,7 +52,7 @@ const Token tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, 
 					STATIC, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
 					U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-					CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB};
+					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB};
 
 //Direct one to one mapping
 const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
@@ -60,7 +60,7 @@ const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", 
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
-						  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
+						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
 						  "with", "lib", "idle", "pub"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */

@@ -1395,7 +1395,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  * BNF Rule: <construct-accessor> ::= => <variable-identifier> 
  * 								    | : <variable-identifier>
  */
-static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
+static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 	//The lookahead token
@@ -1405,12 +1405,12 @@ static generic_ast_node_t* construct_accessor(FILE* fl, generic_type_t* current_
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Otherwise we'll now make the node here
-	generic_ast_node_t* const_access_node = ast_node_alloc(AST_NODE_CLASS_CONSTRUCT_ACCESSOR, side);
+	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_CLASS_STRUCT_ACCESSOR, side);
 	//Add the line number
-	const_access_node->line_number = current_line;
+	struct_access_node->line_number = current_line;
 
 	//Put the token in to show what we have
-	const_access_node->construct_accessor_tok = lookahead.tok;
+	struct_access_node->construct_accessor_tok = lookahead.tok;
 
 	//Grab a convenient reference to the type that we're working with
 	generic_type_t* working_type = dealias_type(current_type);

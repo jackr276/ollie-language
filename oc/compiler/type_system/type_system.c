@@ -26,7 +26,7 @@ u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
 		//These are memory addresses - so yes
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_STRUCT:
 			return TRUE;
 
 		//Let's see what we have here
@@ -153,7 +153,7 @@ u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 		//These are all essentially pointers
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_POINTER:
-		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_STRUCT:
 			return TRUE;
 
 		//Some more exploration needed here
@@ -190,7 +190,7 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
 	//Switch based on the type to determine
 	switch(type->type_class){
 		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_POINTER:
 			return FALSE;
 		case TYPE_CLASS_ENUMERATED:
@@ -226,7 +226,7 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 	switch(type->type_class){
 		case TYPE_CLASS_ARRAY:
 			return FALSE;
-		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_STRUCT:
 			return FALSE;
 		case TYPE_CLASS_POINTER:
 			return TRUE;
@@ -319,9 +319,9 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 	switch(deref_destination_type->type_class){
 		//This is a simpler case - constructs can only be assigned
 		//if they're the exact same
-		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_STRUCT:
 			//Not assignable at all
-			if(deref_source_type->type_class != TYPE_CLASS_CONSTRUCT){
+			if(deref_source_type->type_class != TYPE_CLASS_STRUCT){
 				return NULL;
 			}
 
@@ -1071,7 +1071,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 		case PLUSPLUS:
 		case MINUSMINUS:
 			//This is invalid for construct types
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
+			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
 				return FALSE;
 			}
 
@@ -1121,7 +1121,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 		//We can negate pointers, enums and basic types that are not void
 		case L_NOT:
 			//These are bad, we fail out here
-			if(type->type_class == TYPE_CLASS_CONSTRUCT || type->type_class == TYPE_CLASS_ARRAY){
+			if(type->type_class == TYPE_CLASS_STRUCT || type->type_class == TYPE_CLASS_ARRAY){
 				return FALSE;
 			}
 
@@ -1282,7 +1282,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		case DOUBLE_EQUALS:
 		case PLUS:
 			//This doesn't work on arrays or constructs
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
+			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
 				return FALSE;
 			}
 
@@ -1303,7 +1303,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		 */
 		case MINUS:
 			//This doesn't work on arrays or constructs
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_CONSTRUCT){
+			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
 				return FALSE;
 			}
 
@@ -1490,11 +1490,11 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 /**
  * Dynamically allocate and create a constructed type
  */
-generic_type_t* create_constructed_type(dynamic_string_t type_name, u_int32_t line_number){
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
-	type->type_class = TYPE_CLASS_CONSTRUCT;
+	type->type_class = TYPE_CLASS_STRUCT;
 	
 	//Where is the declaration?
 	type->line_number = line_number;
@@ -1502,22 +1502,22 @@ generic_type_t* create_constructed_type(dynamic_string_t type_name, u_int32_t li
 	type->type_name = type_name;
 
 	//Reserve space for this
-	type->construct_type = calloc(1, sizeof(constructed_type_t));
+	type->struct_type = calloc(1, sizeof(struct_type_t));
 
 	return type;
 }
 
 
 /**
- * Add a value to a constructed type. The void* here is a 
+ * Add a value to a struct type. The void* here is a 
  * symtab variable record
  */
-u_int8_t add_construct_member(generic_type_t* type, void* member_var){
+u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//Grab this out for convenience
-	constructed_type_t* construct = type->construct_type;
+	struct_type_t* construct = type->struct_type;
 
 	//Check for size constraints
-	if(construct->next_index >= MAX_CONSTRUCT_MEMBERS){
+	if(construct->next_index >= MAX_STRUCT_MEMBERS){
 		return OUT_OF_BOUNDS;
 	}
 
@@ -1526,7 +1526,7 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 
 	//If this is the very first one, then we'll 
 	if(construct->next_index == 0){
-		constructed_type_field_t entry;	
+		struct_type_field_t entry;	
 		//Currently, we don't need any padding
 		entry.padding = 0;
 		entry.variable = member_var;
@@ -1543,7 +1543,7 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 		construct->size += member->type_defined_as->type_size;
 
 		//Add this into the construct table
-		construct->construct_table[construct->next_index] = entry;
+		construct->struct_table[construct->next_index] = entry;
 
 		//Increment the index for the next go around
 		construct->next_index += 1;
@@ -1554,7 +1554,7 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 	
 	//Otherwise, if we make it down here, it means that we'll need to pay a bit more
 	//attention to alignment as there is more than one field
-	constructed_type_field_t entry;
+	struct_type_field_t entry;
 	//We'll update the largest member, if applicable
 	if(var->type_defined_as->type_size > construct->largest_member_size){
 		//Update the largest member if this happens
@@ -1571,9 +1571,9 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 	//the size of the latest variable
 	
 	//The prior variable
-	symtab_variable_record_t* prior_variable = construct->construct_table[construct->next_index - 1].variable;
+	symtab_variable_record_t* prior_variable = construct->struct_table[construct->next_index - 1].variable;
 	//And the offset of this entry
-	u_int32_t offset = construct->construct_table[construct->next_index - 1].offset;
+	u_int32_t offset = construct->struct_table[construct->next_index - 1].offset;
 	
 	//The current ending address is the offset of the last variable plus its size
 	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
@@ -1600,7 +1600,7 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 	}
 
 	//This needed padding will go as padding on the prior entry
-	construct->construct_table[construct->next_index - 1].padding = needed_padding;
+	construct->struct_table[construct->next_index - 1].padding = needed_padding;
 
 	//Now we can update the current end
 	current_end = current_end + needed_padding;
@@ -1612,7 +1612,7 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 	construct->size += var->type_defined_as->type_size + needed_padding;
 
 	//Finally, we can add this new entry in
-	construct->construct_table[construct->next_index] = entry;
+	construct->struct_table[construct->next_index] = entry;
 	construct->next_index += 1;
 
 	return SUCCESS;
@@ -1622,19 +1622,19 @@ u_int8_t add_construct_member(generic_type_t* type, void* member_var){
 /**
  * Does this construct contain said member? Return the variable if yes, NULL if not
  */
-constructed_type_field_t* get_construct_member(constructed_type_t* construct, char* name){
+struct_type_field_t* get_construct_member(struct_type_t* construct, char* name){
 	//The current variable that we have
 	symtab_variable_record_t* var;
 
 	//Run through everything here
 	for(u_int16_t _ = 0; _ < construct->next_index; _++){
 		//Grab the variable out
-		var = construct->construct_table[_].variable;
+		var = construct->struct_table[_].variable;
 
 		//Now we'll do a simple comparison. If they match, we're set
 		if(strcmp(var->var_name.string, name) == 0){
 			//Return the whole record if we find it
-			return &(construct->construct_table[_]);
+			return &(construct->struct_table[_]);
 		}
 	}
 
@@ -1654,16 +1654,16 @@ constructed_type_field_t* get_construct_member(constructed_type_t* construct, ch
 void finalize_construct_alignment(generic_type_t* type){
 	//Let's see how far off we are from being a multiple of the
 	//final address
-	u_int32_t needed_padding = type->type_size % type->construct_type->largest_member_size;
+	u_int32_t needed_padding = type->type_size % type->struct_type->largest_member_size;
 
 	//Whatever this needed padding may be, we'll add it to the end as the final padding for our construct
-	type->construct_type->construct_table[type->construct_type->next_index - 1].padding = needed_padding;
+	type->struct_type->struct_table[type->struct_type->next_index - 1].padding = needed_padding;
 
 	//Increment the size accordingly
-	type->construct_type->size += needed_padding;
+	type->struct_type->size += needed_padding;
 
 	//Now we move this over to size
-	type->type_size = type->construct_type->size;
+	type->type_size = type->struct_type->size;
 }
 
 
@@ -1898,8 +1898,8 @@ void type_dealloc(generic_type_t* type){
 		case TYPE_CLASS_POINTER:
 			free(type->pointer_type);
 			break;
-		case TYPE_CLASS_CONSTRUCT:
-			free(type->construct_type);
+		case TYPE_CLASS_STRUCT:
+			free(type->struct_type);
 			break;
 		default:
 			break;
