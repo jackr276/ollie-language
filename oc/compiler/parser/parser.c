@@ -4036,7 +4036,7 @@ static u_int8_t struct_definer(FILE* fl){
 	dynamic_string_alloc(&type_name);
 
 	//Set it
-	dynamic_string_set(&type_name, "construct ");
+	dynamic_string_set(&type_name, "struct ");
 
 
 	//We are now required to see a valid identifier
@@ -4697,7 +4697,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			return record;
 
 		//Construct type
-		case TYPE_CLASS_STRUCT:
+		case STRUCT:
 			//We know that this keyword is in the name, so we'll add it in
 			strcpy(type_name, "struct ");
 
