@@ -3,7 +3,7 @@
 */
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	define construct s {
+	define struct s {
 		x:i32;
 		y:i32;
 	} as my_struct;

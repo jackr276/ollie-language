@@ -52,7 +52,7 @@ const Token tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, 
 					STATIC, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
 					U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-					CONSTRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB};
+					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB};
 
 //Direct one to one mapping
 const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
@@ -60,7 +60,7 @@ const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", 
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
-						  "break", "continue", "construct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
+						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
 						  "with", "lib", "idle", "pub"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
@@ -385,11 +385,6 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 						if(ch2 == '='){
 							//Prepare and return
 							lex_item.tok = DOUBLE_EQUALS;
-							lex_item.line_num = line_num;
-							return lex_item;
-						} else if(ch2 == '>'){
-							//Prepare and return
-							lex_item.tok = ARROW_EQ;
 							lex_item.line_num = line_num;
 							return lex_item;
 						} else {
@@ -964,8 +959,6 @@ char* operator_to_string(Token op){
 			return "|";
 		case OREQ:
 			return "|=";
-		case ARROW_EQ:
-			return "=>";
 		case MODEQ:
 			return "%=";
 		case COLON:

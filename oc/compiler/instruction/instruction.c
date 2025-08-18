@@ -266,7 +266,7 @@ variable_size_t select_type_size(generic_type_t* type){
 		//These are always 64 bits
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 		case TYPE_CLASS_ALIAS:
 			size = QUAD_WORD;
@@ -346,7 +346,7 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 		//These are always 64 bits
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_CONSTRUCT:
+		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 		case TYPE_CLASS_ALIAS:
 			size = QUAD_WORD;
