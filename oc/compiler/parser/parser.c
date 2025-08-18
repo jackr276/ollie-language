@@ -3497,6 +3497,40 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 }
 
 
+static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
+
+	//TODO FIXME this is just here as a placeholder
+	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+}
+
+
+
+/**
+ * An initializer can either decay into an expression chain or it can turn into an initializer of
+ * some kind(string or list)
+ *
+ * BNF Rule: <initializer> ::= <ternary_expression> | <initializer_list>
+ */
+static generic_ast_node_t* initializer(FILE* fl, side_type_t side){
+	//Grab the next token
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	switch(lookahead.tok){
+		//A left bracket symbol means that we're encountering an array initializer
+		case L_BRACKET:
+			return array_initializer(fl, side);
+
+		//By default, we haven't found anything in here that would indicate we'll need an initializer.
+		//As such, we'll push the token back and call the ternary expression rule
+		default:
+			push_back_token(lookahead);
+			return ternary_expression(fl, side);
+	}
+
+	return NULL;
+}
+
+
 /**
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
