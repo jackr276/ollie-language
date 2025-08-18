@@ -4,7 +4,7 @@
 
 alias char* as str;
 
-define construct con{
+define struct con{
 	x:i8;
 	y:i8;
 	b:char*[32];

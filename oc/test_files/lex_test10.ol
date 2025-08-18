@@ -1,4 +1,4 @@
-define construct my_struct{
+define struct my_struct{
 	i:u32;
 	j:u32;
 	prog:u32;
@@ -21,7 +21,7 @@ fn my_func(error_code:u32) -> u32{
 	let l:u32 := 0;
 	let a:u32 := 1;
 	let k:u32 := 0;
-	declare struct_arr:construct my_struct[300];
+	declare struct_arr:struct my_struct[300];
 
 	let struct_access:u32 := struct_arr[3]:i;
 	

@@ -17,7 +17,7 @@
 //Type names may not exceed 200 characters in length
 #define MAX_TYPE_NAME_LENGTH 200
 //The maximum number of members in a construct
-#define MAX_CONSTRUCT_MEMBERS 100
+#define MAX_STRUCT_MEMBERS 100
 //The maximum number of members in an enumerated
 #define MAX_ENUMERATED_MEMBERS 200
 
@@ -37,9 +37,9 @@ typedef struct function_type_parameter_t function_type_parameter_t;
 //An enumerated type
 typedef struct enumerated_type_t enumerated_type_t;
 //A constructed type
-typedef struct constructed_type_t constructed_type_t;
+typedef struct struct_type_t struct_type_t;
 //A constructed type field
-typedef struct constructed_type_field_t constructed_type_field_t;
+typedef struct struct_type_field_t struct_type_field_t;
 //An aliased type
 typedef struct aliased_type_t aliased_type_t;
 //Compiler option type
@@ -84,15 +84,15 @@ typedef enum{
 /**
  * Which class of type is it?
  */
-typedef enum TYPE_CLASS{
+typedef enum type_class_t {
 	TYPE_CLASS_BASIC,
 	TYPE_CLASS_ARRAY,
-	TYPE_CLASS_CONSTRUCT,
+	TYPE_CLASS_STRUCT,
 	TYPE_CLASS_ENUMERATED,
 	TYPE_CLASS_POINTER,
 	TYPE_CLASS_FUNCTION_SIGNATURE, /* Function pointer type */
 	TYPE_CLASS_ALIAS /* Alias types */
-} TYPE_CLASS;
+} type_class_t;
 
 
 /**
@@ -113,7 +113,7 @@ struct generic_type_t{
 	pointer_type_t* pointer_type;
 	//For function pointers
 	function_type_t* function_type;
-	constructed_type_t* construct_type;
+	struct_type_t* struct_type;
 	enumerated_type_t* enumerated_type;
 	aliased_type_t* aliased_type;
 	//When was it defined: -1 = generic type
@@ -121,7 +121,7 @@ struct generic_type_t{
 	//All generic types have a size
 	u_int32_t type_size;
 	//What class of type is it
-	TYPE_CLASS type_class;
+	type_class_t type_class;
 };
 
 
@@ -162,9 +162,9 @@ struct pointer_type_t{
 
 
 /**
- * The constructed type's individual members
+ * The struct type's individual members
  */
-struct constructed_type_field_t{
+struct struct_type_field_t{
 	//What variable is stored in here?
 	void* variable;
 	//What kind of padding do we need to ensure alignment?
@@ -178,12 +178,12 @@ struct constructed_type_field_t{
  * A constructed type contains a list of other types that are inside of it.
  * As such, the type here contains an array of generic types of at most 100
  */
-struct constructed_type_t{
+struct struct_type_t{
 	//We will store internally a pre-aligned construct table. The construct
 	//table itself will be aligned internally, and we'll use the given order of
 	//the construct members to compute it. Due to this, it would be advantageous for
 	//the programmer to order the structure table with larger elements first
-	constructed_type_field_t construct_table[MAX_CONSTRUCT_MEMBERS];
+	struct_type_field_t struct_table[MAX_STRUCT_MEMBERS];
 	//The overall size in bytes of the struct
 	u_int32_t size;
 	//The size of the largest member
@@ -318,9 +318,9 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number);
 
 /**
- * Dynamically allocate and create a constructed type
+ * Dynamically allocate and create a struct type
  */
-generic_type_t* create_constructed_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number);
 
 /**
  * Is the given binary operation valid for the type that was specificed?
@@ -340,17 +340,17 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 /**
  * Add a value into a construct's table
  */
-u_int8_t add_construct_member(generic_type_t* type, void* member_var);
+u_int8_t add_struct_member(generic_type_t* type, void* member_var);
 
 /**
- * Finalize the construct alignment
+ * Finalize the struct alignment
  */
-void finalize_construct_alignment(generic_type_t* type);
+void finalize_struct_alignment(generic_type_t* type);
 
 /**
  * Does a constructed type contain a given member variable?
  */
-constructed_type_field_t* get_construct_member(constructed_type_t* construct, char* name);
+struct_type_field_t* get_struct_member(struct_type_t* structure, char* name);
 
 /**
  * Dynamically allocate and create an array type

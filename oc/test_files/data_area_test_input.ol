@@ -8,7 +8,7 @@ pub fn main(mut arg:i32, argv:char**) -> i32{
 	declare mut oneD:i64[2];
 	declare mut oneDi32:i32[2];
 	
-	define construct my_struct{
+	define struct my_struct{
 		mut ch:char;
 		mut x:i64;
 		mut lch:char;

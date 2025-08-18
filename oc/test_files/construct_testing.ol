@@ -3,7 +3,7 @@
 */
 
 fn not_main(arg:i32, argv:char**) -> i64 {
-	define construct my_struct{
+	define struct my_struct{
 		mut ch:char;
 		mut x:i64;
 		mut lch:char;
