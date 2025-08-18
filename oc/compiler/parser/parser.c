@@ -1392,7 +1392,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  *
  * We will expect to see the => or : here
  *
- * BNF Rule: <construct-accessor> ::= => <variable-identifier> 
+ * BNF Rule: <struct-accessor> ::= => <variable-identifier> 
  * 								    | : <variable-identifier>
  */
 static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
@@ -1434,7 +1434,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 		referenced_type = working_type->pointer_type->points_to;
 
 		//Now we know that its a pointer, but what does it point to?
-		if(referenced_type->type_class != TYPE_CLASS_CONSTRUCT){
+		if(referenced_type->type_class != TYPE_CLASS_STRUCT){
 			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, referenced_type));
@@ -1445,7 +1445,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	//Otherwise we know that we have some kind of non-pointer here(or so we hope)
 	} else {
 		//We need to specifically see a struct here
-		if(working_type->type_class != TYPE_CLASS_CONSTRUCT){
+		if(working_type->type_class != TYPE_CLASS_STRUCT){
 			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
@@ -1470,7 +1470,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	char* member_name = ident->identifier.string;
 
 	//Let's see if we can look this up inside of the type
-	symtab_variable_record_t* var_record = get_construct_member(referenced_type->construct_type, member_name)->variable;
+	symtab_variable_record_t* var_record = get_struct_member(referenced_type->struct_type, member_name)->variable;
 
 	//If we can't find it we're out
 	if(var_record == NULL){
@@ -1479,16 +1479,16 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	}
 	
 	//Add the variable record into the node
-	const_access_node->is_assignable = TRUE;
+	struct_access_node->is_assignable = TRUE;
 
 	//Store the variable in here
-	const_access_node->variable = var_record;
+	struct_access_node->variable = var_record;
 
 	//Store the type
-	const_access_node->inferred_type = working_type;
+	struct_access_node->inferred_type = working_type;
 
 	//And now we're all done, so we'll just give back the root reference
-	return const_access_node;
+	return struct_access_node;
 }
 
 
@@ -1697,21 +1697,21 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 			push_back_token(lookahead);
 
 			//Let's have the rule do it.
-			generic_ast_node_t* constr_acc = construct_accessor(fl, current_type, side);
+			generic_ast_node_t* struct_access = struct_accessor(fl, current_type, side);
 
 			//We have our fail case here
-			if(constr_acc->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(struct_access->CLASS == AST_NODE_CLASS_ERR_NODE){
 				return print_and_return_error("Invalid construct accessor found in postfix expression", current_line);
 			}
 
 			//Update the current type to be whatever came out of here
-			current_type = constr_acc->variable->type_defined_as;
+			current_type = struct_access->variable->type_defined_as;
 
 			//Store the type information here
-			constr_acc->inferred_type = current_type;
+			struct_access->inferred_type = current_type;
 
 			//Otherwise we know it's good, so we'll add it in as a child
-			add_child_node(postfix_expr_node, constr_acc);
+			add_child_node(postfix_expr_node, struct_access);
 		}
 		
 		//refresh the lookahead for the next iteration
@@ -2148,8 +2148,8 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	}
 
 	//You can never cast anything to be a construct
-	if(casting_to_type->type_class == TYPE_CLASS_CONSTRUCT){
-		return print_and_return_error("No type can be casted to a construct type", parser_line_num);
+	if(casting_to_type->type_class == TYPE_CLASS_STRUCT){
+		return print_and_return_error("No type can be casted to a struct type", parser_line_num);
 	}
 
 	/**
@@ -3593,7 +3593,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
  *
  * BNF Rule: <construct-member> ::= {mut}? <identifier> : <type-specifier> 
  */
-static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_t side){
+static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this mutable? False by default
@@ -3634,10 +3634,10 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_
 	}
 
 	//The field, if we can find it
-	constructed_type_field_t* duplicate;
+	struct_type_field_t* duplicate = NULL;
 
 	//Is this a duplicate? If so, we fail out
-	if((duplicate = get_construct_member(construct->construct_type, name)) != NULL){
+	if((duplicate = get_struct_member(construct->struct_type, name)) != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate->variable);
@@ -3712,7 +3712,7 @@ static u_int8_t construct_member(FILE* fl, generic_type_t* construct, side_type_
  *
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
-static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct, side_type_t side){
+static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -3728,7 +3728,7 @@ static u_int8_t construct_member_list(FILE* fl, generic_type_t* construct, side_
 		push_back_token(lookahead);
 
 		//We must first see a valid construct member
-		u_int8_t status = construct_member(fl, construct, side);
+		u_int8_t status = struct_member(fl, construct, side);
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
@@ -4023,9 +4023,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
  *
  * This rule also handles everything with identifiers to avoid excessive confusion
  *
- * BNF Rule: <construct-definer> ::= define construct <identifier> { <construct-member-list> } {as <identifer>}?;
+ * BNF Rule: <struct-definer> ::= define struct <identifier> { <construct-member-list> } {as <identifer>}?;
  */
-static u_int8_t construct_definer(FILE* fl){
+static u_int8_t struct_definer(FILE* fl){
 	//Freeze the line num
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
@@ -4086,10 +4086,10 @@ static u_int8_t construct_definer(FILE* fl){
 	push_token(grouping_stack, lookahead);
 
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
-	generic_type_t* construct_type = create_constructed_type(type_name, current_line);
+	generic_type_t* struct_type = create_struct_type(type_name, current_line);
 
 	//We are now required to see a valid construct member list
-	u_int8_t success = construct_member_list(fl, construct_type, SIDE_TYPE_LEFT);
+	u_int8_t success = struct_member_list(fl, struct_type, SIDE_TYPE_LEFT);
 
 	//Automatic fail case here
 	if(success == FAILURE){
@@ -4117,8 +4117,8 @@ static u_int8_t construct_definer(FILE* fl){
 		return FAILURE;
 	}
 	
-	//Once we're here, the construct type is fully defined. We can now add it into the symbol table
-	insert_type(type_symtab, create_type_record(construct_type));
+	//Once we're here, the struct type is fully defined. We can now add it into the symbol table
+	insert_type(type_symtab, create_type_record(struct_type));
 
 	//Once we're done with this, the mem list itself has no use so we'll destroy it
 	
@@ -4211,7 +4211,7 @@ static u_int8_t construct_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_ident->identifier, construct_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_ident->identifier, struct_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -4697,16 +4697,16 @@ static symtab_type_record_t* type_name(FILE* fl){
 			return record;
 
 		//Construct type
-		case CONSTRUCT:
+		case TYPE_CLASS_STRUCT:
 			//We know that this keyword is in the name, so we'll add it in
-			strcpy(type_name, "construct ");
+			strcpy(type_name, "struct ");
 
 			//It is required that we now see a valid identifier
 			type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 			//If we fail, we'll bail out
 			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-				print_parse_message(PARSE_ERROR, "Invalid identifier given as construct type name", parser_line_num);
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as struct type name", parser_line_num);
 				//It's already an error so just give it back
 				return NULL;
 			}
@@ -4727,7 +4727,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Construct %s was never defined. Types must be defined before use", type_name);
+				sprintf(info, "Struct %s was never defined. Types must be defined before use", type_name);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -7852,8 +7852,8 @@ static u_int8_t definition(FILE* fl){
 			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 			switch(lookahead.tok){
-				case CONSTRUCT:
-					return construct_definer(fl);
+				case STRUCT:
+					return struct_definer(fl);
 				case ENUM:
 					return enum_definer(fl);
 				case FN:
