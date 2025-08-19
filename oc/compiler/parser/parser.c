@@ -7624,6 +7624,28 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 
 /**
+ * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
+ */
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+
+
+	//If we made it here, then we know that we're good
+	return TRUE;
+}
+
+
+/**
+ * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
+ */
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+
+
+	//If we made it here, then we know that we're good
+	return TRUE;
+}
+
+
+/**
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
  * performs type checking and inference and all needed symbol table manipulation
  *
@@ -7755,7 +7777,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
-
 	//Now we know that it wasn't a duplicate, so we must see a valid assignment operator
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -7766,22 +7787,38 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Now we need to see a valid initializer
 	generic_ast_node_t* initializer_node = initializer(fl, SIDE_TYPE_RIGHT);
 
-	//We now need to complete type checking. Is what we're assigning to the new variable
-	//compatible with what we're given by the logical or expression here?
+	//What's the return type of our node?
+	generic_type_t* return_type = type_spec;
 
-	//If it fails, we fail out
-	if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		return print_and_return_error("Invalid expression given as intializer", parser_line_num);
+	//Based on what the class of this initializer node is, there are several different
+	//paths that we can take
+	switch(initializer_node->CLASS){
+		//If it's in error itself, we just leave
+		case AST_NODE_CLASS_ERR_NODE:
+			return print_and_return_error("Invalid expression given as intializer", parser_line_num);
+
+		//An array initializer list has a special checking function
+		//that we must use
+		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+			return print_and_return_error("Not yet implemented", parser_line_num);
+			
+		//A struct initializer list also has it's own special checking function that we must use
+		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			return print_and_return_error("Not yet implemented", parser_line_num);
+			
+		//Otherwise we'll just take the standard path
+		default:
+			//Use the helper to determine if the types are assignable
+			return_type = types_assignable(&(type_spec), &(initializer_node->inferred_type));
+
+			//Will be null if we have a failure
+			if(return_type == NULL){
+				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, type_spec->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			break;
 	}
-
-	//Otherwise it worked, so we'll add it in as a child
-	add_child_node(let_stmt_node, initializer_node);
-
-	//Extract the two types here
-	generic_type_t* left_hand_type = type_spec;
-	generic_type_t* right_hand_type = initializer_node->inferred_type;
-
-	generic_type_t* return_type = types_assignable(&left_hand_type, &right_hand_type);
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(initializer_node->inferred_type->type_class == TYPE_CLASS_POINTER){
@@ -7790,14 +7827,11 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		}
 	}
 
-	//Will be null if we have a failure
-	if(return_type == NULL){
-		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
 	//Store this just in case--most likely won't use
 	let_stmt_node->inferred_type = return_type;
+
+	//Otherwise it worked, so we'll add it in as a child
+	add_child_node(let_stmt_node, initializer_node);
 
 	//The last thing that we are required to see before final assembly is a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
