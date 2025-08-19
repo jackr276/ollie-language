@@ -6744,9 +6744,28 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 	//The left hand var is our assigned var
 	let_results.assignee = left_hand_var;
 
-	//Now emit whatever binary expression code that we have
-	cfg_result_package_t package = emit_expression(current_block, node->first_child, is_branch_ending, FALSE);
+	//Declare the result package up here
+	cfg_result_package_t package;	
 
+	switch(node->first_child->CLASS){
+		case AST_NODE_CLASS_STRING_INITIALIZER:
+			printf("Not yet implemented\n");
+			exit(0);
+
+		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			printf("Not yet implemented\n");
+			exit(0);
+		
+		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+			printf("Not yet implemented\n");
+			exit(0);
+
+		default:
+			//Now emit whatever binary expression code that we have
+			package = emit_expression(current_block, node->first_child, is_branch_ending, FALSE);
+			break;
+	}
+	
 	//The current block here is whatever the final block in the package is 
 	if(package.final_block != NULL && package.final_block != current_block){
 		//We'll reassign this to be the final block. If this does happen, it means that
