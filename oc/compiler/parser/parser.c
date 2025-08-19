@@ -7744,19 +7744,19 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		return print_and_return_error("Assignment operator(:=) required after identifier in let statement", parser_line_num);
 	}
 
-	//Otherwise we saw it, so now we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
+	//Now we need to see a valid initializer
+	generic_ast_node_t* initializer_node = initializer(fl, SIDE_TYPE_RIGHT);
 
 	//We now need to complete type checking. Is what we're assigning to the new variable
 	//compatible with what we're given by the logical or expression here?
 
 	//If it fails, we fail out
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
 		return print_and_return_error("Invalid expression given as intializer", parser_line_num);
 	}
 
 	//Otherwise it worked, so we'll add it in as a child
-	add_child_node(let_stmt_node, expr_node);
+	add_child_node(let_stmt_node, initializer_node);
 
 	//The last thing that we are required to see before final assembly is a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7768,13 +7768,13 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Extract the two types here
 	generic_type_t* left_hand_type = type_spec;
-	generic_type_t* right_hand_type = expr_node->inferred_type;
+	generic_type_t* right_hand_type = initializer_node->inferred_type;
 
 	generic_type_t* return_type = types_assignable(&left_hand_type, &right_hand_type);
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
-	if(expr_node->inferred_type->type_class == TYPE_CLASS_POINTER){
-		if(expr_node->variable != NULL && expr_node->variable->is_mutable == FALSE && is_mutable == TRUE){
+	if(initializer_node->inferred_type->type_class == TYPE_CLASS_POINTER){
+		if(initializer_node->variable != NULL && initializer_node->variable->is_mutable == FALSE && is_mutable == TRUE){
 			return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
 		}
 	}
