@@ -3513,11 +3513,60 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
  * [], separated by commas
  *
  * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
+ *
+ * REMEMBER: by the time that we've arrived here, we've already seen and consumed the
+ * first [ token
  */
 static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
+	//Lookahead token for parsing
+	lexitem_t lookahead;
 
-	//TODO FIXME this is just here as a placeholder
-	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+	//Let's first allocate our initializer node. The initializer node will store
+	//all of our ternary expressions inside of it as children
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_INITIALIZER, side);
+
+	//Prime the lookahead, even though it will be pushed back
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
+	//to process
+	do{
+		//Put the token back
+		push_back_token(lookahead);
+
+		//We now must see an initializer node
+		generic_ast_node_t* initializer_node = initializer(fl, side);
+
+		//If this is an error, then the whole thing is invalid
+		if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return print_and_return_error("Invalid initializer given in array initializer", parser_line_num);
+		}
+
+		//Add this in as a child of the initializer list
+		add_child_node(initializer_list_node, initializer_node);
+
+		//Otherwise, we'll now increment the count for the number of nodes in the initializer list
+		initializer_list_node->child_count++;
+
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we keep seeing commas, we continue
+	} while(lookahead.tok == COMMA);
+
+	//Once we reach down here, we need to check and see if we have the closing bracket that would
+	//mark a valid end for us
+	if(lookahead.tok != R_BRACKET){
+		return print_and_return_error("Closing bracket(]) required at the end of array initializer", parser_line_num);
+	}
+
+	//Pop the grouping stack and ensure it matches
+	if(pop_token(grouping_stack).tok != L_BRACKET){
+		return print_and_return_error("Unmatched brackets detected in array initializer", parser_line_num);
+	}
+
+	//Give back the intializer list node
+	return initializer_list_node;
 }
 
 
@@ -3525,7 +3574,7 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
  * A struct initializer is a set of one or more initializers in between
  * [], separated by commas
  *
- * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
+ * BNF Rule: <struct-initializer> ::= {<intializer>{, <initializer>}*}
  */
 static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 
@@ -3547,10 +3596,18 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side){
 	switch(lookahead.tok){
 		//A left bracket symbol means that we're encountering an array initializer
 		case L_BRACKET:
+			//Push this onto the grouping stack
+			push_token(grouping_stack, lookahead);
+
+			//Let the helper handle it
 			return array_initializer(fl, side);
 
 		//An L_CURLY signifies the start of a struct initializer
 		case L_CURLY:
+			//Push this onto the grouping stack for matching later
+			push_token(grouping_stack, lookahead);
+
+			//Let the helper handle it
 			return struct_initializer(fl, side);
 
 		//By default, we haven't found anything in here that would indicate we'll need an initializer.
@@ -3559,8 +3616,6 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side){
 			push_back_token(lookahead);
 			return ternary_expression(fl, side);
 	}
-
-	return NULL;
 }
 
 

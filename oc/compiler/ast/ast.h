@@ -83,6 +83,8 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ASM_INLINE_STMT,
 	//An array initializer node
 	AST_NODE_CLASS_ARRAY_INITIALIZER,
+	//A struct initializer
+	AST_NODE_CLASS_STRUCT_INITIALIZER,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -135,6 +137,8 @@ struct generic_ast_node_t{
 	int32_t upper_bound;
 	//What line number is this from
 	u_int16_t line_number;
+	//The child count
+	u_int16_t child_count;
 	//Store a binary operator(if one exists)
 	Token binary_operator;
 	//Store a unary operator(if one exists)
