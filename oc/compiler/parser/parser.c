@@ -7657,12 +7657,49 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* array
  *
  * 1.) let a:char[] := "hello"; //We auto set the bounds to be 6 here
  * 2.) let a:char[6] := "hello"; //This is also valid, we just need to ensure that things match
+ *
+ * Returns an error node if bad. If good, we return a string initializer node with the string constant
+ * node as its child
  */
-static u_int8_t validate_or_set_bounds_for_string_initializer(){
+static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
+	//Extract the actual array type for ease of use here
+	array_type_t* array = array_type->array_type;
 
+	//Let's first validate that this array actually is a char[]
+	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type->basic_type != CHAR){
+		//Fail out here
+		return print_and_return_error("Attempt to use a string initializer for an array that is not of type char[]", parser_line_num);
+	}
 
-	//If we made it here, then we know that everything was good
-	return TRUE;
+	//Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
+	//we could be seeing an array type where the length is already set. Either way, we'll need to get the string length of the constant
+	
+	//A dynamic string stores a string lenght, it does not account for the null terminator. As such, we'll need to have the null terminator
+	//accounted for by adding 1 to it
+	u_int32_t length = string_constant->string_val.current_length + 1;
+	
+	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
+	//lenght of the array to be whatever we have in here
+	if(array->num_members == 0){
+		array->num_members = length;
+	} else {
+		//If these are different, then we fail out
+		if(array->num_members != length){
+			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array->num_members, length);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we're all set
+	}
+
+	//Now that we've gotten here, we're able to do our final assembly by first creating the string initializer node
+	generic_ast_node_t* initializer_node = ast_node_alloc(AST_NODE_CLASS_STRING_INITIALIZER, SIDE_TYPE_RIGHT);
+
+	//Once we've created this, we'll add the string constant as its first and only child node
+	add_child_node(initializer_node, string_constant);
+
+	//And give this node back
+	return initializer_node;
 }
 
 
@@ -7835,11 +7872,15 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 			//the helper deal with it
 			if(initializer_node->CLASS == AST_NODE_CLASS_CONSTANT && initializer_node->constant_type == STR_CONST
 				&& type_spec->type_class == TYPE_CLASS_ARRAY){
+				
+				//Dynamically set the initializer node here in the helper function
+				initializer_node = validate_or_set_bounds_for_string_initializer(type_spec, initializer_node);
 
-				//Invoke the validator function here. If it fails, we error out
-				if(validate_or_set_bounds_for_string_initializer() == FALSE){
-					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
-				} 
+				//If it's an error, we need to fail out now
+				if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+					//Throw it up the chain
+					return initializer_node;
+				}
 
 				//Otherwise we'll just break out. The initializer node will have been properly
 				//set by the function above

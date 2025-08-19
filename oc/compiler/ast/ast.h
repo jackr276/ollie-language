@@ -85,6 +85,8 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ARRAY_INITIALIZER_LIST,
 	//A struct initializer
 	AST_NODE_CLASS_STRUCT_INITIALIZER_LIST,
+	//A string initializer node
+	AST_NODE_CLASS_STRING_INITIALIZER,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
