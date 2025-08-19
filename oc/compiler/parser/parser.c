@@ -3516,15 +3516,9 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 	//all of our ternary expressions inside of it as children
 	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_INITIALIZER_LIST, side);
 
-	//Prime the lookahead, even though it will be pushed back
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
 	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
 	//to process
 	do{
-		//Put the token back
-		push_back_token(lookahead);
-
 		//We now must see an initializer node
 		generic_ast_node_t* initializer_node = initializer(fl, side);
 
@@ -3572,9 +3566,6 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 	//all of our ternary expressions inside of it as children
 	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_STRUCT_INITIALIZER_LIST, side);
 
-	//Prime the lookahead, even though it will be pushed back
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
 	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
 	//to process
 	do{
@@ -3591,9 +3582,6 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 
 		//Add this in as a child of the initializer list
 		add_child_node(initializer_list_node, initializer_node);
-
-		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//So long as we keep seeing commas, we continue
 	} while(lookahead.tok == COMMA);
@@ -7789,14 +7777,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Otherwise it worked, so we'll add it in as a child
 	add_child_node(let_stmt_node, initializer_node);
 
-	//The last thing that we are required to see before final assembly is a semicolon
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Last possible tripping point
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required at the end of let statement", parser_line_num);
-	}
-
 	//Extract the two types here
 	generic_type_t* left_hand_type = type_spec;
 	generic_type_t* right_hand_type = initializer_node->inferred_type;
@@ -7818,6 +7798,14 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Store this just in case--most likely won't use
 	let_stmt_node->inferred_type = return_type;
+
+	//The last thing that we are required to see before final assembly is a semicolon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Last possible tripping point
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon required at the end of let statement", parser_line_num);
+	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
