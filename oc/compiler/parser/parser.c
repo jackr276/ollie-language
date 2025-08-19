@@ -1126,7 +1126,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
  * a reference to the subtree created by it
  *
  * BNF Rule: <assignment-expression> ::= <ternary-expression> 
- * 									   | <unary-expression> := <initializer>
+ * 									   | <unary-expression> := <ternary-expression>
  * 									   | <unary-expression> <<= <ternary-expression>
  * 									   | <unary-expression> >>= <ternary-expression>
  * 									   | <unary-expression> += <ternary-expression>
@@ -1236,16 +1236,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 
 	//Holder for our expression
-	generic_ast_node_t* expr;
-
-	//If the assignment operator is a :=, then we are able to see an initializer. If it
-	//is not(for instance, a compound equality), then we are required to see a ternary
-	//expression because an initializer would make no sense
-	if(assignment_operator == COLONEQ){
-		expr = initializer(fl, SIDE_TYPE_RIGHT);
-	} else {
-		expr = ternary_expression(fl, SIDE_TYPE_RIGHT);
-	}
+	generic_ast_node_t* expr = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Fail case here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
