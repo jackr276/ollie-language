@@ -13,7 +13,7 @@ fn string_init() -> char* {
 }
 
 
-fn main(argc:i32, argv:char**) -> i32 {
+pub fn main(argc:i32, argv:char**) -> i32 {
 	@string_init();
 
 	ret 0;

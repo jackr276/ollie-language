@@ -5018,6 +5018,12 @@ static generic_type_t* type_specifier(FILE* fl){
 			//Scan ahead to see
 			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
 
+			//This is a special case where we are able to have an unitialized array for the time
+			//being. This only works if we have an array initializer afterwards
+			
+			//We're all set, push this onto the lightstack
+			lightstack_push(&lightstack, 0);
+
 			//Onto the next iteration
 			continue;
 		}
@@ -5047,6 +5053,7 @@ static generic_type_t* type_specifier(FILE* fl){
 			return NULL;
 		}
 
+		//Determine if we have an illegal constant given as the array bounds
 		switch(const_node->constant_type){
 			case FLOAT_CONST:
 			case STR_CONST:
@@ -7646,6 +7653,20 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* array
 
 
 /**
+ * There are two options that we could see for a string initializer:
+ *
+ * 1.) let a:char[] := "hello"; //We auto set the bounds to be 6 here
+ * 2.) let a:char[6] := "hello"; //This is also valid, we just need to ensure that things match
+ */
+static u_int8_t validate_or_set_bounds_for_string_initializer(){
+
+
+	//If we made it here, then we know that everything was good
+	return TRUE;
+}
+
+
+/**
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
  * performs type checking and inference and all needed symbol table manipulation
  *
@@ -7659,7 +7680,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Is it mutable?
-	u_int8_t is_mutable = 0;
+	u_int8_t is_mutable = FALSE;
 	//The storage class, normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
@@ -7780,6 +7801,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Now we know that it wasn't a duplicate, so we must see a valid assignment operator
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//Assop is mandatory here
 	if(lookahead.tok != COLONEQ){
 		return print_and_return_error("Assignment operator(:=) required after identifier in let statement", parser_line_num);
 	}
@@ -7813,8 +7835,15 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 			//the helper deal with it
 			if(initializer_node->CLASS == AST_NODE_CLASS_CONSTANT && initializer_node->constant_type == STR_CONST
 				&& type_spec->type_class == TYPE_CLASS_ARRAY){
-				printf("Found a string initializer\n\n");
 
+				//Invoke the validator function here. If it fails, we error out
+				if(validate_or_set_bounds_for_string_initializer() == FALSE){
+					return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+				} 
+
+				//Otherwise we'll just break out. The initializer node will have been properly
+				//set by the function above
+				break;
 			}
 
 			//Use the helper to determine if the types are assignable
