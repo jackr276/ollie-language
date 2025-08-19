@@ -102,6 +102,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* defer_statement(FILE* fl);
 static generic_ast_node_t* idle_statement(FILE* fl);
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side);
+static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
@@ -1125,7 +1126,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
  * a reference to the subtree created by it
  *
  * BNF Rule: <assignment-expression> ::= <ternary-expression> 
- * 									   | <unary-expression> := <ternary-expression>
+ * 									   | <unary-expression> := <initializer>
  * 									   | <unary-expression> <<= <ternary-expression>
  * 									   | <unary-expression> >>= <ternary-expression>
  * 									   | <unary-expression> += <ternary-expression>
@@ -1234,8 +1235,17 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Now that we're here we must see a valid conditional expression
-	generic_ast_node_t* expr = ternary_expression(fl, SIDE_TYPE_RIGHT);
+	//Holder for our expression
+	generic_ast_node_t* expr;
+
+	//If the assignment operator is a :=, then we are able to see an initializer. If it
+	//is not(for instance, a compound equality), then we are required to see a ternary
+	//expression because an initializer would make no sense
+	if(assignment_operator == COLONEQ){
+		expr = initializer(fl, SIDE_TYPE_RIGHT);
+	} else {
+		expr = ternary_expression(fl, SIDE_TYPE_RIGHT);
+	}
 
 	//Fail case here
 	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
@@ -3497,12 +3507,31 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 }
 
 
+
+/**
+ * An array initializer is a set of one or more initializers in between
+ * [], separated by commas
+ *
+ * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
+ */
 static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 
 	//TODO FIXME this is just here as a placeholder
 	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
 }
 
+
+/**
+ * A struct initializer is a set of one or more initializers in between
+ * [], separated by commas
+ *
+ * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
+ */
+static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
+
+	//TODO FIXME this is just here as a placeholder
+	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+}
 
 
 /**
@@ -3519,6 +3548,10 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side){
 		//A left bracket symbol means that we're encountering an array initializer
 		case L_BRACKET:
 			return array_initializer(fl, side);
+
+		//An L_CURLY signifies the start of a struct initializer
+		case L_CURLY:
+			return struct_initializer(fl, side);
 
 		//By default, we haven't found anything in here that would indicate we'll need an initializer.
 		//As such, we'll push the token back and call the ternary expression rule
