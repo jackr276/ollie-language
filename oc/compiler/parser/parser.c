@@ -7808,6 +7808,15 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 			
 		//Otherwise we'll just take the standard path
 		default:
+			//If we have a string constant, there's a chance that we could be seeing a string
+			//initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
+			//the helper deal with it
+			if(initializer_node->CLASS == AST_NODE_CLASS_CONSTANT && initializer_node->constant_type == STR_CONST
+				&& type_spec->type_class == TYPE_CLASS_ARRAY){
+				printf("Found a string initializer\n\n");
+
+			}
+
 			//Use the helper to determine if the types are assignable
 			return_type = types_assignable(&(type_spec), &(initializer_node->inferred_type));
 
