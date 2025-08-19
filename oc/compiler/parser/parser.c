@@ -3514,7 +3514,7 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 
 	//Let's first allocate our initializer node. The initializer node will store
 	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_INITIALIZER, side);
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_INITIALIZER_LIST, side);
 
 	//Prime the lookahead, even though it will be pushed back
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -3535,9 +3535,6 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 
 		//Add this in as a child of the initializer list
 		add_child_node(initializer_list_node, initializer_node);
-
-		//Otherwise, we'll now increment the count for the number of nodes in the initializer list
-		initializer_list_node->child_count++;
 
 		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -3568,9 +3565,52 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
  * BNF Rule: <struct-initializer> ::= {<intializer>{, <initializer>}*}
  */
 static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
+	//Lookahead token for parsing
+	lexitem_t lookahead;
 
-	//TODO FIXME this is just here as a placeholder
-	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+	//Let's first allocate our initializer node. The initializer node will store
+	//all of our ternary expressions inside of it as children
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_STRUCT_INITIALIZER_LIST, side);
+
+	//Prime the lookahead, even though it will be pushed back
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
+	//to process
+	do{
+		//Put the token back
+		push_back_token(lookahead);
+
+		//We now must see an initializer node
+		generic_ast_node_t* initializer_node = initializer(fl, side);
+
+		//If this is an error, then the whole thing is invalid
+		if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return print_and_return_error("Invalid initializer given in struct initializer", parser_line_num);
+		}
+
+		//Add this in as a child of the initializer list
+		add_child_node(initializer_list_node, initializer_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we keep seeing commas, we continue
+	} while(lookahead.tok == COMMA);
+
+	//Once we reach down here, we need to check and see if we have the closing bracket that would
+	//mark a valid end for us
+	if(lookahead.tok != L_CURLY){
+		return print_and_return_error("Closing curly brace(}) required at the end of struct initializer", parser_line_num);
+	}
+
+	//Pop the grouping stack and ensure it matches
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Unmatched brackets detected in struct initializer", parser_line_num);
+	}
+
+	//Give back the intializer list node
+	return initializer_list_node;
 }
 
 
