@@ -7635,6 +7635,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
 
+	//TODO ensure type assignment for initializer list node here
 
 	//If we made it here, then we know that we're good
 	return TRUE;
@@ -7646,6 +7647,8 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  */
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
 
+
+	//TODO ensure type assignment for initializer list node here
 
 	//If we made it here, then we know that we're good
 	return TRUE;
@@ -7694,6 +7697,9 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 
 	//Now that we've gotten here, we're able to do our final assembly by first creating the string initializer node
 	generic_ast_node_t* initializer_node = ast_node_alloc(AST_NODE_CLASS_STRING_INITIALIZER, SIDE_TYPE_RIGHT);
+
+	//This node's inferred type is the array type
+	initializer_node->inferred_type = array_type;
 
 	//Once we've created this, we'll add the string constant as its first and only child node
 	add_child_node(initializer_node, string_constant);
