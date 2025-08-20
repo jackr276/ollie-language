@@ -1314,10 +1314,50 @@ static char* op_to_string(Token op){
 
 
 /**
+ * Convert a jump type to a string
+ */
+static char* jump_type_to_string(jump_type_t jump_type){
+	switch(jump_type){
+		case JUMP_TYPE_JE:
+			return "je";
+		case JUMP_TYPE_JNE:
+			return "jne";
+		case JUMP_TYPE_JG:
+			return "jg";
+		case JUMP_TYPE_JL:
+			return "jl";
+		case JUMP_TYPE_JNZ:
+			return "jnz";
+		case JUMP_TYPE_JZ:
+			return "jz";
+		case JUMP_TYPE_JMP:
+			return "jmp";
+		case JUMP_TYPE_JGE:
+			return "jge";
+		case JUMP_TYPE_JLE:
+			return "jle";
+		case JUMP_TYPE_JAE:
+			return "jae";
+		case JUMP_TYPE_JBE:
+			return "jbe";
+		case JUMP_TYPE_JA:
+			return "ja";
+		case JUMP_TYPE_JB:
+			return "jb";
+		default:
+			return "jmp";
+	}
+}
+
+
+/**
  * Pretty print a three address code statement
  *
 */
 void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
+	//For later use
+	dynamic_array_t* func_params;
+
 	//Go based on what our statatement class is
 	switch(stmt->CLASS){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
@@ -1354,201 +1394,167 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		case THREE_ADDR_CODE_ASSN_STMT:
+			//We'll print out the left and right ones here
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_ASSN_CONST_STMT:
+			//First print out the assignee
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+
+			//Print the constant out
+			print_three_addr_constant(fl, stmt->op1_const);
+			//Newline needed
+			fprintf(fl, "\n");
+			break;
+		
+
+		case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
+			//We'll print out the left and right ones here
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- Memory Address of ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_RET_STMT:
+			fprintf(fl, "ret ");
+
+			//If it has a returned variable
+			if(stmt->op1 != NULL){
+				print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			}
+			
+			//No matter what, print a newline
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_JUMP_STMT:
+			//Then print out the block label
+			fprintf(fl, "%s .L%d\n", jump_type_to_string(stmt->jump_type), ((basic_block_t*)(stmt->jumping_to_block))->block_id);
+			break;
+
+		case THREE_ADDR_CODE_FUNC_CALL:
+			//First we'll print out the assignment, if one exists
+			if(stmt->assignee != NULL){
+				//Print the variable and assop out
+				print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+				fprintf(fl, " <- ");
+			}
+
+			//No matter what, we'll need to see the "call" keyword, followed
+			//by the function name
+			fprintf(fl, "call %s(", stmt->called_function->func_name.string);
+
+			//Grab this out
+			func_params = stmt->function_parameters;
+
+			//Now we can go through and print out all of our parameters here
+			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
+				//Grab it out
+				three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
+				
+				//Print this out here
+				print_variable(fl, func_param, PRINTING_VAR_INLINE);
+
+				//If we need to, print out a comma
+				if(i != func_params->current_index - 1){
+					fprintf(fl, ", ");
+				}
+			}
+
+			//Now at the very end, close the whole thing out
+			fprintf(fl, ")\n");
+			break;
+
+		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			//First we'll print out the assignment, if one exists
+			if(stmt->assignee != NULL){
+				//Print the variable and assop out
+				print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+				fprintf(fl, " <- ");
+			}
+
+			//Print out the call here
+			fprintf(fl, "call *");
+
+			//Now we'll use the helper to print the variable name
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+			//Now we can print the opening parenthesis
+			fprintf(fl, "(");
+
+			//Grab this out
+			func_params = stmt->function_parameters;
+
+			//Now we can go through and print out all of our parameters here
+			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
+				//Grab it out
+				three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
+				
+				//Print this out here
+				print_variable(fl, func_param, PRINTING_VAR_INLINE);
+
+				//If we need to, print out a comma
+				if(i != func_params->current_index - 1){
+					fprintf(fl, ", ");
+				}
+			}
+
+			//Now at the very end, close the whole thing out
+			fprintf(fl, ")\n");
+			break;
+		
+		case THREE_ADDR_CODE_INC_STMT:
+			fprintf(fl, "inc ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_DEC_STMT:
+			fprintf(fl, "dec ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- not ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_NEG_STATEMENT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- neg ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			//We will use a sequence of commands to do this
+			fprintf(fl, " <- logical_not ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_LABEL_STMT:
+			//Let's print it out. This is an instance where we will not use the print var
+			fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string + 1);
+			break;
+		
+	
+
 		
 
 	}
 
-	
-	//If we have a regular const assignment
-	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_STMT){
-		//We'll print out the left and right ones here
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	//Assigning a memory address to a variable
-	} else if (stmt->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
-		//We'll print out the left and right ones here
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- Memory Address of ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//First print out the assignee
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- ");
-
-		//Print the constant out
-		print_three_addr_constant(fl, stmt->op1_const);
-		//Newline needed
-		fprintf(fl, "\n");
-
-	//Print out a return statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_RET_STMT){
-		//Use asm keyword here, getting close to machine code
-		fprintf(fl, "ret ");
-
-		//If it has a returned variable
-		if(stmt->op1 != NULL){
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		}
-		
-		//No matter what, print a newline
-		fprintf(fl, "\n");
-
-	//Print out a jump statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-		//Use asm keyword here, getting close to machine code
-		switch(stmt->jump_type){
-			case JUMP_TYPE_JE:
-				fprintf(fl, "je");
-				break;
-			case JUMP_TYPE_JNE:
-				fprintf(fl, "jne");
-				break;
-			case JUMP_TYPE_JG:
-				fprintf(fl, "jg");
-				break;
-			case JUMP_TYPE_JL:
-				fprintf(fl, "jl");
-				break;
-			case JUMP_TYPE_JNZ:
-				fprintf(fl, "jnz");
-				break;
-			case JUMP_TYPE_JZ:
-				fprintf(fl, "jz");
-				break;
-			case JUMP_TYPE_JMP:
-				fprintf(fl, "jmp");
-				break;
-			case JUMP_TYPE_JGE:
-				fprintf(fl, "jge");
-				break;
-			case JUMP_TYPE_JLE:
-				fprintf(fl, "jle");
-				break;
-			case JUMP_TYPE_JAE:
-				fprintf(fl, "jae");
-				break;
-			case JUMP_TYPE_JBE:
-				fprintf(fl, "jbe");
-				break;
-			case JUMP_TYPE_JA:
-				fprintf(fl, "ja");
-				break;
-			case JUMP_TYPE_JB:
-				fprintf(fl, "jb");
-				break;
-			default:
-				fprintf(fl, "jmp");
-				break;
-		}
-
-		//Then print out the block label
-		fprintf(fl, " .L%d\n", ((basic_block_t*)(stmt->jumping_to_block))->block_id);
-
-	//If we have a function call go here
-	} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
-		//First we'll print out the assignment, if one exists
-		if(stmt->assignee != NULL){
-			//Print the variable and assop out
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- ");
-		}
-
-		//No matter what, we'll need to see the "call" keyword, followed
-		//by the function name
-		fprintf(fl, "call %s(", stmt->called_function->func_name.string);
-
-		//Grab this out
-		dynamic_array_t* func_params = stmt->function_parameters;
-
-		//Now we can go through and print out all of our parameters here
-		for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
-			//Grab it out
-			three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
-			
-			//Print this out here
-			print_variable(fl, func_param, PRINTING_VAR_INLINE);
-
-			//If we need to, print out a comma
-			if(i != func_params->current_index - 1){
-				fprintf(fl, ", ");
-			}
-		}
-
-		//Now at the very end, close the whole thing out
-		fprintf(fl, ")\n");
-
-	//Handle the case of an indirect function call
-	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIRECT_FUNC_CALL){
-		//First we'll print out the assignment, if one exists
-		if(stmt->assignee != NULL){
-			//Print the variable and assop out
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- ");
-		}
-
-		//Print out the call here
-		fprintf(fl, "call *");
-
-		//Now we'll use the helper to print the variable name
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-
-		//Now we can print the opening parenthesis
-		fprintf(fl, "(");
-
-		//Grab this out
-		dynamic_array_t* func_params = stmt->function_parameters;
-
-		//Now we can go through and print out all of our parameters here
-		for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
-			//Grab it out
-			three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
-			
-			//Print this out here
-			print_variable(fl, func_param, PRINTING_VAR_INLINE);
-
-			//If we need to, print out a comma
-			if(i != func_params->current_index - 1){
-				fprintf(fl, ", ");
-			}
-		}
-
-		//Now at the very end, close the whole thing out
-		fprintf(fl, ")\n");
-
-	//If we have a binary operator with a constant
-	} else if (stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		//TODO MAY OR MAY NOT NEED
-	} else if (stmt->CLASS == THREE_ADDR_CODE_INC_STMT){
-		fprintf(fl, "inc ");
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if (stmt->CLASS == THREE_ADDR_CODE_DEC_STMT){
-		fprintf(fl, "dec ");
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if (stmt->CLASS == THREE_ADDR_CODE_BITWISE_NOT_STMT){
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- not ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- neg ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		//We will use a sequence of commands to do this
-		fprintf(fl, " <- logical_not ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	//For a label statement, we need to trim off the $ that it has
-	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
-		//Let's print it out. This is an instance where we will not use the print var
-		fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string + 1);
 	} else if(stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
 		//This is an instance where we will not use the print var
 		fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name.string + 1);
