@@ -1265,172 +1265,99 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 
 
 /**
+ * Turn an operand into a string
+ */
+static char* op_to_string(Token op){
+	//Whatever we have here
+	switch (op) {
+		case PLUS:
+			return "+";
+		case MINUS:
+			return "-";
+		case STAR:
+			return "*";
+		case F_SLASH:
+			return "/";
+		case MOD:
+			return "%";
+		case G_THAN:
+			return ">";
+		case L_THAN:
+			return "<";
+		case L_SHIFT:
+			return "<<";
+		case R_SHIFT:
+			return ">>";
+		case SINGLE_AND:
+			return "&";
+		case SINGLE_OR:
+			return "|";
+		case CARROT:
+			return "^";
+		case DOUBLE_OR:
+			return "||";
+		case DOUBLE_AND:
+			return "&&";
+		case DOUBLE_EQUALS:
+			return "==";
+		case NOT_EQUALS:
+			return "!=";
+		case G_THAN_OR_EQ:
+			return ">=";
+		case L_THAN_OR_EQ:
+			return "<=";
+		//Should never happen, but just in case
+		default:
+			exit(1);
+	}
+}
+
+
+/**
  * Pretty print a three address code statement
  *
 */
 void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
-	//If it's a binary operator statement(most common), we'll
-	//print the whole thing
-	if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
-		//What is our op?
-		char* op = "";
+	//Go based on what our statatement class is
+	switch(stmt->CLASS){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			//This one comes first
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 
-		//Whatever we have here
-		switch (stmt->op) {
-			case PLUS:
-				op = "+";
-				break;
-			case MINUS:
-				op = "-";
-				break;
-			case STAR:
-				op = "*";
-				break;
-			case F_SLASH:
-				op = "/";
-				break;
-			case MOD:
-				op = "%";
-				break;
-			case G_THAN:
-				op = ">";
-				break;
-			case L_THAN:
-				op = "<";
-				break;
-			case L_SHIFT:
-				op = "<<";
-				break;
-			case R_SHIFT:
-				op = ">>";
-				break;
-			case SINGLE_AND:
-				op = "&";
-				break;
-			case SINGLE_OR:
-				op = "|";
-				break;
-			case CARROT:
-				op = "^";
-				break;
-			case DOUBLE_OR:
-				op = "||";
-				break;
-			case DOUBLE_AND:
-				op = "&&";
-				break;
-			case DOUBLE_EQUALS:
-				op = "==";
-				break;
-			case NOT_EQUALS:
-				op = "!=";
-				break;
-			case G_THAN_OR_EQ:
-				op = ">=";
-				break;
-			case L_THAN_OR_EQ:
-				op = "<=";
-				break;
-			default:
-				fprintf(fl, "BAD OP");
-				exit(1);
-		}
+			//Then the arrow
+			fprintf(fl, " <- ");
 
-		//This one comes first
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			//Now we'll do op1, token, op2
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, " %s ", op_to_string(stmt->op));
+			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
-		//Then the arrow
-		fprintf(fl, " <- ");
+			//And end it out here
+			fprintf(fl, "\n");
+			break;
 
-		//Now we'll do op1, token, op2
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, " %s ", op);
-		print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			//This one comes first
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 
-		//And end it out here
-		fprintf(fl, "\n");
+			//Then the arrow
+			fprintf(fl, " <- ");
 
-	//If we have a bin op with const
-	} else if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		//What is our op?
-		char* op = "";
+			//Now we'll do op1, token, op2
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, " %s ", op_to_string(stmt->op));
 
-		//Whatever we have here
-		switch (stmt->op) {
-			case PLUS:
-				op = "+";
-				break;
-			case MINUS:
-				op = "-";
-				break;
-			case STAR:
-				op = "*";
-				break;
-			case F_SLASH:
-				op = "/";
-				break;
-			case MOD:
-				op = "%";
-				break;
-			case G_THAN:
-				op = ">";
-				break;
-			case L_THAN:
-				op = "<";
-				break;
-			case L_SHIFT:
-				op = "<<";
-				break;
-			case R_SHIFT:
-				op = ">>";
-				break;
-			case SINGLE_AND:
-				op = "&";
-				break;
-			case SINGLE_OR:
-				op = "|";
-				break;
-			case CARROT:
-				op = "^";
-				break;
-			case DOUBLE_OR:
-				op = "||";
-				break;
-			case DOUBLE_AND:
-				op = "&&";
-				break;
-			case DOUBLE_EQUALS:
-				op = "==";
-				break;
-			case NOT_EQUALS:
-				op = "!=";
-				break;
-			case G_THAN_OR_EQ:
-				op = ">=";
-				break;
-			case L_THAN_OR_EQ:
-				op = "<=";
-				break;
-			default:
-				fprintf(fl, "BAD OP");
-				exit(1);
-		}
+			//Print the constant out
+			print_three_addr_constant(fl, stmt->op1_const);
 
-		//This one comes first
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			//We need a newline here
+			fprintf(fl, "\n");
+			break;
 
-		//Then the arrow
-		fprintf(fl, " <- ");
+		
 
-		//Now we'll do op1, token, op2
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, " %s ", op);
+	}
 
-		//Print the constant out
-		print_three_addr_constant(fl, stmt->op1_const);
-
-		//We need a newline here
-		fprintf(fl, "\n");
 	
 	//If we have a regular const assignment
 	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_STMT){
