@@ -1636,6 +1636,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now the variable
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
+			break;
 
 		defualt:
 			printf("UNKNOWN TYPE");
