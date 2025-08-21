@@ -3576,9 +3576,6 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
 	//to process
 	do{
-		//Put the token back
-		push_back_token(lookahead);
-
 		//We now must see an initializer node
 		generic_ast_node_t* initializer_node = initializer(fl, side);
 
@@ -3590,12 +3587,15 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 		//Add this in as a child of the initializer list
 		add_child_node(initializer_list_node, initializer_node);
 
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
 	//So long as we keep seeing commas, we continue
 	} while(lookahead.tok == COMMA);
 
 	//Once we reach down here, we need to check and see if we have the closing bracket that would
 	//mark a valid end for us
-	if(lookahead.tok != L_CURLY){
+	if(lookahead.tok != R_CURLY){
 		return print_and_return_error("Closing curly brace(}) required at the end of struct initializer", parser_line_num);
 	}
 
@@ -7994,7 +7994,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
-		return print_and_return_error("Invalid assignment attempted", parser_line_num);
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
