@@ -3517,6 +3517,9 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 	//all of our ternary expressions inside of it as children
 	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_INITIALIZER_LIST, side);
 
+	//Store the line number
+	initializer_list_node->line_number = parser_line_num;
+
 	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
 	//to process
 	do{
@@ -3566,6 +3569,9 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 	//Let's first allocate our initializer node. The initializer node will store
 	//all of our ternary expressions inside of it as children
 	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_STRUCT_INITIALIZER_LIST, side);
+
+	//Store the line number
+	initializer_list_node->line_number = parser_line_num;
 
 	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
 	//to process
