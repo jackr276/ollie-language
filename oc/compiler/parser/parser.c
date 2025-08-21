@@ -7831,16 +7831,16 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			}
 
 			//Use the helper to determine if the types are assignable
-			return_type = types_assignable(&(return_type), &(initializer_node->inferred_type));
+			generic_type_t* final_type = types_assignable(&(return_type), &(initializer_node->inferred_type));
 
 			//Will be null if we have a failure
-			if(return_type == NULL){
+			if(final_type == NULL){
 				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, return_type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 			}
 			
 			//Give back the return type
-			return return_type;
+			return final_type;
 	}
 }
 
