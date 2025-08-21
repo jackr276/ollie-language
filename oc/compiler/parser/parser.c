@@ -106,6 +106,7 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node);
 
 
 /**
@@ -7637,6 +7638,9 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//Extract the actual array type for ease of use here
 	array_type_t* array = array_type->array_type;
 
+	//Grab the member type here out as well
+	generic_type_t* member_type = array->member_type;
+
 	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
 	u_int32_t num_members = array->num_members;
 
@@ -7649,19 +7653,42 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
 	//to the given array type
 	while(cursor != NULL){
-		//Let's parse the initializer node as an initializer itself
+		//We'll use the same top level initialization check for this rule as well
+		generic_type_t* final_type = validate_intializer_types(member_type, cursor);
 
+		//If these fail, then we're done here. No need for an error message, they'll have already been
+		//printed
+		if(final_type == NULL){
+			return FALSE;
+		}
 
+		//Increment the member count by 1
+		initializer_list_members++;
 
 		//Push this up to the next sibling
 		cursor = cursor->next_sibling;
+	}
+
+	//The final check down here has 2 options:
+	// 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
+	// 2.) The length was set, in which case, we validate the length here
+	if(num_members != 0){
+		//Validate that they match here
+		if(num_members != initializer_list_members){
+			sprintf(info, "Attempt to assign %d members to an array of size %d", initializer_list_members, num_members);
+			print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+			return FALSE;
+		}
+	//Otherwise, we'll need to set the number of members accordingly here
+	} else {
+		array->num_members = initializer_list_members;
 	}
 
 	//If we make it here, then we can set the type of the initializer list to match the array
 	initializer_list_node->inferred_type = array_type;
 
 	//If we made it here, then we know that we're good
-	return FALSE;
+	return TRUE;
 }
 
 
