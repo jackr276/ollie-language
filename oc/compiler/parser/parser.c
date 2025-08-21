@@ -7670,8 +7670,11 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 
 	//Let's first validate that this array actually is a char[]
 	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type->basic_type != CHAR){
+		//Print out the full error message
+		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
+
 		//Fail out here
-		return print_and_return_error("Attempt to use a string initializer for an array that is not of type char[]", parser_line_num);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
