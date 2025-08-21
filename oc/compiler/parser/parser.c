@@ -7637,11 +7637,28 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//Extract the actual array type for ease of use here
 	array_type_t* array = array_type->array_type;
 
+	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
+	u_int32_t num_members = array->num_members;
+
+	//Let's also keep a record of the number of members that we've seen in total
+	u_int32_t initializer_list_members = 0;
+
+	//Grab a cursor to iterate over the children of the initializer list
+	generic_ast_node_t* cursor = initializer_list_node->first_child;
+
 	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
 	//to the given array type
-	
-	
+	while(cursor != NULL){
+		//Let's parse the initializer node as an initializer itself
 
+
+
+		//Push this up to the next sibling
+		cursor = cursor->next_sibling;
+	}
+
+	//If we make it here, then we can set the type of the initializer list to match the array
+	initializer_list_node->inferred_type = array_type;
 
 	//If we made it here, then we know that we're good
 	return TRUE;
@@ -7715,6 +7732,75 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 
 	//And give this node back
 	return initializer_node;
+}
+
+
+/**
+ * Top level initializer value for type validation
+ */
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node){
+	//What's the return type of our node?
+	generic_type_t* return_type = target_type;
+
+	//By default, we assume we will fail. The validation step will need to prove us wrong
+	u_int8_t validation_succeeded = FALSE;
+
+	//Based on what the class of this initializer node is, there are several different
+	//paths that we can take
+	switch(initializer_node->CLASS){
+		//If it's in error itself, we just leave
+		case AST_NODE_CLASS_ERR_NODE:
+			//Throw an error here
+			print_parse_message(stderr, "Invalid expression given as intializer", parser_line_num);
+			//Return null to mean failure
+			return NULL;
+
+		//An array initializer list has a special checking function
+		//that we must use
+		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+			//Run the validation step for the intializer list
+			validation_succeeded = validate_types_for_array_initializer_list(type_spec, initializer_node);
+			
+			break;
+			
+		//A struct initializer list also has it's own special checking function that we must use
+		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			return print_and_return_error("Not yet implemented", parser_line_num);
+			
+		//Otherwise we'll just take the standard path
+		default:
+			//If we have a string constant, there's a chance that we could be seeing a string
+			//initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
+			//the helper deal with it
+			if(initializer_node->CLASS == AST_NODE_CLASS_CONSTANT && initializer_node->constant_type == STR_CONST
+				&& type_spec->type_class == TYPE_CLASS_ARRAY){
+				
+				//Dynamically set the initializer node here in the helper function
+				initializer_node = validate_or_set_bounds_for_string_initializer(type_spec, initializer_node);
+
+				//If it's an error, we need to fail out now
+				if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+					//Throw it up the chain
+					return initializer_node;
+				}
+
+				//Otherwise we'll just break out. The initializer node will have been properly
+				//set by the function above
+				break;
+			}
+
+			//Use the helper to determine if the types are assignable
+			return_type = types_assignable(&(type_spec), &(initializer_node->inferred_type));
+
+			//Will be null if we have a failure
+			if(return_type == NULL){
+				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, type_spec->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			break;
+	}
+
 }
 
 
@@ -7861,64 +7947,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Now we need to see a valid initializer
 	generic_ast_node_t* initializer_node = initializer(fl, SIDE_TYPE_RIGHT);
 
-	//What's the return type of our node?
-	generic_type_t* return_type = type_spec;
-
-	//By default, we assume we will fail. The validation step will need to prove us wrong
-	u_int8_t validation_succeeded = FALSE;
-
-	//Based on what the class of this initializer node is, there are several different
-	//paths that we can take
-	switch(initializer_node->CLASS){
-		//If it's in error itself, we just leave
-		case AST_NODE_CLASS_ERR_NODE:
-			return print_and_return_error("Invalid expression given as intializer", parser_line_num);
-
-		//An array initializer list has a special checking function
-		//that we must use
-		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
-			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(type_spec, initializer_node);
-			
-			break;
-			
-		//A struct initializer list also has it's own special checking function that we must use
-		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
-			return print_and_return_error("Not yet implemented", parser_line_num);
-			
-		//Otherwise we'll just take the standard path
-		default:
-			//If we have a string constant, there's a chance that we could be seeing a string
-			//initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
-			//the helper deal with it
-			if(initializer_node->CLASS == AST_NODE_CLASS_CONSTANT && initializer_node->constant_type == STR_CONST
-				&& type_spec->type_class == TYPE_CLASS_ARRAY){
-				
-				//Dynamically set the initializer node here in the helper function
-				initializer_node = validate_or_set_bounds_for_string_initializer(type_spec, initializer_node);
-
-				//If it's an error, we need to fail out now
-				if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-					//Throw it up the chain
-					return initializer_node;
-				}
-
-				//Otherwise we'll just break out. The initializer node will have been properly
-				//set by the function above
-				break;
-			}
-
-			//Use the helper to determine if the types are assignable
-			return_type = types_assignable(&(type_spec), &(initializer_node->inferred_type));
-
-			//Will be null if we have a failure
-			if(return_type == NULL){
-				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, type_spec->type_name.string);
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			break;
-	}
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(initializer_node->inferred_type->type_class == TYPE_CLASS_POINTER){
