@@ -7634,8 +7634,14 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+	//Extract the actual array type for ease of use here
+	array_type_t* array = array_type->array_type;
 
-	//TODO ensure type assignment for initializer list node here
+	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
+	//to the given array type
+	
+	
+
 
 	//If we made it here, then we know that we're good
 	return TRUE;
@@ -7858,6 +7864,9 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//What's the return type of our node?
 	generic_type_t* return_type = type_spec;
 
+	//By default, we assume we will fail. The validation step will need to prove us wrong
+	u_int8_t validation_succeeded = FALSE;
+
 	//Based on what the class of this initializer node is, there are several different
 	//paths that we can take
 	switch(initializer_node->CLASS){
@@ -7868,7 +7877,10 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		//An array initializer list has a special checking function
 		//that we must use
 		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
-			return print_and_return_error("Not yet implemented", parser_line_num);
+			//Run the validation step for the intializer list
+			validation_succeeded = validate_types_for_array_initializer_list(type_spec, initializer_node);
+			
+			break;
 			
 		//A struct initializer list also has it's own special checking function that we must use
 		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:

@@ -6747,6 +6747,8 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 	//Declare the result package up here
 	cfg_result_package_t package;	
 
+	//TODO: This is probably not going to work. We'll need our own "visit_initializer"
+	//root level node that will be able to decay into an expression or one of these
 	switch(node->first_child->CLASS){
 		case AST_NODE_CLASS_STRING_INITIALIZER:
 			printf("Not yet implemented\n");
