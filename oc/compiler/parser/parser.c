@@ -7661,7 +7661,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	initializer_list_node->inferred_type = array_type;
 
 	//If we made it here, then we know that we're good
-	return TRUE;
+	return FALSE;
 }
 
 
@@ -7751,7 +7751,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 		//If it's in error itself, we just leave
 		case AST_NODE_CLASS_ERR_NODE:
 			//Throw an error here
-			print_parse_message(stderr, "Invalid expression given as intializer", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Invalid expression given as intializer", parser_line_num);
 			//Return null to mean failure
 			return NULL;
 
@@ -7759,13 +7759,21 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 		//that we must use
 		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
 			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(type_spec, initializer_node);
-			
-			break;
+			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node);
+
+			//If this didn't work we fail out
+			if(validation_succeeded == FALSE){
+				print_parse_message(PARSE_ERROR, "Invalid array intializer given", initializer_node->line_number);
+				return NULL;
+			}
+
+			//Give back the return type
+			return return_type;
 			
 		//A struct initializer list also has it's own special checking function that we must use
 		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
-			return print_and_return_error("Not yet implemented", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Not yet implemented", parser_line_num);
+			return NULL;
 			
 		//Otherwise we'll just take the standard path
 		default:
@@ -7773,34 +7781,34 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
 			//the helper deal with it
 			if(initializer_node->CLASS == AST_NODE_CLASS_CONSTANT && initializer_node->constant_type == STR_CONST
-				&& type_spec->type_class == TYPE_CLASS_ARRAY){
+				&& target_type->type_class == TYPE_CLASS_ARRAY){
 				
 				//Dynamically set the initializer node here in the helper function
-				initializer_node = validate_or_set_bounds_for_string_initializer(type_spec, initializer_node);
+				initializer_node = validate_or_set_bounds_for_string_initializer(target_type, initializer_node);
 
 				//If it's an error, we need to fail out now
 				if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-					//Throw it up the chain
-					return initializer_node;
+					//Throw it up the chain by return null
+					return NULL;
 				}
 
 				//Otherwise we'll just break out. The initializer node will have been properly
 				//set by the function above
-				break;
+				return return_type;
 			}
 
 			//Use the helper to determine if the types are assignable
-			return_type = types_assignable(&(type_spec), &(initializer_node->inferred_type));
+			return_type = types_assignable(&(return_type), &(initializer_node->inferred_type));
 
 			//Will be null if we have a failure
 			if(return_type == NULL){
-				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, type_spec->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, return_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
 			}
-
-			break;
+			
+			//Give back the return type
+			return return_type;
 	}
-
 }
 
 
@@ -7946,7 +7954,15 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Now we need to see a valid initializer
 	generic_ast_node_t* initializer_node = initializer(fl, SIDE_TYPE_RIGHT);
+	
+	//Store the return type here after we do all needed validations. This rule allows 
+	//for recursive validation, so that we can handle recursive initialization
+	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node);
 
+	//If the return type is NULL, we fail out here
+	if(return_type == NULL){
+		return print_and_return_error("Invalid assignment attempted", parser_line_num);
+	}
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(initializer_node->inferred_type->type_class == TYPE_CLASS_POINTER){
