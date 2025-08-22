@@ -7721,18 +7721,47 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 
 	//Run through every node in here
 	while(cursor != NULL){
+		//If we exceed the number of fields given, we error out
+		if(seen_count > num_fields){
+			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_count);
+			print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+			return FALSE;
+		}
 
+		//Grab the variable out
+		symtab_variable_record_t* variable = fields->variable;
 
+		//Extract what type this variable is
+		generic_type_t* variable_type = variable->type_defined_as;
+
+		//Let's check to see if the types are assignable
+		if(types_assignable(&(variable_type), &(initializer_list_node->inferred_type)) == NULL){
+			sprintf(info, "Attempt to initialize field of type %s to value of type %s in struct initializer", variable_type->type_name.string, initializer_list_node->inferred_type->type_name.string);
+			print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+			return FALSE;
+		}
+
+		//Otherwise it worked, so we'll go to the next one
+		
 		//Increment this counter
 		seen_count++;
+
+		//Push the field pointer up by 1
+		fields++;
 
 		//Advance to the next sibling
 		cursor = cursor->next_sibling;
 	}
 
+	//One final validation - we need to check if the field counts match
+	if(num_fields != seen_count){
+		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_count);
+		print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+		return FALSE;
+	}
 
 	//If we made it here, then we know that we're good
-	return FALSE;
+	return TRUE;
 }
 
 
