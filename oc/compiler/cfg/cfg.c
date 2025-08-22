@@ -6721,6 +6721,12 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 
 
 /**
+ * Emit the string initilizer type 
+ */
+
+
+
+/**
  * Emit an initialization statement given only a variable and
  * the top level of what could be a larger initialization sequence
  */
@@ -6789,23 +6795,48 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 	//What block are we emitting to?
 	basic_block_t* current_block = basic_block_alloc(1);
 
-	//We know that this will be the lead block
-	let_results.starting_block = current_block;
+	//Extract the type here
+	generic_type_t* type = node->inferred_type;
 
-	//Let's grab the associated variable record here
-	symtab_variable_record_t* var = node->variable;
+	//The assignee of the let statement. This could either be a variable or it could represent
+	//a base address for an array
+	three_addr_var_t* assignee;
 
-	//Create the variable associated with this
- 	three_addr_var_t* left_hand_var = emit_var(var, FALSE);
+	//Based on what type we have, we'll need to do some special intialization
+	switch(type->type_class){
+		//Arrays or structs require stack allocation
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+			//Emit the variable. This will act as our base address
+			assignee = emit_var(node->variable, FALSE);
 
-	//This has been assigned to
-	add_assigned_variable(current_block, left_hand_var);
+			//Add this variable into the current function's stack. This is what we'll use
+			//to store the address
+			add_variable_to_stack(&(current_function->data_area), assignee);
+	
+			//We'll now emit the actual address calculation using the offset
+			emit_binary_operation_with_constant(current_block, assignee, stack_pointer_var, PLUS, emit_int_constant_direct(assignee->stack_offset, type_symtab), FALSE);
+
+			break;
+			
+		//Otherwise we just have a garden variety variable - no stack allocation required
+		default:
+			//Emit it
+			assignee = emit_var(node->variable, FALSE);
+			break;
+	}
+
+	//This has been assigned to, no matter which path we took above
+	add_assigned_variable(current_block, assignee);
 
 	//The left hand var is our assigned var
-	let_results.assignee = left_hand_var;
+	let_results.assignee = assignee;
 
+	//We know that this will be the lead block
+	let_results.starting_block = current_block;
+	
 	//Declare the result package up here
-	cfg_result_package_t package = emit_initialization(current_block, left_hand_var, node->first_child, is_branch_ending);
+	cfg_result_package_t package = emit_initialization(current_block, assignee, node->first_child, is_branch_ending);
 
 	//This is also the final block for now, unless a ternary comes along
 	let_results.final_block = package.final_block;
