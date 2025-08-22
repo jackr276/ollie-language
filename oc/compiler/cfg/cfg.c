@@ -105,6 +105,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
+static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
@@ -6720,6 +6721,65 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 
 
 /**
+ * Emit an initialization statement given only a variable and
+ * the top level of what could be a larger initialization sequence
+ */
+static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending){
+	//Initialize the results here
+	cfg_result_package_t intermediary_results;
+
+	//The return package
+	cfg_result_package_t package = {current_block, current_block, NULL, BLANK};
+
+	//TODO: This is probably not going to work. We'll need our own "visit_initializer"
+	//root level node that will be able to decay into an expression or one of these
+	switch(initializer_root->CLASS){
+		case AST_NODE_CLASS_STRING_INITIALIZER:
+			printf("Not yet implemented\n");
+			exit(0);
+
+		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			printf("Not yet implemented\n");
+			exit(0);
+		
+		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+			printf("Not yet implemented\n");
+			exit(0);
+
+		//By default we just decay into the expression root
+		default:
+			//Now emit whatever binary expression code that we have
+			intermediary_results = emit_expression(current_block, initializer_root, is_branch_ending, FALSE);
+
+			//The current block here is whatever the final block in the package is 
+			if(intermediary_results.final_block != NULL && intermediary_results.final_block != current_block){
+				//We'll reassign this to be the final block. If this does happen, it means that
+				//at some point we had a ternary expression
+				current_block = intermediary_results.final_block;
+			}
+
+			//The actual statement is the assignment of right to left
+			instruction_t* assignment_statement = emit_assignment_instruction(assignee, intermediary_results.assignee);
+
+			//If this is not temporary, then it counts as used
+			if(intermediary_results.assignee->is_temporary == FALSE){
+				add_used_variable(current_block, intermediary_results.assignee);
+			}
+
+			//Finally we'll add this into the overall block
+			add_statement(current_block, assignment_statement);
+
+			//Store the package's assignee too
+			package.assignee = assignee;
+			package.final_block = intermediary_results.final_block;
+
+			//Give back the package
+			return package;
+	}
+}
+
+
+/**
  * Visit a let statement
  */
 static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
@@ -6745,49 +6805,10 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 	let_results.assignee = left_hand_var;
 
 	//Declare the result package up here
-	cfg_result_package_t package;	
-
-	//TODO: This is probably not going to work. We'll need our own "visit_initializer"
-	//root level node that will be able to decay into an expression or one of these
-	switch(node->first_child->CLASS){
-		case AST_NODE_CLASS_STRING_INITIALIZER:
-			printf("Not yet implemented\n");
-			exit(0);
-
-		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
-			printf("Not yet implemented\n");
-			exit(0);
-		
-		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
-			printf("Not yet implemented\n");
-			exit(0);
-
-		default:
-			//Now emit whatever binary expression code that we have
-			package = emit_expression(current_block, node->first_child, is_branch_ending, FALSE);
-			break;
-	}
-	
-	//The current block here is whatever the final block in the package is 
-	if(package.final_block != NULL && package.final_block != current_block){
-		//We'll reassign this to be the final block. If this does happen, it means that
-		//at some point we had a ternary expression
-		current_block = package.final_block;
-	}
-
-	//The actual statement is the assignment of right to left
-	instruction_t* assignment_statement = emit_assignment_instruction(left_hand_var, package.assignee);
-
-	//If this is not temporary, then it counts as used
-	if(package.assignee->is_temporary == FALSE){
-		add_used_variable(current_block, package.assignee);
-	}
-
-	//Finally we'll add this into the overall block
-	add_statement(current_block, assignment_statement);
+	cfg_result_package_t package = emit_initialization(current_block, left_hand_var, node->first_child, is_branch_ending);
 
 	//This is also the final block for now, unless a ternary comes along
-	let_results.final_block = current_block;
+	let_results.final_block = package.final_block;
 
 	//Give the block back
 	return let_results;
