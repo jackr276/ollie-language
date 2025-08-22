@@ -7731,13 +7731,11 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		//Grab the variable out
 		symtab_variable_record_t* variable = fields->variable;
 
-		//Extract what type this variable is
-		generic_type_t* variable_type = variable->type_defined_as;
+		//Recursively call the initializer processor rule. This allows us to handle nested initializations
+		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor);
 
 		//Let's check to see if the types are assignable
-		if(types_assignable(&(variable_type), &(initializer_list_node->inferred_type)) == NULL){
-			sprintf(info, "Attempt to initialize field of type %s to value of type %s in struct initializer", variable_type->type_name.string, initializer_list_node->inferred_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+		if(final_type == NULL){
 			return FALSE;
 		}
 
@@ -7759,6 +7757,9 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
 		return FALSE;
 	}
+
+	//Set the struct type here accordingly
+	initializer_list_node->inferred_type = struct_type; 
 
 	//If we made it here, then we know that we're good
 	return TRUE;
