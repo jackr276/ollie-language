@@ -7706,10 +7706,30 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
 	//Grab the raw struct type out
 	struct_type_t* raw_type = struct_type->struct_type;
-	
+
+	//We'll need to extract the struct table and that max index that it holds
+	struct_type_field_t* fields = raw_type->struct_table;
+
+	//The number of fields that were defined in the type is here
+	u_int32_t num_fields = raw_type->next_index;
+
+	//Initialize a cursor to the initializer list node itself
+	generic_ast_node_t* cursor = initializer_list_node->first_child;
+
+	//Keep a count of how many fields we've seen
+	u_int32_t seen_count = 0;
+
+	//Run through every node in here
+	while(cursor != NULL){
 
 
-	//TODO ensure type assignment for initializer list node here
+		//Increment this counter
+		seen_count++;
+
+		//Advance to the next sibling
+		cursor = cursor->next_sibling;
+	}
+
 
 	//If we made it here, then we know that we're good
 	return FALSE;
