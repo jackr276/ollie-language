@@ -6721,9 +6721,39 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 
 
 /**
- * Emit the string initilizer type 
+ * Emit all struct intializer assignments. To do this, we'll need the base address and the initializer
+ * node that contains all elements to add in
  */
+static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending){
+	//Initialize the results package here to start
+	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
+	return results;
+}
+
+
+/**
+ * Emit all array intializer assignments. To do this, we'll need the base address and the initializer
+ * node that contains all elements to add in
+ */
+static cfg_result_package_t emit_array_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* array_intializer, u_int8_t is_branch_ending){
+	//Initialize the results package here to start
+	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+
+	return results;
+}
+
+
+/**
+ * Emit all string intializer assignments. To do this, we'll need the base address and the initializer's string
+ * itself.
+ */
+static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* string_initializer, u_int8_t is_branch_ending){
+	//Initialize the results package here to start
+	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+
+	return results;
+}
 
 
 /**
