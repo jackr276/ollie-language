@@ -143,8 +143,6 @@ struct generic_ast_node_t{
 	Token binary_operator;
 	//Store a unary operator(if one exists)
 	Token unary_operator;
-	//Construct accessor token
-	Token construct_accessor_tok;
 	//Is this assignable?
 	variable_assignability_t is_assignable;
 	//What side is this node on

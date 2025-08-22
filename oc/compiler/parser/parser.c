@@ -1412,7 +1412,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	struct_access_node->line_number = current_line;
 
 	//Put the token in to show what we have
-	struct_access_node->construct_accessor_tok = lookahead.tok;
+	struct_access_node->unary_operator = lookahead.tok;
 
 	//Grab a convenient reference to the type that we're working with
 	generic_type_t* working_type = dealias_type(current_type);
@@ -7699,15 +7699,20 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 
 
 /**
- * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
+ * Struct initializers, unlike array intializers, only have one way of working. The user needs to properly define all of the
+ * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
+ * up
  */
-static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
+	//Grab the raw struct type out
+	struct_type_t* raw_type = struct_type->struct_type;
+	
 
 
 	//TODO ensure type assignment for initializer list node here
 
 	//If we made it here, then we know that we're good
-	return TRUE;
+	return FALSE;
 }
 
 
@@ -7805,8 +7810,17 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			
 		//A struct initializer list also has it's own special checking function that we must use
 		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
-			print_parse_message(PARSE_ERROR, "Not yet implemented", parser_line_num);
-			return NULL;
+			//Run the validation step for a struct
+			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node);
+
+			//If this didn't work we fail out
+			if(validation_succeeded == FALSE){
+				print_parse_message(PARSE_ERROR, "Invalid struct intializer given", initializer_node->line_number);
+				return NULL;
+			}
+
+			//Give back the return type
+			return return_type;
 			
 		//Otherwise we'll just take the standard path
 		default:
