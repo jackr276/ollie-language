@@ -1064,7 +1064,7 @@ void print_constant_name(symtab_constant_record_t* record){
 			printf("%d", const_node->char_val);
 			break;
 		case STR_CONST:
-			printf("%s", const_node->string_val.string);
+			printf("%s", const_node->string_value.string);
 			break;
 		case FLOAT_CONST:
 			printf("%f", const_node->float_val);
@@ -1188,7 +1188,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			}
 
 			//If it's a label, don't bother with it
-			if(record->is_label == 1 || record->is_construct_member == TRUE){
+			if(record->is_label == TRUE || record->is_construct_member == TRUE){
 				continue;;
 			}
 
@@ -1196,7 +1196,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			
 			//We have a non initialized variable
 			if(record->initialized == 0){
-				sprintf(info, "Variable \"%s\" is never initialized. First defined here:", record->var_name.string);
+				sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
 				print_warning(info, record->line_number);
 				print_variable_name(record);
 				(*num_warnings)++;
