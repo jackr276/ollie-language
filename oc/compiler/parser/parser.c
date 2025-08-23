@@ -7143,7 +7143,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			enum_ident_node->variable = enum_record;
 
 			//Grab the value of this case statement
-			case_stmt->case_statement_value = enum_record->enum_member_value;
+			case_stmt->int_long_val = enum_record->enum_member_value;
 
 			//We already have the value -- so this doesn't need to be a child node
 			break;
@@ -7175,12 +7175,12 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				case LONG_CONST_FORCE_U:
 
 					//Store the value
-					case_stmt->case_statement_value = const_node->int_long_val;
+					case_stmt->int_long_val = const_node->int_long_val;
 					break;
 
 				case CHAR_CONST:
 					//Just assign the char value here
-					case_stmt->case_statement_value = const_node->char_val;
+					case_stmt->int_long_val = const_node->char_val;
 
 				default:
 					return print_and_return_error("Illegal type given as case statement value", parser_line_num);
@@ -7206,13 +7206,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 
 	//If it's higher than the upper bound, it now is the upper bound
-	if(case_stmt->case_statement_value > switch_stmt_node->upper_bound){
-		switch_stmt_node->upper_bound = case_stmt->case_statement_value;
+	if(case_stmt->int_long_val > switch_stmt_node->upper_bound){
+		switch_stmt_node->upper_bound = case_stmt->int_long_val;
 	}
 
 	//If it's lower than the lower bound, it is now the lower bound
-	if(case_stmt->case_statement_value < switch_stmt_node->lower_bound){
-		switch_stmt_node->lower_bound = case_stmt->case_statement_value;
+	if(case_stmt->int_long_val < switch_stmt_node->lower_bound){
+		switch_stmt_node->lower_bound = case_stmt->int_long_val;
 	}
 
 	//If these are too far apart, we won't go for it. We'll check here, because once
@@ -7223,13 +7223,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	}
 
 	//Now let's see if we have any duplicates. If there are, we error out
-	if(values[case_stmt->case_statement_value % MAX_SWITCH_RANGE] == TRUE){
-		sprintf(info, "Value %ld is duplicated in the switch statement", case_stmt->case_statement_value);
+	if(values[case_stmt->int_long_val % MAX_SWITCH_RANGE] == TRUE){
+		sprintf(info, "Value %ld is duplicated in the switch statement", case_stmt->int_long_val);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Let's now store it for the future
-	values[case_stmt->case_statement_value % MAX_SWITCH_RANGE] = TRUE;
+	values[case_stmt->int_long_val % MAX_SWITCH_RANGE] = TRUE;
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

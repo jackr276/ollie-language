@@ -123,8 +123,6 @@ struct generic_ast_node_t{
 	char char_val;
 	//Holds the token for what kind of constant it is
 	Token constant_type;
-	//What is the value of this case statement
-	int64_t case_statement_value;
 	//The upper and lower bound for switch statements
 	int32_t lower_bound;
 	int32_t upper_bound;
@@ -142,8 +140,6 @@ struct generic_ast_node_t{
 	side_type_t side;
 	//What kind of node is it?
 	ast_node_class_t CLASS;
-	//Is this a deferred node?
-	u_int8_t is_deferred;
 	//The number of parameters
 	u_int8_t num_params;
 	//The type address specifier - for types
