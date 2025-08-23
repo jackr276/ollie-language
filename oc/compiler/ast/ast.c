@@ -154,21 +154,17 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	switch(node->CLASS){
 		//Asm inline is a special case because we'll need to copy the assembly over
 		case AST_NODE_CLASS_ASM_INLINE_STMT:
-			duplicated->string_val = clone_dynamic_string(&(node->string_val));
+		case AST_NODE_CLASS_IDENTIFIER:
+			duplicated->string_value = clone_dynamic_string(&(node->string_value));
 			break;
 
 		//Constants are another special case, because they contain a special inner node
 		case AST_NODE_CLASS_CONSTANT:
 			//If we have a string constant, we'll duplicate the dynamic string
 			if(node->constant_type == STR_CONST){
-				duplicated->string_val = clone_dynamic_string(&(node->string_val));
+				duplicated->string_value = clone_dynamic_string(&(node->string_value));
 			}
 
-			break;
-
-		//Final case is that we have an identifier
-		case AST_NODE_CLASS_IDENTIFIER:
-			duplicated->identifier = clone_dynamic_string(&(node->identifier));
 			break;
 
 		//By default we do nothing, this is just there for the compiler to not complain
