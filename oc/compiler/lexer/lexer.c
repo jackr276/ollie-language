@@ -147,7 +147,7 @@ static void put_back_char(FILE* fl){
  * will simply run through what we have here until we get to that backslash. We'll
  * then pack what we had into a lexer item and send it back to the caller
  */
-lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num){
+lexitem_t get_next_assembly_statement(FILE* fl){
 	//We'll be giving this back
 	lexitem_t asm_statement;
 	asm_statement.tok = ASM_STATEMENT;

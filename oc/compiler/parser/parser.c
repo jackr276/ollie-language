@@ -6901,7 +6901,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		push_back_token(lookahead);
 
 		//We'll now need to consume an assembly statement
-		lookahead = get_next_assembly_statement(fl, &parser_line_num);
+		lookahead = get_next_assembly_statement(fl);
 
 		//If it's an error, we'll fail out here
 		if(lookahead.tok == ERROR){
@@ -7793,7 +7793,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 	
 	//A dynamic string stores a string lenght, it does not account for the null terminator. As such, we'll need to have the null terminator
 	//accounted for by adding 1 to it
-	u_int32_t length = string_constant->string_val.current_length + 1;
+	u_int32_t length = string_constant->string_value.current_length + 1;
 	
 	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
 	//lenght of the array to be whatever we have in here
