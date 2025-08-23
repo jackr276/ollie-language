@@ -154,7 +154,7 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	switch(node->CLASS){
 		//Asm inline is a special case because we'll need to copy the assembly over
 		case AST_NODE_CLASS_ASM_INLINE_STMT:
-			duplicated->asm_inline_statements = clone_dynamic_string(&(node->asm_inline_statements));
+			duplicated->string_val = clone_dynamic_string(&(node->string_val));
 			break;
 
 		//Constants are another special case, because they contain a special inner node
@@ -280,11 +280,23 @@ void ast_dealloc(){
 			free(temp->node);
 		}
 
-		//Free this if needed
-		if(temp->CLASS == AST_NODE_CLASS_IDENTIFIER){
-			dynamic_string_dealloc(&(temp->identifier));
-		} else if(temp->CLASS == AST_NODE_CLASS_ASM_INLINE_STMT){
-			dynamic_string_dealloc(&(temp->asm_inline_statements));
+		//Some additional freeing may be needed
+		switch(temp->CLASS){
+			case AST_NODE_CLASS_IDENTIFIER:
+			case AST_NODE_CLASS_ASM_INLINE_STMT:
+				dynamic_string_dealloc(&(temp->string_value));
+				break;
+
+			//We could see a case where this is a string const
+			case AST_NODE_CLASS_CONSTANT:
+				if(temp->constant_type == STR_CONST){
+					dynamic_string_dealloc(&(temp->string_value));
+				}
+				break;
+
+			//By default we don't need to worry about this
+			default:
+				break;
 		}
 
 		//Destroy temp here

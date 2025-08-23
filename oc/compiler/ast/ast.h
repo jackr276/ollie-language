@@ -97,12 +97,9 @@ typedef enum address_specifier_type_t{
  * to what the actual node is
 */
 struct generic_ast_node_t{
-	//The identifier
-	dynamic_string_t identifier;
-	//String value stored as dynamic string
-	dynamic_string_t string_val;
-	//Any assembly inlined statements
-	dynamic_string_t asm_inline_statements;
+	//The string value could hold an identifier, string constant, or it could hold
+	//an assembly inline statement. It all depends based on context
+	dynamic_string_t string_value;
 	//What is the next created AST NODE? Used for memory deallocation
 	generic_ast_node_t* next_created_ast_node;
 	//What is the inferred type of the node

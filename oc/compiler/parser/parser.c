@@ -6732,7 +6732,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
 
 	//Allocate the dynamic string in here
-	dynamic_string_alloc(&(assembly_node->asm_inline_statements));
+	dynamic_string_alloc(&(assembly_node->string_val));
 
 	//Store this too
 	assembly_node->line_number = parser_line_num;
@@ -6754,10 +6754,10 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		}
 
 		//Concatenate this in
-		dynamic_string_concatenate(&(assembly_node->asm_inline_statements), lookahead.lexeme.string);
+		dynamic_string_concatenate(&(assembly_node->string_val), lookahead.lexeme.string);
 
 		//Add the newline character for readability
-		dynamic_string_add_char_to_back(&(assembly_node->asm_inline_statements), '\n');
+		dynamic_string_add_char_to_back(&(assembly_node->string_val), '\n');
 
 		//Now we'll refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
