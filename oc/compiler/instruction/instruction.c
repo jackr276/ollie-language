@@ -3143,7 +3143,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
  */
 three_addr_const_t* emit_string_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
 	//Let's create the local constant first
-	local_constant_t* local_constant = local_constant_alloc(&(const_node->string_val));
+	local_constant_t* local_constant = local_constant_alloc(&(const_node->string_value));
 
 	//Once this has been made, we can add it to the function
 	add_local_constant_to_function(function, local_constant);
@@ -3756,7 +3756,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node){
 	stmt->CLASS = THREE_ADDR_CODE_ASM_INLINE_STMT;
 
 	//Copy this over
-	stmt->inlined_assembly = clone_dynamic_string(&(asm_inline_node->asm_inline_statements));
+	stmt->inlined_assembly = clone_dynamic_string(&(asm_inline_node->string_value));
 
 	//What function are we in
 	stmt->function = current_function;
