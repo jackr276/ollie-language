@@ -1244,7 +1244,12 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			fprintf(fl, "%ld", constant->long_const);
 			break;
 		case CHAR_CONST:
-			fprintf(fl, "'%c'", constant->char_const);
+			//Special case here to for display reasons
+			if(constant->char_const == 0){
+				fprintf(fl, "'\\0'");
+			} else {
+				fprintf(fl, "'%c'", constant->char_const);
+			}
 			break;
 		//We do not print out string constants directly. Instead, we print
 		//out the local constant ID that is associated with them
