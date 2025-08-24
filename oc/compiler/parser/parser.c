@@ -7688,6 +7688,9 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//Otherwise, we'll need to set the number of members accordingly here
 	} else {
 		array->num_members = initializer_list_members;
+
+		//Reup the acutal size here
+		array_type->type_size = initializer_list_members * array->member_type->type_size;
 	}
 
 	//If we make it here, then we can set the type of the initializer list to match the array
@@ -7798,7 +7801,11 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
 	//lenght of the array to be whatever we have in here
 	if(array->num_members == 0){
+		//Set the number of members
 		array->num_members = length;
+
+		//Since these are all chars, the size of the array is just the length
+		array_type->type_size = length;
 	} else {
 		//If these are different, then we fail out
 		if(array->num_members != length){

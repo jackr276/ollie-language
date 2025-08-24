@@ -2143,8 +2143,6 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
  * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
  */
 static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, u_int32_t offset, generic_type_t* base_type, u_int8_t is_branch_ending){
-	printf("Type size is: %d\n", base_type->type_size);
-
 	//We can directly compute here
 	u_int32_t total_offset = offset * base_type->type_size;
 
@@ -6778,10 +6776,17 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		//We'll need to emit the proper address offset calculation for each one
 		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, cursor->inferred_type, is_branch_ending);
 
-		//If the base type here is not an array, we will emit the dereferencing code
-		if(cursor->inferred_type->type_class != TYPE_CLASS_ARRAY){
-			//Once we have the address, we'll need to emit the memory code for it
-			address = emit_mem_code(current_block, address);
+		//Determine if we need to emit an indirection instruction or not
+		switch(cursor->CLASS){
+			//We won't do any dereferencing if we have these
+			case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+			case AST_NODE_CLASS_STRING_INITIALIZER:
+			case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+				break;
+			default:
+				//Once we have the address, we'll need to emit the memory code for it
+				address = emit_mem_code(current_block, address);
+				break;
 		}
 
 		//Now we'll invoke the helper rule to make the rest work
