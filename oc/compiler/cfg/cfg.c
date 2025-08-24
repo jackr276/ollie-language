@@ -2101,7 +2101,7 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 /**
  * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
  */
-static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
 	//We'll need the size to multiply by
 	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(base_type->type_size, type_symtab);
 
@@ -2125,6 +2125,32 @@ static three_addr_var_t* emit_address_offset_calc(basic_block_t* basic_block, th
 
 	//Once we have the total offset, we add it to the base address
 	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), base_addr, PLUS, total_offset);
+	
+	//if the base address is not temporary, it also counts as used
+	if(base_addr->is_temporary == FALSE){
+		add_used_variable(basic_block, base_addr);
+	}
+
+	//Add this into the block
+	add_statement(basic_block, result);
+
+	//Give back whatever we assigned
+	return result->assignee;
+}
+
+
+/**
+ * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
+ */
+static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, u_int32_t offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+	//We'll need the size to multiply by
+	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(base_type->type_size, type_symtab);
+
+	//We can directly compute here
+	u_int32_t total_offset = offset * base_type->type_size;
+
+	//Once we have the total offset, we add it to the base address
+	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), base_addr, PLUS, emit_int_constant_direct(total_offset, type_symtab));
 	
 	//if the base address is not temporary, it also counts as used
 	if(base_addr->is_temporary == FALSE){
@@ -2889,14 +2915,14 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				if(is_power_of_2(current_type->type_size) == TRUE){
 					address = emit_lea(current, current_var, offset, current_type, is_branch_ending);
 				} else {
-					address = emit_address_offset_calc(current, current_var, offset, current_type, is_branch_ending);
+					address = emit_address_offset_calculation(current, current_var, offset, current_type, is_branch_ending);
 				}
 			} else {
 				//Remember, we can only use lea if we have a power of 2 
 				if(is_power_of_2(current_type->type_size) == TRUE){
 					address = emit_lea(current, current_address, offset, current_type, is_branch_ending);
 				} else {
-					address = emit_address_offset_calc(current, current_address, offset, current_type, is_branch_ending);
+					address = emit_address_offset_calculation(current, current_address, offset, current_type, is_branch_ending);
 				}
 			}
 
@@ -6734,12 +6760,47 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 
 /**
  * Emit all array intializer assignments. To do this, we'll need the base address and the initializer
- * node that contains all elements to add in
+ * node that contains all elements to add in. We'll leverage the root level "emit_initializer" here
+ * and let it do all of the heavy lifting in terms of assignment operations. This rule
+ * will just compute the addresses that we need
  */
-static cfg_result_package_t emit_array_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* array_intializer, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_array_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* array_initializer, u_int8_t is_branch_ending){
 	//Initialize the results package here to start
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
+	//Grab a cursor to the child
+	generic_ast_node_t* cursor = array_initializer->first_child;
+
+	//Keep track of the total offset here
+	u_int32_t offset = 0;
+
+	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
+	while(cursor != NULL){
+		//We'll need to emit the proper address offset calculation for each one
+		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, array_initializer->inferred_type, is_branch_ending);
+
+		//Once we have the address, we'll need to emit the memory code for it
+		three_addr_var_t* derferenced = emit_mem_code(current_block, address);
+
+		//Now we'll invoke the helper rule to make the rest work
+		cfg_result_package_t initializer_results = emit_initialization(current_block, derferenced, cursor, is_branch_ending);
+
+		//Change the current block if there is a change. This is possible with ternary expressions
+		if(initializer_results.final_block != NULL && initializer_results.final_block != current_block){
+			current_block = initializer_results.final_block;
+		}
+
+		//Increment this by one
+		offset++;
+
+		//Advance to the next one
+		cursor = cursor->next_sibling;
+	}
+
+	//This could have changed throughout the function's executions
+	results.final_block = current_block;
+	
+	//Give back the results package
 	return results;
 }
 
@@ -6800,9 +6861,9 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 		case AST_NODE_CLASS_STRING_INITIALIZER:
 			return emit_string_initializer(current_block, assignee, initializer_root, is_branch_ending);
 
+		//Make a direct call to this one's rule as well
 		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
-			printf("Not yet implemented\n");
-			exit(0);
+			return emit_array_initializer(current_block, assignee, initializer_root, is_branch_ending);
 		
 		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
 			printf("Not yet implemented\n");
