@@ -3315,21 +3315,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//These both can't have higher indirection levels than 0
 			if(!(first->op1->indirection_level > 0 && second->assignee->indirection_level > 0)
 				//Same with these
-				&& !(second->op1->indirection_level > 0 && first->assignee->indirection_level > 0)){
+				&& !(second->op1->indirection_level > 0 && first->assignee->indirection_level > 0)
+				//We also can't combine these
+				&& !(second->op1->indirection_level > 0 && first->op1->indirection_level > 0)){
 
-				/**
-				 * We could have a scenario like this:
-				 * 	t5 <- (z_0)
-				 * 	t6 <- (t5)
-				 *
-				 * 	If this is the case, then we need to bump the indirection level of the second
-				 * 	one up when we combine
-				 *
-				 * 	We'd end with this
-				 * 	t6 <- ((z_0))
-				 */
-
-				//Bump the indirection level accordingly
+				//Copy this over so we don't lose it
 				first->op1->indirection_level += second->op1->indirection_level;
 
 				//Reorder the op1's
