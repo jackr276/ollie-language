@@ -1268,9 +1268,9 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 		while(cursor != NULL){
 			//This will be in our "related write var" field. All we need to do is see
 			//if the related write field matches our var
-			if(cursor->assignee != NULL && cursor->assignee->related_write_var != NULL
+			if(cursor->assignee != NULL && cursor->assignee->memory_address_variable != NULL
 				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
-				&& cursor->assignee->related_write_var == var->related_write_var){
+				&& cursor->assignee->memory_address_variable == var->memory_address_variable){
 				//This is a case where we mark
 				if(cursor->mark == FALSE){
 					//Mark the statement itself
@@ -1311,13 +1311,19 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 		return;
 	}
 
+	if(variable->linked_var != NULL && variable->linked_var->type_defined_as->type_class == TYPE_CLASS_ARRAY){
+		mark_and_add_all_field_writes(cfg, worklist, variable);
+		printf("HERE with %s\n", variable->linked_var->var_name.string);
+
+	}
+
 	//If this variable is a memory access, we'll need to do a bit more
 	//than just mark all of it's definitions. Rather, we'll need to
 	//mark all of the times that we write to this location
 	//in memory as important
 	if(variable->access_type == MEMORY_ACCESS_READ){
 		//Use the helper for memory address marking
-		mark_and_add_all_field_writes(cfg, worklist, stmt->assignee);
+		//mark_and_add_all_field_writes(cfg, worklist, stmt->assignee);
 	}
 
 	//Run through everything here

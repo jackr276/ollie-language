@@ -2941,7 +2941,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 					//This is related to a write of a var. We'll need to set this flag for later processing
 					//by the optimizer
-					current_var->related_write_var = array_or_struct_var;
+					current_var->memory_address_variable = array_or_struct_var;
 
 				//Otherwise we're dealing with a read
 				} else {
@@ -2967,7 +2967,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 					current_var = deref_stmt->assignee;
 
 					//Mark this too for later mapping
-					current_var->related_write_var = array_or_struct_var;
+					current_var->memory_address_variable = array_or_struct_var;
 				}
 
 			} else {
@@ -3032,8 +3032,8 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 					current_var->access_type = MEMORY_ACCESS_WRITE;
 
 					//Record where these variables came from
-					address->related_write_var = member;
-					current_var->related_write_var = member;
+					address->memory_address_variable = member;
+					current_var->memory_address_variable = member;
 				
 				//Otherwise we're dealing with a read
 				} else {
@@ -3059,7 +3059,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 					current_var = deref_stmt->assignee;
 
 					//Mark this too
-					current_var->related_write_var = member;
+					current_var->memory_address_variable = member;
 				}
 			//Otherwise, our current var is this address
 			} else {
@@ -6777,7 +6777,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 
 				//Store the linked variable. If there is none(2d array) then it will be null,
 				//which is fine
-				address->related_write_var = base_address->linked_var;
+				address->memory_address_variable = base_address->linked_var;
 
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;
@@ -6833,7 +6833,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		dereferenced->access_type = MEMORY_ACCESS_WRITE;
 
 		//Store the linked variable
-		dereferenced->related_write_var = base_address->linked_var;
+		dereferenced->memory_address_variable = base_address->linked_var;
 
 		//We'll now emit a constant assignment statement to load the char value in
 		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_char_constant_direct(char_value, type_symtab));
@@ -6888,7 +6888,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				address = emit_mem_code(current_block, address);
 				
 				//Store the field as a related write variable
-				address->related_write_var = struct_type->struct_table[member].variable;
+				address->memory_address_variable = struct_type->struct_table[member].variable;
 
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;
