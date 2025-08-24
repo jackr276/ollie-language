@@ -21,7 +21,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 		case 1 -> {
 			x := 3;
 		}
-		case 33 -> {
+		case 7 -> {
 			x := 2;
 		}
 		// Empty default

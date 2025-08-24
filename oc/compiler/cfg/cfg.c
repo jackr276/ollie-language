@@ -6846,16 +6846,22 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	//Initialize the results package here to start
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
+	//Grab the struct type out for reference
+	struct_type_t* struct_type = struct_initializer->inferred_type->struct_type;
+
 	//Grab a cursor to the child
 	generic_ast_node_t* cursor = struct_initializer->first_child;
 
 	//Keep track of the total offset here
-	u_int32_t offset = 0;
+	u_int32_t member = 0;
 
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
+		//Grab the offset directly from the struct table
+		u_int32_t offset = struct_type->struct_table[member].offset;
+
 		//We'll need to emit the proper address offset calculation for each one
-		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, cursor->inferred_type, is_branch_ending);
+		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_long_constant_direct(offset, type_symtab), is_branch_ending);
 
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->CLASS){
@@ -6879,7 +6885,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		}
 
 		//Increment this by one
-		offset++;
+		member++;
 
 		//Advance to the next one
 		cursor = cursor->next_sibling;
@@ -6913,8 +6919,7 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 
 		//Make a direct call to this one's rule as well
 		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
-			printf("Not yet implemented\n");
-			exit(0);
+			return emit_struct_initializer(current_block, assignee, initializer_root, is_branch_ending);
 		
 		//Make a direct call to this one's rule as well
 		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
