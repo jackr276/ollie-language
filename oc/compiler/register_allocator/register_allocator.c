@@ -1077,6 +1077,18 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
  * 			remove LC from LIVENOW
  * 			Add LA an LB to LIVENOW
  *
+ * This algorithm operates on the basic(and obvious) principle that two values cannot occupy the same
+ * register at the same time. So, we can determine what values are "live"(currently in use) by keeping
+ * track of what values have been used but not written. We crawl up the block, starting with the "live_out"
+ * values as our initial set. Remember that live out values are just values that are live-in at one of the
+ * successors of the current block. In other words, we require that these values survive after the block is done
+ * executing.
+ *
+ * We work by starting at the bottom of the block and crawling our way up. A value is considered "live_now" until
+ * we find the instruction where it was a destination. Once we find the instruction where the value was written
+ * to, we can safely remove it from LIVE_NOW because everything before that cannot possibly rely on the register
+ * because it hadn't been written to yet.
+ *
  */
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
 	//First thing that we'll do is reset all live ranges
@@ -1162,13 +1174,12 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 					dynamic_array_add(live_now, operation->address_calc_reg2->associated_live_range);
 				}
 
-
 				operation = operation->previous_statement;
 				continue;
 			}
 
 			//Now that we know this operation is valid, we will add interference between this and every
-			//other value in live_out
+			//other value in live_now
 			for(u_int16_t i = 0; i < live_now->current_index; i++){
 				//Graph the LR out
 				live_range_t* range = dynamic_array_get_at(live_now, i);
@@ -1185,6 +1196,17 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				if(dynamic_array_contains(live_now, operation->destination_register->associated_live_range) == NOT_FOUND){
 					dynamic_array_add(live_now, operation->destination_register->associated_live_range);
 				}
+
+			//If the destination register is being dereferenced, then it does count as live because we need
+			//the internal value to remain untouched. An example of this would be:
+			// movq %rax, (%rcx)
+			// Even though RCX is the destination register, we aren't actually overwriting it, so it will still be live
+			} else if(operation->destination_register->indirection_level > 0){
+				//This will also count as a source, so we must add it
+				if(dynamic_array_contains(live_now, operation->destination_register->associated_live_range) == NOT_FOUND){
+					dynamic_array_add(live_now, operation->destination_register->associated_live_range);
+				}
+
 			//Otherwise we can delete
 			} else {
 				dynamic_array_delete(live_now, operation->destination_register->associated_live_range);

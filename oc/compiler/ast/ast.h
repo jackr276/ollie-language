@@ -81,6 +81,12 @@ typedef enum ast_node_class_t{
 	AST_NODE_CLASS_ELABORATIVE_PARAM,
 	//For assembly inline statements
 	AST_NODE_CLASS_ASM_INLINE_STMT,
+	//An array initializer node
+	AST_NODE_CLASS_ARRAY_INITIALIZER_LIST,
+	//A struct initializer
+	AST_NODE_CLASS_STRUCT_INITIALIZER_LIST,
+	//A string initializer node
+	AST_NODE_CLASS_STRING_INITIALIZER,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
 } ast_node_class_t;
 
@@ -132,8 +138,6 @@ struct generic_ast_node_t{
 	Token binary_operator;
 	//Store a unary operator(if one exists)
 	Token unary_operator;
-	//Construct accessor token
-	Token construct_accessor_tok;
 	//Is this assignable?
 	variable_assignability_t is_assignable;
 	//What side is this node on

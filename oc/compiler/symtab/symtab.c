@@ -508,6 +508,13 @@ void add_all_basic_types(type_symtab_t* symtab){
 	type = create_basic_type("char", CHAR);
 	insert_type(symtab,  create_type_record(type));
 
+	//Save this for the next one to avoid confusion
+	generic_type_t* char_type = type;
+
+	//char* type
+	type = create_pointer_type(char_type, 0);
+	insert_type(symtab,  create_type_record(type));
+
 	//Generic unsigned int
 	type = create_basic_type("generic_unsigned_int", UNSIGNED_INT_CONST);
 	insert_type(symtab,  create_type_record(type));

@@ -167,7 +167,7 @@ void reset_file(FILE* fl);
 /**
  * Special case -- hunting for assembly statements
  */
-lexitem_t get_next_assembly_statement(FILE* fl, u_int16_t* parser_line_num);
+lexitem_t get_next_assembly_statement(FILE* fl);
 
 /**
  * Generic token grabbing function

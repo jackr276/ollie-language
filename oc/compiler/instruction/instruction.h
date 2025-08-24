@@ -669,6 +669,11 @@ three_addr_const_t* emit_string_constant(symtab_function_record_t* function, gen
 three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symtab);
 
 /**
+ * Emit a char constant directly from a value
+ */
+three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* symtab);
+
+/**
  * Emit an unsigned int constant directly
  */
 three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab_t* symtab);

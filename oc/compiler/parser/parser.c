@@ -102,9 +102,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* defer_statement(FILE* fl);
 static generic_ast_node_t* idle_statement(FILE* fl);
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side);
+static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node);
 
 
 /**
@@ -1234,7 +1236,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Now that we're here we must see a valid conditional expression
+	//Holder for our expression
 	generic_ast_node_t* expr = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Fail case here
@@ -1410,7 +1412,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	struct_access_node->line_number = current_line;
 
 	//Put the token in to show what we have
-	struct_access_node->construct_accessor_tok = lookahead.tok;
+	struct_access_node->unary_operator = lookahead.tok;
 
 	//Grab a convenient reference to the type that we're working with
 	generic_type_t* working_type = dealias_type(current_type);
@@ -3497,6 +3499,152 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 }
 
 
+
+/**
+ * An array initializer is a set of one or more initializers in between
+ * [], separated by commas
+ *
+ * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
+ *
+ * REMEMBER: by the time that we've arrived here, we've already seen and consumed the
+ * first [ token
+ */
+static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
+	//Lookahead token for parsing
+	lexitem_t lookahead;
+
+	//Let's first allocate our initializer node. The initializer node will store
+	//all of our ternary expressions inside of it as children
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_INITIALIZER_LIST, side);
+
+	//Store the line number
+	initializer_list_node->line_number = parser_line_num;
+
+	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
+	//to process
+	do{
+		//We now must see an initializer node
+		generic_ast_node_t* initializer_node = initializer(fl, side);
+
+		//If this is an error, then the whole thing is invalid
+		if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return print_and_return_error("Invalid initializer given in array initializer", parser_line_num);
+		}
+
+		//Add this in as a child of the initializer list
+		add_child_node(initializer_list_node, initializer_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we keep seeing commas, we continue
+	} while(lookahead.tok == COMMA);
+
+	//Once we reach down here, we need to check and see if we have the closing bracket that would
+	//mark a valid end for us
+	if(lookahead.tok != R_BRACKET){
+		return print_and_return_error("Closing bracket(]) required at the end of array initializer", parser_line_num);
+	}
+
+	//Pop the grouping stack and ensure it matches
+	if(pop_token(grouping_stack).tok != L_BRACKET){
+		return print_and_return_error("Unmatched brackets detected in array initializer", parser_line_num);
+	}
+
+	//Give back the intializer list node
+	return initializer_list_node;
+}
+
+
+/**
+ * A struct initializer is a set of one or more initializers in between
+ * [], separated by commas
+ *
+ * BNF Rule: <struct-initializer> ::= {<intializer>{, <initializer>}*}
+ */
+static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
+	//Lookahead token for parsing
+	lexitem_t lookahead;
+
+	//Let's first allocate our initializer node. The initializer node will store
+	//all of our ternary expressions inside of it as children
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_STRUCT_INITIALIZER_LIST, side);
+
+	//Store the line number
+	initializer_list_node->line_number = parser_line_num;
+
+	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
+	//to process
+	do{
+		//We now must see an initializer node
+		generic_ast_node_t* initializer_node = initializer(fl, side);
+
+		//If this is an error, then the whole thing is invalid
+		if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return print_and_return_error("Invalid initializer given in struct initializer", parser_line_num);
+		}
+
+		//Add this in as a child of the initializer list
+		add_child_node(initializer_list_node, initializer_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we keep seeing commas, we continue
+	} while(lookahead.tok == COMMA);
+
+	//Once we reach down here, we need to check and see if we have the closing bracket that would
+	//mark a valid end for us
+	if(lookahead.tok != R_CURLY){
+		return print_and_return_error("Closing curly brace(}) required at the end of struct initializer", parser_line_num);
+	}
+
+	//Pop the grouping stack and ensure it matches
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Unmatched brackets detected in struct initializer", parser_line_num);
+	}
+
+	//Give back the intializer list node
+	return initializer_list_node;
+}
+
+
+/**
+ * An initializer can either decay into an expression chain or it can turn into an initializer of
+ * some kind(string or list)
+ *
+ * BNF Rule: <initializer> ::= <ternary_expression> | <initializer_list>
+ */
+static generic_ast_node_t* initializer(FILE* fl, side_type_t side){
+	//Grab the next token
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	switch(lookahead.tok){
+		//A left bracket symbol means that we're encountering an array initializer
+		case L_BRACKET:
+			//Push this onto the grouping stack
+			push_token(grouping_stack, lookahead);
+
+			//Let the helper handle it
+			return array_initializer(fl, side);
+
+		//An L_CURLY signifies the start of a struct initializer
+		case L_CURLY:
+			//Push this onto the grouping stack for matching later
+			push_token(grouping_stack, lookahead);
+
+			//Let the helper handle it
+			return struct_initializer(fl, side);
+
+		//By default, we haven't found anything in here that would indicate we'll need an initializer.
+		//As such, we'll push the token back and call the ternary expression rule
+		default:
+			push_back_token(lookahead);
+			return ternary_expression(fl, side);
+	}
+}
+
+
 /**
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
@@ -3678,6 +3826,14 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in construct member", parser_line_num);
 		num_errors++;
 		//It's already an error, so just send it up
+		return FAILURE;
+	}
+
+	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
+	//the user from adding a field the mut a:char[] that is unknown at compile time
+	if(type_spec->type_size == 0){
+		sprintf(info, "The size of type %s is not known. Struct members must have a size known at compile time", type_spec->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}
 
@@ -4877,6 +5033,12 @@ static generic_type_t* type_specifier(FILE* fl){
 			//Scan ahead to see
 			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
 
+			//This is a special case where we are able to have an unitialized array for the time
+			//being. This only works if we have an array initializer afterwards
+			
+			//We're all set, push this onto the lightstack
+			lightstack_push(&lightstack, 0);
+
 			//Onto the next iteration
 			continue;
 		}
@@ -4906,6 +5068,7 @@ static generic_type_t* type_specifier(FILE* fl){
 			return NULL;
 		}
 
+		//Determine if we have an illegal constant given as the array bounds
 		switch(const_node->constant_type){
 			case FLOAT_CONST:
 			case STR_CONST:
@@ -6746,7 +6909,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 		push_back_token(lookahead);
 
 		//We'll now need to consume an assembly statement
-		lookahead = get_next_assembly_statement(fl, &parser_line_num);
+		lookahead = get_next_assembly_statement(fl);
 
 		//If it's an error, we'll fail out here
 		if(lookahead.tok == ERROR){
@@ -7331,12 +7494,9 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	//If we see a specifier here, we'll record it
-	if(lookahead.tok == REGISTER){
-		storage_class = STORAGE_CLASS_REGISTER;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	} else if(lookahead.tok == STATIC){
+
+	//If we see static here, we'll make a note of that
+	if(lookahead.tok == STATIC){
 		storage_class = STORAGE_CLASS_STATIC;
 		//Refresh token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7486,6 +7646,282 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 
 /**
+ * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
+ */
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+	//Extract the actual array type for ease of use here
+	array_type_t* array = array_type->array_type;
+
+	//Grab the member type here out as well
+	generic_type_t* member_type = array->member_type;
+
+	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
+	u_int32_t num_members = array->num_members;
+
+	//Let's also keep a record of the number of members that we've seen in total
+	u_int32_t initializer_list_members = 0;
+
+	//Grab a cursor to iterate over the children of the initializer list
+	generic_ast_node_t* cursor = initializer_list_node->first_child;
+
+	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
+	//to the given array type
+	while(cursor != NULL){
+		//We'll use the same top level initialization check for this rule as well
+		generic_type_t* final_type = validate_intializer_types(member_type, cursor);
+
+		//If these fail, then we're done here. No need for an error message, they'll have already been
+		//printed
+		if(final_type == NULL){
+			return FALSE;
+		}
+
+		//Increment the member count by 1
+		initializer_list_members++;
+
+		//Push this up to the next sibling
+		cursor = cursor->next_sibling;
+	}
+
+	//The final check down here has 2 options:
+	// 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
+	// 2.) The length was set, in which case, we validate the length here
+	if(num_members != 0){
+		//Validate that they match here
+		if(num_members != initializer_list_members){
+			sprintf(info, "Attempt to assign %d members to an array of size %d", initializer_list_members, num_members);
+			print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+			return FALSE;
+		}
+	//Otherwise, we'll need to set the number of members accordingly here
+	} else {
+		array->num_members = initializer_list_members;
+
+		//Reup the acutal size here
+		array_type->type_size = initializer_list_members * array->member_type->type_size;
+	}
+
+	//If we make it here, then we can set the type of the initializer list to match the array
+	initializer_list_node->inferred_type = array_type;
+
+	//If we made it here, then we know that we're good
+	return TRUE;
+}
+
+
+/**
+ * Struct initializers, unlike array intializers, only have one way of working. The user needs to properly define all of the
+ * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
+ * up
+ */
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
+	//Grab the raw struct type out
+	struct_type_t* raw_type = struct_type->struct_type;
+
+	//We'll need to extract the struct table and that max index that it holds
+	struct_type_field_t* fields = raw_type->struct_table;
+
+	//The number of fields that were defined in the type is here
+	u_int32_t num_fields = raw_type->next_index;
+
+	//Initialize a cursor to the initializer list node itself
+	generic_ast_node_t* cursor = initializer_list_node->first_child;
+
+	//Keep a count of how many fields we've seen
+	u_int32_t seen_count = 0;
+
+	//Run through every node in here
+	while(cursor != NULL){
+		//If we exceed the number of fields given, we error out
+		if(seen_count > num_fields){
+			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_count);
+			print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+			return FALSE;
+		}
+
+		//Grab the variable out
+		symtab_variable_record_t* variable = fields->variable;
+
+		//Recursively call the initializer processor rule. This allows us to handle nested initializations
+		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor);
+
+		//Let's check to see if the types are assignable
+		if(final_type == NULL){
+			return FALSE;
+		}
+
+		//Otherwise it worked, so we'll go to the next one
+		
+		//Increment this counter
+		seen_count++;
+
+		//Push the field pointer up by 1
+		fields++;
+
+		//Advance to the next sibling
+		cursor = cursor->next_sibling;
+	}
+
+	//One final validation - we need to check if the field counts match
+	if(num_fields != seen_count){
+		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_count);
+		print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+		return FALSE;
+	}
+
+	//Set the struct type here accordingly
+	initializer_list_node->inferred_type = struct_type; 
+
+	//If we made it here, then we know that we're good
+	return TRUE;
+}
+
+
+/**
+ * There are two options that we could see for a string initializer:
+ *
+ * 1.) let a:char[] := "hello"; //We auto set the bounds to be 6 here
+ * 2.) let a:char[6] := "hello"; //This is also valid, we just need to ensure that things match
+ *
+ * Returns an error node if bad. If good, we return a string initializer node with the string constant
+ * node as its child
+ */
+static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
+	//Extract the actual array type for ease of use here
+	array_type_t* array = array_type->array_type;
+
+	//Let's first validate that this array actually is a char[]
+	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type->basic_type != CHAR){
+		//Print out the full error message
+		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
+
+		//Fail out here
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
+	//we could be seeing an array type where the length is already set. Either way, we'll need to get the string length of the constant
+	
+	//A dynamic string stores a string lenght, it does not account for the null terminator. As such, we'll need to have the null terminator
+	//accounted for by adding 1 to it
+	u_int32_t length = string_constant->string_value.current_length + 1;
+	
+	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
+	//lenght of the array to be whatever we have in here
+	if(array->num_members == 0){
+		//Set the number of members
+		array->num_members = length;
+
+		//Since these are all chars, the size of the array is just the length
+		array_type->type_size = length;
+	} else {
+		//If these are different, then we fail out
+		if(array->num_members != length){
+			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array->num_members, length);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we're all set
+	}
+
+	//Reassign the class here from a constant to a string initializer
+	string_constant->CLASS = AST_NODE_CLASS_STRING_INITIALIZER;
+
+	//Reassign the type to match what was sent in
+	string_constant->inferred_type = array_type;
+
+	//And give this node back
+	return string_constant;
+}
+
+
+/**
+ * Top level initializer value for type validation
+ */
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node){
+	//What's the return type of our node?
+	generic_type_t* return_type = target_type;
+
+	//By default, we assume we will fail. The validation step will need to prove us wrong
+	u_int8_t validation_succeeded = FALSE;
+
+	//Based on what the class of this initializer node is, there are several different
+	//paths that we can take
+	switch(initializer_node->CLASS){
+		//If it's in error itself, we just leave
+		case AST_NODE_CLASS_ERR_NODE:
+			//Throw an error here
+			print_parse_message(PARSE_ERROR, "Invalid expression given as intializer", parser_line_num);
+			//Return null to mean failure
+			return NULL;
+
+		//An array initializer list has a special checking function
+		//that we must use
+		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+			//Run the validation step for the intializer list
+			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node);
+
+			//If this didn't work we fail out
+			if(validation_succeeded == FALSE){
+				print_parse_message(PARSE_ERROR, "Invalid array intializer given", initializer_node->line_number);
+				return NULL;
+			}
+
+			//Give back the return type
+			return return_type;
+			
+		//A struct initializer list also has it's own special checking function that we must use
+		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			//Run the validation step for a struct
+			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node);
+
+			//If this didn't work we fail out
+			if(validation_succeeded == FALSE){
+				print_parse_message(PARSE_ERROR, "Invalid struct intializer given", initializer_node->line_number);
+				return NULL;
+			}
+
+			//Give back the return type
+			return return_type;
+			
+		//Otherwise we'll just take the standard path
+		default:
+			//If we have a string constant, there's a chance that we could be seeing a string
+			//initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
+			//the helper deal with it
+			if(initializer_node->CLASS == AST_NODE_CLASS_CONSTANT && initializer_node->constant_type == STR_CONST
+				&& target_type->type_class == TYPE_CLASS_ARRAY){
+				
+				//Dynamically set the initializer node here in the helper function
+				initializer_node = validate_or_set_bounds_for_string_initializer(target_type, initializer_node);
+
+				//If it's an error, we need to fail out now
+				if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+					//Throw it up the chain by return null
+					return NULL;
+				}
+
+				//Otherwise we'll just break out. The initializer node will have been properly
+				//set by the function above
+				return return_type;
+			}
+
+			//Use the helper to determine if the types are assignable
+			generic_type_t* final_type = types_assignable(&(return_type), &(initializer_node->inferred_type));
+
+			//Will be null if we have a failure
+			if(final_type == NULL){
+				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, return_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+			}
+			
+			//Give back the return type
+			return final_type;
+	}
+}
+
+
+/**
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
  * performs type checking and inference and all needed symbol table manipulation
  *
@@ -7499,7 +7935,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Is it mutable?
-	u_int8_t is_mutable = 0;
+	u_int8_t is_mutable = FALSE;
 	//The storage class, normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
@@ -7509,12 +7945,8 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we see a specifier here, we'll record it
-	if(lookahead.tok == REGISTER){
-		storage_class = STORAGE_CLASS_REGISTER;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	} else if(lookahead.tok == STATIC){
+	//If we see static here, we'll make a note of that
+	if(lookahead.tok == STATIC){
 		storage_class = STORAGE_CLASS_STATIC;
 		//Refresh token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7621,27 +8053,38 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
-
 	//Now we know that it wasn't a duplicate, so we must see a valid assignment operator
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//Assop is mandatory here
 	if(lookahead.tok != COLONEQ){
 		return print_and_return_error("Assignment operator(:=) required after identifier in let statement", parser_line_num);
 	}
 
-	//Otherwise we saw it, so now we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
+	//Now we need to see a valid initializer
+	generic_ast_node_t* initializer_node = initializer(fl, SIDE_TYPE_RIGHT);
+	
+	//Store the return type here after we do all needed validations. This rule allows 
+	//for recursive validation, so that we can handle recursive initialization
+	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node);
 
-	//We now need to complete type checking. Is what we're assigning to the new variable
-	//compatible with what we're given by the logical or expression here?
-
-	//If it fails, we fail out
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
-		return print_and_return_error("Invalid expression given as intializer", parser_line_num);
+	//If the return type is NULL, we fail out here
+	if(return_type == NULL){
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
+	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
+	if(initializer_node->inferred_type->type_class == TYPE_CLASS_POINTER){
+		if(initializer_node->variable != NULL && initializer_node->variable->is_mutable == FALSE && is_mutable == TRUE){
+			return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
+		}
+	}
+
+	//Store this just in case--most likely won't use
+	let_stmt_node->inferred_type = return_type;
+
 	//Otherwise it worked, so we'll add it in as a child
-	add_child_node(let_stmt_node, expr_node);
+	add_child_node(let_stmt_node, initializer_node);
 
 	//The last thing that we are required to see before final assembly is a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7650,28 +8093,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	if(lookahead.tok != SEMICOLON){
 		return print_and_return_error("Semicolon required at the end of let statement", parser_line_num);
 	}
-
-	//Extract the two types here
-	generic_type_t* left_hand_type = type_spec;
-	generic_type_t* right_hand_type = expr_node->inferred_type;
-
-	generic_type_t* return_type = types_assignable(&left_hand_type, &right_hand_type);
-
-	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
-	if(expr_node->inferred_type->type_class == TYPE_CLASS_POINTER){
-		if(expr_node->variable != NULL && expr_node->variable->is_mutable == FALSE && is_mutable == TRUE){
-			return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
-		}
-	}
-
-	//Will be null if we have a failure
-	if(return_type == NULL){
-		sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Store this just in case--most likely won't use
-	let_stmt_node->inferred_type = return_type;
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function

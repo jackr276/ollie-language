@@ -1244,7 +1244,12 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			fprintf(fl, "%ld", constant->long_const);
 			break;
 		case CHAR_CONST:
-			fprintf(fl, "'%c'", constant->char_const);
+			//Special case here to for display reasons
+			if(constant->char_const == 0){
+				fprintf(fl, "'\\0'");
+			} else {
+				fprintf(fl, "'%c'", constant->char_const);
+			}
 			break;
 		//We do not print out string constants directly. Instead, we print
 		//out the local constant ID that is associated with them
@@ -1265,490 +1270,383 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 
 
 /**
+ * Turn an operand into a string
+ */
+static char* op_to_string(Token op){
+	//Whatever we have here
+	switch (op) {
+		case PLUS:
+			return "+";
+		case MINUS:
+			return "-";
+		case STAR:
+			return "*";
+		case F_SLASH:
+			return "/";
+		case MOD:
+			return "%";
+		case G_THAN:
+			return ">";
+		case L_THAN:
+			return "<";
+		case L_SHIFT:
+			return "<<";
+		case R_SHIFT:
+			return ">>";
+		case SINGLE_AND:
+			return "&";
+		case SINGLE_OR:
+			return "|";
+		case CARROT:
+			return "^";
+		case DOUBLE_OR:
+			return "||";
+		case DOUBLE_AND:
+			return "&&";
+		case DOUBLE_EQUALS:
+			return "==";
+		case NOT_EQUALS:
+			return "!=";
+		case G_THAN_OR_EQ:
+			return ">=";
+		case L_THAN_OR_EQ:
+			return "<=";
+		//Should never happen, but just in case
+		default:
+			exit(1);
+	}
+}
+
+
+/**
+ * Convert a jump type to a string
+ */
+static char* jump_type_to_string(jump_type_t jump_type){
+	switch(jump_type){
+		case JUMP_TYPE_JE:
+			return "je";
+		case JUMP_TYPE_JNE:
+			return "jne";
+		case JUMP_TYPE_JG:
+			return "jg";
+		case JUMP_TYPE_JL:
+			return "jl";
+		case JUMP_TYPE_JNZ:
+			return "jnz";
+		case JUMP_TYPE_JZ:
+			return "jz";
+		case JUMP_TYPE_JMP:
+			return "jmp";
+		case JUMP_TYPE_JGE:
+			return "jge";
+		case JUMP_TYPE_JLE:
+			return "jle";
+		case JUMP_TYPE_JAE:
+			return "jae";
+		case JUMP_TYPE_JBE:
+			return "jbe";
+		case JUMP_TYPE_JA:
+			return "ja";
+		case JUMP_TYPE_JB:
+			return "jb";
+		default:
+			return "jmp";
+	}
+}
+
+
+/**
  * Pretty print a three address code statement
  *
 */
 void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
-	//If it's a binary operator statement(most common), we'll
-	//print the whole thing
-	if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
-		//What is our op?
-		char* op = "";
+	//For later use
+	dynamic_array_t* func_params;
 
-		//Whatever we have here
-		switch (stmt->op) {
-			case PLUS:
-				op = "+";
-				break;
-			case MINUS:
-				op = "-";
-				break;
-			case STAR:
-				op = "*";
-				break;
-			case F_SLASH:
-				op = "/";
-				break;
-			case MOD:
-				op = "%";
-				break;
-			case G_THAN:
-				op = ">";
-				break;
-			case L_THAN:
-				op = "<";
-				break;
-			case L_SHIFT:
-				op = "<<";
-				break;
-			case R_SHIFT:
-				op = ">>";
-				break;
-			case SINGLE_AND:
-				op = "&";
-				break;
-			case SINGLE_OR:
-				op = "|";
-				break;
-			case CARROT:
-				op = "^";
-				break;
-			case DOUBLE_OR:
-				op = "||";
-				break;
-			case DOUBLE_AND:
-				op = "&&";
-				break;
-			case DOUBLE_EQUALS:
-				op = "==";
-				break;
-			case NOT_EQUALS:
-				op = "!=";
-				break;
-			case G_THAN_OR_EQ:
-				op = ">=";
-				break;
-			case L_THAN_OR_EQ:
-				op = "<=";
-				break;
-			default:
-				fprintf(fl, "BAD OP");
-				exit(1);
-		}
+	//Go based on what our statatement class is
+	switch(stmt->CLASS){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			//This one comes first
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 
-		//This one comes first
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			//Then the arrow
+			fprintf(fl, " <- ");
 
-		//Then the arrow
-		fprintf(fl, " <- ");
-
-		//Now we'll do op1, token, op2
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, " %s ", op);
-		print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
-
-		//And end it out here
-		fprintf(fl, "\n");
-
-	//If we have a bin op with const
-	} else if(stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		//What is our op?
-		char* op = "";
-
-		//Whatever we have here
-		switch (stmt->op) {
-			case PLUS:
-				op = "+";
-				break;
-			case MINUS:
-				op = "-";
-				break;
-			case STAR:
-				op = "*";
-				break;
-			case F_SLASH:
-				op = "/";
-				break;
-			case MOD:
-				op = "%";
-				break;
-			case G_THAN:
-				op = ">";
-				break;
-			case L_THAN:
-				op = "<";
-				break;
-			case L_SHIFT:
-				op = "<<";
-				break;
-			case R_SHIFT:
-				op = ">>";
-				break;
-			case SINGLE_AND:
-				op = "&";
-				break;
-			case SINGLE_OR:
-				op = "|";
-				break;
-			case CARROT:
-				op = "^";
-				break;
-			case DOUBLE_OR:
-				op = "||";
-				break;
-			case DOUBLE_AND:
-				op = "&&";
-				break;
-			case DOUBLE_EQUALS:
-				op = "==";
-				break;
-			case NOT_EQUALS:
-				op = "!=";
-				break;
-			case G_THAN_OR_EQ:
-				op = ">=";
-				break;
-			case L_THAN_OR_EQ:
-				op = "<=";
-				break;
-			default:
-				fprintf(fl, "BAD OP");
-				exit(1);
-		}
-
-		//This one comes first
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-
-		//Then the arrow
-		fprintf(fl, " <- ");
-
-		//Now we'll do op1, token, op2
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, " %s ", op);
-
-		//Print the constant out
-		print_three_addr_constant(fl, stmt->op1_const);
-
-		//We need a newline here
-		fprintf(fl, "\n");
-	
-	//If we have a regular const assignment
-	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_STMT){
-		//We'll print out the left and right ones here
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	//Assigning a memory address to a variable
-	} else if (stmt->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
-		//We'll print out the left and right ones here
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- Memory Address of ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if(stmt->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//First print out the assignee
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- ");
-
-		//Print the constant out
-		print_three_addr_constant(fl, stmt->op1_const);
-		//Newline needed
-		fprintf(fl, "\n");
-
-	//Print out a return statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_RET_STMT){
-		//Use asm keyword here, getting close to machine code
-		fprintf(fl, "ret ");
-
-		//If it has a returned variable
-		if(stmt->op1 != NULL){
+			//Now we'll do op1, token, op2
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		}
-		
-		//No matter what, print a newline
-		fprintf(fl, "\n");
-
-	//Print out a jump statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-		//Use asm keyword here, getting close to machine code
-		switch(stmt->jump_type){
-			case JUMP_TYPE_JE:
-				fprintf(fl, "je");
-				break;
-			case JUMP_TYPE_JNE:
-				fprintf(fl, "jne");
-				break;
-			case JUMP_TYPE_JG:
-				fprintf(fl, "jg");
-				break;
-			case JUMP_TYPE_JL:
-				fprintf(fl, "jl");
-				break;
-			case JUMP_TYPE_JNZ:
-				fprintf(fl, "jnz");
-				break;
-			case JUMP_TYPE_JZ:
-				fprintf(fl, "jz");
-				break;
-			case JUMP_TYPE_JMP:
-				fprintf(fl, "jmp");
-				break;
-			case JUMP_TYPE_JGE:
-				fprintf(fl, "jge");
-				break;
-			case JUMP_TYPE_JLE:
-				fprintf(fl, "jle");
-				break;
-			case JUMP_TYPE_JAE:
-				fprintf(fl, "jae");
-				break;
-			case JUMP_TYPE_JBE:
-				fprintf(fl, "jbe");
-				break;
-			case JUMP_TYPE_JA:
-				fprintf(fl, "ja");
-				break;
-			case JUMP_TYPE_JB:
-				fprintf(fl, "jb");
-				break;
-			default:
-				fprintf(fl, "jmp");
-				break;
-		}
-
-		//Then print out the block label
-		fprintf(fl, " .L%d\n", ((basic_block_t*)(stmt->jumping_to_block))->block_id);
-
-	//If we have a function call go here
-	} else if(stmt->CLASS == THREE_ADDR_CODE_FUNC_CALL){
-		//First we'll print out the assignment, if one exists
-		if(stmt->assignee != NULL){
-			//Print the variable and assop out
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- ");
-		}
-
-		//No matter what, we'll need to see the "call" keyword, followed
-		//by the function name
-		fprintf(fl, "call %s(", stmt->called_function->func_name.string);
-
-		//Grab this out
-		dynamic_array_t* func_params = stmt->function_parameters;
-
-		//Now we can go through and print out all of our parameters here
-		for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
-			//Grab it out
-			three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
-			
-			//Print this out here
-			print_variable(fl, func_param, PRINTING_VAR_INLINE);
-
-			//If we need to, print out a comma
-			if(i != func_params->current_index - 1){
-				fprintf(fl, ", ");
-			}
-		}
-
-		//Now at the very end, close the whole thing out
-		fprintf(fl, ")\n");
-
-	//Handle the case of an indirect function call
-	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIRECT_FUNC_CALL){
-		//First we'll print out the assignment, if one exists
-		if(stmt->assignee != NULL){
-			//Print the variable and assop out
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- ");
-		}
-
-		//Print out the call here
-		fprintf(fl, "call *");
-
-		//Now we'll use the helper to print the variable name
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-
-		//Now we can print the opening parenthesis
-		fprintf(fl, "(");
-
-		//Grab this out
-		dynamic_array_t* func_params = stmt->function_parameters;
-
-		//Now we can go through and print out all of our parameters here
-		for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
-			//Grab it out
-			three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
-			
-			//Print this out here
-			print_variable(fl, func_param, PRINTING_VAR_INLINE);
-
-			//If we need to, print out a comma
-			if(i != func_params->current_index - 1){
-				fprintf(fl, ", ");
-			}
-		}
-
-		//Now at the very end, close the whole thing out
-		fprintf(fl, ")\n");
-
-	//If we have a binary operator with a constant
-	} else if (stmt->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		//TODO MAY OR MAY NOT NEED
-	} else if (stmt->CLASS == THREE_ADDR_CODE_INC_STMT){
-		fprintf(fl, "inc ");
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if (stmt->CLASS == THREE_ADDR_CODE_DEC_STMT){
-		fprintf(fl, "dec ");
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if (stmt->CLASS == THREE_ADDR_CODE_BITWISE_NOT_STMT){
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- not ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if(stmt->CLASS == THREE_ADDR_CODE_NEG_STATEMENT){
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		fprintf(fl, " <- neg ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} else if (stmt->CLASS == THREE_ADDR_CODE_LOGICAL_NOT_STMT){
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-		//We will use a sequence of commands to do this
-		fprintf(fl, " <- logical_not ");
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	//For a label statement, we need to trim off the $ that it has
-	} else if(stmt->CLASS == THREE_ADDR_CODE_LABEL_STMT){
-		//Let's print it out. This is an instance where we will not use the print var
-		fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string + 1);
-	} else if(stmt->CLASS == THREE_ADDR_CODE_DIR_JUMP_STMT){
-		//This is an instance where we will not use the print var
-		fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name.string + 1);
-	//Display an assembly inline statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_ASM_INLINE_STMT){
-		//Should already have a trailing newline
-		fprintf(fl, "%s", stmt->inlined_assembly.string);
-	} else if(stmt->CLASS == THREE_ADDR_CODE_IDLE_STMT){
-		//Just print a nop
-		fprintf(fl, "nop\n");
-	//If we have a lea statement, we will print it out in plain algebraic form here
-	} else if(stmt->CLASS == THREE_ADDR_CODE_LEA_STMT){
-		//Var name comes first
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-
-		//Print the assignment operator
-		fprintf(fl, " <- ");
-
-		//Now print out the rest in order
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		//Then we have a plus
-		fprintf(fl, " + ");
-
-		//If we have a constant, we'll print that. Otherwise, print op2
-		if(stmt->op1_const != NULL){
-			//Print the constant out
-			print_three_addr_constant(fl, stmt->op1_const);
-			fprintf(fl, "\n");
-		} else {
-			//Then we have the third one, times some multiplier
+			fprintf(fl, " %s ", op_to_string(stmt->op));
 			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
-			//If we have a multiplicator, then we can print it
-			if(stmt->has_multiplicator == TRUE){
-				//And the finishing sequence
-				fprintf(fl, " * %ld", stmt->lea_multiplicator);
-			}
-
+			//And end it out here
 			fprintf(fl, "\n");
-		}
-	//Print out a phi function 
-	} else if(stmt->CLASS == THREE_ADDR_CODE_PHI_FUNC){
-		//Print it in block header mode
-		print_variable(fl, stmt->assignee, PRINTING_VAR_BLOCK_HEADER);
-		fprintf(fl, " <- PHI(");
+			break;
 
-		//For convenience
-		dynamic_array_t* phi_func_params = stmt->phi_function_parameters;
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			//This one comes first
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 
-		//Now run through all of the parameters
-		for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
-			//Print out the variable
-			print_variable(fl, dynamic_array_get_at(phi_func_params, _), PRINTING_VAR_BLOCK_HEADER);
+			//Then the arrow
+			fprintf(fl, " <- ");
 
-			//If it isn't the very last one, add a comma space
-			if(_ != phi_func_params->current_index - 1){
-				fprintf(fl, ", ");
+			//Now we'll do op1, token, op2
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, " %s ", op_to_string(stmt->op));
+
+			//Print the constant out
+			print_three_addr_constant(fl, stmt->op1_const);
+
+			//We need a newline here
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_ASSN_STMT:
+			//We'll print out the left and right ones here
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_ASSN_CONST_STMT:
+			//First print out the assignee
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+
+			//Print the constant out
+			print_three_addr_constant(fl, stmt->op1_const);
+			//Newline needed
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
+			//We'll print out the left and right ones here
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- Memory Address of ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_RET_STMT:
+			fprintf(fl, "ret ");
+
+			//If it has a returned variable
+			if(stmt->op1 != NULL){
+				print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			}
-		}
+			
+			//No matter what, print a newline
+			fprintf(fl, "\n");
+			break;
 
-		fprintf(fl, ")\n");
-	//Print out an indirect jump statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
-		print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+		case THREE_ADDR_CODE_JUMP_STMT:
+			//Then print out the block label
+			fprintf(fl, "%s .L%d\n", jump_type_to_string(stmt->jump_type), ((basic_block_t*)(stmt->jumping_to_block))->block_id);
+			break;
 
-		//Print out the jump block ID
-		fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->jumping_to_block))->jump_table_id);
+		case THREE_ADDR_CODE_FUNC_CALL:
+			//First we'll print out the assignment, if one exists
+			if(stmt->assignee != NULL){
+				//Print the variable and assop out
+				print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+				fprintf(fl, " <- ");
+			}
+
+			//No matter what, we'll need to see the "call" keyword, followed
+			//by the function name
+			fprintf(fl, "call %s(", stmt->called_function->func_name.string);
+
+			//Grab this out
+			func_params = stmt->function_parameters;
+
+			//Now we can go through and print out all of our parameters here
+			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
+				//Grab it out
+				three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
+				
+				//Print this out here
+				print_variable(fl, func_param, PRINTING_VAR_INLINE);
+
+				//If we need to, print out a comma
+				if(i != func_params->current_index - 1){
+					fprintf(fl, ", ");
+				}
+			}
+
+			//Now at the very end, close the whole thing out
+			fprintf(fl, ")\n");
+			break;
+
+		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			//First we'll print out the assignment, if one exists
+			if(stmt->assignee != NULL){
+				//Print the variable and assop out
+				print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+				fprintf(fl, " <- ");
+			}
+
+			//Print out the call here
+			fprintf(fl, "call *");
+
+			//Now we'll use the helper to print the variable name
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+			//Now we can print the opening parenthesis
+			fprintf(fl, "(");
+
+			//Grab this out
+			func_params = stmt->function_parameters;
+
+			//Now we can go through and print out all of our parameters here
+			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
+				//Grab it out
+				three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
+				
+				//Print this out here
+				print_variable(fl, func_param, PRINTING_VAR_INLINE);
+
+				//If we need to, print out a comma
+				if(i != func_params->current_index - 1){
+					fprintf(fl, ", ");
+				}
+			}
+
+			//Now at the very end, close the whole thing out
+			fprintf(fl, ")\n");
+			break;
 		
-		//Now print out the variable
-		print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+		case THREE_ADDR_CODE_INC_STMT:
+			fprintf(fl, "inc ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
 
-		//Finally the multiplicator
-		fprintf(fl, " * %ld\n", stmt->lea_multiplicator);
-	//Print out an indirect jump statement
-	} else if(stmt->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
-		switch(stmt->jump_type){
-			case JUMP_TYPE_JE:
-				fprintf(fl, "je");
-				break;
-			case JUMP_TYPE_JNE:
-				fprintf(fl, "jne");
-				break;
-			case JUMP_TYPE_JG:
-				fprintf(fl, "jg");
-				break;
-			case JUMP_TYPE_JL:
-				fprintf(fl, "jl");
-				break;
-			case JUMP_TYPE_JNZ:
-				fprintf(fl, "jnz");
-				break;
-			case JUMP_TYPE_JZ:
-				fprintf(fl, "jz");
-				break;
-			case JUMP_TYPE_JMP:
-				fprintf(fl, "jmp");
-				break;
-			case JUMP_TYPE_JGE:
-				fprintf(fl, "jge");
-				break;
-			case JUMP_TYPE_JLE:
-				fprintf(fl, "jle");
-				break;
-			case JUMP_TYPE_JAE:
-				fprintf(fl, "jae");
-				break;
-			case JUMP_TYPE_JBE:
-				fprintf(fl, "jbe");
-				break;
-			case JUMP_TYPE_JA:
-				fprintf(fl, "ja");
-				break;
-			case JUMP_TYPE_JB:
-				fprintf(fl, "jb");
-				break;
-			default:
-				fprintf(fl, "jmp");
-				break;
-		}
+		case THREE_ADDR_CODE_DEC_STMT:
+			fprintf(fl, "dec ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
 
-		//Indirection
-		fprintf(fl, " *");
+		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- not ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
 
-		//Now the variable
-		print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-		fprintf(fl, "\n");
-	} 
+		case THREE_ADDR_CODE_NEG_STATEMENT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- neg ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			//We will use a sequence of commands to do this
+			fprintf(fl, " <- logical_not ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_LABEL_STMT:
+			//Let's print it out. This is an instance where we will not use the print var
+			fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string + 1);
+			break;
+
+		case THREE_ADDR_CODE_DIR_JUMP_STMT:
+			//This is an instance where we will not use the print var
+			fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name.string + 1);
+			break;
+		
+		case THREE_ADDR_CODE_ASM_INLINE_STMT:
+			//Should already have a trailing newline
+			fprintf(fl, "%s", stmt->inlined_assembly.string);
+			break;
+
+		case THREE_ADDR_CODE_IDLE_STMT:
+			//Just print a nop
+			fprintf(fl, "nop\n");
+			break;
+
+		case THREE_ADDR_CODE_LEA_STMT:
+			//Var name comes first
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+			//Print the assignment operator
+			fprintf(fl, " <- ");
+
+			//Now print out the rest in order
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			//Then we have a plus
+			fprintf(fl, " + ");
+
+			//If we have a constant, we'll print that. Otherwise, print op2
+			if(stmt->op1_const != NULL){
+				//Print the constant out
+				print_three_addr_constant(fl, stmt->op1_const);
+				fprintf(fl, "\n");
+			} else {
+				//Then we have the third one, times some multiplier
+				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+
+				//If we have a multiplicator, then we can print it
+				if(stmt->has_multiplicator == TRUE){
+					//And the finishing sequence
+					fprintf(fl, " * %ld", stmt->lea_multiplicator);
+				}
+
+				fprintf(fl, "\n");
+			}
+			break;
+
+		case THREE_ADDR_CODE_PHI_FUNC:
+			//Print it in block header mode
+			print_variable(fl, stmt->assignee, PRINTING_VAR_BLOCK_HEADER);
+			fprintf(fl, " <- PHI(");
+
+			//For convenience
+			dynamic_array_t* phi_func_params = stmt->phi_function_parameters;
+
+			//Now run through all of the parameters
+			for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
+				//Print out the variable
+				print_variable(fl, dynamic_array_get_at(phi_func_params, _), PRINTING_VAR_BLOCK_HEADER);
+
+				//If it isn't the very last one, add a comma space
+				if(_ != phi_func_params->current_index - 1){
+					fprintf(fl, ", ");
+				}
+			}
+
+			fprintf(fl, ")\n");
+			break;
+
+		case THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+			//Print out the jump block ID
+			fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->jumping_to_block))->jump_table_id);
+			
+			//Now print out the variable
+			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+
+			//Finally the multiplicator
+			fprintf(fl, " * %ld\n", stmt->lea_multiplicator);
+			break;
+
+		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+			//Indirection
+			fprintf(fl, "%s *", jump_type_to_string(stmt->jump_type));
+
+			//Now the variable
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		default:
+			printf("UNKNOWN TYPE");
+			break;
+	}
 }
 
 
@@ -3728,6 +3626,29 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 	if(int_const == 0){
 		constant->is_value_0 = TRUE;
 	}
+
+	//Return out
+	return constant;
+}
+
+
+/**
+ * Emit a char constant directly from a value
+ */
+three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* symtab){
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Attach it for memory management
+	constant->next_created = emitted_consts;
+	emitted_consts = constant;
+
+	//Store the class
+	constant->const_type = CHAR_CONST;
+	//Store the char value
+	constant->char_const = char_const;
+
+	//Lookup what we have in here(char)
+	constant->type = lookup_type_name_only(symtab, "char")->type;
 
 	//Return out
 	return constant;
