@@ -1638,7 +1638,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		defualt:
+		default:
 			printf("UNKNOWN TYPE");
 			break;
 	}

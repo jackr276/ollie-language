@@ -6749,20 +6749,22 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
  * itself.
  */
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* string_initializer, u_int8_t is_branch_ending){
+	printf("HERE\n");
+
 	//Initialize the results package here to start
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
 	//The constant is always the first child
 	generic_ast_node_t* string_constant_node = string_initializer->first_child;
 
-	//Extract the string type from the initializer node
-	char* string = string_constant_node->string_value.string; 
-
 	//Keep track of the current offset
 	u_int32_t current_offset = 0;
 
 	//Now we'll go through every single character here and emit a load instruction for them
-	while(*string != '\0'){
+	while(current_offset < string_constant_node->string_value.current_length + 1){
+		//Grab the value that we want out
+		char char_value = string_constant_node->string_value.string[current_offset];
+
 		//We'll first emit the calculation for the address
 		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_int_constant_direct(current_offset, type_symtab), is_branch_ending);
 
@@ -6770,14 +6772,17 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		three_addr_var_t* dereferenced = emit_mem_code(current_block, address);
 
 		//We'll now emit a constant assignment statement to load the char value in
-		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_char_constant_direct(*string, type_symtab));
+		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_char_constant_direct(char_value, type_symtab));
 
 		//Now we'll add this into the block
+		add_statement(current_block, const_assignment);
 
-
-
+		//Once this is all done, we'll loop back up to the top
+		current_offset++;
 	}
 
+	//The results package shouldn't have much at all that changes. There is no chance
+	//to have any ternary operations at all here
 	return results;
 }
 
@@ -6796,9 +6801,9 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 	//TODO: This is probably not going to work. We'll need our own "visit_initializer"
 	//root level node that will be able to decay into an expression or one of these
 	switch(initializer_root->CLASS){
+		//Make a direct call to the rule
 		case AST_NODE_CLASS_STRING_INITIALIZER:
-			printf("Not yet implemented\n");
-			exit(0);
+			return emit_string_initializer(current_block, assignee, initializer_root, is_branch_ending);
 
 		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
 			printf("Not yet implemented\n");
