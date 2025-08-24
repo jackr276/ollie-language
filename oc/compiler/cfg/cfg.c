@@ -3284,6 +3284,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignment = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), assignee);
 			assignment->is_branch_ending = is_branch_ending;
 
+			//What is this one's memory address variable?
+			assignment->assignee->memory_address_variable = assignee->linked_var;
+
 			//We will count the assignee here as a used variable
 			add_used_variable(current_block, assignee);
 
