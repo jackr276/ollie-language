@@ -3000,6 +3000,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//Now we'll grab the associated nstruct record
 			struct_type_field_t* field = get_struct_member(current_type->struct_type, var->var_name.string);
 
+			//Save this for down the road
+			generic_type_t* struct_type = current_type;
+
 			//The field we have
 			symtab_variable_record_t* member = field->variable;
 
@@ -3014,9 +3017,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 			//we've already gotten
 			if(current_address == NULL){
-				address = emit_struct_address_calculation(current, current_type, current_var, offset, is_branch_ending);
+				address = emit_struct_address_calculation(current, struct_type, current_var, offset, is_branch_ending);
 			} else {
-				address = emit_struct_address_calculation(basic_block, current_type, current_address, offset, is_branch_ending);
+				address = emit_struct_address_calculation(basic_block, struct_type, current_address, offset, is_branch_ending);
 			}
 
 			//Do we need to do more memory work? We can tell if the array accessor node is next
@@ -3059,6 +3062,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 					current_var = deref_stmt->assignee;
 
 					//Mark this too
+					address->memory_address_variable = member;
 					current_var->memory_address_variable = member;
 				}
 
