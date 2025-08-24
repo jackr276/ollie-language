@@ -6744,18 +6744,6 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 
 
 /**
- * Emit all struct intializer assignments. To do this, we'll need the base address and the initializer
- * node that contains all elements to add in
- */
-static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending){
-	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
-
-	return results;
-}
-
-
-/**
  * Emit all array intializer assignments. To do this, we'll need the base address and the initializer
  * node that contains all elements to add in. We'll leverage the root level "emit_initializer" here
  * and let it do all of the heavy lifting in terms of assignment operations. This rule
@@ -6846,6 +6834,61 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 
 	//The results package shouldn't have much at all that changes. There is no chance
 	//to have any ternary operations at all here
+	return results;
+}
+
+
+/**
+ * Emit all struct intializer assignments. To do this, we'll need the base address and the initializer
+ * node that contains all elements to add in
+ */
+static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending){
+	//Initialize the results package here to start
+	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
+
+	//Grab a cursor to the child
+	generic_ast_node_t* cursor = struct_initializer->first_child;
+
+	//Keep track of the total offset here
+	u_int32_t offset = 0;
+
+	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
+	while(cursor != NULL){
+		//We'll need to emit the proper address offset calculation for each one
+		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, cursor->inferred_type, is_branch_ending);
+
+		//Determine if we need to emit an indirection instruction or not
+		switch(cursor->CLASS){
+			//We won't do any dereferencing if we have these
+			case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+			case AST_NODE_CLASS_STRING_INITIALIZER:
+			case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+				break;
+			default:
+				//Once we have the address, we'll need to emit the memory code for it
+				address = emit_mem_code(current_block, address);
+				break;
+		}
+
+		//Now we'll invoke the helper rule to make the rest work
+		cfg_result_package_t initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
+
+		//Change the current block if there is a change. This is possible with ternary expressions
+		if(initializer_results.final_block != NULL && initializer_results.final_block != current_block){
+			current_block = initializer_results.final_block;
+		}
+
+		//Increment this by one
+		offset++;
+
+		//Advance to the next one
+		cursor = cursor->next_sibling;
+	}
+
+	//This could have changed throughout the function's executions
+	results.final_block = current_block;
+	
+	//Give back the results package
 	return results;
 }
 
