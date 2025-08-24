@@ -2143,8 +2143,7 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
  * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
  */
 static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, u_int32_t offset, generic_type_t* base_type, u_int8_t is_branch_ending){
-	//We'll need the size to multiply by
-	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(base_type->type_size, type_symtab);
+	printf("Type size is: %d\n", base_type->type_size);
 
 	//We can directly compute here
 	u_int32_t total_offset = offset * base_type->type_size;
@@ -6777,13 +6776,16 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
 		//We'll need to emit the proper address offset calculation for each one
-		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, array_initializer->inferred_type, is_branch_ending);
+		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, cursor->inferred_type, is_branch_ending);
 
-		//Once we have the address, we'll need to emit the memory code for it
-		three_addr_var_t* derferenced = emit_mem_code(current_block, address);
+		//If the base type here is not an array, we will emit the dereferencing code
+		if(cursor->inferred_type->type_class != TYPE_CLASS_ARRAY){
+			//Once we have the address, we'll need to emit the memory code for it
+			address = emit_mem_code(current_block, address);
+		}
 
 		//Now we'll invoke the helper rule to make the rest work
-		cfg_result_package_t initializer_results = emit_initialization(current_block, derferenced, cursor, is_branch_ending);
+		cfg_result_package_t initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
 
 		//Change the current block if there is a change. This is possible with ternary expressions
 		if(initializer_results.final_block != NULL && initializer_results.final_block != current_block){
@@ -6863,11 +6865,12 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 
 		//Make a direct call to this one's rule as well
 		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
-			return emit_array_initializer(current_block, assignee, initializer_root, is_branch_ending);
-		
-		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
 			printf("Not yet implemented\n");
 			exit(0);
+		
+		//Make a direct call to this one's rule as well
+		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+			return emit_array_initializer(current_block, assignee, initializer_root, is_branch_ending);
 
 		//By default we just decay into the expression root
 		default:
