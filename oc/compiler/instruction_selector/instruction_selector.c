@@ -2256,8 +2256,11 @@ static void handle_address_assignment_instruction(instruction_t* instruction, ty
 	//The first address calculation register is the stack pointer
 	instruction->address_calc_reg1 = stack_pointer;
 
+	//Copy the source register over to op1
+	instruction->source_register = instruction->op1;
+
 	//This is just a placeholder for now - it will be occupied later on
-	three_addr_const_t* constant = emit_long_constant_direct(0, symtab);
+	three_addr_const_t* constant = emit_long_constant_direct(-1, symtab);
 	instruction->offset = constant;
 
 	//This will print out with the offset only

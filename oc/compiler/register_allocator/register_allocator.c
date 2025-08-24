@@ -1123,21 +1123,6 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 			//Hitch a ride on this traversal to do pre-coloring
 			pre_color(operation);
 
-			//Let's check to see if any pre-spilling has affected us here
-			if(operation->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT){
-				printf("\n\n\n\n\n\n\nMust be spilled\n");
-
-				//We'll just need to use op1's stack offset here
-				operation->offset->long_const = operation->op1->stack_offset;
-
-				printf("stack offset is %d\n", operation->op1->stack_offset);
-
-				//Make sure that we unset this flag
-				if(operation->offset->long_const != 0){
-					operation->offset->is_value_0 = FALSE;
-				}
-			}
-
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
 			if(operation->instruction_type == PHI_FUNCTION){
@@ -1346,9 +1331,9 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
  * memory. This is easier than a use spill because all we need to do
  * is insert a store instruction right after the use
  */
-static void handle_assignment_spill(cfg_t* cfg, three_addr_var_t* var, live_range_t* spill_range, instruction_t* instruction, u_int64_t offset){
+static void handle_assignment_spill(cfg_t* cfg, three_addr_var_t* var, live_range_t* spill_range, instruction_t* instruction){
 	//Let the helper do this for us
-	instruction_t* store = emit_store_instruction(var, cfg->stack_pointer, cfg->type_symtab, offset);
+	instruction_t* store = emit_store_instruction(var, cfg->stack_pointer, cfg->type_symtab, spill_range->stack_offset);
 
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
@@ -1382,7 +1367,7 @@ static void handle_assignment_spill(cfg_t* cfg, three_addr_var_t* var, live_rang
  *
  * We will be emitting a new live range here, so we should give it back as a pointer
  */
-static three_addr_var_t* handle_use_spill(cfg_t* cfg, dynamic_array_t* live_ranges, three_addr_var_t* affected_var, live_range_t* spill_range, instruction_t* instruction, u_int64_t offset){
+static three_addr_var_t* handle_use_spill(cfg_t* cfg, dynamic_array_t* live_ranges, three_addr_var_t* affected_var, live_range_t* spill_range, instruction_t* instruction){
 	//Copy the old variable
 	three_addr_var_t* new_var = emit_var_copy(affected_var);
 
@@ -1399,7 +1384,7 @@ static three_addr_var_t* handle_use_spill(cfg_t* cfg, dynamic_array_t* live_rang
 	dynamic_array_add(live_ranges, new_var->associated_live_range);
 
 	//Now we'll want to load from memory
-	instruction_t* load = emit_load_instruction(new_var, cfg->stack_pointer, cfg->type_symtab, offset);
+	instruction_t* load = emit_load_instruction(new_var, cfg->stack_pointer, cfg->type_symtab, spill_range->stack_offset);
 
 	//Link the load instruction with what block it's in
 	load->block_contained_in = block;
@@ -1445,8 +1430,8 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 	//in the stack data area
 	add_spilled_variable_to_stack(&(spill_range->function_defined_in->data_area), var);
 
-	//Now we'll grab out this one's offset
-	u_int32_t stack_offset = var->stack_offset;
+	//Just store the offset in the spill range's offset
+	spill_range->stack_offset = var->stack_offset;
 
 	//Now that we've added this in, we'll need to go through and add 
 	//the loads and stores
@@ -1478,12 +1463,23 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 		//Crawl through every block
 		while(current != NULL){
+			//We'll skip all of these - we don't need them
+			if(current->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT 
+				&& current->source_register->associated_live_range == spill_range){
+				//We'll need to change the offset to now be the appropriate value here
+				current->offset->long_const = spill_range->stack_offset;
+
+				//And we can move along, nothing else to do for this one
+				current = current->next_statement;
+				continue;
+			}
+
 			//We'll also need a use spill here
 			if(is_destination_also_operand(current) == TRUE
 				&& current->destination_register->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//We'll need to handle it like this
-					current->destination_register = handle_use_spill(cfg, live_ranges, current->destination_register, spill_range, current, stack_offset);
+					current->destination_register = handle_use_spill(cfg, live_ranges, current->destination_register, spill_range, current);
 					currently_spilled = current->destination_register->associated_live_range;
 				}
 			}
@@ -1494,7 +1490,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				&& current->source_register->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//Let the helper deal with it
-					current->source_register = handle_use_spill(cfg, live_ranges, current->source_register, spill_range, current, stack_offset);
+					current->source_register = handle_use_spill(cfg, live_ranges, current->source_register, spill_range, current);
 					currently_spilled = current->source_register->associated_live_range;
 				}
 			}
@@ -1504,7 +1500,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				&& current->source_register2->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//Let the helper deal with it
-					current->source_register2 = handle_use_spill(cfg, live_ranges, current->source_register2, spill_range, current, stack_offset);
+					current->source_register2 = handle_use_spill(cfg, live_ranges, current->source_register2, spill_range, current);
 					currently_spilled = current->source_register2->associated_live_range;
 				}
 			}
@@ -1514,7 +1510,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				&& current->address_calc_reg1->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//Let the helper deal with it
-					handle_use_spill(cfg, live_ranges, current->address_calc_reg1, spill_range, current, stack_offset);
+					handle_use_spill(cfg, live_ranges, current->address_calc_reg1, spill_range, current);
 				}
 			}
 
@@ -1523,7 +1519,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				&& current->address_calc_reg2->associated_live_range == spill_range){
 				if(currently_spilled == NULL){
 					//Let the helper deal with it
-					handle_use_spill(cfg, live_ranges, current->address_calc_reg2, spill_range, current, stack_offset);
+					handle_use_spill(cfg, live_ranges, current->address_calc_reg2, spill_range, current);
 				}
 			}
 
@@ -1534,7 +1530,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			if(current->destination_register != NULL
 				&& current->destination_register->associated_live_range == spill_range){
 				//Let the helper deal with it
-				handle_assignment_spill(cfg, current->destination_register, spill_range, current, stack_offset);
+				handle_assignment_spill(cfg, current->destination_register, spill_range, current);
 
 				//Reset currenlty spilled
 				currently_spilled = NULL;
@@ -1549,7 +1545,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			} else if(current->destination_register != NULL 
 						&& current->destination_register->associated_live_range == currently_spilled){
 				//Let the helper deal with it
-				handle_assignment_spill(cfg, current->destination_register, currently_spilled, current, stack_offset);
+				handle_assignment_spill(cfg, current->destination_register, currently_spilled, current);
 
 				//Reset currenlty spilled
 				currently_spilled = NULL;

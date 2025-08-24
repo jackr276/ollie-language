@@ -370,6 +370,8 @@ struct live_range_t{
 	dynamic_array_t* neighbors;
 	//What function does this come from?
 	symtab_function_record_t* function_defined_in;
+	//What is the stack offset of this live range?
+	u_int32_t stack_offset;
 	//The degree of this live range
 	u_int16_t degree;
 	//The interference graph index of it
