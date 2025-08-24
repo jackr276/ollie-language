@@ -6,15 +6,12 @@
 alias char as character;
 
 
-fn string_init() -> char* {
+fn string_init() -> char {
 	//Invoke the string initializer
-	let my_str:character[20] := "The quick brown fox";
-
-	//Get a pointer to this value
-	let ptr:char* := my_str;
+	let my_str:character[] := "The quick brown fox";
 
 	//And return it
-	ret ptr;
+	ret my_str[2];
 }
 
 
