@@ -6749,21 +6749,16 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
  * itself.
  */
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* string_initializer, u_int8_t is_branch_ending){
-	printf("HERE\n");
-
 	//Initialize the results package here to start
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
-
-	//The constant is always the first child
-	generic_ast_node_t* string_constant_node = string_initializer->first_child;
 
 	//Keep track of the current offset
 	u_int32_t current_offset = 0;
 
 	//Now we'll go through every single character here and emit a load instruction for them
-	while(current_offset < string_constant_node->string_value.current_length + 1){
+	while(current_offset < string_initializer->string_value.current_length + 1){
 		//Grab the value that we want out
-		char char_value = string_constant_node->string_value.string[current_offset];
+		char char_value = string_initializer->string_value.string[current_offset];
 
 		//We'll first emit the calculation for the address
 		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_int_constant_direct(current_offset, type_symtab), is_branch_ending);

@@ -7809,17 +7809,14 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 		//Otherwise we're all set
 	}
 
-	//Now that we've gotten here, we're able to do our final assembly by first creating the string initializer node
-	generic_ast_node_t* initializer_node = ast_node_alloc(AST_NODE_CLASS_STRING_INITIALIZER, SIDE_TYPE_RIGHT);
+	//Reassign the class here from a constant to a string initializer
+	string_constant->CLASS = AST_NODE_CLASS_STRING_INITIALIZER;
 
-	//This node's inferred type is the array type
-	initializer_node->inferred_type = array_type;
-
-	//Once we've created this, we'll add the string constant as its first and only child node
-	add_child_node(initializer_node, string_constant);
+	//Reassign the type to match what was sent in
+	string_constant->inferred_type = array_type;
 
 	//And give this node back
-	return initializer_node;
+	return string_constant;
 }
 
 
