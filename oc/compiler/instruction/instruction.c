@@ -3628,6 +3628,29 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 
 
 /**
+ * Emit a char constant directly from a value
+ */
+three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* symtab){
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Attach it for memory management
+	constant->next_created = emitted_consts;
+	emitted_consts = constant;
+
+	//Store the class
+	constant->const_type = CHAR_CONST;
+	//Store the char value
+	constant->char_const = char_const;
+
+	//Lookup what we have in here(char)
+	constant->type = lookup_type_name_only(symtab, "char")->type;
+
+	//Return out
+	return constant;
+}
+
+
+/**
  * Emit an unsigned in constant directly. Used for address calculations
  */
 three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab_t* symtab){

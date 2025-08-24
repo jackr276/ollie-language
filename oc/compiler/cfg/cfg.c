@@ -6752,6 +6752,32 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 	//Initialize the results package here to start
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
+	//The constant is always the first child
+	generic_ast_node_t* string_constant_node = string_initializer->first_child;
+
+	//Extract the string type from the initializer node
+	char* string = string_constant_node->string_value.string; 
+
+	//Keep track of the current offset
+	u_int32_t current_offset = 0;
+
+	//Now we'll go through every single character here and emit a load instruction for them
+	while(*string != '\0'){
+		//We'll first emit the calculation for the address
+		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_int_constant_direct(current_offset, type_symtab), is_branch_ending);
+
+		//Once we've emitted the binary operation, we'll have the address available for use. We now need to emit the load operation to add it in
+		three_addr_var_t* dereferenced = emit_mem_code(current_block, address);
+
+		//We'll now emit a constant assignment statement to load the char value in
+		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_char_constant_direct(*string, type_symtab));
+
+		//Now we'll add this into the block
+
+
+
+	}
+
 	return results;
 }
 
