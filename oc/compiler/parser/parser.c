@@ -8123,6 +8123,19 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Store the line number
 	let_stmt_node->line_number = current_line;
 
+	//In special cases, we'll store this variable in the "node" section
+	switch(initializer_node->CLASS){
+		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_CLASS_STRING_INITIALIZER:
+		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			initializer_node->node = declared_var;
+			break;
+
+		//Otherwise not
+		default:
+			break;
+	}
+
 	//Once we get here, the ident nodes and type specifiers are useless
 
 	//Give back the let statement node here

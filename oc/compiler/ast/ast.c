@@ -272,8 +272,16 @@ void ast_dealloc(){
 
 		//We can off the bat free it's data
 		if(temp->node != NULL){
-			//No matter what, we always free this
-			free(temp->node);
+			switch(temp->CLASS){
+				//Don't free these here, they'd be freed elsewhere
+				case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+				case AST_NODE_CLASS_STRING_INITIALIZER:
+				case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+					break;
+				default:
+					//Otherwise we can
+					free(temp->node);
+			}
 		}
 
 		//Some additional freeing may be needed

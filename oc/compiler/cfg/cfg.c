@@ -6760,6 +6760,11 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		//We'll need to emit the proper address offset calculation for each one
 		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, cursor->inferred_type, is_branch_ending);
 
+		//Just copy the variable over
+		address->memory_address_variable = base_address->memory_address_variable;
+
+		if(address->memory_address_variable == NULL) printf("ITS NULL\n\n");
+
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->CLASS){
 			//We won't do any dereferencing if we have these
@@ -6769,11 +6774,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_mem_code(current_block, address, base_address->linked_var);
-
-				//Store the linked variable. If there is none(2d array) then it will be null,
-				//which is fine
-				address->memory_address_variable = base_address->linked_var;
+				address = emit_mem_code(current_block, address, address->memory_address_variable);
 
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;
@@ -7023,6 +7024,10 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 	//We know that this will be the lead block
 	let_results.starting_block = current_block;
 	
+	//A bit strange - but the intiailizer variable would be stored in
+	//the void* field that's ours for general use
+	assignee->memory_address_variable = node->first_child->node;
+
 	//Declare the result package up here
 	cfg_result_package_t package = emit_initialization(current_block, assignee, node->first_child, is_branch_ending);
 
