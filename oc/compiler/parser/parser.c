@@ -3845,7 +3845,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Mark that this is a construct member
-	member_record->is_construct_member = TRUE;
+	member_record->is_struct_member = TRUE;
 	//Store what the type is
 	member_record->type_defined_as = type_spec;
 	//Is it mutable or not
@@ -8122,6 +8122,19 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	let_stmt_node->variable = declared_var;
 	//Store the line number
 	let_stmt_node->line_number = current_line;
+
+	//In special cases, we'll store this variable in the "node" section
+	switch(initializer_node->CLASS){
+		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_CLASS_STRING_INITIALIZER:
+		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			initializer_node->node = declared_var;
+			break;
+
+		//Otherwise not
+		default:
+			break;
+	}
 
 	//Once we get here, the ident nodes and type specifiers are useless
 

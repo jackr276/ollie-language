@@ -8,7 +8,7 @@ pub fn main() -> i32 {
 	let mut y:u32* := &x;
 	let mut z:u32** := &y;
 
-	x := 3222;
+	x := 127;
 
 	ret **z;
 }

@@ -1018,7 +1018,7 @@ void print_variable_name(symtab_variable_record_t* record){
 	} else if (record->is_label == 1){
 		printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
 		return;
-	} else if(record->is_enumeration_member == TRUE || record->is_construct_member == TRUE){
+	} else if(record->is_enumeration_member == TRUE || record->is_struct_member == TRUE){
 		//The var name
 		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
 	} else {
@@ -1195,7 +1195,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			}
 
 			//If it's a label, don't bother with it
-			if(record->is_label == TRUE || record->is_construct_member == TRUE){
+			if(record->is_label == TRUE || record->is_struct_member == TRUE){
 				continue;;
 			}
 

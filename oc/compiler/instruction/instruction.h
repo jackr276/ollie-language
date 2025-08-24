@@ -370,6 +370,8 @@ struct live_range_t{
 	dynamic_array_t* neighbors;
 	//What function does this come from?
 	symtab_function_record_t* function_defined_in;
+	//What is the stack offset of this live range?
+	u_int32_t stack_offset;
 	//The degree of this live range
 	u_int16_t degree;
 	//The interference graph index of it
@@ -404,7 +406,7 @@ struct three_addr_var_t{
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What is this related to the writing of?
-	symtab_variable_record_t* related_write_var;
+	symtab_variable_record_t* memory_address_variable;
 	//For memory management
 	three_addr_var_t* next_created;
 	//The related stack data area node. Not all variables have these,

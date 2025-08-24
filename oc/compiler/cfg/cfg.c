@@ -2165,9 +2165,9 @@ static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t*
 /**
  * Emit a struct access lea statement
  */
-static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(u64);
+	three_addr_var_t* assignee = emit_temp_var(struct_type);
 
 	//If the base addr is not temporary, this counts as a read
 	if(base_addr->is_temporary == FALSE){
@@ -2559,7 +2559,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 /**
  * Emit memory indirection three address code
  */
-static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_var_t* assignee){
+static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_var_t* assignee, symtab_variable_record_t* memory_address_variable){
 	//No actual code here, we are just accessing this guy's memory
 	//Create a new variable with an indirection level
 	three_addr_var_t* indirect_var = emit_var_copy(assignee);
@@ -2573,6 +2573,9 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 	indirect_var->indirection_level++;
 	//Temp or not same deal
 	indirect_var->is_temporary = assignee->is_temporary;
+
+	//Store the memory address variable here for later processing
+	indirect_var->memory_address_variable = memory_address_variable;
 
 	//And get out
 	return indirect_var;
@@ -2935,18 +2938,14 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
 				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
-					current_var = emit_mem_code(current, address);
+					current_var = emit_mem_code(current, address, array_or_struct_var);
 					//It's a write
 					current_var->access_type = MEMORY_ACCESS_WRITE;
-
-					//This is related to a write of a var. We'll need to set this flag for later processing
-					//by the optimizer
-					current_var->related_write_var = array_or_struct_var;
 
 				//Otherwise we're dealing with a read
 				} else {
 					//Still emit the memory code
-					current_var = emit_mem_code(current, address);
+					current_var = emit_mem_code(current, address, array_or_struct_var);
 					//It's a read
 					current_var->access_type = MEMORY_ACCESS_READ;
 
@@ -2965,9 +2964,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 					//Update the current bar too
 					current_var = deref_stmt->assignee;
-
-					//Mark this too for later mapping
-					current_var->related_write_var = array_or_struct_var;
 				}
 
 			} else {
@@ -3000,6 +2996,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//Now we'll grab the associated nstruct record
 			struct_type_field_t* field = get_struct_member(current_type->struct_type, var->var_name.string);
 
+			//Save this for down the road
+			generic_type_t* struct_type = current_type;
+
 			//The field we have
 			symtab_variable_record_t* member = field->variable;
 
@@ -3014,9 +3013,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 			//we've already gotten
 			if(current_address == NULL){
-				address = emit_struct_address_calculation(current, current_var, offset, is_branch_ending);
+				address = emit_struct_address_calculation(current, struct_type, current_var, offset, is_branch_ending);
 			} else {
-				address = emit_struct_address_calculation(basic_block, current_address, offset, is_branch_ending);
+				address = emit_struct_address_calculation(basic_block, struct_type, current_address, offset, is_branch_ending);
 			}
 
 			//Do we need to do more memory work? We can tell if the array accessor node is next
@@ -3027,18 +3026,14 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
 				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
-					current_var = emit_mem_code(current, address);
+					current_var = emit_mem_code(current, address, member);
 					//It's a write
 					current_var->access_type = MEMORY_ACCESS_WRITE;
-
-					//Record where these variables came from
-					address->related_write_var = member;
-					current_var->related_write_var = member;
 				
 				//Otherwise we're dealing with a read
 				} else {
 					//Still emit the memory code
-					current_var = emit_mem_code(current, address);
+					current_var = emit_mem_code(current, address, member);
 					//It's a read
 					current_var->access_type = MEMORY_ACCESS_READ;
 
@@ -3057,10 +3052,8 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 					//Update the current bar too
 					current_var = deref_stmt->assignee;
-
-					//Mark this too
-					current_var->related_write_var = member;
 				}
+
 			//Otherwise, our current var is this address
 			} else {
 				current_var = address;
@@ -3278,6 +3271,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//only ever on the RHS
 			assignment = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), assignee);
 			assignment->is_branch_ending = is_branch_ending;
+
+			//What is this one's memory address variable?
+			assignment->assignee->memory_address_variable = assignee->linked_var;
 
 			//We will count the assignee here as a used variable
 			add_used_variable(current_block, assignee);
@@ -6764,6 +6760,11 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		//We'll need to emit the proper address offset calculation for each one
 		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, cursor->inferred_type, is_branch_ending);
 
+		//Just copy the variable over
+		address->memory_address_variable = base_address->memory_address_variable;
+
+		if(address->memory_address_variable == NULL) printf("ITS NULL\n\n");
+
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->CLASS){
 			//We won't do any dereferencing if we have these
@@ -6773,11 +6774,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_mem_code(current_block, address);
-
-				//Store the linked variable. If there is none(2d array) then it will be null,
-				//which is fine
-				address->related_write_var = base_address->linked_var;
+				address = emit_mem_code(current_block, address, address->memory_address_variable);
 
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;
@@ -6827,13 +6824,13 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_int_constant_direct(current_offset, type_symtab), is_branch_ending);
 
 		//Once we've emitted the binary operation, we'll have the address available for use. We now need to emit the load operation to add it in
-		three_addr_var_t* dereferenced = emit_mem_code(current_block, address);
+		three_addr_var_t* dereferenced = emit_mem_code(current_block, address, base_address->linked_var);
 
 		//This is a write access type
 		dereferenced->access_type = MEMORY_ACCESS_WRITE;
 
 		//Store the linked variable
-		dereferenced->related_write_var = base_address->linked_var;
+		dereferenced->memory_address_variable = base_address->linked_var;
 
 		//We'll now emit a constant assignment statement to load the char value in
 		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_char_constant_direct(char_value, type_symtab));
@@ -6885,10 +6882,10 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_mem_code(current_block, address);
+				address = emit_mem_code(current_block, address, base_address->linked_var);
 				
 				//Store the field as a related write variable
-				address->related_write_var = struct_type->struct_table[member].variable;
+				address->memory_address_variable = struct_type->struct_table[member].variable;
 
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;
@@ -7027,6 +7024,10 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 	//We know that this will be the lead block
 	let_results.starting_block = current_block;
 	
+	//A bit strange - but the intiailizer variable would be stored in
+	//the void* field that's ours for general use
+	assignee->memory_address_variable = node->first_child->node;
+
 	//Declare the result package up here
 	cfg_result_package_t package = emit_initialization(current_block, assignee, node->first_child, is_branch_ending);
 

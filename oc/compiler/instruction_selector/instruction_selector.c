@@ -2256,8 +2256,11 @@ static void handle_address_assignment_instruction(instruction_t* instruction, ty
 	//The first address calculation register is the stack pointer
 	instruction->address_calc_reg1 = stack_pointer;
 
+	//Copy the source register over to op1
+	instruction->source_register = instruction->op1;
+
 	//This is just a placeholder for now - it will be occupied later on
-	three_addr_const_t* constant = emit_long_constant_direct(0, symtab);
+	three_addr_const_t* constant = emit_long_constant_direct(-1, symtab);
 	instruction->offset = constant;
 
 	//This will print out with the offset only
@@ -3284,6 +3287,23 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * t17 <- (t16)
 	 *
 	 * t17 <- (arr_0)
+	 *
+	 *  | First->op1 | second->assignee | can_combine
+	 *  | 1			 | 1				| 0
+	 *  | 1   		 | 0 				| 1
+	 *  | 0 		 | 1			    | 1
+	 *  | 0 		 | 0 				| 1
+	 *
+	 * So we'll use XOR for this one
+	 * 
+	 *  | First->assignee | second->op1 | can_combine
+	 *  | 1			 	  | 1				| 0
+	 *  | 1   		 	  | 0 				| 1
+	 *  | 0 		  	  | 1			    | 1
+	 *  | 0 		  	  | 0 				| 1
+	 *
+	 * So we'll use XOR for this one as well
+	 * 
 	 */
 	//If we have two consecutive assignment statements
 	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT &&
@@ -3293,27 +3313,30 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		instruction_t* second = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
-			//If we bitwise AND their two indirection levels and get a value that isn't 0, we'd have our wrong case
-			&& (first->assignee->indirection_level & second->op1->indirection_level) == 0
-			&& (first->op1->indirection_level & second->assignee->indirection_level) == 0){
+		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE){
+			//Now let's check for any indirection level violations that we need to account for
+			//These both can't have higher indirection levels than 0
+			if(!(first->op1->indirection_level > 0 && second->assignee->indirection_level > 0)
+				//Same with these
+				&& !(second->op1->indirection_level > 0 && first->assignee->indirection_level > 0)
+				//We also can't combine these
+				&& !(second->op1->indirection_level > 0 && first->op1->indirection_level > 0)){
 
-			//This is a special case we're we'll need to transfer the indirection over
-			if(second->op1->indirection_level > 0 && first->op1->indirection_level == 0){
-				first->op1->indirection_level = second->op1->indirection_level;
+				//Copy this over so we don't lose it
+				first->op1->indirection_level += second->op1->indirection_level;
+
+				//Reorder the op1's
+				second->op1 = first->op1;
+
+				//We can now delete the first statement
+				delete_statement( first);
+
+				//Reconstruct the window with second as the start
+				reconstruct_window(window, second);
+				
+				//Regardless of what happened, we did see a change here
+				changed = TRUE;
 			}
-
-			//Reorder the op1's
-			second->op1 = first->op1;
-
-			//We can now delete the first statement
-			delete_statement( first);
-
-			//Reconstruct the window with second as the start
-			reconstruct_window(window, second);
-			
-			//Regardless of what happened, we did see a change here
-			changed = TRUE;
 		}
 	}
 

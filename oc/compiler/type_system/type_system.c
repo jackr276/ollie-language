@@ -17,6 +17,21 @@
 
 
 /**
+ * Does this type represent a memory address?
+ */
+u_int8_t is_memory_address_type(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
