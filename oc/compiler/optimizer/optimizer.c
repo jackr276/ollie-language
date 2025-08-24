@@ -1314,10 +1314,15 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 
 	//If we're marking a variable that is a memory address type, then we need to ensure that all writes
 	//to said memory address are preserved
- 	if(variable->linked_var != NULL && is_memory_address_type(variable->linked_var->type_defined_as) == TRUE){
+ 	if(variable->linked_var != NULL && 
+		(is_memory_address_type(variable->linked_var->type_defined_as) == TRUE || variable->linked_var->is_struct_member == TRUE)){
 		printf("HERE with:\n");
 		print_variable(stdout, variable, PRINTING_VAR_INLINE);
 		mark_and_add_all_field_writes(cfg, worklist, variable->linked_var);
+	} else {
+		printf("Not a struct member or memory address:\n");
+		print_variable(stdout, variable, PRINTING_VAR_INLINE);
+		printf("\n");
 	}
 
 	//Run through everything here

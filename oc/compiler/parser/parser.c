@@ -3845,7 +3845,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Mark that this is a construct member
-	member_record->is_construct_member = TRUE;
+	member_record->is_struct_member = TRUE;
 	//Store what the type is
 	member_record->type_defined_as = type_spec;
 	//Is it mutable or not

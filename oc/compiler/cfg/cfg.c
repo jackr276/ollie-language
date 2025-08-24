@@ -2165,9 +2165,9 @@ static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t*
 /**
  * Emit a struct access lea statement
  */
-static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(u64);
+	three_addr_var_t* assignee = emit_temp_var(struct_type);
 
 	//If the base addr is not temporary, this counts as a read
 	if(base_addr->is_temporary == FALSE){
@@ -3014,9 +3014,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 			//we've already gotten
 			if(current_address == NULL){
-				address = emit_struct_address_calculation(current, current_var, offset, is_branch_ending);
+				address = emit_struct_address_calculation(current, current_type, current_var, offset, is_branch_ending);
 			} else {
-				address = emit_struct_address_calculation(basic_block, current_address, offset, is_branch_ending);
+				address = emit_struct_address_calculation(basic_block, current_type, current_address, offset, is_branch_ending);
 			}
 
 			//Do we need to do more memory work? We can tell if the array accessor node is next
@@ -3061,6 +3061,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 					//Mark this too
 					current_var->memory_address_variable = member;
 				}
+
 			//Otherwise, our current var is this address
 			} else {
 				current_var = address;
