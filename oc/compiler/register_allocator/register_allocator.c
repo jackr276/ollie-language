@@ -1545,7 +1545,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			} else if(current->destination_register != NULL 
 						&& current->destination_register->associated_live_range == currently_spilled){
 				//Let the helper deal with it
-				handle_assignment_spill(cfg, current->destination_register, currently_spilled, current);
+				handle_assignment_spill(cfg, current->destination_register, spill_range, current);
 
 				//Reset currenlty spilled
 				currently_spilled = NULL;
