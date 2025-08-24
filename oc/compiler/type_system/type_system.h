@@ -245,6 +245,11 @@ struct function_type_t{
 
 
 /**
+ * Does this type represent a memory address?
+ */
+u_int8_t is_memory_address_type(generic_type_t* type);
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */

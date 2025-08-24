@@ -1239,12 +1239,13 @@ static void sweep(cfg_t* cfg){
 }
 
 
+
 /**
  * Mark all statements that write to a given field in a structure. We're able to be more specific
  * here because a construct's layout is determined when the parser hits it. As such, if we're only
  * ever using a certain field, we need only worry about writes to that given field
  */
-static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist, three_addr_var_t* var){
+static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist, symtab_variable_record_t* variable){
 	//Run through every single block in the CFG
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the given block out
@@ -1252,8 +1253,7 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 
 		//If this block does not match the function that we're currently in, and the variable
 		//itself is not global, we'll skip it
-		if(var->linked_var != NULL && var->linked_var->function_declared_in != NULL &&
-			var->linked_var->function_declared_in != current->function_defined_in){
+		if(variable->function_declared_in != NULL && variable->function_declared_in != current->function_defined_in){
 			//Skip to the next one, this can't possibly be what we want
 			continue;
 		}
@@ -1270,9 +1270,10 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 			//if the related write field matches our var
 			if(cursor->assignee != NULL && cursor->assignee->memory_address_variable != NULL
 				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
-				&& cursor->assignee->memory_address_variable == var->memory_address_variable){
+				&& cursor->assignee->memory_address_variable == variable){
 				//This is a case where we mark
 				if(cursor->mark == FALSE){
+					//TODO we should probably mark and add definition here too
 					//Mark the statement itself
 					cursor->mark = TRUE;
 					dynamic_array_add(worklist, cursor);
@@ -1311,19 +1312,12 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 		return;
 	}
 
-	if(variable->linked_var != NULL && variable->linked_var->type_defined_as->type_class == TYPE_CLASS_ARRAY){
-		mark_and_add_all_field_writes(cfg, worklist, variable);
-		printf("HERE with %s\n", variable->linked_var->var_name.string);
-
-	}
-
-	//If this variable is a memory access, we'll need to do a bit more
-	//than just mark all of it's definitions. Rather, we'll need to
-	//mark all of the times that we write to this location
-	//in memory as important
-	if(variable->access_type == MEMORY_ACCESS_READ){
-		//Use the helper for memory address marking
-		//mark_and_add_all_field_writes(cfg, worklist, stmt->assignee);
+	//If we're marking a variable that is a memory address type, then we need to ensure that all writes
+	//to said memory address are preserved
+ 	if(variable->linked_var != NULL && is_memory_address_type(variable->linked_var->type_defined_as) == TRUE){
+		printf("HERE with:\n");
+		print_variable(stdout, variable, PRINTING_VAR_INLINE);
+		mark_and_add_all_field_writes(cfg, worklist, variable->linked_var);
 	}
 
 	//Run through everything here
