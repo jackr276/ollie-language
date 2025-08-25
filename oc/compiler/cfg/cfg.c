@@ -5369,6 +5369,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
 
+	//This has now been used once more
+	add_used_variable(root_level_block, input_results.assignee);
+
 	//Add it into the block
 	add_statement(root_level_block, temporary_variable_assignent);
 
@@ -5561,6 +5564,9 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
+
+	//This has now been used once more
+	add_used_variable(root_level_block, input_results.assignee);
 
 	//Add it into the block
 	add_statement(root_level_block, temporary_variable_assignent);
