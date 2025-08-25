@@ -3984,6 +3984,25 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	/**
+	 * There is a chance that we could be left with statements that assign to themselves
+	 * like this:
+	 *  t11 <- t11
+	 *
+	 *  These are guaranteed to be useless, so we can eliminate them
+	 */
+	if(window->instruction1 != NULL && window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		//If we get here, we have a temp assignment who is completely useless, so we delete
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == TRUE){
+
+		//Delete it
+		delete_statement(window->instruction1);
+
+		//Counts as a change
+		changed = TRUE;
+	}
+
+	/**
 	 * Final check - in the previous optimization module, there is a chance that we've deleted
 	 * items in the stack that have caused our old stack addresses to be out of sync. We'll hitch
 	 * a ride on this instruction crawl to remediate anything stack addresses
