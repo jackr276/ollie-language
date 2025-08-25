@@ -3998,8 +3998,39 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Delete it
 		delete_statement(window->instruction1);
 
+		//Rebuild now based on instruction2
+		reconstruct_window(window, window->instruction2);
+
 		//Counts as a change
 		changed = TRUE;
+	}
+
+	/**
+	 * There is a chance that we could be left with statements that assign to themselves
+	 * like this:
+	 *  t11 <- 2
+	 *
+	 *  Where t11 has no real usage at all. Since this is the case, we can eliminate the whole
+	 *  operation
+	 *
+	 *  These are guaranteed to be useless, so we can eliminate them
+	 */
+	if(window->instruction1 != NULL && is_instruction_assignment_operation(window->instruction1) == TRUE
+		//If we get here, we have a temp assignment who is completely useless, so we delete
+		&& window->instruction1->assignee->is_temporary == TRUE
+		//Ensure that it's not being used at all
+		&& window->instruction1->assignee->use_count == 0
+		//We can't mess with memory movement instructions
+		&& window->instruction1->assignee->indirection_level == 0){
+
+		//Delete it
+	//	delete_statement(window->instruction1);
+
+		//Rebuild now based on instruction2
+	//	reconstruct_window(window, window->instruction2);
+
+		//Counts as a change
+	//	changed = TRUE;
 	}
 
 	/**

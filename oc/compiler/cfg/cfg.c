@@ -314,6 +314,11 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * as live
  */
 static void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//This can happen, so we'll check here to avoid complexity elsewhere
+	if(var == NULL){
+		return;
+	}
+
 	//Increment the use count of this variable, regardless of what it is
 	var->use_count++;
 
@@ -2300,6 +2305,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//We'll use the ret stmt feature here
 	instruction_t* ret_stmt = emit_ret_instruction(return_variable);
 
+	//This variable is now used
+	add_used_variable(current, return_variable);
+
 	//Mark this with whatever was passed through
 	ret_stmt->is_branch_ending = is_branch_ending;
 
@@ -2950,9 +2958,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 					//We will perform the deref here, as we can't do it in the lea 
 					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
 
-					//If the current var isn't temp, it's been used
-					add_used_variable(current, current_var);
-
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
@@ -2980,6 +2985,11 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 				//Assign temp to be the current address
 				instruction_t* assnment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+
+				//The dereferenced variable here is used
+				add_used_variable(current, dereferenced);
+
+				//Add it into the block
 				add_statement(current, assnment);
 
 				//Reassign what current address really is
@@ -3035,9 +3045,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 					//We will perform the deref here, as we can't do it in the lea 
 					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-					//If the current var isn't temp, it's been used
-					add_used_variable(current, current_var);
 
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
@@ -3894,6 +3901,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		
 		//Add the parameter in
 		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+
+		//The assignment here is used implicitly by the function call
+		add_used_variable(current, assignment->assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
