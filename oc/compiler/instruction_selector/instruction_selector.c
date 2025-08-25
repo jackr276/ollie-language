@@ -2680,6 +2680,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
 		&& is_instruction_assignment_operation(window->instruction3) == TRUE
 		&& window->instruction3->assignee->indirection_level == 1
+		&& window->instruction1->assignee->use_count <= 1
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
 
@@ -2709,7 +2710,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction2 != NULL && window->instruction3 != NULL
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction3->op1->indirection_level == 1
+		&& window->instruction1->assignee->use_count <= 1
+		&& window->instruction3->op1->indirection_level <= 1
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->op1, TRUE) == TRUE){
 
@@ -2738,7 +2740,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction3->op1->indirection_level == 1 //Only works for memory movement
+		&& window->instruction1->assignee->use_count <= 1
+		&& window->instruction3->op1->indirection_level <= 1 //Only works for memory movement
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->op1, TRUE) == TRUE){
 
@@ -2768,6 +2771,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& is_instruction_assignment_operation(window->instruction3) == TRUE
 		&& window->instruction3->assignee->indirection_level == 1 //Only works for memory movement
+		&& window->instruction1->assignee->use_count <= 1
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
 
@@ -2799,6 +2803,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction1->op == PLUS 
 		&& is_instruction_assignment_operation(window->instruction2) == TRUE
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
+		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction2->assignee->indirection_level == 1){
 
 		//Use the helper to keep things somewhat clean in here
@@ -2830,6 +2835,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction1->op == PLUS
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE
+		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction2->op1->indirection_level == 1){
 
 		//Use the helper to avoid an explosion of code here
@@ -3184,6 +3190,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Modify the type of the assignment
 			binary_operation->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
+			//The use count here now goes down by one
+			binary_operation->op1->use_count--;
+
 			//Make sure that we now null out op1
 			binary_operation->op1 = NULL;
 
@@ -3216,6 +3225,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Now we'll modify this to be an assignment const statement
 			binary_operation->op1_const = window->instruction2->op1_const;
 
+			//The use count for op1 now goes down by 1
+			binary_operation->op1->use_count--;
+
 			//Make sure that we now NULL out the first non-const operand for the future
 			binary_operation->op1 = NULL;
 			
@@ -3226,7 +3238,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			delete_statement(window->instruction2);
 
 			//We'll need to reconstruct the window. Instruction 1 is still the start
-			reconstruct_window(window, window->instruction1);
+			reconstruct_window(window, window->instruction3);
 
 			//Whatever happened here, we did change something
 			changed = TRUE;
@@ -3260,8 +3272,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Null out where the old value was
 		window->instruction2->op1 = NULL;
 
-		//Instruction 1 is now completely useless
-		delete_statement(window->instruction1);
+		//Instruction 1 is now completely useless *if* that was the only time that
+		//his assignee was used. Otherwise, we need to keep it in
+		if(window->instruction1->assignee->use_count == 0){
+			delete_statement(window->instruction1);
+		}
 
 		//Reconstruct the window with instruction 2 as the start
 		reconstruct_window(window, window->instruction2);
@@ -3317,7 +3332,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		instruction_t* second = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE){
+		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
+			//And the assignee of the first statement is only ever used once
+			&& first->assignee->use_count <= 1){
 			//Now let's check for any indirection level violations that we need to account for
 			//These both can't have higher indirection levels than 0
 			if(!(first->op1->indirection_level > 0 && second->assignee->indirection_level > 0)
@@ -3367,6 +3384,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Let's mark that this is now a binary op with const statement
 			window->instruction2->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
+			//op2 is now used one less time
+			window->instruction2->op2->use_count--;
+
 			//We'll want to NULL out the secondary variable in the operation
 			window->instruction2->op2 = NULL;
 			
@@ -3400,6 +3420,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//Let's mark that this is now a binary op with const statement
 			window->instruction3->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//Op2 for instruction3 is now used one less time
+			window->instruction3->op2->use_count--;
 
 			//We'll want to NULL out the secondary variable in the operation
 			window->instruction3->op2 = NULL;
@@ -3585,6 +3608,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	if(window->instruction1 != NULL && window->instruction2 != NULL && window->instruction3 != NULL
 	 	&& window->instruction1->assignee != NULL && window->instruction3->assignee != NULL
+		&& window->instruction2->op1 != NULL
 		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT
 		&& window->instruction2->cannot_be_combined == FALSE
 		&& window->instruction2->assignee->is_temporary == TRUE
@@ -3789,7 +3813,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
 						//Wipe the values out
 						current_instruction->op1_const = NULL;
-						current_instruction->op2 = NULL;
+
 						//We changed something
 						changed = TRUE;
 
@@ -3799,8 +3823,15 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 						//Now we're assigning a const
 						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
 						//The constant is still the same thing(0), let's just wipe out the ops
-						current_instruction->op1 = NULL;
-						current_instruction->op2 = NULL;
+						if(current_instruction->op1 != NULL){
+							current_instruction->op1->use_count--;
+							current_instruction->op1 = NULL;
+						}
+						//Do the same for this
+						if(current_instruction->op2 != NULL){
+							current_instruction->op2->use_count--;
+							current_instruction->op2 = NULL;
+						}
 						//We changed something
 						changed = TRUE;
 
