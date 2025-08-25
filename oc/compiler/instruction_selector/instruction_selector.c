@@ -4033,7 +4033,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 *  These are guaranteed to be useless, so we can eliminate them
 	 */
-	if(window->instruction1 != NULL && is_instruction_assignment_operation(window->instruction1) == TRUE
+	if(window->instruction1 != NULL && window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT
 		//If we get here, we have a temp assignment who is completely useless, so we delete
 		&& window->instruction1->assignee->is_temporary == TRUE
 		//Ensure that it's not being used at all
