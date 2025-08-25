@@ -2037,9 +2037,7 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	temp_assignment->is_branch_ending = is_branch_ending;
 
 	//If the assignee is not temporary, it counts as used
-	if(assignee->is_temporary == FALSE){
-		add_used_variable(basic_block, assignee);
-	}
+	add_used_variable(basic_block, assignee);
 
 	//Add this to the block
 	add_statement(basic_block, temp_assignment);
@@ -2051,12 +2049,18 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	instruction_t* operation = emit_binary_operation_with_const_instruction(emit_temp_var(assignee->type), temp_assignment->assignee, op, constant);
 	operation->is_branch_ending = is_branch_ending;
 
+	//This now counts as used
+	add_used_variable(basic_block, temp_assignment->assignee);
+
 	//Add this to the block
 	add_statement(basic_block, operation);
 
 	//We need one final assignment
 	instruction_t* final_assignment = emit_assignment_instruction(emit_var_copy(assignee), operation->assignee);
 	final_assignment->is_branch_ending = is_branch_ending;
+
+	//This now counts as used
+	add_used_variable(basic_block, operation->assignee);
 
 	//And add this one in
 	add_statement(basic_block, final_assignment);
@@ -2075,14 +2079,10 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 	three_addr_var_t* assignee = emit_temp_var(base_addr->type);
 
 	//If the base addr is not temporary, this counts as a read
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
+	add_used_variable(basic_block, base_addr);
 
 	//If the offset is not temporary, it also counts as used
-	if(offset->is_temporary == FALSE){
-		add_used_variable(basic_block, offset);
-	}
+	add_used_variable(basic_block, offset);
 
 	//Now we leverage the helper to emit this
 	instruction_t* stmt = emit_lea_instruction(assignee, base_addr, offset, base_type->type_size);
@@ -2123,13 +2123,14 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 	//Now we emit the offset multiplication
 	three_addr_var_t* total_offset = emit_binary_operation_with_constant(basic_block, offset, offset, STAR, type_size, is_branch_ending);
 
+	//The offset has been used here
+	add_used_variable(basic_block, offset);
+
 	//Once we have the total offset, we add it to the base address
 	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), base_addr, PLUS, total_offset);
 	
 	//if the base address is not temporary, it also counts as used
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
+	add_used_variable(basic_block, base_addr);
 
 	//Add this into the block
 	add_statement(basic_block, result);
@@ -2150,9 +2151,7 @@ static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t*
 	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), base_addr, PLUS, emit_int_constant_direct(total_offset, type_symtab));
 	
 	//if the base address is not temporary, it also counts as used
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
+	add_used_variable(basic_block, base_addr);
 
 	//Add this into the block
 	add_statement(basic_block, result);
@@ -2169,18 +2168,11 @@ static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_bl
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(struct_type);
 
-	//If the base addr is not temporary, this counts as a read
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
-
 	//Now we leverage the helper to emit this
 	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, base_addr, PLUS, offset);
 
-	//If the base address is not temporary, then it is used
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
+	//If the base addr is not temporary, this counts as a read
+	add_used_variable(basic_block, base_addr);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2201,9 +2193,7 @@ static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* b
 	three_addr_var_t* assignee = emit_temp_var(lookup_type_name_only(type_symtab, "label")->type);
 
 	//If the multiplicand is not temporary we have a new used variable
-	if(mutliplicand->is_temporary == FALSE){
-		add_used_variable(basic_block, mutliplicand);
-	}
+	add_used_variable(basic_block, mutliplicand);
 
 	//Use the helper to emit it - type size is 8 because it's an address
 	instruction_t* stmt = emit_indir_jump_address_calc_instruction(assignee, initial_address, mutliplicand, 8);
