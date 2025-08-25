@@ -3841,15 +3841,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					case STAR:
 						//Now we're assigning a const
 						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
 						//The constant is still the same thing(0), let's just wipe out the ops
 						if(current_instruction->op1 != NULL){
 							current_instruction->op1->use_count--;
 							current_instruction->op1 = NULL;
-						}
-						//Do the same for this
-						if(current_instruction->op2 != NULL){
-							current_instruction->op2->use_count--;
-							current_instruction->op2 = NULL;
 						}
 						//We changed something
 						changed = TRUE;
@@ -4046,13 +4042,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->assignee->indirection_level == 0){
 
 		//Delete it
-	//	delete_statement(window->instruction1);
+		delete_statement(window->instruction1);
 
 		//Rebuild now based on instruction2
-	//	reconstruct_window(window, window->instruction2);
+		reconstruct_window(window, window->instruction2);
 
 		//Counts as a change
-	//	changed = TRUE;
+		changed = TRUE;
 	}
 
 	/**
