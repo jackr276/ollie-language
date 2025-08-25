@@ -757,6 +757,17 @@ void delete_statement(instruction_t* stmt){
 		previous->next_statement = next;
 		next->previous_statement = previous;
 	}
+
+	//Now we need to do all maintenance when it comes to used variables for these statements. All variables
+	//in here that were used now have one less "use" instance, and we'll need to update accordingly
+	if(stmt->op1 != NULL){
+		stmt->op1->use_count--;
+	}
+
+	//One less use count here as well
+	if(stmt->op2 != NULL){
+		stmt->op2->use_count--;
+	}
 }
 
 
@@ -2467,11 +2478,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//First we'll create the non-temp var here
 		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
 
-		//Add this in as a used variable
-		add_used_variable(basic_block, non_temp_var);
-
 		//Let's first create the assignment statement
 		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
+
+		//Add this in as a used variable
+		add_used_variable(basic_block, non_temp_var);
 
 		//Carry this through
 		temp_assignment->is_branch_ending = is_branch_ending;

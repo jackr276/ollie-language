@@ -3173,7 +3173,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//deemed important, so we wouldn't want to remove their assignments
 		if(window->instruction1->assignee->is_temporary == TRUE &&
 			//Verify that this is not used more than once
-			window->instruction1->assignee->use_count == 1 &&
+			window->instruction1->assignee->use_count <= 1 &&
 			variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 			//Grab this out for convenience
 			instruction_t* binary_operation = window->instruction2;
@@ -3208,7 +3208,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//deemed important, so we wouldn't want to remove their assignments
 		if(window->instruction2->assignee->is_temporary == TRUE &&
 			//Verify that this is not used more than once
-			window->instruction2->assignee->use_count == 1 &&
+			window->instruction2->assignee->use_count <= 1 &&
 			variables_equal(window->instruction2->assignee, window->instruction3->op1, FALSE) == TRUE){
 			//Grab this out for convenience
 			instruction_t* binary_operation = window->instruction3;
@@ -3253,6 +3253,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 		//Instruction 2 is now simply an assign const statement
 		window->instruction2->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+		//Op1 is now used one less time
+		window->instruction2->op1->use_count--;
+
 		//Null out where the old value was
 		window->instruction2->op1 = NULL;
 
@@ -3329,7 +3333,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				second->op1 = first->op1;
 
 				//We can now delete the first statement
-				delete_statement( first);
+				delete_statement(first);
 
 				//Reconstruct the window with second as the start
 				reconstruct_window(window, second);
@@ -3353,7 +3357,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE
 			//Validate that the use count is less than 1
-			&& window->instruction1->assignee->use_count == 1
+			&& window->instruction1->assignee->use_count <= 1
 			&& is_operation_valid_for_constant_folding(window->instruction2) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
@@ -3386,7 +3390,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE
 			//Validate that this is not being used more than once
-			&& window->instruction1->assignee->use_count == 1
+			&& window->instruction1->assignee->use_count <= 1
 			&& is_operation_valid_for_constant_folding(window->instruction3) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
 			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
@@ -3434,7 +3438,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE 
 			//Make sure that this is the only use
-			&& window->instruction1->assignee->use_count == 1
+			&& window->instruction1->assignee->use_count <= 1
 			&& window->instruction1->op1->is_temporary == FALSE
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
@@ -3483,7 +3487,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//We still need further checks to see if this is indeed the pattern above. If
 		//we survive all of these checks, we know that we're set to optimize
 		if(first->assignee->is_temporary == TRUE && third->assignee->is_temporary == FALSE &&
-			first->assignee->use_count == 1 &&
+			first->assignee->use_count <= 2 &&
 			variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE &&
 	 		variables_equal(first->assignee, second->op1, FALSE) == TRUE &&
 	 		variables_equal(second->assignee, third->op1, FALSE) == TRUE){
