@@ -51,6 +51,19 @@ struct instruction_window_t{
 
 
 /**
+ * This is used to manage when we need to swap a variable out and handle all use case
+ * modifications
+ */
+static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
+	//Decrement the old one's use count
+	old->use_count--;
+
+	//And update the new one's use count
+	new->use_count++;
+}
+
+
+/**
  * Is an operation valid for token folding? If it is, we'll return true
  * The invalid operations are &&, ||, / and %, and * *when* it is unsigned
  */
@@ -3346,6 +3359,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				//Copy this over so we don't lose it
 				first->op1->indirection_level += second->op1->indirection_level;
 
+				//Manage our use state here
+				replace_variable(second->op1, first->op1);
+
 				//Reorder the op1's
 				second->op1 = first->op1;
 
@@ -3514,6 +3530,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE &&
 	 		variables_equal(first->assignee, second->op1, FALSE) == TRUE &&
 	 		variables_equal(second->assignee, third->op1, FALSE) == TRUE){
+
+			//Manage our use state here
+			replace_variable(second->op1, first->op1);
 
 			//The second op1 will now become the first op1
 			second->op1 = first->op1;
@@ -3968,6 +3987,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//in the second instruction's constant
 			second->op1_const = add_constants(second->op1_const, first->op1_const);
 
+			//Manage our use state here
+			replace_variable(second->op1, first->op1);
+
 			//Now that we've done that, we'll modify the second equation's op1 to be the first equation's op1
 			second->op1 = first->op1;
 
@@ -4024,13 +4046,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->assignee->indirection_level == 0){
 
 		//Delete it
-	//	delete_statement(window->instruction1);
+//		delete_statement(window->instruction1);
 
 		//Rebuild now based on instruction2
-	//	reconstruct_window(window, window->instruction2);
+//		reconstruct_window(window, window->instruction2);
 
 		//Counts as a change
-	//	changed = TRUE;
+//		changed = TRUE;
 	}
 
 	/**
