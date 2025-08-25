@@ -3168,6 +3168,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
+				//The dereferenced variable has been used
+				add_used_variable(current_block, dereferenced);
+
 				//Add it in
 				add_statement(current_block, temp_assignment);
 
@@ -3778,7 +3781,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//registers before a function call
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 
-		//If the package's assignee is not temporary, then this counts as a use
+		//The assignee of the package has been used
 		add_used_variable(current, package.assignee);
 
 		//Add this to the block
@@ -3789,6 +3792,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		
 		//Add the parameter in
 		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+
+		//The assignment's assignee is also used
+		add_used_variable(current, assignment->assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -3806,6 +3812,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//Emit an assignment instruction. This will become very important way down the line in register
 		//allocation to avoid interference
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+		//The assignee here is used
+		add_used_variable(current, assignee);
 				
 		//Reassign this value
 		assignee = assignment->assignee;

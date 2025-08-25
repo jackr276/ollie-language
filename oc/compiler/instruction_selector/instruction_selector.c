@@ -4046,13 +4046,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->assignee->indirection_level == 0){
 
 		//Delete it
-//		delete_statement(window->instruction1);
+	//	delete_statement(window->instruction1);
 
 		//Rebuild now based on instruction2
-//		reconstruct_window(window, window->instruction2);
+	//	reconstruct_window(window, window->instruction2);
 
 		//Counts as a change
-//		changed = TRUE;
+	//	changed = TRUE;
 	}
 
 	/**
