@@ -832,24 +832,6 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 
 
 /**
- * Emit a copy of this statement
- */
-instruction_t* emit_label_instruction(three_addr_var_t* label){
-	//Let's first allocate the statement
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//All we do now is give this the label 
-	stmt->assignee = label;
-	//Note the class too
-	stmt->CLASS = THREE_ADDR_CODE_LABEL_STMT;
-	//What function are we in
-	stmt->function = current_function;
-	//And give it back
-	return stmt;
-}
-
-
-/**
  * Directly emit an idle statement
  */
 instruction_t* emit_idle_instruction(){
@@ -1528,11 +1510,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- logical_not ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
-			break;
-
-		case THREE_ADDR_CODE_LABEL_STMT:
-			//Let's print it out. This is an instance where we will not use the print var
-			fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string);
 			break;
 
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:

@@ -332,8 +332,6 @@ typedef enum{
 	THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT,
 	//An indirect jump statement -- used for switch statement jump tables
 	THREE_ADDR_CODE_INDIRECT_JUMP_STMT,
-	//A label statement
-	THREE_ADDR_CODE_LABEL_STMT,
 	//A function call statement 
 	THREE_ADDR_CODE_FUNC_CALL,
 	//And indirect function call statement
@@ -815,10 +813,6 @@ instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t
  */
 instruction_t* emit_not_instruction(three_addr_var_t* var);
 
-/**
- * Emit a label statement here
- */
-instruction_t* emit_label_instruction(three_addr_var_t* var);
 
 /**
  * Emit a left shift statement

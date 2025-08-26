@@ -1531,15 +1531,6 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//Same goes for labels in memory
-				case THREE_ADDR_CODE_LABEL_STMT:
-					current_stmt->mark = TRUE;
-					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
-					//The block now has a mark
-					current->contains_mark = TRUE;
-					break;
-
 				//And finally idle statements are considered important
 				//because they literally do nothing, so if the user
 				//put them there, we'll assume that it was for a good reason

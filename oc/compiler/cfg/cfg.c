@@ -1927,7 +1927,7 @@ static void rename_block(basic_block_t* entry){
 		//And now if it's anything else that has an assignee, operands, etc,
 		//we'll need to rewrite all of those as well
 		//We'll exclude direct jump statements, these we don't care about
-		} else if(cursor->CLASS != THREE_ADDR_CODE_LABEL_STMT){
+		} else {
 			//If we get here we know that we don't have a phi function
 
 			//If we have a non-temp variable, rename it
@@ -2010,8 +2010,7 @@ static void rename_block(basic_block_t* entry){
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
 		//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-		if(cursor->CLASS != THREE_ADDR_CODE_LABEL_STMT &&
-			cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+		if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
 			//Pop it off
 			lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
 		}
@@ -2316,27 +2315,6 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 	//Give back the results
 	return return_package;
-}
-
-
-/**
- * Emit the abstract machine code for a label statement
- */
-static void emit_label(basic_block_t* basic_block, generic_ast_node_t* label_node, u_int8_t is_branch_ending){
-	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(label_node->variable, TRUE);
-
-	//This is a special case here -- these don't really count as variables
-	//in the way that most do. As such, we will not add it in as live
-
-	//We'll just use the helper to emit this
-	instruction_t* stmt = emit_label_instruction(label_var);
-
-	//Mark with whatever was passed through
-	stmt->is_branch_ending = is_branch_ending;
-
-	//Add this statement into the block
-	add_statement(basic_block, stmt);
 }
 
 
@@ -6006,7 +5984,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 				
 				//We rely on the helper to do it for us
-				emit_label(current_block, ast_cursor, FALSE);
+				//emit_label(current_block, ast_cursor, FALSE);
 
 				break;
 		
@@ -6514,7 +6492,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 				
 				//We rely on the helper to do it for us
-				emit_label(current_block, ast_cursor, FALSE);
+				//emit_label(current_block, ast_cursor, FALSE);
 
 				break;
 
