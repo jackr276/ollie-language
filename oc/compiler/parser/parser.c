@@ -5478,8 +5478,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Grab the name out for convenience
 	char* label_name = label_ident->string_value.string;
 
-	//We now need to make sure that it isn't a duplicate
-	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, label_name);
+	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
+	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name);
 
 	//If we did find it, that's bad
 	if(found_variable != NULL){
@@ -7060,7 +7060,6 @@ static generic_ast_node_t* statement(FILE* fl){
 		
 		//If we see the pound symbol, we know that we are declaring a label
 		case POUND:
-			printf("HERE\n");
 			//Just return whatever the rule gives us
 			return labeled_statement(fl);
 
@@ -8406,6 +8405,13 @@ static int8_t check_jump_labels(){
 			return FAILURE;
 		}
 
+		//This can also happen - where we have a user trying to jump to a non-label
+		if(label->is_label == FALSE){
+			sprintf(info, "Variable %s exists but is not a label, so it cannot be jumped to", label->var_name.string);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			return FAILURE;
+		}
+
 		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
 		if(strcmp(current_function->func_name.string, label->function_declared_in->func_name.string) != 0){
 			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name.string);
@@ -8904,6 +8910,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 				//If this fails, we fail out here too
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
+
 		} else {
 			sprintf(info, "Function %s has no body", function_record->func_name.string);
 			print_parse_message(WARNING, info, parser_line_num);
