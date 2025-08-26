@@ -5788,7 +5788,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 		}
 
 		//This is a conditional so the type that we have here needs to be valid for it
-		if(is_type_valid_for_conditional(conditional->inferred_type)){
+		if(is_type_valid_for_conditional(conditional->inferred_type) == FALSE){
 			sprintf(info, "Type %s is not valid for a conditional", conditional->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
