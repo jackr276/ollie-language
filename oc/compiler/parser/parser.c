@@ -5447,8 +5447,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//Do we contain a defer at any point in here? If so, that is invalid because we already
-	//have a return. If this happens, we'll need to reject it
+	//Do we contain a defer at any point in here? If so, that is invalid because we could
+	//have the defer block duplicated multiple times. As such, a label would become ambiguous
 	if(nesting_stack_contains_level(nesting_stack, DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Label statements cannot be placed inside of deferred blocks", parser_line_num);
 	}
@@ -5734,11 +5734,17 @@ static generic_ast_node_t* if_statement(FILE* fl){
  * is valid before the function is fully processed. As such, we add all of these jump statements into a
  * queue for processing
  *
- * BNF Rule: <jump-statement> ::= jump <label-identifier>;
+ * BNF Rule: <jump-statement> ::= jump <label-identifier> {when(conditional_expression)}?;
  */
 static generic_ast_node_t* jump_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
+
+	//Do we contain a defer at any point in here? If so, that is invalid because we could
+	//have the defer block duplicated multiple times. As such, a label would become ambiguous
+	if(nesting_stack_contains_level(nesting_stack, DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Direct jump statements cannot be placed inside of deferred blocks", parser_line_num);
+	}
 
 	//We can off the bat create the jump statement node here
 	generic_ast_node_t* jump_stmt = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT); 
@@ -7054,6 +7060,7 @@ static generic_ast_node_t* statement(FILE* fl){
 		
 		//If we see the pound symbol, we know that we are declaring a label
 		case POUND:
+			printf("HERE\n");
 			//Just return whatever the rule gives us
 			return labeled_statement(fl);
 

@@ -29,16 +29,8 @@ fn saturating_add(x:i32, y:i32) -> i32{
 }
 */
 
-#dependencies
-//============================================
-require "./oc/test_files/test_prog4.ol";
-require "./oc/test_files/test_prog3.ol";
-//require "test_prog4.ol";
-//============================================
-#dependencies
-
-#replace TEST_INT with -1;
-#replace my_char with 'c';
+replace TEST_INT with -1;
+replace my_char with 'c';
 
 fn tester() -> void{
 	let mut x:i32 := !3;
@@ -57,7 +49,7 @@ pub fn main() -> i32{
 	let mut my_val:i32 := x + -32;
 	let mut teste:i32 := TEST_INT;
 	let test_char:char := my_char;
-	jump $label1;
+	jump label1;
 
 	//Example asm inline statement
 	defer {
@@ -77,11 +69,11 @@ pub fn main() -> i32{
 	
 	if(!x)  {
 
-		$label1:
+	#label1:
 		++x;
 	} else {
 		--x;
-		jump $label1;
+		jump label1;
 		ret x;
 	}
 	

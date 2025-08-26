@@ -1550,12 +1550,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_LABEL_STMT:
 			//Let's print it out. This is an instance where we will not use the print var
-			fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string + 1);
+			fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string);
 			break;
 
 		case THREE_ADDR_CODE_DIR_JUMP_STMT:
 			//This is an instance where we will not use the print var
-			fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name.string + 1);
+			fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name.string);
 			break;
 		
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
