@@ -5447,6 +5447,12 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
+	//Do we contain a defer at any point in here? If so, that is invalid because we already
+	//have a return. If this happens, we'll need to reject it
+	if(nesting_stack_contains_level(nesting_stack, DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Label statements cannot be placed inside of deferred blocks", parser_line_num);
+	}
+
 	//Let's create the label ident node
 	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT, SIDE_TYPE_LEFT);
 	//Save our line number
@@ -5473,13 +5479,39 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	char* label_name = label_ident->string_value.string;
 
 	//We now need to make sure that it isn't a duplicate
-	symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, label_name);
+	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, label_name);
 
 	//If we did find it, that's bad
-	if(found != NULL){
-		sprintf(info, "Label identifier %s has already been declared. First declared here: ", label_name); 
+	if(found_variable != NULL){
+		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name); 
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(found);
+		print_variable_name(found_variable);
+		num_errors++;
+		//give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//We now need to make sure that it isn't a duplicate
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, label_name);
+
+	//If we did find it, that's bad
+	if(found_type != NULL){
+		sprintf(info, "Identifier %s has already been declared as a type. First declared here: ", label_name); 
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_type_name(found_type);
+		num_errors++;
+		//give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//We now need to make sure that it isn't a duplicate
+	symtab_function_record_t* found_function = lookup_function(function_symtab, label_name);
+
+	//If we did find it, that's bad
+	if(found_function != NULL){
+		sprintf(info, "Identifier %s has already been declared as a function. First declared here: ", label_name); 
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_function_name(found_function);
 		num_errors++;
 		//give back an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
@@ -5489,34 +5521,27 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//The label type is one of our core types
 	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "label");
 
-	//Sanity check here
-	if(label_type == NULL){
-		return print_and_return_error("Fatal internal compiler error. Basic type label was not found", parser_line_num);
-	}
-
 	//Now that we know we didn't find it, we'll create it
-	found = create_variable_record(label_ident->string_value, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* label = create_variable_record(label_ident->string_value, STORAGE_CLASS_NORMAL);
 	//Store the type
-	found->type_defined_as = label_type->type;
+	label->type_defined_as = label_type->type;
 	//Store the fact that it is a label
-	found->is_label = 1;
+	label->is_label = TRUE;
 	//Store the line number
-	found->line_number = parser_line_num;
+	label->line_number = parser_line_num;
 	//Store what function it's defined in(important for later)
-	found->function_declared_in = current_function;
+	label->function_declared_in = current_function;
 
 	//Put into the symtab
-	insert_variable(variable_symtab, found);
+	insert_variable(variable_symtab, label);
 
 	//We'll also associate this variable with the node
-	label_stmt->variable = found;
+	label_stmt->variable = label;
 	label_stmt->inferred_type = label_type->type;
 
 	//Now we can get out
 	return label_stmt;
 }
-
-
 
 
 /**
@@ -5719,7 +5744,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 	generic_ast_node_t* jump_stmt = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT); 
 
 	//Once we've made it, we need to see a valid label identifier
-	generic_ast_node_t* label_ident = label_identifier(fl, SIDE_TYPE_LEFT);
+	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If this failed, we're done
 	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){

@@ -560,7 +560,7 @@ void add_all_basic_types(type_symtab_t* symtab){
 	insert_type(symtab,  create_type_record(type));
 
 	//label type
-	type = create_basic_type("label", LABEL_IDENT);
+	type = create_basic_type("label", IDENT);
 	insert_type(symtab,  create_type_record(type));
 }
 
