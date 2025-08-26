@@ -101,14 +101,10 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int16_t line_n
 			return lex_item;
 		}
 	}
-
-	//Otherwise if we get here, it could be a regular ident or a label ident
-	if(lexeme.string[0] == '$'){
-		lex_item.tok = LABEL_IDENT;
-	} else {
-		lex_item.tok = IDENT;
-	}
 	
+	//Set the type here
+	lex_item.tok = IDENT;
+
 	//Fail out if too long
 	if(lexeme.current_length >= MAX_IDENT_LENGTH){
 		printf("[LINE %d | LEXER ERROR]: Identifiers may be at most %d characters long\n", line_number, MAX_IDENT_LENGTH);

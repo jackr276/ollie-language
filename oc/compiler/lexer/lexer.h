@@ -92,7 +92,6 @@ typedef enum {
 	L_NOT,
 	B_NOT,
 	IDENT,
-	LABEL_IDENT, /* Label idents always start with $ */
 	POUND, /* # */
 	FUNC_CONST,
 	INT_CONST,

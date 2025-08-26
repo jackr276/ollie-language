@@ -378,37 +378,6 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	return ident_node;
 }
 
-/**
- * We will always return a pointer to the node holding the label identifier. Due to the times when
- * this will be called, we can not do any symbol table validation here. 
- *
- * BNF "Rule": <label-identifier> ::= ${(<letter>) | <digit> | _ | $}*
- * Note all actual string parsing and validation is handled by the lexer
- */
-static generic_ast_node_t* label_identifier(FILE* fl, side_type_t side){
-	//Grab the next token
-	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If we can't find it that's bad
-	if(lookahead.tok != LABEL_IDENT){
-		sprintf(info, "String %s is not a valid label identifier", lookahead.lexeme.string);
-		//Create and return an error node that will be sent up the chain
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Create the identifier node
-	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
-	//Clone the string in
-	label_ident_node->string_value = clone_dynamic_string(&(lookahead.lexeme));
-	//By default a label identifier is of type u_int64(memory address)
-	label_ident_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
-	//Add the line number
-	label_ident_node->line_number = parser_line_num;
-
-	//Return our reference to the node
-	return label_ident_node;
-}
-
 
 /**
  * Emit a constant node directly
@@ -5465,15 +5434,12 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 
 
 /**
- * A labeled statement could come as part of a switch statement or could
- * simply be a label that can be used for jumping. Whatever it is, it is
- * always followed by a colon. Like all rules, this rule returns a reference to
- * it's root node
+ * A labeled statement allows the user in ollie to directly jump to where
+ * they'd like to go, with some exceptions
  *
- * We must also ensure, in the case of a case statement, that the type of what we're matching with
- * is compatible with what we're switching on
+ * NOTE: By the time we get here, we have already seen & consumed the #
  *
- * <labeled-statement> ::= <label-identifier> : 
+ * <labeled-statement> ::= #<label-identifier>: 
  */
 static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Freeze the line number
@@ -5487,11 +5453,11 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	label_stmt->line_number = parser_line_num;
 
 	//Let's see if we can find one
-	generic_ast_node_t* label_ident = label_identifier(fl, SIDE_TYPE_LEFT);
+	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it's bad we'll fail out here
 	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-		return print_and_return_error("Invalid label identifier given as label ident statement", current_line);
+		return print_and_return_error("Invalid identifier given as label ident statement", current_line);
 	}
 		
 	//Let's also verify that we have the colon right now
@@ -7061,11 +7027,8 @@ static generic_ast_node_t* statement(FILE* fl){
 
 			return NULL;
 		
-		//If we see a label ident, we know we're seeing a labeled statement
-		case LABEL_IDENT:
-			//This rule relies on these tokens, so we'll push them back
-			push_back_token(lookahead);
-	
+		//If we see the pound symbol, we know that we are declaring a label
+		case POUND:
 			//Just return whatever the rule gives us
 			return labeled_statement(fl);
 
