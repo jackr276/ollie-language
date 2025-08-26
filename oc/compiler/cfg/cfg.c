@@ -6771,7 +6771,11 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		//Just copy the variable over
 		address->memory_address_variable = base_address->memory_address_variable;
 
-		if(address->memory_address_variable == NULL) printf("ITS NULL\n\n");
+		if(address->memory_address_variable == NULL){
+			printf("ITS NULL\n\n");
+		} else {
+			printf("%s\n\n\n", address->memory_address_variable->var_name.string);
+		}
 
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->CLASS){
@@ -6881,6 +6885,9 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		//We'll need to emit the proper address offset calculation for each one
 		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_long_constant_direct(offset, type_symtab), is_branch_ending);
 
+		//Store the memory address variable here
+		address->memory_address_variable = struct_type->struct_table[member].variable;
+
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->CLASS){
 			//We won't do any dereferencing if we have these
@@ -6890,11 +6897,8 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_mem_code(current_block, address, base_address->linked_var);
+				address = emit_mem_code(current_block, address, struct_type->struct_table[member].variable);
 				
-				//Store the field as a related write variable
-				address->memory_address_variable = struct_type->struct_table[member].variable;
-
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;
 				break;
