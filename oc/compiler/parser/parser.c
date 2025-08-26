@@ -5746,9 +5746,6 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 		return print_and_return_error("Direct jump statements cannot be placed inside of deferred blocks", parser_line_num);
 	}
 
-	//We can off the bat create the jump statement node here
-	generic_ast_node_t* jump_stmt = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT); 
-
 	//Once we've made it, we need to see a valid label identifier
 	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
 
@@ -5757,27 +5754,85 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 		return print_and_return_error("Invalid label given to jump statement", parser_line_num);
 	}
 
+	//Predeclare this, we don't know what it could be
+	generic_ast_node_t* jump_statement = NULL;
+
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We could optionally see a conditional jump statement here with the "when" keyword
+	if(lookahead.tok == WHEN){
+		//Different class of statement here
+		jump_statement = ast_node_alloc(AST_NODE_CLASS_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT); 
+
+		//Add this in as a child node to the statement
+		add_child_node(jump_statement, label_ident);
+
+		//We now need to see an L_PAREN 
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail out if not
+		if(lookahead.tok != L_PAREN){
+			return print_and_return_error("Left parenthesis required after when statement", parser_line_num);
+		}
+
+		//Otherwise we'll add this into the grouping stack
+		push_token(grouping_stack, lookahead);
+
+		//Now we need to see a valid conditional expression
+		generic_ast_node_t* conditional = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+
+		//If this is invalid, we fail out
+		if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return conditional;
+		}
+
+		//This is a conditional so the type that we have here needs to be valid for it
+		if(is_type_valid_for_conditional(conditional->inferred_type)){
+			sprintf(info, "Type %s is not valid for a conditional", conditional->inferred_type->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we're all good here, so we'll add this in as a child
+		add_child_node(jump_statement, conditional);
+
+		//We'll need to see the final closing paren here
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//If it's not an R_PAREN we're done
+		if(lookahead.tok != R_PAREN){
+			return print_and_return_error("Closing parenthesis required after conditional in when statement", parser_line_num);
+		}
+
+		//Pop the grouping stack and validate that we match
+		if(pop_token(grouping_stack).tok != L_PAREN){
+			return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+		}
+
+		//Refresh the lookahead one last time for the semicolon search
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	} else {
+		//We can off the bat create the jump statement node here
+		jump_statement = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT); 
+
+		//Add this in as a child node to the statement
+		add_child_node(jump_statement, label_ident);
+	}
 
 	//If we don't see a semicolon we bail
 	if(lookahead.tok != SEMICOLON){
 		return print_and_return_error("Semicolon required after jump statement", parser_line_num);
 	}
 	
-	//Otherwise if we get here we know that it is a valid label and valid syntax
-	//We'll now do the final assembly
-	//First we'll add the label ident as a child of the jump
-	add_child_node(jump_stmt, label_ident);
-
 	//Store the line number
-	jump_stmt->line_number = parser_line_num;
+	jump_statement->line_number = parser_line_num;
 
 	//Add this jump statement into the queue for processing
-	enqueue(current_function_jump_statements, jump_stmt); 
+	enqueue(current_function_jump_statements, jump_statement);
 
 	//Finally we'll give back the root reference
-	return jump_stmt;
+	return jump_statement;
 }
 
 
