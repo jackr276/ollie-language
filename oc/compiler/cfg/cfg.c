@@ -314,6 +314,11 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * as live
  */
 static void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//This can happen, so we'll check here to avoid complexity elsewhere
+	if(var == NULL){
+		return;
+	}
+
 	//Increment the use count of this variable, regardless of what it is
 	var->use_count++;
 
@@ -756,6 +761,17 @@ void delete_statement(instruction_t* stmt){
 		instruction_t* next = stmt->next_statement;
 		previous->next_statement = next;
 		next->previous_statement = previous;
+	}
+
+	//Now we need to do all maintenance when it comes to used variables for these statements. All variables
+	//in here that were used now have one less "use" instance, and we'll need to update accordingly
+	if(stmt->op1 != NULL){
+		stmt->op1->use_count--;
+	}
+
+	//One less use count here as well
+	if(stmt->op2 != NULL){
+		stmt->op2->use_count--;
 	}
 }
 
@@ -2037,9 +2053,7 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	temp_assignment->is_branch_ending = is_branch_ending;
 
 	//If the assignee is not temporary, it counts as used
-	if(assignee->is_temporary == FALSE){
-		add_used_variable(basic_block, assignee);
-	}
+	add_used_variable(basic_block, assignee);
 
 	//Add this to the block
 	add_statement(basic_block, temp_assignment);
@@ -2051,12 +2065,18 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	instruction_t* operation = emit_binary_operation_with_const_instruction(emit_temp_var(assignee->type), temp_assignment->assignee, op, constant);
 	operation->is_branch_ending = is_branch_ending;
 
+	//This now counts as used
+	add_used_variable(basic_block, temp_assignment->assignee);
+
 	//Add this to the block
 	add_statement(basic_block, operation);
 
 	//We need one final assignment
 	instruction_t* final_assignment = emit_assignment_instruction(emit_var_copy(assignee), operation->assignee);
 	final_assignment->is_branch_ending = is_branch_ending;
+
+	//This now counts as used
+	add_used_variable(basic_block, operation->assignee);
 
 	//And add this one in
 	add_statement(basic_block, final_assignment);
@@ -2075,14 +2095,10 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 	three_addr_var_t* assignee = emit_temp_var(base_addr->type);
 
 	//If the base addr is not temporary, this counts as a read
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
+	add_used_variable(basic_block, base_addr);
 
 	//If the offset is not temporary, it also counts as used
-	if(offset->is_temporary == FALSE){
-		add_used_variable(basic_block, offset);
-	}
+	add_used_variable(basic_block, offset);
 
 	//Now we leverage the helper to emit this
 	instruction_t* stmt = emit_lea_instruction(assignee, base_addr, offset, base_type->type_size);
@@ -2123,13 +2139,14 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 	//Now we emit the offset multiplication
 	three_addr_var_t* total_offset = emit_binary_operation_with_constant(basic_block, offset, offset, STAR, type_size, is_branch_ending);
 
+	//The offset has been used here
+	add_used_variable(basic_block, offset);
+
 	//Once we have the total offset, we add it to the base address
 	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), base_addr, PLUS, total_offset);
 	
 	//if the base address is not temporary, it also counts as used
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
+	add_used_variable(basic_block, base_addr);
 
 	//Add this into the block
 	add_statement(basic_block, result);
@@ -2150,9 +2167,7 @@ static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t*
 	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), base_addr, PLUS, emit_int_constant_direct(total_offset, type_symtab));
 	
 	//if the base address is not temporary, it also counts as used
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
+	add_used_variable(basic_block, base_addr);
 
 	//Add this into the block
 	add_statement(basic_block, result);
@@ -2169,18 +2184,11 @@ static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_bl
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(struct_type);
 
-	//If the base addr is not temporary, this counts as a read
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
-
 	//Now we leverage the helper to emit this
 	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, base_addr, PLUS, offset);
 
-	//If the base address is not temporary, then it is used
-	if(base_addr->is_temporary == FALSE){
-		add_used_variable(basic_block, base_addr);
-	}
+	//If the base addr is not temporary, this counts as a read
+	add_used_variable(basic_block, base_addr);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2201,9 +2209,7 @@ static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* b
 	three_addr_var_t* assignee = emit_temp_var(lookup_type_name_only(type_symtab, "label")->type);
 
 	//If the multiplicand is not temporary we have a new used variable
-	if(mutliplicand->is_temporary == FALSE){
-		add_used_variable(basic_block, mutliplicand);
-	}
+	add_used_variable(basic_block, mutliplicand);
 
 	//Use the helper to emit it - type size is 8 because it's an address
 	instruction_t* stmt = emit_indir_jump_address_calc_instruction(assignee, initial_address, mutliplicand, 8);
@@ -2287,10 +2293,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		//Emit the temp assignment
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(expression_package.assignee->type), expression_package.assignee);
 
-		//If this isn't temporary, then it's being used
-		if(expression_package.assignee->is_temporary == FALSE){
-			add_used_variable(basic_block, expression_package.assignee);
-		}
+		//Add this in as a used variable
+		add_used_variable(basic_block, expression_package.assignee);
 
 		//Add it into the block
 		add_statement(current, assignment);
@@ -2300,6 +2304,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 	//We'll use the ret stmt feature here
 	instruction_t* ret_stmt = emit_ret_instruction(return_variable);
+
+	//This variable is now used
+	add_used_variable(current, return_variable);
 
 	//Mark this with whatever was passed through
 	ret_stmt->is_branch_ending = is_branch_ending;
@@ -2479,11 +2486,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//First we'll create the non-temp var here
 		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
 
-		//Add this in as a used variable
-		add_used_variable(basic_block, non_temp_var);
-
 		//Let's first create the assignment statement
 		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
+
+		//Add this in as a used variable
+		add_used_variable(basic_block, non_temp_var);
 
 		//Carry this through
 		temp_assignment->is_branch_ending = is_branch_ending;
@@ -2516,9 +2523,10 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 	//This will count as live if we read from it
 	if(incrementee->is_temporary == FALSE){
 		add_assigned_variable(basic_block, incrementee);
-		//This is a rare case were we're assigning to AND using
-		add_used_variable(basic_block, incrementee);
 	}
+
+	//This is a rare case were we're assigning to AND using
+	add_used_variable(basic_block, incrementee);
 
 	//Mark this with whatever was passed through
 	inc_code->is_branch_ending = is_branch_ending;
@@ -2541,9 +2549,10 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 	//This will count as live if we read from it
 	if(decrementee->is_temporary == FALSE){
 		add_assigned_variable(basic_block, decrementee);
-		//This is a rare case were we're assigning to AND using
-		add_used_variable(basic_block, decrementee);
 	}
+
+	//This is a rare case were we're assigning to AND using
+	add_used_variable(basic_block, decrementee);
 
 	//Mark this with whatever was passed through
 	dec_code->is_branch_ending = is_branch_ending;
@@ -2565,9 +2574,7 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
 	three_addr_var_t* indirect_var = emit_var_copy(assignee);
 
 	//This will count as live if we read from it
-	if(indirect_var->is_temporary == FALSE){
-		add_used_variable(basic_block, indirect_var);
-	}
+	add_used_variable(basic_block, indirect_var);
 
 	//Increment the indirection
 	indirect_var->indirection_level++;
@@ -2592,9 +2599,7 @@ static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, th
 	three_addr_var_t* indirect_var = emit_var_copy(assignee);
 
 	//This will count as live if we read from it
-	if(indirect_var->is_temporary == FALSE){
-		add_used_variable(basic_block, indirect_var);
-	}
+	add_used_variable(basic_block, indirect_var);
 
 	//Increment the indirection
 	indirect_var->indirection_level++;
@@ -2620,8 +2625,10 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 	//assigned to, so it counts as assigned
 	if(var->is_temporary == FALSE){
 		add_assigned_variable(basic_block, var);
-		add_used_variable(basic_block, var);
 	}
+
+	//Regardless this is still used here
+	add_used_variable(basic_block, var);
 
 	//Mark this with its branch end status
 	not_stmt->is_branch_ending = is_branch_ending;
@@ -2638,6 +2645,7 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
  * Emit a binary operation statement with a constant built in
  */
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending){
+	//Assigned variables need to be non-constant
 	if(assignee->is_temporary == FALSE){
 		add_assigned_variable(basic_block, assignee);
 	}
@@ -2666,11 +2674,8 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
 	//We make our temp selection based on this
 	three_addr_var_t* var = emit_temp_var(negated->type);
 
-	//If this isn't a temp var, we'll add it in as live
-	if(negated->is_temporary == FALSE){
-		//This counts as used
-		add_used_variable(basic_block, negated);
-	}
+	//This counts as used
+	add_used_variable(basic_block, negated);
 
 	//Now let's create it
 	instruction_t* stmt = emit_neg_instruction(var, negated);
@@ -2691,18 +2696,19 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
  */
 static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, u_int8_t is_branch_ending){
 	//We need to emit a temp assignment for the negation
-	instruction_t* temp_assingment = emit_assignment_instruction(emit_temp_var(negated->type), negated);
+	instruction_t* temp_assingnment = emit_assignment_instruction(emit_temp_var(negated->type), negated);
 
 	//If negated isn't temp, it also counts as a read
-	if(negated->is_temporary == FALSE){
-		add_used_variable(basic_block, negated);
-	}
+	add_used_variable(basic_block, negated);
 
 	//Add this into the block
-	add_statement(basic_block, temp_assingment);
+	add_statement(basic_block, temp_assingnment);
 
 	//This will always overwrite the other value
-	instruction_t* stmt = emit_logical_not_instruction(temp_assingment->assignee, temp_assingment->assignee);
+	instruction_t* stmt = emit_logical_not_instruction(temp_assingnment->assignee, temp_assingnment->assignee);
+
+	//This counts as used
+	add_used_variable(basic_block, temp_assingnment->assignee);
 
 	//Mark this with its branch ending status
 	stmt->is_branch_ending = is_branch_ending;
@@ -2952,11 +2958,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 					//We will perform the deref here, as we can't do it in the lea 
 					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
 
-					//If the current var isn't temp, it's been used
-					if(current_var->is_temporary == FALSE){
-						add_used_variable(current, current_var);
-					}
-
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
 					//And add it in
@@ -2984,6 +2985,11 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 				//Assign temp to be the current address
 				instruction_t* assnment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+
+				//The dereferenced variable here is used
+				add_used_variable(current, dereferenced);
+
+				//Add it into the block
 				add_statement(current, assnment);
 
 				//Reassign what current address really is
@@ -3039,11 +3045,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 					//We will perform the deref here, as we can't do it in the lea 
 					instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-					//If the current var isn't temp, it's been used
-					if(current_var->is_temporary == FALSE){
-						add_used_variable(current, current_var);
-					}
 
 					//Is this branch ending?
 					deref_stmt->is_branch_ending = is_branch_ending;
@@ -3167,6 +3168,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
+				//The dereferenced variable has been used
+				add_used_variable(current_block, dereferenced);
+
 				//Add it in
 				add_statement(current_block, temp_assignment);
 
@@ -3241,6 +3245,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//We'll need to assign to a temp here, these are
 			//only ever on the RHS
 			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+			//The assignee here counts as used
+			add_used_variable(current_block, assignee);
 
 			//Add this into the block
 			add_statement(current_block, assignment);
@@ -3404,9 +3411,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	add_assigned_variable(if_block, if_result);
 
 	//This counts as a use
-	if(if_branch.assignee->is_temporary == FALSE){
-		add_used_variable(if_block, if_branch.assignee);
-	}
+	add_used_variable(if_block, if_branch.assignee);
 
 	//Now add a direct jump to the end
 	emit_jump(if_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
@@ -3432,9 +3437,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	add_assigned_variable(else_block, else_result);
 
 	//This counts as a use
-	if(else_branch.assignee->is_temporary == FALSE){
-		add_used_variable(else_block, else_branch.assignee);
-	}
+	add_used_variable(else_block, else_branch.assignee);
 
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block, JUMP_TYPE_JMP, is_branch_ending, FALSE);
@@ -3585,14 +3588,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	}
 
 	//If these are not temporary, they're being used
-	if(op1->is_temporary == FALSE){
-		add_used_variable(current_block, op1);
-	}
+	add_used_variable(current_block, op1);
 
 	//Same deal with this one
-	if(op2->is_temporary == FALSE){
-		add_used_variable(current_block, op2);
-	}
+	add_used_variable(current_block, op2);
 
 	//Mark this with what we have
 	binary_operation->is_branch_ending = is_branch_ending;
@@ -3668,9 +3667,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			}
 
 			//If the package's assignee is not temp, it counts as used
-			if(expression_package.assignee->is_temporary == FALSE){
-				add_used_variable(current_block, expression_package.assignee);
-			}
+			add_used_variable(current_block, expression_package.assignee);
 			
 			//Mark this with what was passed through
 			final_assignment->is_branch_ending = is_branch_ending;
@@ -3784,10 +3781,8 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//registers before a function call
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 
-		//If the package's assignee is not temporary, then this counts as a use
-		if(package.assignee->is_temporary == FALSE){
-			add_used_variable(current, package.assignee);
-		}
+		//The assignee of the package has been used
+		add_used_variable(current, package.assignee);
 
 		//Add this to the block
 		add_statement(current, assignment);
@@ -3797,6 +3792,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		
 		//Add the parameter in
 		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+
+		//The assignment's assignee is also used
+		add_used_variable(current, assignment->assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -3814,6 +3812,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//Emit an assignment instruction. This will become very important way down the line in register
 		//allocation to avoid interference
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+
+		//The assignee here is used
+		add_used_variable(current, assignee);
 				
 		//Reassign this value
 		assignee = assignment->assignee;
@@ -3899,9 +3900,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 
 		//If the package's assignee is not temporary, then this counts as a use
-		if(package.assignee->is_temporary == FALSE){
-			add_used_variable(current, package.assignee);
-		}
+		add_used_variable(current, package.assignee);
 
 		//Add this to the block
 		add_statement(current, assignment);
@@ -3911,6 +3910,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		
 		//Add the parameter in
 		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+
+		//The assignment here is used implicitly by the function call
+		add_used_variable(current, assignment->assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -5386,6 +5388,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
 
+	//This has now been used once more
+	add_used_variable(root_level_block, input_results.assignee);
+
 	//Add it into the block
 	add_statement(root_level_block, temporary_variable_assignent);
 
@@ -5578,6 +5583,9 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
+
+	//This has now been used once more
+	add_used_variable(root_level_block, input_results.assignee);
 
 	//Add it into the block
 	add_statement(root_level_block, temporary_variable_assignent);
@@ -6763,8 +6771,6 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		//Just copy the variable over
 		address->memory_address_variable = base_address->memory_address_variable;
 
-		if(address->memory_address_variable == NULL) printf("ITS NULL\n\n");
-
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->CLASS){
 			//We won't do any dereferencing if we have these
@@ -6873,6 +6879,9 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		//We'll need to emit the proper address offset calculation for each one
 		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_long_constant_direct(offset, type_symtab), is_branch_ending);
 
+		//Store the memory address variable here
+		address->memory_address_variable = struct_type->struct_table[member].variable;
+
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->CLASS){
 			//We won't do any dereferencing if we have these
@@ -6882,11 +6891,8 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_mem_code(current_block, address, base_address->linked_var);
+				address = emit_mem_code(current_block, address, struct_type->struct_table[member].variable);
 				
-				//Store the field as a related write variable
-				address->memory_address_variable = struct_type->struct_table[member].variable;
-
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;
 				break;
@@ -6957,9 +6963,7 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 			instruction_t* assignment_statement = emit_assignment_instruction(assignee, intermediary_results.assignee);
 
 			//If this is not temporary, then it counts as used
-			if(intermediary_results.assignee->is_temporary == FALSE){
-				add_used_variable(current_block, intermediary_results.assignee);
-			}
+			add_used_variable(current_block, intermediary_results.assignee);
 
 			//Finally we'll add this into the overall block
 			add_statement(current_block, assignment_statement);

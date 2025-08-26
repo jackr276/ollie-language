@@ -1271,9 +1271,9 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 			if(cursor->assignee != NULL && cursor->assignee->memory_address_variable != NULL
 				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
 				&& cursor->assignee->memory_address_variable == variable){
+
 				//This is a case where we mark
 				if(cursor->mark == FALSE){
-					//TODO we should probably mark and add definition here too
 					//Mark the statement itself
 					cursor->mark = TRUE;
 					dynamic_array_add(worklist, cursor);
