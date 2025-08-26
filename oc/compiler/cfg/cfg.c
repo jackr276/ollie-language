@@ -2344,9 +2344,9 @@ static void emit_label(basic_block_t* basic_block, generic_ast_node_t* label_nod
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
-void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
+void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
 	//Use the helper function to emit the statement
-	instruction_t* stmt = emit_jmp_instruction(dest_block, type);
+	instruction_t* stmt = emit_jmp_instruction(destination_block, type);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -2356,6 +2356,30 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, jump_type_
 
 	//Is this an inverse jump? Important for optimization down the line
 	stmt->inverse_jump = inverse_jump;
+
+	//Add this into the first block
+	add_statement(basic_block, stmt);
+}
+
+
+/**
+ * Emit a user defined jump statement that points to a label, not to a block
+ */
+static void emit_user_defined_jump(basic_block_t* basic_block, basic_block_t* destination_block, jump_type_t type, u_int8_t is_branch_ending){
+	//Use the helper function to emit the statement
+	instruction_t* stmt = emit_jmp_instruction(destination_block, type);
+
+	//Is this branch ending?
+	stmt->is_branch_ending = is_branch_ending;
+
+	//Mark where we came from
+	stmt->block_contained_in = basic_block;
+
+	//These will never be basic blocks
+	stmt->inverse_jump = FALSE;
+
+	//This is a user defined jump
+	stmt->is_user_defined_jump = TRUE;
 
 	//Add this into the first block
 	add_statement(basic_block, stmt);
@@ -3945,6 +3969,43 @@ static int32_t increment_and_get(){
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block?
+	created->estimated_execution_frequency = estimated_execution_frequency;
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg_ref->created_blocks, created);
+
+	return created;
+}
+
+
+/**
+ * Allocate a basic block that comes from a user-defined label statement
+*/
+static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label, u_int32_t estimated_execution_frequency){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in even though it is a labeled block
+	created->block_id = increment_and_get();
+
+	//This block's name will draw from the label
+	created->label = label;
+
+	//This is a label block
+	created->is_label_block = TRUE;
 
 	//Put the block ID in
 	created->block_id = increment_and_get();

@@ -95,6 +95,8 @@ struct basic_block_t{
 	jump_table_t* jump_table;
 	//The function that we're defined in
 	symtab_function_record_t* function_defined_in;
+	//The variable that this block's name draws from if this block is a label block
+	symtab_variable_record_t* label;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
@@ -150,6 +152,8 @@ struct basic_block_t{
 	u_int8_t contains_mark;
 	//Was this block visited by traverser?
 	u_int8_t visited;
+	//Is this a label block(defined by user)
+	u_int8_t is_label_block;
 };
 
 
