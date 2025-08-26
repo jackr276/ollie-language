@@ -332,8 +332,6 @@ typedef enum{
 	THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT,
 	//An indirect jump statement -- used for switch statement jump tables
 	THREE_ADDR_CODE_INDIRECT_JUMP_STMT,
-	//A direct to label jump statement
-	THREE_ADDR_CODE_DIR_JUMP_STMT,
 	//A label statement
 	THREE_ADDR_CODE_LABEL_STMT,
 	//A function call statement 
@@ -532,6 +530,8 @@ struct instruction_t{
 	//Are we jumping to if?(Affirmative jump) Our if statements and do while blocks
 	//use this in the conditional. Otherwise, we're jumping to else, which is an inverse jump
 	u_int8_t inverse_jump;
+	//Is this a user-defined jump
+	u_int8_t is_user_defined_jump;
 	//What is the indirection level?
 	u_int8_t indirection_level;
 	//Cannot be coalesced
@@ -844,11 +844,6 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
 instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_type_t jump_type);
-
-/**
- * Emit a direct jump statement. This is used only with jump statements the user has made
- */
-instruction_t* emit_direct_jmp_instruction(three_addr_var_t* jumping_to);
 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in

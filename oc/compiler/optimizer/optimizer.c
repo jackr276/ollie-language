@@ -1531,16 +1531,6 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//Direct jumps are also added by the user and as such are always
-				//important
-				case THREE_ADDR_CODE_DIR_JUMP_STMT:
-					current_stmt->mark = TRUE;
-					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
-					//The block now has a mark
-					current->contains_mark = TRUE;
-					break;
-	
 				//Same goes for labels in memory
 				case THREE_ADDR_CODE_LABEL_STMT:
 					current_stmt->mark = TRUE;

@@ -2918,7 +2918,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			instruction->source_register = instruction->op1;
 			break;
 		case THREE_ADDR_CODE_JUMP_STMT:
-		case THREE_ADDR_CODE_DIR_JUMP_STMT:
 			//Let the helper do this and then leave
 			select_jump_instruction(instruction);
 			break;

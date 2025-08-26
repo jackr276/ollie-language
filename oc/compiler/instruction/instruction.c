@@ -850,24 +850,6 @@ instruction_t* emit_label_instruction(three_addr_var_t* label){
 
 
 /**
- * Emit a direct jump statement. This is used only with jump statements the user has made
- */
-instruction_t* emit_direct_jmp_instruction(three_addr_var_t* jumping_to){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Now all we need to do is give it the label
-	stmt->assignee = jumping_to;
-	//Note the class too
-	stmt->CLASS = THREE_ADDR_CODE_DIR_JUMP_STMT;
-	//What function are we in
-	stmt->function = current_function;
-	//and give it back
-	return stmt;
-}
-
-
-/**
  * Directly emit an idle statement
  */
 instruction_t* emit_idle_instruction(){
@@ -1553,11 +1535,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string);
 			break;
 
-		case THREE_ADDR_CODE_DIR_JUMP_STMT:
-			//This is an instance where we will not use the print var
-			fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name.string);
-			break;
-		
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
 			//Should already have a trailing newline
 			fprintf(fl, "%s", stmt->inlined_assembly.string);
