@@ -6771,12 +6771,6 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		//Just copy the variable over
 		address->memory_address_variable = base_address->memory_address_variable;
 
-		if(address->memory_address_variable == NULL){
-			printf("ITS NULL\n\n");
-		} else {
-			printf("%s\n\n\n", address->memory_address_variable->var_name.string);
-		}
-
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->CLASS){
 			//We won't do any dereferencing if we have these
