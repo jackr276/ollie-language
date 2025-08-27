@@ -378,15 +378,30 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		print_jump_table(stdout, block->jump_table);
 	}
 
+	//Different blocks have different printing rules
+	switch(block->block_type){
+		case BLOCK_TYPE_FUNC_ENTRY:
+			//Print out any/all local constants
+			print_local_constants(stdout, block->function_defined_in);
+
+			//Now the block name
+			printf("%s", block->function_defined_in->func_name.string);
+			break;
+
+		//If it's a label block, we'll print accordingly
+		case BLOCK_TYPE_LABEL:
+			printf("%s", block->label->var_name.string);
+			break;
+
+		//By default it's just the .L printing
+		default:
+			printf(".L%d", block->block_id);
+	
+	}
+
 	//Print the block's ID or the function name
 	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		//Print out any/all local constants
-		print_local_constants(stdout, block->function_defined_in);
-
-		//Now the block name
-		printf("%s", block->function_defined_in->func_name.string);
-	} else {
-		printf(".L%d", block->block_id);
+		} else {
 	}
 
 	//Now, we will print all of the active variables that this block has
@@ -3982,16 +3997,13 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label, u_int
 	//This block's name will draw from the label
 	created->label = label;
 
-	//This is a label block
-	created->is_label_block = TRUE;
-
 	//Put the block ID in
 	created->block_id = increment_and_get();
 
 	//Our sane defaults here - normal termination and normal type
 	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
-	//By default we're normal here
-	created->block_type = BLOCK_TYPE_NORMAL;
+	//We'll mark this to indicate that this is a labeled block
+	created->block_type = BLOCK_TYPE_LABEL;
 
 	//What is the estimated execution cost of this block?
 	created->estimated_execution_frequency = estimated_execution_frequency;

@@ -55,6 +55,7 @@ typedef enum{
 	BLOCK_TYPE_FOR_STMT_END, //End of a for statement
 	BLOCK_TYPE_FOR_STMT_CONDITIONAL, //For statement conditional block
 	BLOCK_TYPE_FOR_STMT_UPDATE, //Update block of a for statement
+	BLOCK_TYPE_LABEL, //This block comes from a user-defined label
 } block_type_t;
 
 
@@ -152,8 +153,6 @@ struct basic_block_t{
 	u_int8_t contains_mark;
 	//Was this block visited by traverser?
 	u_int8_t visited;
-	//Is this a label block(defined by user)
-	u_int8_t is_label_block;
 };
 
 

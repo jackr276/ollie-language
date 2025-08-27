@@ -4245,12 +4245,23 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
 		print_jump_table(stdout, block->jump_table);
 	}
 
-	//If it's a function entry block, we need to print this out
-	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		printf("%s:\n", block->function_defined_in->func_name.string);
-		print_stack_data_area(&(block->function_defined_in->data_area));
-	} else {
-		printf(".L%d:\n", block->block_id);
+	//Switch here based on the type of block that we have
+	switch(block->block_type){
+		//Function entry blocks need extra printing
+		case BLOCK_TYPE_FUNC_ENTRY:
+			printf("%s:\n", block->function_defined_in->func_name.string);
+			print_stack_data_area(&(block->function_defined_in->data_area));
+			break;
+
+		//For a label we use the label var to print
+		case BLOCK_TYPE_LABEL:
+			printf("%s:\n", block->label->var_name.string);
+			break;
+
+		//By default just print the name
+		default:
+			printf(".L%d:\n", block->block_id);
+			break;
 	}
 
 	//Now grab a cursor and print out every statement that we 
