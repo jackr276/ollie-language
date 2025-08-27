@@ -5988,18 +5988,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 		
-			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
-				//This really shouldn't happen, but it can't hurt
-				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
-					current_block = starting_block;
-				}
-
-				//We rely on the helper to do it for us
-				//emit_direct_jump(current_block, ast_cursor, TRUE);
-
-				break;
-
 			case AST_NODE_CLASS_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
@@ -6484,6 +6472,13 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
+			/**
+			 * A label statement is special because it creates an entirely
+			 * separate basic block. This is done to maintain the rule
+			 * that we have exactly one entry point to each and every block.
+			 * Since a label statement will be jumped to, we need to have it 
+			 * as the start of a separate block
+			 */
 			case AST_NODE_CLASS_LABEL_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
@@ -6493,18 +6488,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				
 				//We rely on the helper to do it for us
 				//emit_label(current_block, ast_cursor, FALSE);
-
-				break;
-
-			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
-				//This really shouldn't happen, but it can't hurt
-				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
-					current_block = starting_block;
-				}
-
-				//We rely on the helper to do it for us
-				//emit_direct_jump(current_block, ast_cursor, TRUE);
 
 				break;
 
