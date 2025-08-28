@@ -2384,6 +2384,11 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, three_addr
 
 	//Add this into the first block
 	add_statement(basic_block, stmt);
+
+	//This conditional result now counts as a variable that has been used, because this jump relies on it
+	if(conditional_result != NULL){
+		add_used_variable(basic_block, conditional_result);
+	}
 }
 
 

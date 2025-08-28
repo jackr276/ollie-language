@@ -1757,33 +1757,8 @@ static void mark(cfg_t* cfg){
 			//will be our jump to if
 			instruction_t* jump_to_if = rdf_block_stmt;
 
-			/**
-			 * One final thing to check here - our conditional statement. This should really be a foregone
-			 * conclusion - but it never hurts to check
-			 *
-			 * If it's NULL or somehow a jump, we'll bail out. This really should never happen, it's just
-			 * here so it won't crash if something goes terribly wrong
-			 */
-			rdf_block_stmt = rdf_block_stmt->previous_statement;
-			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
-				continue;
-			}
-
-			//We survived - so this is our conditional statement
-			instruction_t* conditional_stmt = rdf_block_stmt;
-
-			//Now we'll go through and mark these statements
-			//Mark the conditional and add it to the worklist
-			if(conditional_stmt->mark == FALSE){
-				printf("Marking conditional statement: ");
-				print_three_addr_code_stmt(stdout, conditional_stmt);
-				printf("\n");
-
-				//Mark
-				conditional_stmt->mark = TRUE;
-				//Add to list
-				dynamic_array_add(worklist, conditional_stmt);
-			}
+			//Mark and add the definitions of the op1 that this conditional jump relies on as important
+			mark_and_add_definition(cfg, jump_to_if, jump_to_if->op1, stmt->function, worklist);
 
 			//Now mark the jump to if. We don't need to add this one to
 			//any list - there's nothing else to mark
