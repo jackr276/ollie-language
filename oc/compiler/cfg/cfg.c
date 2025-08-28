@@ -6020,7 +6020,13 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 		
-			//A user defined jump statement allows us to directly insert jmps into our code
+			/**
+			 * Strategy:
+			 *   Emit the jump statement
+			 *   The block that comes after the jump statement will not have the current block as a 
+			 *   successor. If that block ends up having something point to it, it will survive. If it doesn't,
+			 *   then oh well
+			 */
 			case AST_NODE_CLASS_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
@@ -6575,7 +6581,13 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			//A custom jump statement allows us to jump out of a block at will. It is very similar to break
+			/**
+			 * Strategy:
+			 *   Emit the jump statement
+			 *   The block that comes after the jump statement will not have the current block as a 
+			 *   successor. If that block ends up having something point to it, it will survive. If it doesn't,
+			 *   then oh well
+			 */
 			case AST_NODE_CLASS_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
@@ -6788,8 +6800,33 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
  * needs to be done after the fact because we could jump to a label statement that we have not yet seen
  */
 static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_blocks, dynamic_array_t* user_defined_jumps){
+	//Run through every jump statement
+	while(dynamic_array_is_empty(user_defined_jumps) == FALSE){
+		//Delete from the back
+		instruction_t* jump_instruction = dynamic_array_delete_from_back(user_defined_jumps);
 
+		//We'll now need to scan through the labeled blocks to find who this should point to
+		for(u_int16_t i = 0; i < labeled_blocks->current_index; i++){
+			//Grab the labeled block out
+			basic_block_t* labeled_block = dynamic_array_get_at(labeled_blocks, i);
+
+			//If this labeled block doesn't have the same variable, we're out
+			if(labeled_block->label != jump_instruction->var_record){
+				continue;
+			}
+
+			//Otherwise if we get here we know that we found the correct label
+			jump_instruction->jumping_to_block = labeled_block;
+
+			//Add this in as a successor
+			add_successor(jump_instruction->block_contained_in, labeled_block);
+			
+			//Break out of the for loop
+			break;
+		}
+	}
 }
+
 
 /**
  * A function definition will always be considered a leader statement. As such, it
