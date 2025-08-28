@@ -6027,6 +6027,45 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
+			//A conditional user-defined jump works somewhat like a break
+			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
+				//This really shouldn't happen, but it can't hurt
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//The second child here should be our conditional
+				generic_ast_node_t* cursor = ast_cursor->first_child;
+				cursor = cursor->next_sibling;
+
+				//We'll need to emit the conditional in the current block
+				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
+
+				//We'll now update the current block accordingly
+				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
+					current_block = ret_package.final_block;
+				}
+
+				//We'll need a block at the very end which we'll hit after we jump
+				basic_block_t* jumping_to_block = basic_block_alloc(1);
+
+				//Now that we're here, we can begin to emit the jumps
+				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
+
+				//Emit the user defined jump now
+				emit_user_defined_jump(current_block, type, TRUE);
+
+				//And we'll also emit the direct jump at the end
+				emit_jump(current_block, jumping_to_block, JUMP_TYPE_JMP, TRUE, FALSE);
+
+				//Add the jumping to block as one of the successors(we'll add the other successor in later)
+				add_successor(current_block, jumping_to_block);
+
+				//The current block now is said jumping to block
+				current_block = jumping_to_block;
+
+				break;
 
 			case AST_NODE_CLASS_SWITCH_STMT:
 				//Visit the switch statement
@@ -6542,7 +6581,47 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
-		
+
+			//A conditional user-defined jump works somewhat like a break
+			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
+				//This really shouldn't happen, but it can't hurt
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc(1);
+					current_block = starting_block;
+				}
+
+				//The second child here should be our conditional
+				generic_ast_node_t* cursor = ast_cursor->first_child;
+				cursor = cursor->next_sibling;
+
+				//We'll need to emit the conditional in the current block
+				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
+
+				//We'll now update the current block accordingly
+				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
+					current_block = ret_package.final_block;
+				}
+
+				//We'll need a block at the very end which we'll hit after we jump
+				basic_block_t* jumping_to_block = basic_block_alloc(1);
+
+				//Now that we're here, we can begin to emit the jumps
+				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
+
+				//Emit the user defined jump now
+				emit_user_defined_jump(current_block, type, TRUE);
+
+				//And we'll also emit the direct jump at the end
+				emit_jump(current_block, jumping_to_block, JUMP_TYPE_JMP, TRUE, FALSE);
+
+				//Add the jumping to block as one of the successors(we'll add the other successor in later)
+				add_successor(current_block, jumping_to_block);
+
+				//The current block now is said jumping to block
+				current_block = jumping_to_block;
+
+				break;
+
 			case AST_NODE_CLASS_SWITCH_STMT:
 				//Visit the switch statement
 				generic_results = visit_switch_statement(ast_cursor);
