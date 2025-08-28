@@ -2362,12 +2362,15 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, jum
 /**
  * Emit a user defined jump statement that points to a label, not to a block
  */
-static void emit_user_defined_jump(basic_block_t* basic_block, jump_type_t type, u_int8_t is_branch_ending){
+static void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* label, jump_type_t type, u_int8_t is_branch_ending){
 	//Use the helper function to emit the statement
 	instruction_t* stmt = emit_incomplete_jmp_instruction(type);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
+
+	//We'll need to store the label in here for later on down the line
+	stmt->var_record = label;
 
 	//Mark where we came from
 	stmt->block_contained_in = basic_block;
@@ -6053,8 +6056,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Now that we're here, we can begin to emit the jumps
 				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
-				//Emit the user defined jump now
-				emit_user_defined_jump(current_block, type, TRUE);
+				//Emit the user defined jump now. The ast cursor's variable contains the label variable that we jump to
+				emit_user_defined_jump(current_block, ast_cursor->variable, type, TRUE);
 
 				//And we'll also emit the direct jump at the end
 				emit_jump(current_block, jumping_to_block, JUMP_TYPE_JMP, TRUE, FALSE);
@@ -6608,8 +6611,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Now that we're here, we can begin to emit the jumps
 				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
-				//Emit the user defined jump now
-				emit_user_defined_jump(current_block, type, TRUE);
+				//Emit the user defined jump now. The ast cursor's variable contains the label we're jumping to
+				emit_user_defined_jump(current_block, ast_cursor->variable, type, TRUE);
 
 				//And we'll also emit the direct jump at the end
 				emit_jump(current_block, jumping_to_block, JUMP_TYPE_JMP, TRUE, FALSE);
@@ -6781,6 +6784,14 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
 
 
 /**
+ * Finalize all user defined jump statements by ensuring that these jumps are assigned the right block to go to. This
+ * needs to be done after the fact because we could jump to a label statement that we have not yet seen
+ */
+static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_blocks, dynamic_array_t* user_defined_jumps){
+
+}
+
+/**
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
@@ -6839,6 +6850,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 	//Determine and insert any needed ret statements
 	determine_and_insert_return_statements(function_starting_block, function_exit_block);
+
+	//We'll need to go through and finalize all user defined jump statements if there are any
+	finalize_all_user_defined_jump_statements(current_function_labeled_blocks, current_function_user_defined_jump_statements);
 
 	//Add the start and end blocks to their respective arrays
 	dynamic_array_add(cfg->function_entry_blocks, function_starting_block);
