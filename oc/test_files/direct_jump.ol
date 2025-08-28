@@ -8,9 +8,9 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 	let mut y:i32 := 2322;
 
 	//So long as x is more than 0
-	while(1){
-		jump end_label;
+	while(x < 32){
 		--x;
+		jump end_label;
 		y--;
 	}
 
