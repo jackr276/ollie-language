@@ -54,6 +54,8 @@ heap_stack_t* break_stack = NULL;
 heap_stack_t* continue_stack = NULL;
 //Keep a list of all lable statements in the function(block jumps are internal only)
 dynamic_array_t* current_function_labeled_blocks = NULL;
+//Also keep a list of all custom jumps in the function
+dynamic_array_t* current_function_user_defined_jump_statements = NULL;
 //The current stack offset for any given function
 u_int64_t stack_offset = 0;
 //For any/all error printing
@@ -2360,9 +2362,9 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, jum
 /**
  * Emit a user defined jump statement that points to a label, not to a block
  */
-static void emit_user_defined_jump(basic_block_t* basic_block, basic_block_t* destination_block, jump_type_t type, u_int8_t is_branch_ending){
+static void emit_user_defined_jump(basic_block_t* basic_block, jump_type_t type, u_int8_t is_branch_ending){
 	//Use the helper function to emit the statement
-	instruction_t* stmt = emit_jmp_instruction(destination_block, type);
+	instruction_t* stmt = emit_incomplete_jmp_instruction(type);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -2373,8 +2375,8 @@ static void emit_user_defined_jump(basic_block_t* basic_block, basic_block_t* de
 	//These will never be basic blocks
 	stmt->inverse_jump = FALSE;
 
-	//This is a user defined jump
-	stmt->is_user_defined_jump = TRUE;
+	//Add this to the array of user defined jumps
+	dynamic_array_add(current_function_user_defined_jump_statements, stmt);
 
 	//Add this into the first block
 	add_statement(basic_block, stmt);
@@ -6711,6 +6713,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	stack_offset = 0;
 	//We also need to set the labeled block array to be empty
 	current_function_labeled_blocks = dynamic_array_alloc();
+	//Keep an array for all of the jump statements as well
+	current_function_user_defined_jump_statements = dynamic_array_alloc();
 
 	//Reset the three address code accordingly
 	set_new_function(func_record);
@@ -6769,6 +6773,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Now we can scrap the labeled block array
 	dynamic_array_dealloc(current_function_labeled_blocks);
 	current_function_labeled_blocks = NULL;
+
+	//Deallocate the current function's user defined jumps as well
+	dynamic_array_dealloc(current_function_user_defined_jump_statements);
+	current_function_user_defined_jump_statements = NULL;
 
 	//We always return the start block
 	return function_starting_block;

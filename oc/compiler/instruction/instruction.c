@@ -3501,6 +3501,24 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
 
 
 /**
+ * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
+ * These statements are intended for when we create user-defined jumps
+ */
+instruction_t* emit_incomplete_jmp_instruction(jump_type_t jump_type){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
+	stmt->jump_type = jump_type;
+	//What function are we in
+	stmt->function = current_function;
+	//Give the statement back
+	return stmt;
+}
+
+
+/**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
 instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_type_t jump_type){

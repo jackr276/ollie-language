@@ -528,8 +528,6 @@ struct instruction_t{
 	//Are we jumping to if?(Affirmative jump) Our if statements and do while blocks
 	//use this in the conditional. Otherwise, we're jumping to else, which is an inverse jump
 	u_int8_t inverse_jump;
-	//Is this a user-defined jump
-	u_int8_t is_user_defined_jump;
 	//What is the indirection level?
 	u_int8_t indirection_level;
 	//Cannot be coalesced
@@ -833,6 +831,12 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
 instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_type);
+
+/**
+ * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
+ * These statements are intended for when we create user-defined jumps
+ */
+instruction_t* emit_incomplete_jmp_instruction(jump_type_t jump_type);
 
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
