@@ -1409,6 +1409,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		case THREE_ADDR_CODE_TEST_STMT:
+			//First print the assignee
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- test ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, ", ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
 		case THREE_ADDR_CODE_ASSN_CONST_STMT:
 			//First print out the assignee
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
@@ -3070,17 +3080,19 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
  *
  * Test instructions inherently have no assignee as they don't modify registers
  */
-instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
+instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1){
 	//First we'll allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//We'll now set the type
 	stmt->CLASS = THREE_ADDR_CODE_TEST_STMT;
 
-	//Then we'll set op1 and op2 to be the source registers
+	//Assign the assignee and op1
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
-	stmt->op2 = op2;
+
+	//Assign the function too
+	stmt->function = current_function;
 
 	//And now we'll give it back
 	return stmt;

@@ -2970,6 +2970,13 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			//Let the helper do it
 			handle_not_instruction(instruction);
 			break;
+
+		//Handle the testing statement
+		case THREE_ADDR_CODE_TEST_STMT:
+			//Let the helper do it
+			//TODO
+			break;
+			
 		default:
 			break;
 	}
