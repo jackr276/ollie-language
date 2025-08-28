@@ -6026,6 +6026,19 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = starting_block;
 				}
 
+				//Allocate a fresh block at the very end
+				basic_block_t* new_block = basic_block_alloc(1);
+
+				//We'll emit the unconditional jump here - but we will need to still have a new
+				//block at the very end to continue the statements afterwards
+				emit_user_defined_jump(current_block, ast_cursor->variable, JUMP_TYPE_JMP, TRUE);
+
+				//After the user defined jump is added here, we will add the new block as a successor
+				add_successor(current_block, new_block);
+
+				//The current block now is the new block
+				current_block = new_block;
+
 				break;
 
 			//A conditional user-defined jump works somewhat like a break
@@ -6587,6 +6600,19 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					starting_block = basic_block_alloc(1);
 					current_block = starting_block;
 				}
+
+				//Allocate a fresh block at the very end
+				basic_block_t* new_block = basic_block_alloc(1);
+
+				//We'll emit the unconditional jump here - but we will need to still have a new
+				//block at the very end to continue the statements afterwards
+				emit_user_defined_jump(current_block, ast_cursor->variable, JUMP_TYPE_JMP, TRUE);
+
+				//After the user defined jump is added here, we will add the new block as a successor
+				add_successor(current_block, new_block);
+
+				//The current block now is the new block
+				current_block = new_block;
 
 				break;
 
