@@ -5657,6 +5657,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	basic_block_t* starting_block = NULL;
 	//The current block
 	basic_block_t* current_block = starting_block;
+	//A holder for labeled blocks
+	basic_block_t* labeled_block = NULL;
 
 	//Grab our very first thing here
 	generic_ast_node_t* ast_cursor = first_node;
@@ -5988,15 +5990,23 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
+			//Label statements are unique because they'll force the creation of a new block with a
+			//given label name
 			case AST_NODE_CLASS_LABEL_STMT:
-				//This really shouldn't happen, but it can't hurt
+				//Allocate the label statement as the current block
+				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
+
+				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
-					current_block = starting_block;
+					starting_block = labeled_block;
+				//Otherwise we'll need to emit a jump to it
+				} else {
+					//Add it in as a successor
+					add_successor(current_block, labeled_block);
 				}
-				
-				//We rely on the helper to do it for us
-				//emit_label(current_block, ast_cursor, FALSE);
+
+				//The current block now is this labeled block
+				current_block = labeled_block;
 
 				break;
 		
@@ -6150,6 +6160,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	basic_block_t* starting_block = NULL;
 	//The current block
 	basic_block_t* current_block = starting_block;
+	//A holder that we'll use for labeled statements
+	basic_block_t* labeled_block = NULL;
 
 	//Grab the initial node
 	generic_ast_node_t* compound_stmt_node = root_node;
@@ -6492,14 +6504,20 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			 * as the start of a separate block
 			 */
 			case AST_NODE_CLASS_LABEL_STMT:
-				//This really shouldn't happen, but it can't hurt
+				//Allocate the label statement as the current block
+				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
+
+				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
-					current_block = starting_block;
+					starting_block = labeled_block;
+				//Otherwise we'll need to emit a jump to it
+				} else {
+					//Add it in as a successor
+					add_successor(current_block, labeled_block);
 				}
-				
-				//We rely on the helper to do it for us
-				//emit_label(current_block, ast_cursor, FALSE);
+
+				//The current block now is this labeled block
+				current_block = labeled_block;
 
 				break;
 
