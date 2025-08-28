@@ -3390,6 +3390,8 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 	//Select the jump type for our conditional
 	jump_type_t jump = select_appropriate_jump_stmt(expression_package.operator, JUMP_CATEGORY_NORMAL, is_signed);
+
+	//TODO HERE we need some conditional logic which inserts the test command if the operator is blank MOVING DOES NOT SET FLAGS
 	
 	//Now we'll emit a jump to the if block and else block
 	emit_jump(current_block, if_block, expression_package.assignee, jump, is_branch_ending, FALSE);

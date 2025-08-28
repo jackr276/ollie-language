@@ -232,6 +232,8 @@ variable_size_t select_type_size(generic_type_t* type){
 				//These are 32 bit(double word)
 				case S_INT32:
 				case U_INT32:
+				case SIGNED_INT_CONST:
+				case UNSIGNED_INT_CONST:
 					size = DOUBLE_WORD;
 					break;
 
@@ -3060,6 +3062,28 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 	dec_stmt->function = current_function;
 	//And give it back
 	return dec_stmt;
+}
+
+
+/**
+ * Emit a test instruction
+ *
+ * Test instructions inherently have no assignee as they don't modify registers
+ */
+instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
+	//First we'll allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//We'll now set the type
+	stmt->CLASS = THREE_ADDR_CODE_TEST_STMT;
+
+	//Then we'll set op1 and op2 to be the source registers
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op2 = op2;
+
+	//And now we'll give it back
+	return stmt;
 }
 
 

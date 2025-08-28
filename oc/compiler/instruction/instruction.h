@@ -348,6 +348,8 @@ typedef enum{
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
 	//A "Load effective address(lea)" instruction
 	THREE_ADDR_CODE_LEA_STMT,
+	//A test instruction
+	THREE_ADDR_CODE_TEST_STMT,
 	//An indirect jump address calculation instruction, very similar to lea
 	THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT,
 	//A phi function - for SSA analysis only
@@ -804,6 +806,11 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
  * Emit a decrement instruction
  */
 instruction_t* emit_dec_instruction(three_addr_var_t* decrementee);
+
+/**
+ * Emit a test statement 
+ */
+instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
 
 /**
  * Emit a negation(negX) statement

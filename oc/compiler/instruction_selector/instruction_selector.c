@@ -256,7 +256,7 @@ static void print_instruction_window(instruction_window_t* window){
  *
  * NOTE: This may only be used DURING the process of register selection
  */
-static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
+static instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -2358,7 +2358,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
-	instruction_t* test_inst = emit_test_instruction(logical_not->assignee, logical_not->assignee); 
+	instruction_t* test_inst = emit_direct_test_instruction(logical_not->assignee, logical_not->assignee); 
 	//Ensure that we set all these flags too
 	test_inst->block_contained_in = logical_not->block_contained_in;
 	test_inst->is_branch_ending = logical_not->is_branch_ending;
@@ -2478,7 +2478,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* after_logical_and = logical_and->next_statement;
 
 	//Let's first emit our test instruction
-	instruction_t* first_test = emit_test_instruction(logical_and->op1, logical_and->op1);
+	instruction_t* first_test = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
 
 	//We'll need this type for our setne's
 	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
@@ -2487,7 +2487,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* first_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 	
 	//Now we'll need the second test
-	instruction_t* second_test = emit_test_instruction(logical_and->op2, logical_and->op2);
+	instruction_t* second_test = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
 
 	//Now the second setne
 	instruction_t* second_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
