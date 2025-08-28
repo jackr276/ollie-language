@@ -392,21 +392,12 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 			printf("%s", block->function_defined_in->func_name.string);
 			break;
 
-		//If it's a label block, we'll print accordingly
-		case BLOCK_TYPE_LABEL:
-			printf("%s", block->label->var_name.string);
-			break;
-
 		//By default it's just the .L printing
 		default:
 			printf(".L%d", block->block_id);
 	
 	}
 
-	//Print the block's ID or the function name
-	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		} else {
-	}
 
 	//Now, we will print all of the active variables that this block has
 	if(block->used_variables != NULL){
@@ -6013,6 +6004,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				} else {
 					//Add it in as a successor
 					add_successor(current_block, labeled_block);
+					emit_jump(current_block, labeled_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//The current block now is this labeled block
@@ -6574,6 +6566,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				} else {
 					//Add it in as a successor
 					add_successor(current_block, labeled_block);
+					emit_jump(current_block, labeled_block, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//The current block now is this labeled block

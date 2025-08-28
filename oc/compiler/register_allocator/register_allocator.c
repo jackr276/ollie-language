@@ -179,11 +179,6 @@ static void print_block_with_live_ranges(basic_block_t* block){
 			print_stack_data_area(&(block->function_defined_in->data_area));
 			break;
 
-		//For a label we use the label var to print
-		case BLOCK_TYPE_LABEL:
-			printf("%s:\n", block->label->var_name.string);
-			break;
-
 		//By default just print the name
 		default:
 			printf(".L%d:\n", block->block_id);
@@ -308,11 +303,6 @@ static void print_block_with_registers(basic_block_t* block){
 			//Then the name
 			printf("%s:\n", block->function_defined_in->func_name.string);
 			print_stack_data_area(&(block->function_defined_in->data_area));
-			break;
-
-		//For a label we use the label var to print
-		case BLOCK_TYPE_LABEL:
-			printf("%s:\n", block->label->var_name.string);
 			break;
 
 		//By default just print the name

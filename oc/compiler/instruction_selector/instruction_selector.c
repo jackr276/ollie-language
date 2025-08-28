@@ -4253,11 +4253,6 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
 			print_stack_data_area(&(block->function_defined_in->data_area));
 			break;
 
-		//For a label we use the label var to print
-		case BLOCK_TYPE_LABEL:
-			printf("%s:\n", block->label->var_name.string);
-			break;
-
 		//By default just print the name
 		default:
 			printf(".L%d:\n", block->block_id);
