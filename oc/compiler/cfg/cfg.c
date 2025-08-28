@@ -6027,6 +6027,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
+
 			case AST_NODE_CLASS_SWITCH_STMT:
 				//Visit the switch statement
 				generic_results = visit_switch_statement(ast_cursor);

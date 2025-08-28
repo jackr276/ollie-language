@@ -5755,16 +5755,19 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 	}
 
 	//Allocate the jump statement
-	generic_ast_node_t* jump_statement = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT);
-
-	//Add this in as a child node to the statement
-	add_child_node(jump_statement, label_ident);
+	generic_ast_node_t* jump_statement;
 
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//We could optionally see a conditional jump statement here with the "when" keyword
 	if(lookahead.tok == WHEN){
+		//This means we have a conditional jump
+		jump_statement = ast_node_alloc(AST_NODE_CLASS_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
+
+		//Add this in as a child node to the statement
+		add_child_node(jump_statement, label_ident);
+
 		//We now need to see an L_PAREN 
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -5808,6 +5811,14 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 
 		//Refresh the lookahead one last time for the semicolon search
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Otherwise it's not a conditional, just a direct jump
+	} else {
+		//Allocate the non-conditional jump
+		jump_statement = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT);
+
+		//Add this in as a child node to the statement
+		add_child_node(jump_statement, label_ident);
 	}
 
 	//If we don't see a semicolon we bail
