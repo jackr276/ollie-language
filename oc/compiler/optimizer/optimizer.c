@@ -301,7 +301,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//============================== BLOCK MERGING =================================================
 			//This is another special case -- if the block we're jumping to only has one predecessor, then
 			//we may as well avoid the jump and just merge the two
-			if(jumping_to_block->predecessors->current_index == 1){
+			if(jumping_to_block->predecessors->current_index == 1 && jumping_to_block->block_type != BLOCK_TYPE_LABEL){
 				//We need to check here -- is there only ONE jump to the jumping to block inside of this
 				//block? If there is only one, then we are all set to merge
 
@@ -312,12 +312,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				u_int8_t good_to_merge = TRUE;
 
 				while(cursor != NULL){
-					//If we have another jump, we are NOT good to merge
-					if(cursor->CLASS == THREE_ADDR_CODE_JUMP_STMT && cursor->jumping_to_block == jumping_to_block){
-						good_to_merge = FALSE;
-						break;
-					}
-
 					//Another option here - if this is short circuit eligible, then merging like this would ruin the
 					//detection of short circuiting. So if we see this, we also will NOT merge
 					if(cursor->is_short_circuit_eligible == TRUE){

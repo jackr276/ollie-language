@@ -52,6 +52,8 @@ static generic_type_t* u64 = NULL;
 //to send value packages at each rule
 heap_stack_t* break_stack = NULL;
 heap_stack_t* continue_stack = NULL;
+//Keep a list of all lable statements in the function(block jumps are internal only)
+dynamic_array_t* current_function_labeled_blocks = NULL;
 //The current stack offset for any given function
 u_int64_t stack_offset = 0;
 //For any/all error printing
@@ -5996,6 +5998,9 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Allocate the label statement as the current block
 				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
 
+				//Add this into the current function's labeled blocks
+				dynamic_array_add(current_function_labeled_blocks, labeled_block);
+
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
 					starting_block = labeled_block;
@@ -6010,6 +6015,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 		
+			//A user defined jump statement allows us to directly insert jmps into our code
 			case AST_NODE_CLASS_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
@@ -6507,6 +6513,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Allocate the label statement as the current block
 				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
 
+				//Add this into the current function's labeled blocks
+				dynamic_array_add(current_function_labeled_blocks, labeled_block);
+
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
 					starting_block = labeled_block;
@@ -6521,6 +6530,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
+			//A custom jump statement allows us to jump out of a block at will. It is very similar to break
 			case AST_NODE_CLASS_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
@@ -6699,6 +6709,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	current_function = func_record;
 	//We also need to zero out the current stack offset value
 	stack_offset = 0;
+	//We also need to set the labeled block array to be empty
+	current_function_labeled_blocks = dynamic_array_alloc();
 
 	//Reset the three address code accordingly
 	set_new_function(func_record);
@@ -6753,6 +6765,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 	//Mark this as NULL for the next go around
 	function_exit_block = NULL;
+
+	//Now we can scrap the labeled block array
+	dynamic_array_dealloc(current_function_labeled_blocks);
+	current_function_labeled_blocks = NULL;
 
 	//We always return the start block
 	return function_starting_block;
