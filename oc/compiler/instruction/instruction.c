@@ -232,6 +232,8 @@ variable_size_t select_type_size(generic_type_t* type){
 				//These are 32 bit(double word)
 				case S_INT32:
 				case U_INT32:
+				case SIGNED_INT_CONST:
+				case UNSIGNED_INT_CONST:
 					size = DOUBLE_WORD;
 					break;
 
@@ -1404,6 +1406,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_TEST_STMT:
+			//First print the assignee
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- test ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, ", ");
+			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -3060,6 +3072,72 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 	dec_stmt->function = current_function;
 	//And give it back
 	return dec_stmt;
+}
+
+
+/**
+ * Emit a test instruction
+ *
+ * Test instructions inherently have no assignee as they don't modify registers
+ */
+instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
+	//First we'll allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//We'll now set the type
+	stmt->CLASS = THREE_ADDR_CODE_TEST_STMT;
+
+	//Assign the assignee and op1
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op2 = op2;
+
+	//Assign the function too
+	stmt->function = current_function;
+
+	//And now we'll give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a test instruction directly - bypassing the instruction selection step
+ *
+ * Test instructions inherently have no assignee as they don't modify registers
+ *
+ * NOTE: This may only be used DURING the process of register selection
+ */
+instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size to select the appropriate instruction
+	variable_size_t size = select_variable_size(op1);
+
+	//Select the size appropriately
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = TESTQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = TESTL;
+			break;
+		case WORD:
+			instruction->instruction_type = TESTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = TESTB;
+			break;
+		default:
+			break;
+	}
+
+	//Then we'll set op1 and op2 to be the source registers
+	instruction->source_register = op1;
+	instruction->source_register2 = op2;
+
+	//And now we'll give it back
+	return instruction;
 }
 
 
