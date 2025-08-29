@@ -810,7 +810,7 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee);
 /**
  * Emit a test statement 
  */
-instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
 
 /**
  * Emit a negation(negX) statement

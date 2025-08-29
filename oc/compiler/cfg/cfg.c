@@ -2442,8 +2442,31 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			//Emit the constant value
 			const_val = emit_constant(constant_node);
 
+			//For later on
+			three_addr_var_t* assignee;
+
+			//These are all basic types
+			generic_type_t* type = constant_node->inferred_type;
+
+			//Go based on the type
+			switch(type->basic_type->basic_type){
+				//If it's unassigned by this point, we fall to defaults
+				case UNSIGNED_INT_CONST:
+					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u32")->type);
+					break;
+				
+				case SIGNED_INT_CONST:
+					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "i32")->type);
+					break;
+
+				//If we hit the default we just use its type
+				default:
+					assignee = emit_temp_var(type);
+					break;
+			}
+
 			//We'll use the constant var feature here
-			const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_node->inferred_type), const_val);
+			const_assignment = emit_assignment_with_const_instruction(assignee, const_val);
 			break;
 	}
 
@@ -2577,12 +2600,15 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 /**
  * Emit a test instruction
  */
-static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_var_t* op1, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_var_t* op1, three_addr_var_t* op2, u_int8_t is_branch_ending){
 	//Emit the test statement based on the type
-	instruction_t* test_statement = emit_test_statement(emit_temp_var(op1->type), op1);
+	instruction_t* test_statement = emit_test_statement(emit_temp_var(op1->type), op1, op2);
 
 	//This counts as a use for op1
 	add_used_variable(basic_block, op1);
+
+	//This counts as a use for op2
+	add_used_variable(basic_block, op2);
 
 	//Mark if it is branch ending
 	test_statement->is_branch_ending = is_branch_ending;
@@ -4791,7 +4817,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//If the operator is blank, we need to emit a test instruction
 	if(package.operator == BLANK){
 		//Emit the testing instruction
-	 	conditional_decider = emit_test_code(while_statement_entry_block, package.assignee, TRUE);
+	 	conditional_decider = emit_test_code(while_statement_entry_block, package.assignee, package.assignee, TRUE);
 	}
 
 	//"Jump over" the body if it's bad
@@ -4882,7 +4908,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//If the operator is blank, we need to emit a test instruction
 		if(package.operator == BLANK){
 			//Emit the testing instruction
-	 		conditional_decider = emit_test_code(entry_block, package.assignee, TRUE);
+	 		conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
 		}
 
 		//Emit a jummp with the conditional decider marked as important

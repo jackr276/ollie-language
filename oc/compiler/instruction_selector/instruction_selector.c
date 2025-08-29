@@ -2578,6 +2578,15 @@ static void handle_not_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a test instruction. The test instruction's op1 is acutally duplicated
+ * to be both of its inputs in this case
+ */
+static void handle_test_instruction(instruction_t* instruction){
+
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -2974,7 +2983,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Handle the testing statement
 		case THREE_ADDR_CODE_TEST_STMT:
 			//Let the helper do it
-			//TODO
+			handle_test_instruction(instruction);
 			break;
 			
 		default:
