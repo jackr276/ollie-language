@@ -3434,14 +3434,20 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 	//The package's assignee is what we base all conditional moves on
 	u_int8_t is_signed = is_type_signed(expression_package.assignee->type); 
+	
+	//Store for later
+	three_addr_var_t* conditional_decider = expression_package.assignee;
 
 	//Select the jump type for our conditional
 	jump_type_t jump = select_appropriate_jump_stmt(expression_package.operator, JUMP_CATEGORY_NORMAL, is_signed);
 
-	//TODO HERE we need some conditional logic which inserts the test command if the operator is blank MOVING DOES NOT SET FLAGS
+	//If this is blank, we need a test instruction
+	if(expression_package.operator == BLANK){
+		conditional_decider = emit_test_code(current_block, expression_package.assignee, expression_package.assignee, TRUE);
+	}
 	
 	//Now we'll emit a jump to the if block and else block
-	emit_jump(current_block, if_block, expression_package.assignee, jump, is_branch_ending, FALSE);
+	emit_jump(current_block, if_block, conditional_decider, jump, is_branch_ending, FALSE);
 	emit_jump(current_block, else_block, NULL, JUMP_TYPE_JMP, is_branch_ending, FALSE);
 
 	//These are both now successors to the if block
@@ -4564,8 +4570,16 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//The condition block values package
 	cfg_result_package_t condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE, TRUE);
 
+	//Store this for later
+	three_addr_var_t* conditional_decider = condition_block_vals.assignee;
+
 	//We'll use our inverse jumping("jump out") strategy here. We'll need this jump for later
 	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE, is_type_signed(condition_block_vals.assignee->type));
+
+	//If this is blank, we need to change this
+	if(condition_block_vals.operator == BLANK){
+		conditional_decider = emit_test_code(condition_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
+	}
 
 	//Now move it along to the third condition
 	ast_cursor = ast_cursor->next_sibling;
@@ -4606,7 +4620,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		add_successor(condition_block, for_stmt_exit_block);
 
 		//Make the condition block jump to the exit. This is an inverse jump
-		emit_jump(condition_block, for_stmt_exit_block, condition_block_vals.assignee, jump_type, TRUE, TRUE);
+		emit_jump(condition_block, for_stmt_exit_block, conditional_decider, jump_type, TRUE, TRUE);
 
 		//Pop both values off of the stack
 		pop(continue_stack);
@@ -4624,7 +4638,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	add_successor(condition_block, for_stmt_exit_block);
 
 	//Make the condition block jump to the exit. This is an inverse jump
-	emit_jump(condition_block, for_stmt_exit_block, condition_block_vals.assignee, jump_type, TRUE, TRUE);
+	emit_jump(condition_block, for_stmt_exit_block, conditional_decider, jump_type, TRUE, TRUE);
 
 	//Emit a direct jump from the condition block to the compound stmt start
 	emit_jump(condition_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
@@ -4727,11 +4741,19 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//We'll set the entry block's direct successor to be the exit block for efficiency
 	do_while_stmt_entry_block->direct_successor = do_while_stmt_exit_block;
 
+	//Store for later
+	three_addr_var_t* conditional_decider = package.assignee;
+
 	//Discern the jump type here--This is a direct jump
 	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
+
+	//If this is blank, we'll need to emit the test code here
+	if(package.operator == BLANK){
+		conditional_decider = emit_test_code(compound_stmt_end, package.assignee, package.assignee, TRUE);
+	}
 		
 	//We'll need a jump statement here to the entrance block
-	emit_jump(compound_stmt_end, do_while_stmt_entry_block, package.assignee, jump_type, TRUE, FALSE);
+	emit_jump(compound_stmt_end, do_while_stmt_entry_block, conditional_decider, jump_type, TRUE, FALSE);
 	//Also emit a jump statement to the ending block
 	emit_jump(compound_stmt_end, do_while_stmt_exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 	//This is our condition block here, so we'll add the estimated cost
@@ -4895,12 +4917,12 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Visit the compound statement that we're required to have here
 	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
 
+	//Variable for down the road
+	three_addr_var_t* conditional_decider = package.assignee;
+
 	if(if_compound_statement_results.starting_block != NULL){
 		//Add the if statement node in as a direct successor
 		add_successor(entry_block, if_compound_statement_results.starting_block);
-
-		//Save the assignee
-		three_addr_var_t* conditional_decider = package.assignee;
 
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
@@ -4933,7 +4955,15 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//We'll just set this to jump out of here
 		//We will perform a normal jump to this one
 		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-		emit_jump(entry_block, exit_block, package.assignee, jump_to_if, TRUE, FALSE);
+
+		//If the operator is blank, we need to emit a test instruction
+		if(package.operator == BLANK){
+			//Emit the testing instruction
+	 		conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
+		}
+
+		//Jump based on the decider
+		emit_jump(entry_block, exit_block, conditional_decider, jump_to_if, TRUE, FALSE);
 		add_successor(entry_block, exit_block);
 	}
 
@@ -4975,13 +5005,24 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
 
+		//This is the package's assignee
+		conditional_decider = package.assignee;
+
 		//If it's not null, we'll process fully
 		if(else_if_compound_statement_results.starting_block != NULL){
 			//Add the if statement node in as a direct successor
 			add_successor(current_entry_block, else_if_compound_statement_results.starting_block);
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-			emit_jump(current_entry_block, else_if_compound_statement_results.starting_block, package.assignee, jump_to_if, TRUE, FALSE);
+
+			//If the operator is blank, we need to emit a test instruction
+			if(package.operator == BLANK){
+				//Emit the testing instruction
+	 			conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
+			}
+
+			//Emit a jump based on the decider
+			emit_jump(current_entry_block, else_if_compound_statement_results.starting_block, conditional_decider, jump_to_if, TRUE, FALSE);
 
 			//Now we'll find the end of this statement
 			basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
@@ -5001,7 +5042,14 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			//We'll just set this to jump out of here
 			//We will perform a normal jump to this one
 			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-			emit_jump(current_entry_block, exit_block, package.assignee, jump_to_else_if, TRUE, FALSE);
+
+			//If the operator is blank, we need to emit a test instruction
+			if(package.operator == BLANK){
+				//Emit the testing instruction
+	 			conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
+			}
+
+			emit_jump(current_entry_block, exit_block, conditional_decider, jump_to_else_if, TRUE, FALSE);
 			add_successor(current_entry_block, exit_block);
 		}
 
@@ -5917,8 +5965,17 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				} else {
 					//Emit the expression code into the current statement
 					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+
+					//Store for later
+					three_addr_var_t* conditional_decider = package.assignee;
+
 					//Decide the appropriate jump statement -- direct path here
 					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
+
+					//If this is blank, we'll need a test instruction
+					if(package.operator == BLANK){
+						conditional_decider = emit_test_code(current_block, package.assignee, package.assignee, TRUE);
+					}
 
 					//We'll need a new block here - this will count as a branch
 					basic_block_t* new_block = basic_block_alloc(1);
@@ -5931,7 +5988,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Add the successor in
 					add_successor(current_block, continuing_to);
 					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, continuing_to, NULL, jump_type, TRUE, FALSE);
+					emit_jump(current_block, continuing_to, conditional_decider, jump_type, TRUE, FALSE);
 
 					//Add this new block in as a successor
 					add_successor(current_block, new_block);
@@ -5983,8 +6040,16 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//First let's emit the conditional code
 					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
 
+					//Store this for later
+					three_addr_var_t* conditional_decider = ret_package.assignee;
+
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
+
+					//If this is blank, we'll need a test instruction
+					if(ret_package.operator == BLANK){
+						conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+					}
 
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
@@ -5992,7 +6057,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Add a successor to the end
 					add_successor(current_block, breaking_to);
 					//We will jump to it -- this jump is decided above
-					emit_jump(current_block, breaking_to, ret_package.assignee, jump_type, TRUE, FALSE);
+					emit_jump(current_block, breaking_to, conditional_decider, jump_type, TRUE, FALSE);
 
 					//Add the new block as a successor as well
 					add_successor(current_block, new_block);
@@ -6416,8 +6481,17 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				} else {
 					//Emit the expression code into the current statement
 					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+
+					//Store for later
+					three_addr_var_t* conditional_decider = package.assignee;
+
 					//Decide the appropriate jump statement -- direct path here
 					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
+
+					//If this is blank, we'll need a test instruction
+					if(package.operator == BLANK){
+						conditional_decider = emit_test_code(current_block, package.assignee, package.assignee, TRUE);
+					}
 
 					//We'll need a new block here - this will count as a branch
 					basic_block_t* new_block = basic_block_alloc(1);
@@ -6430,7 +6504,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Add the successor in
 					add_successor(current_block, continuing_to);
 					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, continuing_to, package.assignee, jump_type, TRUE, FALSE);
+					emit_jump(current_block, continuing_to, conditional_decider, jump_type, TRUE, FALSE);
 
 					//Add this new block in as a successor
 					add_successor(current_block, new_block);
@@ -6482,8 +6556,16 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//First let's emit the conditional code
 					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
 
+					//Store for later
+					three_addr_var_t* conditional_decider = ret_package.assignee;
+
 					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
 					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
+
+					//If this is blank, we'll need a test instruction
+					if(ret_package.operator == BLANK){
+						conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+					}
 
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
@@ -6491,7 +6573,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Add a successor to the end
 					add_successor(current_block, breaking_to);
 					//We will jump to it -- this jump is decided above
-					emit_jump(current_block, breaking_to, ret_package.assignee, jump_type, TRUE, FALSE);
+					emit_jump(current_block, breaking_to, conditional_decider, jump_type, TRUE, FALSE);
 
 					//Add the new block as a successor as well
 					add_successor(current_block, new_block);
