@@ -2582,7 +2582,30 @@ static void handle_not_instruction(instruction_t* instruction){
  * to be both of its inputs in this case
  */
 static void handle_test_instruction(instruction_t* instruction){
+	//Find out what size we have
+	variable_size_t size = select_variable_size(instruction->assignee);
 
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = TESTQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = TESTL;
+			break;
+		case WORD:
+			instruction->instruction_type = TESTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = TESTB;
+			break;
+		default:
+			break;
+	}
+
+	//This actually has no real destination register, the assignee was a dummy
+	//It does have 2 source registers however
+	instruction->source_register = instruction->op1;
+	instruction->source_register2 = instruction->op2;
 }
 
 
