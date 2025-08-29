@@ -250,47 +250,6 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
- * Emit a test instruction
- *
- * Test instructions inherently have no assignee as they don't modify registers
- *
- * NOTE: This may only be used DURING the process of register selection
- */
-static instruction_t* emit_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//We'll need the size to select the appropriate instruction
-	variable_size_t size = select_variable_size(op1);
-
-	//Select the size appropriately
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = TESTQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = TESTL;
-			break;
-		case WORD:
-			instruction->instruction_type = TESTW;
-			break;
-		case BYTE:
-			instruction->instruction_type = TESTB;
-			break;
-		default:
-			break;
-	}
-
-	//Then we'll set op1 and op2 to be the source registers
-	instruction->source_register = op1;
-	instruction->source_register2 = op2;
-
-	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
  * Emit a conversion instruction for division preparation
  *
  * We use this during the process of emitting division instructions
@@ -2358,7 +2317,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
-	instruction_t* test_inst = emit_test_instruction(logical_not->assignee, logical_not->assignee); 
+	instruction_t* test_inst = emit_direct_test_instruction(logical_not->assignee, logical_not->assignee); 
 	//Ensure that we set all these flags too
 	test_inst->block_contained_in = logical_not->block_contained_in;
 	test_inst->is_branch_ending = logical_not->is_branch_ending;
@@ -2478,7 +2437,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* after_logical_and = logical_and->next_statement;
 
 	//Let's first emit our test instruction
-	instruction_t* first_test = emit_test_instruction(logical_and->op1, logical_and->op1);
+	instruction_t* first_test = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
 
 	//We'll need this type for our setne's
 	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
@@ -2487,7 +2446,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* first_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 	
 	//Now we'll need the second test
-	instruction_t* second_test = emit_test_instruction(logical_and->op2, logical_and->op2);
+	instruction_t* second_test = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
 
 	//Now the second setne
 	instruction_t* second_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
@@ -2574,6 +2533,38 @@ static void handle_not_instruction(instruction_t* instruction){
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
 	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
+ * Handle a test instruction. The test instruction's op1 is acutally duplicated
+ * to be both of its inputs in this case
+ */
+static void handle_test_instruction(instruction_t* instruction){
+	//Find out what size we have
+	variable_size_t size = select_variable_size(instruction->assignee);
+
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = TESTQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = TESTL;
+			break;
+		case WORD:
+			instruction->instruction_type = TESTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = TESTB;
+			break;
+		default:
+			break;
+	}
+
+	//This actually has no real destination register, the assignee was a dummy
+	//It does have 2 source registers however
+	instruction->source_register = instruction->op1;
+	instruction->source_register2 = instruction->op2;
 }
 
 
@@ -2969,6 +2960,13 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			//Let the helper do it
 			handle_not_instruction(instruction);
 			break;
+
+		//Handle the testing statement
+		case THREE_ADDR_CODE_TEST_STMT:
+			//Let the helper do it
+			handle_test_instruction(instruction);
+			break;
+			
 		default:
 			break;
 	}
