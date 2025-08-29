@@ -6157,48 +6157,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 		
-			/**
-			 * Strategy:
-			 *   Emit the jump statement
-			 *   The block that comes after the jump statement will not have the current block as a 
-			 *   successor. If that block ends up having something point to it, it will survive. If it doesn't,
-			 *   then oh well
-			 */
-			case AST_NODE_CLASS_JUMP_STMT:
-				//This really shouldn't happen, but it can't hurt
-				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
-					current_block = starting_block;
-				}
-				
-				//We'll emit the unconditional jump here - but we will need to still have a new
-				//block at the very end to continue the statements afterwards
-				emit_user_defined_jump(current_block, ast_cursor->variable, NULL, JUMP_TYPE_JMP, TRUE);
-
-				//Now that we've emitted the direct jump here, literally everything else afterwards
-				//is unreachable *unless* we see a label statment
-				while(ast_cursor != NULL && ast_cursor->CLASS != AST_NODE_CLASS_LABEL_STMT){
-					//Keep pushing on
-					ast_cursor = ast_cursor->next_sibling;
-				}
-
-				//Now we're done here with 2 options: either it's NULL, in which case we're done and need
-				//to return - or its a label statement, in which case we need to keep going
-				if(ast_cursor == NULL){
-					//We'll mark for people that we end in a direct jump here
-					current_block->block_terminal_type = BLOCK_TERM_TYPE_USER_DEFINED_JUMP;
-
-					//Package up the values
-					generic_results.starting_block = starting_block;
-					generic_results.final_block = current_block;
-					generic_results.operator = BLANK;
-					generic_results.assignee = NULL;
-					return generic_results;
-				}
-
-				//Otherwise it's a label statement so just break
-				break;
-
 			//A conditional user-defined jump works somewhat like a break
 			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
@@ -6769,48 +6727,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//The current block now is this labeled block
 				current_block = labeled_block;
 
-				break;
-
-			/**
-			 * Strategy:
-			 *   Emit the jump statement
-			 *   The block that comes after the jump statement will not have the current block as a 
-			 *   successor. If that block ends up having something point to it, it will survive. If it doesn't,
-			 *   then oh well
-			 */
-			case AST_NODE_CLASS_JUMP_STMT:
-				//This really shouldn't happen, but it can't hurt
-				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
-					current_block = starting_block;
-				}
-				
-				//We'll emit the unconditional jump here - but we will need to still have a new
-				//block at the very end to continue the statements afterwards
-				emit_user_defined_jump(current_block, ast_cursor->variable, NULL, JUMP_TYPE_JMP, TRUE);
-
-				//Now that we've emitted the direct jump here, literally everything else afterwards
-				//is unreachable *unless* we see a label statment
-				while(ast_cursor != NULL && ast_cursor->CLASS != AST_NODE_CLASS_LABEL_STMT){
-					//Keep pushing on
-					ast_cursor = ast_cursor->next_sibling;
-				}
-
-				//Now we're done here with 2 options: either it's NULL, in which case we're done and need
-				//to return - or its a label statement, in which case we need to keep going
-				if(ast_cursor == NULL){
-					//We'll mark for people that we end in a direct jump here
-					current_block->block_terminal_type = BLOCK_TERM_TYPE_USER_DEFINED_JUMP;
-
-					//Package up the values
-					generic_results.starting_block = starting_block;
-					generic_results.final_block = current_block;
-					generic_results.operator = BLANK;
-					generic_results.assignee = NULL;
-					return generic_results;
-				}
-
-				//Otherwise it's a label statement so just break
 				break;
 
 			//A conditional user-defined jump works somewhat like a break

@@ -380,8 +380,28 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 
 
 /**
- * Emit a constant node directly
+ * Directly emit an integer constant node. This is used exclusively for the user-defined direct
+ * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
+ * simplifies our development processes
  */
+static generic_ast_node_t* emit_direct_constant(u_int32_t constant){
+	//Create our constant node
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, SIDE_TYPE_RIGHT);
+	//Add the line number
+	constant_node->line_number = parser_line_num;
+
+	//This is an int_const
+	constant_node->constant_type = INT_CONST;
+	
+	//This is signed by default
+	constant_node->inferred_type = generic_signed_int;
+
+	//Give it the value
+	constant_node->int_long_val = constant;
+
+	return constant_node;
+}
+
 
 /**
  * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
@@ -5734,6 +5754,10 @@ static generic_ast_node_t* if_statement(FILE* fl){
  * is valid before the function is fully processed. As such, we add all of these jump statements into a
  * queue for processing
  *
+ * For a direct jump here, we'll kind of cook the books by internally representing it as jump <label> when(1);
+ * This greatly simplifies things on our end and allows us to greatly simplify the translation of direct jumps
+ * in the CFG.
+ *
  * BNF Rule: <jump-statement> ::= jump <label-identifier> {when(conditional_expression)}?;
  */
 static generic_ast_node_t* jump_statement(FILE* fl){
@@ -5755,16 +5779,13 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 	}
 
 	//Allocate the jump statement
-	generic_ast_node_t* jump_statement;
+	generic_ast_node_t* jump_statement = ast_node_alloc(AST_NODE_CLASS_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
 
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//We could optionally see a conditional jump statement here with the "when" keyword
 	if(lookahead.tok == WHEN){
-		//This means we have a conditional jump
-		jump_statement = ast_node_alloc(AST_NODE_CLASS_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
-
 		//Add this in as a child node to the statement
 		add_child_node(jump_statement, label_ident);
 
@@ -5814,11 +5835,12 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 
 	//Otherwise it's not a conditional, just a direct jump
 	} else {
-		//Allocate the non-conditional jump
-		jump_statement = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT);
-
 		//Add this in as a child node to the statement
 		add_child_node(jump_statement, label_ident);
+	
+		//Rig this jump here to really be a "jump when" that just always evaluates to true
+		add_child_node(jump_statement, emit_direct_constant(1));
+		
 	}
 
 	//If we don't see a semicolon we bail
