@@ -2332,7 +2332,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
-void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, three_addr_var_t* conditional_result, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
+void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, three_addr_var_t* conditional_result, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
 	//Use the helper function to emit the statement
 	instruction_t* stmt = emit_jmp_instruction(destination_block, type);
 
@@ -2362,9 +2362,9 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, three_addr
 /**
  * Emit a user defined jump statement that points to a label, not to a block
  */
-static void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* label, jump_type_t type, u_int8_t is_branch_ending){
+static void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* label, three_addr_var_t* conditional_decider, jump_type_t type, u_int8_t is_branch_ending){
 	//Use the helper function to emit the statement
-	instruction_t* stmt = emit_incomplete_jmp_instruction(type);
+	instruction_t* stmt = emit_incomplete_jmp_instruction(conditional_decider, type);
 
 	//Is this branch ending?
 	stmt->is_branch_ending = is_branch_ending;
@@ -6149,7 +6149,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				} else {
 					//Add it in as a successor
 					add_successor(current_block, labeled_block);
-					emit_jump(current_block, labeled_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, labeled_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//The current block now is this labeled block
@@ -6208,14 +6208,23 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//We'll need a block at the very end which we'll hit after we jump
 				basic_block_t* jumping_to_block = basic_block_alloc(1);
 
+				//Save this here for later
+				three_addr_var_t* conditional_decider = ret_package.assignee;
+
 				//Now that we're here, we can begin to emit the jumps
 				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
+				//If the return package's operator is blank,
+				//then we'll need to emit a test instruction here
+				if(ret_package.operator == BLANK){
+					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+				}
+
 				//Emit the user defined jump now. The ast cursor's variable contains the label variable that we jump to
-				emit_user_defined_jump(current_block, ast_cursor->variable, type, TRUE);
+				emit_user_defined_jump(current_block, ast_cursor->variable, conditional_decider, type, TRUE);
 
 				//And we'll also emit the direct jump at the end
-				emit_jump(current_block, jumping_to_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, jumping_to_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//Add the jumping to block as one of the successors(we'll add the other successor in later)
 				add_successor(current_block, jumping_to_block);
@@ -6740,7 +6749,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				} else {
 					//Add it in as a successor
 					add_successor(current_block, labeled_block);
-					emit_jump(current_block, labeled_block, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, labeled_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
 				//The current block now is this labeled block
@@ -6800,14 +6809,23 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//We'll need a block at the very end which we'll hit after we jump
 				basic_block_t* jumping_to_block = basic_block_alloc(1);
 
+				//Store this in here for later
+				three_addr_var_t* conditional_decider = ret_package.assignee;
+
 				//Now that we're here, we can begin to emit the jumps
 				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
+				//If the return package's operator is blank,
+				//then we'll need to emit a test instruction here
+				if(ret_package.operator == BLANK){
+					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+				}
+
 				//Emit the user defined jump now. The ast cursor's variable contains the label we're jumping to
-				emit_user_defined_jump(current_block, ast_cursor->variable, type, TRUE);
+				emit_user_defined_jump(current_block, ast_cursor->variable, conditional_decider, type, TRUE);
 
 				//And we'll also emit the direct jump at the end
-				emit_jump(current_block, jumping_to_block, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, jumping_to_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				//Add the jumping to block as one of the successors(we'll add the other successor in later)
 				add_successor(current_block, jumping_to_block);

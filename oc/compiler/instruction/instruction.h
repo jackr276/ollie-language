@@ -848,7 +848,7 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
  * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
  * These statements are intended for when we create user-defined jumps
  */
-instruction_t* emit_incomplete_jmp_instruction(jump_type_t jump_type);
+instruction_t* emit_incomplete_jmp_instruction(three_addr_var_t* relies_on, jump_type_t jump_type);
 
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
