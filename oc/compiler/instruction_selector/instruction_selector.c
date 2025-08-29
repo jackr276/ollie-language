@@ -250,47 +250,6 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
- * Emit a test instruction
- *
- * Test instructions inherently have no assignee as they don't modify registers
- *
- * NOTE: This may only be used DURING the process of register selection
- */
-static instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//We'll need the size to select the appropriate instruction
-	variable_size_t size = select_variable_size(op1);
-
-	//Select the size appropriately
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = TESTQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = TESTL;
-			break;
-		case WORD:
-			instruction->instruction_type = TESTW;
-			break;
-		case BYTE:
-			instruction->instruction_type = TESTB;
-			break;
-		default:
-			break;
-	}
-
-	//Then we'll set op1 and op2 to be the source registers
-	instruction->source_register = op1;
-	instruction->source_register2 = op2;
-
-	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
  * Emit a conversion instruction for division preparation
  *
  * We use this during the process of emitting division instructions
