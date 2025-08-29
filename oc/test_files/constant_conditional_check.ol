@@ -6,11 +6,36 @@
 pub fn main() -> i32 {
 	let mut x:i32 := 232;
 
-	//Checking this
+	//Checking while
 	while(1){
 		x--;
 
 		break when (x == 32);
+	}
+
+
+	//Checking do-while
+	do{
+		x--;
+
+		break when (x == 32);
+	} while(1);
+
+	//checking for
+	for(let mut a:i32 := 32; a; a--){
+		x--;
+	}
+
+	//Check that it works for if
+	if(1){
+		x--;
+	}
+
+	//Check that it works for else if
+	if(x == 1){
+		x++;
+	} else if (1){
+		x--;
 	}
 
 	//To stop the optimizer

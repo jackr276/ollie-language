@@ -5018,7 +5018,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			//If the operator is blank, we need to emit a test instruction
 			if(package.operator == BLANK){
 				//Emit the testing instruction
-	 			conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
+	 			conditional_decider = emit_test_code(current_entry_block, package.assignee, package.assignee, TRUE);
 			}
 
 			//Emit a jump based on the decider
