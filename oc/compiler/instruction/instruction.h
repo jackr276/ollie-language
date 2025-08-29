@@ -332,10 +332,6 @@ typedef enum{
 	THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT,
 	//An indirect jump statement -- used for switch statement jump tables
 	THREE_ADDR_CODE_INDIRECT_JUMP_STMT,
-	//A direct to label jump statement
-	THREE_ADDR_CODE_DIR_JUMP_STMT,
-	//A label statement
-	THREE_ADDR_CODE_LABEL_STMT,
 	//A function call statement 
 	THREE_ADDR_CODE_FUNC_CALL,
 	//And indirect function call statement
@@ -827,10 +823,6 @@ instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t
  */
 instruction_t* emit_not_instruction(three_addr_var_t* var);
 
-/**
- * Emit a label statement here
- */
-instruction_t* emit_label_instruction(three_addr_var_t* var);
 
 /**
  * Emit a left shift statement
@@ -853,14 +845,15 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_type);
 
 /**
+ * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
+ * These statements are intended for when we create user-defined jumps
+ */
+instruction_t* emit_incomplete_jmp_instruction(three_addr_var_t* relies_on, jump_type_t jump_type);
+
+/**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
 instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_type_t jump_type);
-
-/**
- * Emit a direct jump statement. This is used only with jump statements the user has made
- */
-instruction_t* emit_direct_jmp_instruction(three_addr_var_t* jumping_to);
 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in

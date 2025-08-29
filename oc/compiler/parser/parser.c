@@ -378,41 +378,30 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	return ident_node;
 }
 
+
 /**
- * We will always return a pointer to the node holding the label identifier. Due to the times when
- * this will be called, we can not do any symbol table validation here. 
- *
- * BNF "Rule": <label-identifier> ::= ${(<letter>) | <digit> | _ | $}*
- * Note all actual string parsing and validation is handled by the lexer
+ * Directly emit an integer constant node. This is used exclusively for the user-defined direct
+ * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
+ * simplifies our development processes
  */
-static generic_ast_node_t* label_identifier(FILE* fl, side_type_t side){
-	//Grab the next token
-	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If we can't find it that's bad
-	if(lookahead.tok != LABEL_IDENT){
-		sprintf(info, "String %s is not a valid label identifier", lookahead.lexeme.string);
-		//Create and return an error node that will be sent up the chain
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Create the identifier node
-	generic_ast_node_t* label_ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
-	//Clone the string in
-	label_ident_node->string_value = clone_dynamic_string(&(lookahead.lexeme));
-	//By default a label identifier is of type u_int64(memory address)
-	label_ident_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
+static generic_ast_node_t* emit_direct_constant(u_int32_t constant){
+	//Create our constant node
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, SIDE_TYPE_RIGHT);
 	//Add the line number
-	label_ident_node->line_number = parser_line_num;
+	constant_node->line_number = parser_line_num;
 
-	//Return our reference to the node
-	return label_ident_node;
+	//This is an int_const
+	constant_node->constant_type = INT_CONST;
+	
+	//This is signed by default
+	constant_node->inferred_type = generic_signed_int;
+
+	//Give it the value
+	constant_node->int_long_val = constant;
+
+	return constant_node;
 }
 
-
-/**
- * Emit a constant node directly
- */
 
 /**
  * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
@@ -5465,15 +5454,12 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 
 
 /**
- * A labeled statement could come as part of a switch statement or could
- * simply be a label that can be used for jumping. Whatever it is, it is
- * always followed by a colon. Like all rules, this rule returns a reference to
- * it's root node
+ * A labeled statement allows the user in ollie to directly jump to where
+ * they'd like to go, with some exceptions
  *
- * We must also ensure, in the case of a case statement, that the type of what we're matching with
- * is compatible with what we're switching on
+ * NOTE: By the time we get here, we have already seen & consumed the #
  *
- * <labeled-statement> ::= <label-identifier> : 
+ * <labeled-statement> ::= #<label-identifier>: 
  */
 static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Freeze the line number
@@ -5481,17 +5467,23 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
+	//Do we contain a defer at any point in here? If so, that is invalid because we could
+	//have the defer block duplicated multiple times. As such, a label would become ambiguous
+	if(nesting_stack_contains_level(nesting_stack, DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Label statements cannot be placed inside of deferred blocks", parser_line_num);
+	}
+
 	//Let's create the label ident node
 	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT, SIDE_TYPE_LEFT);
 	//Save our line number
 	label_stmt->line_number = parser_line_num;
 
 	//Let's see if we can find one
-	generic_ast_node_t* label_ident = label_identifier(fl, SIDE_TYPE_LEFT);
+	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it's bad we'll fail out here
 	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
-		return print_and_return_error("Invalid label identifier given as label ident statement", current_line);
+		return print_and_return_error("Invalid identifier given as label ident statement", current_line);
 	}
 		
 	//Let's also verify that we have the colon right now
@@ -5506,14 +5498,40 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Grab the name out for convenience
 	char* label_name = label_ident->string_value.string;
 
-	//We now need to make sure that it isn't a duplicate
-	symtab_variable_record_t* found = lookup_variable_lower_scope(variable_symtab, label_name);
+	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
+	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name);
 
 	//If we did find it, that's bad
-	if(found != NULL){
-		sprintf(info, "Label identifier %s has already been declared. First declared here: ", label_name); 
+	if(found_variable != NULL){
+		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name); 
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(found);
+		print_variable_name(found_variable);
+		num_errors++;
+		//give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//We now need to make sure that it isn't a duplicate
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, label_name);
+
+	//If we did find it, that's bad
+	if(found_type != NULL){
+		sprintf(info, "Identifier %s has already been declared as a type. First declared here: ", label_name); 
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_type_name(found_type);
+		num_errors++;
+		//give back an error node
+		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//We now need to make sure that it isn't a duplicate
+	symtab_function_record_t* found_function = lookup_function(function_symtab, label_name);
+
+	//If we did find it, that's bad
+	if(found_function != NULL){
+		sprintf(info, "Identifier %s has already been declared as a function. First declared here: ", label_name); 
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_function_name(found_function);
 		num_errors++;
 		//give back an error node
 		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
@@ -5523,34 +5541,27 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//The label type is one of our core types
 	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "label");
 
-	//Sanity check here
-	if(label_type == NULL){
-		return print_and_return_error("Fatal internal compiler error. Basic type label was not found", parser_line_num);
-	}
-
 	//Now that we know we didn't find it, we'll create it
-	found = create_variable_record(label_ident->string_value, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* label = create_variable_record(label_ident->string_value, STORAGE_CLASS_NORMAL);
 	//Store the type
-	found->type_defined_as = label_type->type;
+	label->type_defined_as = label_type->type;
 	//Store the fact that it is a label
-	found->is_label = 1;
+	label->is_label = TRUE;
 	//Store the line number
-	found->line_number = parser_line_num;
+	label->line_number = parser_line_num;
 	//Store what function it's defined in(important for later)
-	found->function_declared_in = current_function;
+	label->function_declared_in = current_function;
 
 	//Put into the symtab
-	insert_variable(variable_symtab, found);
+	insert_variable(variable_symtab, label);
 
 	//We'll also associate this variable with the node
-	label_stmt->variable = found;
+	label_stmt->variable = label;
 	label_stmt->inferred_type = label_type->type;
 
 	//Now we can get out
 	return label_stmt;
 }
-
-
 
 
 /**
@@ -5743,44 +5754,108 @@ static generic_ast_node_t* if_statement(FILE* fl){
  * is valid before the function is fully processed. As such, we add all of these jump statements into a
  * queue for processing
  *
- * BNF Rule: <jump-statement> ::= jump <label-identifier>;
+ * For a direct jump here, we'll kind of cook the books by internally representing it as jump <label> when(1);
+ * This greatly simplifies things on our end and allows us to greatly simplify the translation of direct jumps
+ * in the CFG.
+ *
+ * BNF Rule: <jump-statement> ::= jump <label-identifier> {when(conditional_expression)}?;
  */
 static generic_ast_node_t* jump_statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//We can off the bat create the jump statement node here
-	generic_ast_node_t* jump_stmt = ast_node_alloc(AST_NODE_CLASS_JUMP_STMT, SIDE_TYPE_LEFT); 
+	//Do we contain a defer at any point in here? If so, that is invalid because we could
+	//have the defer block duplicated multiple times. As such, a label would become ambiguous
+	if(nesting_stack_contains_level(nesting_stack, DEFER_STATEMENT) == TRUE){
+		return print_and_return_error("Direct jump statements cannot be placed inside of deferred blocks", parser_line_num);
+	}
 
 	//Once we've made it, we need to see a valid label identifier
-	generic_ast_node_t* label_ident = label_identifier(fl, SIDE_TYPE_LEFT);
+	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If this failed, we're done
 	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
 		return print_and_return_error("Invalid label given to jump statement", parser_line_num);
 	}
 
+	//Allocate the jump statement
+	generic_ast_node_t* jump_statement = ast_node_alloc(AST_NODE_CLASS_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
+
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We could optionally see a conditional jump statement here with the "when" keyword
+	if(lookahead.tok == WHEN){
+		//Add this in as a child node to the statement
+		add_child_node(jump_statement, label_ident);
+
+		//We now need to see an L_PAREN 
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail out if not
+		if(lookahead.tok != L_PAREN){
+			return print_and_return_error("Left parenthesis required after when statement", parser_line_num);
+		}
+
+		//Otherwise we'll add this into the grouping stack
+		push_token(grouping_stack, lookahead);
+
+		//Now we need to see a valid conditional expression
+		generic_ast_node_t* conditional = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+
+		//If this is invalid, we fail out
+		if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
+			return conditional;
+		}
+
+		//This is a conditional so the type that we have here needs to be valid for it
+		if(is_type_valid_for_conditional(conditional->inferred_type) == FALSE){
+			sprintf(info, "Type %s is not valid for a conditional", conditional->inferred_type->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we're all good here, so we'll add this in as a child
+		add_child_node(jump_statement, conditional);
+
+		//We'll need to see the final closing paren here
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//If it's not an R_PAREN we're done
+		if(lookahead.tok != R_PAREN){
+			return print_and_return_error("Closing parenthesis required after conditional in when statement", parser_line_num);
+		}
+
+		//Pop the grouping stack and validate that we match
+		if(pop_token(grouping_stack).tok != L_PAREN){
+			return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+		}
+
+		//Refresh the lookahead one last time for the semicolon search
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Otherwise it's not a conditional, just a direct jump
+	} else {
+		//Add this in as a child node to the statement
+		add_child_node(jump_statement, label_ident);
+	
+		//Rig this jump here to really be a "jump when" that just always evaluates to true
+		add_child_node(jump_statement, emit_direct_constant(1));
+		
+	}
 
 	//If we don't see a semicolon we bail
 	if(lookahead.tok != SEMICOLON){
 		return print_and_return_error("Semicolon required after jump statement", parser_line_num);
 	}
 	
-	//Otherwise if we get here we know that it is a valid label and valid syntax
-	//We'll now do the final assembly
-	//First we'll add the label ident as a child of the jump
-	add_child_node(jump_stmt, label_ident);
-
 	//Store the line number
-	jump_stmt->line_number = parser_line_num;
+	jump_statement->line_number = parser_line_num;
 
 	//Add this jump statement into the queue for processing
-	enqueue(current_function_jump_statements, jump_stmt); 
+	enqueue(current_function_jump_statements, jump_statement);
 
 	//Finally we'll give back the root reference
-	return jump_stmt;
+	return jump_statement;
 }
 
 
@@ -7061,11 +7136,8 @@ static generic_ast_node_t* statement(FILE* fl){
 
 			return NULL;
 		
-		//If we see a label ident, we know we're seeing a labeled statement
-		case LABEL_IDENT:
-			//This rule relies on these tokens, so we'll push them back
-			push_back_token(lookahead);
-	
+		//If we see the pound symbol, we know that we are declaring a label
+		case POUND:
 			//Just return whatever the rule gives us
 			return labeled_statement(fl);
 
@@ -8411,6 +8483,13 @@ static int8_t check_jump_labels(){
 			return FAILURE;
 		}
 
+		//This can also happen - where we have a user trying to jump to a non-label
+		if(label->is_label == FALSE){
+			sprintf(info, "Variable %s exists but is not a label, so it cannot be jumped to", label->var_name.string);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			return FAILURE;
+		}
+
 		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
 		if(strcmp(current_function->func_name.string, label->function_declared_in->func_name.string) != 0){
 			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name.string);
@@ -8909,6 +8988,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 				//If this fails, we fail out here too
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
+
 		} else {
 			sprintf(info, "Function %s has no body", function_record->func_name.string);
 			print_parse_message(WARNING, info, parser_line_num);

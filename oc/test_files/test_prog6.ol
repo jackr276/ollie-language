@@ -33,11 +33,9 @@ fn saturating_add(x:i32, y:i32) -> i32{
 * TEST: Empty #comptime directive
 */
 
-#dependencies
-#dependencies
 
-#replace TEST_INT with -1;
-#replace my_char with 'c';
+replace TEST_INT with -1;
+replace my_char with 'c';
 
 fn tester() -> void{
 	let mut x:i32 := !3;

@@ -4,8 +4,8 @@
 */
 
 
-#replace TEST_INT with -1;
-#replace my_char with 'c';
+replace TEST_INT with -1;
+replace my_char with 'c';
 /**
  * Additiong of two's complement ints that saturates to TMAX or TMIN
  * as opposed to creating a positive or negative overflow

@@ -301,7 +301,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//============================== BLOCK MERGING =================================================
 			//This is another special case -- if the block we're jumping to only has one predecessor, then
 			//we may as well avoid the jump and just merge the two
-			if(jumping_to_block->predecessors->current_index == 1){
+			if(jumping_to_block->predecessors->current_index == 1 && jumping_to_block->block_type != BLOCK_TYPE_LABEL){
 				//We need to check here -- is there only ONE jump to the jumping to block inside of this
 				//block? If there is only one, then we are all set to merge
 
@@ -312,12 +312,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				u_int8_t good_to_merge = TRUE;
 
 				while(cursor != NULL){
-					//If we have another jump, we are NOT good to merge
-					if(cursor->CLASS == THREE_ADDR_CODE_JUMP_STMT && cursor->jumping_to_block == jumping_to_block){
-						good_to_merge = FALSE;
-						break;
-					}
-
 					//Another option here - if this is short circuit eligible, then merging like this would ruin the
 					//detection of short circuiting. So if we see this, we also will NOT merge
 					if(cursor->is_short_circuit_eligible == TRUE){
@@ -1524,25 +1518,6 @@ static void mark(cfg_t* cfg){
 				//called function performs some important task. As such, we will 
 				//mark it as important
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
-					current_stmt->mark = TRUE;
-					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
-					//The block now has a mark
-					current->contains_mark = TRUE;
-					break;
-
-				//Direct jumps are also added by the user and as such are always
-				//important
-				case THREE_ADDR_CODE_DIR_JUMP_STMT:
-					current_stmt->mark = TRUE;
-					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
-					//The block now has a mark
-					current->contains_mark = TRUE;
-					break;
-	
-				//Same goes for labels in memory
-				case THREE_ADDR_CODE_LABEL_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(worklist, current_stmt);

@@ -33,6 +33,7 @@ typedef enum {
 	BLOCK_TERM_TYPE_BREAK, //Ends in a break statement
 	BLOCK_TERM_TYPE_CONTINUE, //Ends in a continue statement
 	BLOCK_TERM_TYPE_RET, //The block ends in a return statement
+	BLOCK_TERM_TYPE_USER_DEFINED_JUMP, //The block ends in a direct user defined nonconditional jump
 	BLOCK_TERM_TYPE_LOOP_END, //This block is the end of a loop
 } block_terminal_type_t;
 
@@ -55,6 +56,7 @@ typedef enum{
 	BLOCK_TYPE_FOR_STMT_END, //End of a for statement
 	BLOCK_TYPE_FOR_STMT_CONDITIONAL, //For statement conditional block
 	BLOCK_TYPE_FOR_STMT_UPDATE, //Update block of a for statement
+	BLOCK_TYPE_LABEL, //This block comes from a user-defined label
 } block_type_t;
 
 
@@ -95,6 +97,8 @@ struct basic_block_t{
 	jump_table_t* jump_table;
 	//The function that we're defined in
 	symtab_function_record_t* function_defined_in;
+	//The variable that this block's name draws from if this block is a label block
+	symtab_variable_record_t* label;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements

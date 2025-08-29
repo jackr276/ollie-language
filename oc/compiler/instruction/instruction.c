@@ -834,42 +834,6 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 
 
 /**
- * Emit a copy of this statement
- */
-instruction_t* emit_label_instruction(three_addr_var_t* label){
-	//Let's first allocate the statement
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//All we do now is give this the label 
-	stmt->assignee = label;
-	//Note the class too
-	stmt->CLASS = THREE_ADDR_CODE_LABEL_STMT;
-	//What function are we in
-	stmt->function = current_function;
-	//And give it back
-	return stmt;
-}
-
-
-/**
- * Emit a direct jump statement. This is used only with jump statements the user has made
- */
-instruction_t* emit_direct_jmp_instruction(three_addr_var_t* jumping_to){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Now all we need to do is give it the label
-	stmt->assignee = jumping_to;
-	//Note the class too
-	stmt->CLASS = THREE_ADDR_CODE_DIR_JUMP_STMT;
-	//What function are we in
-	stmt->function = current_function;
-	//and give it back
-	return stmt;
-}
-
-
-/**
  * Directly emit an idle statement
  */
 instruction_t* emit_idle_instruction(){
@@ -1560,16 +1524,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		case THREE_ADDR_CODE_LABEL_STMT:
-			//Let's print it out. This is an instance where we will not use the print var
-			fprintf(fl, "%s:\n", stmt->assignee->linked_var->var_name.string + 1);
-			break;
-
-		case THREE_ADDR_CODE_DIR_JUMP_STMT:
-			//This is an instance where we will not use the print var
-			fprintf(fl, "jmp %s\n", stmt->assignee->linked_var->var_name.string + 1);
-			break;
-		
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
 			//Should already have a trailing newline
 			fprintf(fl, "%s", stmt->inlined_assembly.string);
@@ -3617,6 +3571,29 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
 	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
 	stmt->jumping_to_block = jumping_to_block;
 	stmt->jump_type = jump_type;
+	//What function are we in
+	stmt->function = current_function;
+	//Give the statement back
+	return stmt;
+}
+
+
+/**
+ * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
+ * These statements are intended for when we create user-defined jumps
+ */
+instruction_t* emit_incomplete_jmp_instruction(three_addr_var_t* relies_on, jump_type_t jump_type){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
+	stmt->jump_type = jump_type;
+
+	//Store the variable that this relies on. This will be NULL for direct jumps,
+	//and occupied for conditional jumps
+	stmt->op1 = relies_on;
+
 	//What function are we in
 	stmt->function = current_function;
 	//Give the statement back

@@ -56,11 +56,11 @@ const Token tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, 
 
 //Direct one to one mapping
 const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
-						 "require", "#replace", "static", "external", "u8", "i8", "u16",
+						 "require", "replace", "static", "external", "u8", "i8", "u16",
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
-						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "#dependencies", "asm",
+						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
 						  "with", "lib", "idle", "pub"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
@@ -101,14 +101,10 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int16_t line_n
 			return lex_item;
 		}
 	}
-
-	//Otherwise if we get here, it could be a regular ident or a label ident
-	if(lexeme.string[0] == '$'){
-		lex_item.tok = LABEL_IDENT;
-	} else {
-		lex_item.tok = IDENT;
-	}
 	
+	//Set the type here
+	lex_item.tok = IDENT;
+
 	//Fail out if too long
 	if(lexeme.current_length >= MAX_IDENT_LENGTH){
 		printf("[LINE %d | LEXER ERROR]: Identifiers may be at most %d characters long\n", line_number, MAX_IDENT_LENGTH);
@@ -300,6 +296,12 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 							lex_item.line_num = line_num;
 							return lex_item;
 						}
+
+					//Pound for label identifiers
+					case '#':
+						lex_item.tok = POUND;
+						lex_item.line_num = line_num;
+						return lex_item;
 
 					//Question mark for ternary operations
 					case '?':

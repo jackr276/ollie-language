@@ -52,6 +52,10 @@ static generic_type_t* u64 = NULL;
 //to send value packages at each rule
 heap_stack_t* break_stack = NULL;
 heap_stack_t* continue_stack = NULL;
+//Keep a list of all lable statements in the function(block jumps are internal only)
+dynamic_array_t* current_function_labeled_blocks = NULL;
+//Also keep a list of all custom jumps in the function
+dynamic_array_t* current_function_user_defined_jump_statements = NULL;
 //The current stack offset for any given function
 u_int64_t stack_offset = 0;
 //For any/all error printing
@@ -378,16 +382,22 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 		print_jump_table(stdout, block->jump_table);
 	}
 
-	//Print the block's ID or the function name
-	if(block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-		//Print out any/all local constants
-		print_local_constants(stdout, block->function_defined_in);
+	//Different blocks have different printing rules
+	switch(block->block_type){
+		case BLOCK_TYPE_FUNC_ENTRY:
+			//Print out any/all local constants
+			print_local_constants(stdout, block->function_defined_in);
 
-		//Now the block name
-		printf("%s", block->function_defined_in->func_name.string);
-	} else {
-		printf(".L%d", block->block_id);
+			//Now the block name
+			printf("%s", block->function_defined_in->func_name.string);
+			break;
+
+		//By default it's just the .L printing
+		default:
+			printf(".L%d", block->block_id);
+	
 	}
+
 
 	//Now, we will print all of the active variables that this block has
 	if(block->used_variables != NULL){
@@ -1927,7 +1937,7 @@ static void rename_block(basic_block_t* entry){
 		//And now if it's anything else that has an assignee, operands, etc,
 		//we'll need to rewrite all of those as well
 		//We'll exclude direct jump statements, these we don't care about
-		} else if(cursor->CLASS != THREE_ADDR_CODE_DIR_JUMP_STMT && cursor->CLASS != THREE_ADDR_CODE_LABEL_STMT){
+		} else {
 			//If we get here we know that we don't have a phi function
 
 			//If we have a non-temp variable, rename it
@@ -2010,8 +2020,7 @@ static void rename_block(basic_block_t* entry){
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
 		//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-		if(cursor->CLASS != THREE_ADDR_CODE_DIR_JUMP_STMT && cursor->CLASS != THREE_ADDR_CODE_LABEL_STMT &&
-			cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+		if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
 			//Pop it off
 			lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
 		}
@@ -2320,54 +2329,12 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 
 /**
- * Emit the abstract machine code for a label statement
- */
-static void emit_label(basic_block_t* basic_block, generic_ast_node_t* label_node, u_int8_t is_branch_ending){
-	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(label_node->variable, TRUE);
-
-	//This is a special case here -- these don't really count as variables
-	//in the way that most do. As such, we will not add it in as live
-
-	//We'll just use the helper to emit this
-	instruction_t* stmt = emit_label_instruction(label_var);
-
-	//Mark with whatever was passed through
-	stmt->is_branch_ending = is_branch_ending;
-
-	//Add this statement into the block
-	add_statement(basic_block, stmt);
-}
-
-
-/**
- * Emit the abstract machine code for a jump statement
- */
-static void emit_direct_jump(basic_block_t* basic_block, generic_ast_node_t* jump_statement, u_int8_t is_branch_ending){
-	//Emit the appropriate variable
-	three_addr_var_t* label_var = emit_var(jump_statement->variable, TRUE);
-
-	//This is a special case here -- these don't really count as variables
-	//in the way that most do. As such, we will not add it in as live
-	
-	//We'll just use the helper to do this
-	instruction_t* stmt = emit_direct_jmp_instruction(label_var);
-
-	//Is this branch ending?
-	stmt->is_branch_ending = is_branch_ending;
-
-	//Add this statement into the block
-	add_statement(basic_block, stmt);
-}
-
-
-/**
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
  */
-void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, three_addr_var_t* conditional_result, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
+void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, three_addr_var_t* conditional_result, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
 	//Use the helper function to emit the statement
-	instruction_t* stmt = emit_jmp_instruction(dest_block, type);
+	instruction_t* stmt = emit_jmp_instruction(destination_block, type);
 
 	//We'll store the conditional as the op1 here. It may be null for direct jumps which is ok, 
 	//but for a conditional jump this cannot be null
@@ -2389,6 +2356,33 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, three_addr
 	if(conditional_result != NULL){
 		add_used_variable(basic_block, conditional_result);
 	}
+}
+
+
+/**
+ * Emit a user defined jump statement that points to a label, not to a block
+ */
+static void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* label, three_addr_var_t* conditional_decider, jump_type_t type, u_int8_t is_branch_ending){
+	//Use the helper function to emit the statement
+	instruction_t* stmt = emit_incomplete_jmp_instruction(conditional_decider, type);
+
+	//Is this branch ending?
+	stmt->is_branch_ending = is_branch_ending;
+
+	//We'll need to store the label in here for later on down the line
+	stmt->var_record = label;
+
+	//Mark where we came from
+	stmt->block_contained_in = basic_block;
+
+	//These will never be basic blocks
+	stmt->inverse_jump = FALSE;
+
+	//Add this to the array of user defined jumps
+	dynamic_array_add(current_function_user_defined_jump_statements, stmt);
+
+	//Add this into the first block
+	add_statement(basic_block, stmt);
 }
 
 
@@ -4038,6 +4032,40 @@ static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency)
 	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block?
+	created->estimated_execution_frequency = estimated_execution_frequency;
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg_ref->created_blocks, created);
+
+	return created;
+}
+
+
+/**
+ * Allocate a basic block that comes from a user-defined label statement
+*/
+static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label, u_int32_t estimated_execution_frequency){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in even though it is a labeled block
+	created->block_id = increment_and_get();
+
+	//This block's name will draw from the label
+	created->label = label;
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//We'll mark this to indicate that this is a labeled block
+	created->block_type = BLOCK_TYPE_LABEL;
 
 	//What is the estimated execution cost of this block?
 	created->estimated_execution_frequency = estimated_execution_frequency;
@@ -5755,6 +5783,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	basic_block_t* starting_block = NULL;
 	//The current block
 	basic_block_t* current_block = starting_block;
+	//A holder for labeled blocks
+	basic_block_t* labeled_block = NULL;
 
 	//Grab our very first thing here
 	generic_ast_node_t* ast_cursor = first_node;
@@ -6103,27 +6133,76 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
+			//Label statements are unique because they'll force the creation of a new block with a
+			//given label name
 			case AST_NODE_CLASS_LABEL_STMT:
-				//This really shouldn't happen, but it can't hurt
+				//Allocate the label statement as the current block
+				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
+
+				//Add this into the current function's labeled blocks
+				dynamic_array_add(current_function_labeled_blocks, labeled_block);
+
+				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
-					current_block = starting_block;
+					starting_block = labeled_block;
+				//Otherwise we'll need to emit a jump to it
+				} else {
+					//Add it in as a successor
+					add_successor(current_block, labeled_block);
+					emit_jump(current_block, labeled_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
-				
-				//We rely on the helper to do it for us
-				emit_label(current_block, ast_cursor, FALSE);
+
+				//The current block now is this labeled block
+				current_block = labeled_block;
 
 				break;
 		
-			case AST_NODE_CLASS_JUMP_STMT:
+			//A conditional user-defined jump works somewhat like a break
+			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
 					current_block = starting_block;
 				}
 
-				//We rely on the helper to do it for us
-				emit_direct_jump(current_block, ast_cursor, TRUE);
+				//The second child here should be our conditional
+				generic_ast_node_t* cursor = ast_cursor->first_child;
+				cursor = cursor->next_sibling;
+
+				//We'll need to emit the conditional in the current block
+				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
+
+				//We'll now update the current block accordingly
+				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
+					current_block = ret_package.final_block;
+				}
+
+				//We'll need a block at the very end which we'll hit after we jump
+				basic_block_t* jumping_to_block = basic_block_alloc(1);
+
+				//Save this here for later
+				three_addr_var_t* conditional_decider = ret_package.assignee;
+
+				//Now that we're here, we can begin to emit the jumps
+				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
+
+				//If the return package's operator is blank,
+				//then we'll need to emit a test instruction here
+				if(ret_package.operator == BLANK){
+					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+				}
+
+				//Emit the user defined jump now. The ast cursor's variable contains the label variable that we jump to
+				emit_user_defined_jump(current_block, ast_cursor->variable, conditional_decider, type, TRUE);
+
+				//And we'll also emit the direct jump at the end
+				emit_jump(current_block, jumping_to_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+
+				//Add the jumping to block as one of the successors(we'll add the other successor in later)
+				add_successor(current_block, jumping_to_block);
+
+				//The current block now is said jumping to block
+				current_block = jumping_to_block;
 
 				break;
 
@@ -6268,6 +6347,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	basic_block_t* starting_block = NULL;
 	//The current block
 	basic_block_t* current_block = starting_block;
+	//A holder that we'll use for labeled statements
+	basic_block_t* labeled_block = NULL;
 
 	//Grab the initial node
 	generic_ast_node_t* compound_stmt_node = root_node;
@@ -6619,27 +6700,81 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
+			/**
+			 * A label statement is special because it creates an entirely
+			 * separate basic block. This is done to maintain the rule
+			 * that we have exactly one entry point to each and every block.
+			 * Since a label statement will be jumped to, we need to have it 
+			 * as the start of a separate block
+			 */
 			case AST_NODE_CLASS_LABEL_STMT:
-				//This really shouldn't happen, but it can't hurt
+				//Allocate the label statement as the current block
+				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
+
+				//Add this into the current function's labeled blocks
+				dynamic_array_add(current_function_labeled_blocks, labeled_block);
+
+				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
-					current_block = starting_block;
+					starting_block = labeled_block;
+				//Otherwise we'll need to emit a jump to it
+				} else {
+					//Add it in as a successor
+					add_successor(current_block, labeled_block);
+					emit_jump(current_block, labeled_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
-				
-				//We rely on the helper to do it for us
-				emit_label(current_block, ast_cursor, FALSE);
+
+				//The current block now is this labeled block
+				current_block = labeled_block;
 
 				break;
-		
-			case AST_NODE_CLASS_JUMP_STMT:
+
+			//A conditional user-defined jump works somewhat like a break
+			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
 					current_block = starting_block;
 				}
 
-				//We rely on the helper to do it for us
-				emit_direct_jump(current_block, ast_cursor, TRUE);
+				//The second child here should be our conditional
+				generic_ast_node_t* cursor = ast_cursor->first_child;
+				cursor = cursor->next_sibling;
+
+				//We'll need to emit the conditional in the current block
+				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
+
+				//We'll now update the current block accordingly
+				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
+					current_block = ret_package.final_block;
+				}
+
+				//We'll need a block at the very end which we'll hit after we jump
+				basic_block_t* jumping_to_block = basic_block_alloc(1);
+
+				//Store this in here for later
+				three_addr_var_t* conditional_decider = ret_package.assignee;
+
+				//Now that we're here, we can begin to emit the jumps
+				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
+
+				//If the return package's operator is blank,
+				//then we'll need to emit a test instruction here
+				if(ret_package.operator == BLANK){
+					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+				}
+
+				//Emit the user defined jump now. The ast cursor's variable contains the label we're jumping to
+				emit_user_defined_jump(current_block, ast_cursor->variable, conditional_decider, type, TRUE);
+
+				//And we'll also emit the direct jump at the end
+				emit_jump(current_block, jumping_to_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+
+				//Add the jumping to block as one of the successors(we'll add the other successor in later)
+				add_successor(current_block, jumping_to_block);
+
+				//The current block now is said jumping to block
+				current_block = jumping_to_block;
 
 				break;
 
@@ -6802,6 +6937,39 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
 
 
 /**
+ * Finalize all user defined jump statements by ensuring that these jumps are assigned the right block to go to. This
+ * needs to be done after the fact because we could jump to a label statement that we have not yet seen
+ */
+static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_blocks, dynamic_array_t* user_defined_jumps){
+	//Run through every jump statement
+	while(dynamic_array_is_empty(user_defined_jumps) == FALSE){
+		//Delete from the back
+		instruction_t* jump_instruction = dynamic_array_delete_from_back(user_defined_jumps);
+
+		//We'll now need to scan through the labeled blocks to find who this should point to
+		for(u_int16_t i = 0; i < labeled_blocks->current_index; i++){
+			//Grab the labeled block out
+			basic_block_t* labeled_block = dynamic_array_get_at(labeled_blocks, i);
+
+			//If this labeled block doesn't have the same variable, we're out
+			if(labeled_block->label != jump_instruction->var_record){
+				continue;
+			}
+
+			//Otherwise if we get here we know that we found the correct label
+			jump_instruction->jumping_to_block = labeled_block;
+
+			//Add this in as a successor
+			add_successor(jump_instruction->block_contained_in, labeled_block);
+			
+			//Break out of the for loop
+			break;
+		}
+	}
+}
+
+
+/**
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
@@ -6812,6 +6980,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	current_function = func_record;
 	//We also need to zero out the current stack offset value
 	stack_offset = 0;
+	//We also need to set the labeled block array to be empty
+	current_function_labeled_blocks = dynamic_array_alloc();
+	//Keep an array for all of the jump statements as well
+	current_function_user_defined_jump_statements = dynamic_array_alloc();
 
 	//Reset the three address code accordingly
 	set_new_function(func_record);
@@ -6857,6 +7029,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Determine and insert any needed ret statements
 	determine_and_insert_return_statements(function_starting_block, function_exit_block);
 
+	//We'll need to go through and finalize all user defined jump statements if there are any
+	finalize_all_user_defined_jump_statements(current_function_labeled_blocks, current_function_user_defined_jump_statements);
+
 	//Add the start and end blocks to their respective arrays
 	dynamic_array_add(cfg->function_entry_blocks, function_starting_block);
 	dynamic_array_add(cfg->function_exit_blocks, function_exit_block);
@@ -6866,6 +7041,14 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 	//Mark this as NULL for the next go around
 	function_exit_block = NULL;
+
+	//Now we can scrap the labeled block array
+	dynamic_array_dealloc(current_function_labeled_blocks);
+	current_function_labeled_blocks = NULL;
+
+	//Deallocate the current function's user defined jumps as well
+	dynamic_array_dealloc(current_function_user_defined_jump_statements);
+	current_function_user_defined_jump_statements = NULL;
 
 	//We always return the start block
 	return function_starting_block;
