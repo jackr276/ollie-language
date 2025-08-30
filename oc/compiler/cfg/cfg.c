@@ -3074,6 +3074,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				address = emit_struct_address_calculation(basic_block, struct_type, current_address, offset, is_branch_ending);
 			}
 
+			//Now at this point our "array_or_struct_var" is the member, so we'll need to store it accordingly
+			array_or_struct_var = member;
+
 			//Do we need to do more memory work? We can tell if the array accessor node is next
 			if(cursor->next_sibling == NULL){
 				//We're using indirection, address is being wiped out
