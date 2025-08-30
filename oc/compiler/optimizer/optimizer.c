@@ -1385,14 +1385,6 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 		}
 	}
 
-	//Alternatively, if we have a struct variable here, we'll need to mark all fields that
-	//consider it as important
-	if(variable->memory_address_variable != NULL){
-		if(variable->memory_address_variable->is_struct_member == TRUE){
-			mark_and_add_all_field_writes(cfg, worklist, variable->memory_address_variable);
-		}
-	}
-
 	//Run through everything here
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the block out
