@@ -2925,11 +2925,10 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	generic_type_t* current_type = current_var->type;
 
 	//Keep track of the array/construct variable here
-	symtab_variable_record_t* array_or_struct_var = current_var->linked_var;
+	symtab_variable_record_t* memory_address_variable = current_var->linked_var;
 
-	//So long as we're hitting arrays or constructs, we need to be memory conscious
-	while(cursor != NULL &&
-		(cursor->CLASS == AST_NODE_CLASS_STRUCT_ACCESSOR || cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR)){
+	//While we're hitting arrays and structs, we'll need to be memory conscious
+	while(cursor != NULL && cursor->CLASS != AST_NODE_CLASS_UNARY_OPERATOR){
 		//First of two potentialities is the array accessor
 		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
@@ -2994,14 +2993,14 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
 				if(postfix_expr_side == SIDE_TYPE_LEFT){
 					//Emit the indirection for this one
-					current_var = emit_mem_code(current, address, array_or_struct_var);
+					current_var = emit_mem_code(current, address, memory_address_variable);
 					//It's a write
 					current_var->access_type = MEMORY_ACCESS_WRITE;
 
 				//Otherwise we're dealing with a read
 				} else {
 					//Still emit the memory code
-					current_var = emit_mem_code(current, address, array_or_struct_var);
+					current_var = emit_mem_code(current, address, memory_address_variable);
 					//It's a read
 					current_var->access_type = MEMORY_ACCESS_READ;
 
@@ -3074,8 +3073,8 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				address = emit_struct_address_calculation(basic_block, struct_type, current_address, offset, is_branch_ending);
 			}
 
-			//Now at this point our "array_or_struct_var" is the member, so we'll need to store it accordingly
-			array_or_struct_var = member;
+			//Now at this point our "memory_address_variable" is the member, so we'll need to store it accordingly
+			memory_address_variable = member;
 
 			//Do we need to do more memory work? We can tell if the array accessor node is next
 			if(cursor->next_sibling == NULL){
