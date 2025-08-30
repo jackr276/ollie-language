@@ -1385,14 +1385,6 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 		}
 	}
 
-	//Alternatively, if we have a struct variable here, we'll need to mark all fields that
-	//consider it as important
-	if(variable->memory_address_variable != NULL){
-		if(variable->memory_address_variable->is_struct_member == TRUE){
-			mark_and_add_all_field_writes(cfg, worklist, variable->memory_address_variable);
-		}
-	}
-
 	//Run through everything here
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the block out
@@ -1473,6 +1465,9 @@ static void mark(cfg_t* cfg){
 		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
 
+		//For later storage
+		symtab_variable_record_t* memory_address_variable;
+
 		//Now we'll run through every statement(operation) in this block
 		while(current_stmt != NULL){
 			//Clear it's mark
@@ -1534,39 +1529,32 @@ static void mark(cfg_t* cfg){
 					dynamic_array_add(worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
+					break;
 
-				//Let's see what other special cases we have
-				default:
-					//We can leave right now if this is the case
-					if(current_stmt->assignee == NULL || current_stmt->assignee->is_temporary == TRUE){
+				//These can also be special cases
+				case THREE_ADDR_CODE_ASSN_STMT:
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					//Grab out the linked variable
+					memory_address_variable = current_stmt->assignee->memory_address_variable;
+
+					//Most common case, just skip out
+					if(memory_address_variable == NULL){
 						break;
 					}
 
-					//Otherwise, we may have some special cases that we'll need to account for
-					//If we have an assignee and that assignee is a global variable, then this is marked as
-					//important
-					if(current_stmt->assignee->linked_var->is_global == TRUE){
-						current_stmt->mark = TRUE;
-						//Add it to the list
-						dynamic_array_add(worklist, current_stmt);
-						//The block now has a mark
-						current->contains_mark = TRUE;
-
-					//If we have a pointer type and are assigning to a derefence of a function parameter
-					//(inout mode), we are modifying the value of that pointer
-					} else if(current_stmt->assignee->linked_var->is_function_paramater == TRUE 
-							&& current_stmt->assignee->type->type_class == TYPE_CLASS_POINTER 
-							&& current_stmt->assignee->indirection_level > 0){
-						//Mark it
-						current_stmt->mark = TRUE;
-						//Add it to the list
-						dynamic_array_add(worklist, current_stmt);
-						//The block now has a mark
-						current->contains_mark = TRUE;
+					//If we have a variable that is a function paramter *and* we're writing to it, then
+					//automatically every single write here is important
+					if(memory_address_variable->is_function_parameter == TRUE){
+						//We need to mark and add anything that writes to this field
+						mark_and_add_all_field_writes(cfg, worklist, memory_address_variable);
 					}
-					
+
 					break;
-			}
+
+				//Let's see what other special cases we have
+				default:
+					break;
+				}
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;

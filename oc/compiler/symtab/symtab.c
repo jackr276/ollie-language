@@ -1012,10 +1012,10 @@ void print_function_name(symtab_function_record_t* record){
  */
 void print_variable_name(symtab_variable_record_t* record){
 	//If it's part of a function we'll just print that
-	if(record->is_function_paramater == 1){
+	if(record->is_function_parameter == TRUE){
 		print_function_name(record->function_declared_in);
 		return;
-	} else if (record->is_label == 1){
+	} else if (record->is_label == TRUE){
 		printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
 		return;
 	} else if(record->is_enumeration_member == TRUE || record->is_struct_member == TRUE){

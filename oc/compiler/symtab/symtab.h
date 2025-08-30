@@ -164,7 +164,7 @@ struct symtab_variable_record_t{
 	//Was it assigned to?
 	u_int8_t assigned_to;
 	//Is it a function parameter?
-	u_int8_t is_function_paramater;
+	u_int8_t is_function_parameter;
 	//What is the parameter order for this value?
 	u_int8_t function_parameter_order;
 	//Is this mutable?

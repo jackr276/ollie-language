@@ -5256,7 +5256,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//Let's first construct the variable record
 	symtab_variable_record_t* param_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
 	//It is a function parameter
-	param_record->is_function_paramater = TRUE;
+	param_record->is_function_parameter = TRUE;
 	//We assume that it was initialized
 	param_record->initialized = TRUE;
 	//Add the line number
