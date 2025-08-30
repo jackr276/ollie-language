@@ -491,7 +491,7 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 	//For developer flagging
 	if(live_range == NULL){
 		//This is a function parameter, we need to make it ourselves
-		if(variable->linked_var != NULL && variable->linked_var->is_function_paramater == TRUE){
+		if(variable->linked_var != NULL && variable->linked_var->is_function_parameter == TRUE){
 			print_variable(stdout, variable, PRINTING_VAR_INLINE);
 			//Create it. Since this is a function parameter, we start at line 0
 			live_range = live_range_alloc(block->function_defined_in, variable->variable_size);
