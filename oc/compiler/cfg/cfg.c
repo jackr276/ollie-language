@@ -2619,6 +2619,21 @@ static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_v
  * Emit memory indirection three address code
  */
 static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_var_t* assignee, symtab_variable_record_t* memory_address_variable){
+	//If the assignee's indirection level is already more than 0, we can't double dereference
+	if(assignee->indirection_level > 0){
+		//Emit the assignment instruction here
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee); 
+
+		//Add it into the end
+		add_statement(basic_block, assignment);
+
+		//This counts as a use
+		add_used_variable(basic_block, assignee);
+
+		//Reassign
+		assignee = assignment->assignee;
+	}
+
 	//No actual code here, we are just accessing this guy's memory
 	//Create a new variable with an indirection level
 	three_addr_var_t* indirect_var = emit_var_copy(assignee);
@@ -2644,6 +2659,21 @@ static three_addr_var_t* emit_mem_code(basic_block_t* basic_block, three_addr_va
  * be able to store the dereferenced type in here
  */
 static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, three_addr_var_t* assignee, generic_type_t* dereferenced_type){
+	//If the assignee's indirection level is already more than 0, we can't double dereference
+	if(assignee->indirection_level > 0){
+		//Emit the assignment instruction here
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee); 
+
+		//Add it into the end
+		add_statement(basic_block, assignment);
+
+		//This counts as a use
+		add_used_variable(basic_block, assignee);
+
+		//Reassign
+		assignee = assignment->assignee;
+	}
+
 	//No actual code here, we are just accessing this guy's memory
 	//Create a new variable with an indirection level
 	three_addr_var_t* indirect_var = emit_var_copy(assignee);
