@@ -1530,26 +1530,6 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//These can also be special cases
-				case THREE_ADDR_CODE_ASSN_STMT:
-				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					//Grab out the linked variable
-					related_memory_address = current_stmt->assignee->related_memory_address;
-
-					//Most common case, just skip out
-					if(related_memory_address == NULL){
-						break;
-					}
-
-					//If we have a variable that is a function paramter *and* we're writing to it, then
-					//automatically every single write here is important
-					if(related_memory_address->is_function_parameter == TRUE){
-						//We need to mark and add anything that writes to this field
-						mark_and_add_all_field_writes(cfg, worklist, related_memory_address);
-					}
-
-					break;
-
 				//Let's see what other special cases we have
 				default:
 					break;
@@ -1557,6 +1537,25 @@ static void mark(cfg_t* cfg){
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;
+		}
+
+		//If this one's block type is a function entry block, we'll
+		//need to do some more checking for parameter optimizations
+		if(current->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			//Grab the record out
+			symtab_function_record_t* function_record = current->function_defined_in;
+
+			//We'll need to crawl through all of the parameters in here
+			for(u_int16_t i = 0; i < function_record->number_of_params; i++){
+				//Grab the associated variable out
+				symtab_variable_record_t* parameter_variable = function_record->func_params[i].associate_var;
+
+				//If this variable is a pointer, then we need to go through and mark/add all field writes that
+				//reference it
+				if(parameter_variable->type_defined_as->type_class == TYPE_CLASS_POINTER){
+					mark_and_add_all_field_writes(cfg, worklist, parameter_variable);
+				}
+			}
 		}
 	}
 
