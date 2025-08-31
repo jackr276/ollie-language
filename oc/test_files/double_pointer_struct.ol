@@ -19,6 +19,17 @@ pub fn double_pointer_reassign(mut ptr:i64**) -> i64**{
 	ret ptr;
 }
 
+/**
+* Test reassigning a double pointer
+*/
+pub fn single_pointer_reassign(mut ptr:i64*) -> void{
+	*ptr := 32;
+
+	ret;
+}
+
+
+
 
 /**
 * A function that will mutate a structure in its entirety

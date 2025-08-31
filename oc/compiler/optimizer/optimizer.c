@@ -1238,7 +1238,7 @@ static void sweep(cfg_t* cfg){
  * here because a construct's layout is determined when the parser hits it. As such, if we're only
  * ever using a certain field, we need only worry about writes to that given field
  */
-static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist, symtab_variable_record_t* variable){
+static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist, symtab_variable_record_t* related_memory_address){
 	//Run through every single block in the CFG
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the given block out
@@ -1246,7 +1246,7 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 
 		//If this block does not match the function that we're currently in, and the variable
 		//itself is not global, we'll skip it
-		if(variable->function_declared_in != NULL && variable->function_declared_in != current->function_defined_in){
+		if(related_memory_address->function_declared_in != NULL && related_memory_address->function_declared_in != current->function_defined_in){
 			//Skip to the next one, this can't possibly be what we want
 			continue;
 		}
@@ -1263,7 +1263,7 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 			//if the related write field matches our var
 			if(cursor->assignee != NULL && cursor->assignee->related_memory_address != NULL
 				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
-				&& cursor->assignee->related_memory_address == variable){
+				&& cursor->assignee->related_memory_address == related_memory_address){
 
 				//This is a case where we mark
 				if(cursor->mark == FALSE){
@@ -1385,10 +1385,20 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 	//If we're marking a variable that is a memory address type, then we need to ensure that all writes
 	//to said memory address are preserved
- 	if(variable->linked_var != NULL){
-		if(is_memory_address_type(variable->linked_var->type_defined_as) == TRUE){
-			mark_and_add_all_field_writes(cfg, worklist, variable->linked_var);
-		}
+ 	if(variable->related_memory_address != NULL){
+		mark_and_add_all_field_writes(cfg, worklist, variable->related_memory_address);
+	}
+
+	/**
+	 * Say we have something like this
+	 * t25 <- arr_0
+	 *
+	 * Well there's no related memory address for arr_0 - but it is in fact a memory address. Since
+	 * we're passing it around as important, we're going to need to mark everything that deals with it
+	 * in a memory related way
+	 */
+	if(variable->linked_var != NULL && is_memory_address_type(variable->linked_var->type_defined_as) == TRUE){
+		mark_and_add_all_field_writes(cfg, worklist, variable->linked_var);
 	}
 
 	//Run through everything here
@@ -1541,6 +1551,22 @@ static void mark(cfg_t* cfg){
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
 					//If this is a function parameter, we'll need to do some more important
 					//checks here
+					if(current_stmt->assignee->related_memory_address != NULL 
+						&& current_stmt->assignee->related_memory_address->is_function_parameter == TRUE){
+						//This means we're writing to it
+						if(current_stmt->assignee->indirection_level > 0){
+							//Mark it
+							current_stmt->mark = TRUE;
+							//Add it to the list
+							dynamic_array_add(worklist, current_stmt);
+							//This has a mark
+							current->contains_mark = TRUE;
+						}
+					}
+
+					//What if the linked variable is a function parameter and we're
+					//dereferencing? Well, since this could affect memory
+					//outside of the current program, we have to link it in
 					if(current_stmt->assignee->linked_var != NULL 
 						&& current_stmt->assignee->linked_var->is_function_parameter == TRUE){
 						//This means we're writing to it

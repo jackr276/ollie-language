@@ -1187,6 +1187,10 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
 		fprintf(fl, ")");
 	}
+
+	if(mode == PRINTING_VAR_INLINE && variable->related_memory_address != NULL){
+//		printf(" (Related memory address: %s) ", variable->related_memory_address->var_name.string);
+	}
 }
 
 
