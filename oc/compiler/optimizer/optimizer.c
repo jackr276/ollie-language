@@ -1274,6 +1274,13 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 					//Keep track of the old assignee
 					three_addr_var_t* old_assignee = cursor->assignee;
 
+					/**
+					 * We know for a fact that all memory addresses have had a temp variable
+					 * assignment. As such, we need to crawl back and *also* mark that temp variable
+					 * assignment itself as important. That's what the following chunk of code
+					 * does
+					 */
+
 					//Push it back by one to start
 					cursor = cursor->previous_statement;
 
@@ -1530,6 +1537,25 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
+				case THREE_ADDR_CODE_ASSN_STMT:
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					//If this is a function parameter, we'll need to do some more important
+					//checks here
+					if(current_stmt->assignee->linked_var != NULL 
+						&& current_stmt->assignee->linked_var->is_function_parameter == TRUE){
+						//This means we're writing to it
+						if(current_stmt->assignee->indirection_level > 0){
+							//Mark it
+							current_stmt->mark = TRUE;
+							//Add it to the list
+							dynamic_array_add(worklist, current_stmt);
+							//This has a mark
+							current->contains_mark = TRUE;
+						}
+					}
+
+					break;
+
 				//Let's see what other special cases we have
 				default:
 					break;
@@ -1537,25 +1563,6 @@ static void mark(cfg_t* cfg){
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;
-		}
-
-		//If this one's block type is a function entry block, we'll
-		//need to do some more checking for parameter optimizations
-		if(current->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			//Grab the record out
-			symtab_function_record_t* function_record = current->function_defined_in;
-
-			//We'll need to crawl through all of the parameters in here
-			for(u_int16_t i = 0; i < function_record->number_of_params; i++){
-				//Grab the associated variable out
-				symtab_variable_record_t* parameter_variable = function_record->func_params[i].associate_var;
-
-				//If this variable is a pointer, then we need to go through and mark/add all field writes that
-				//reference it
-				if(parameter_variable->type_defined_as->type_class == TYPE_CLASS_POINTER){
-					mark_and_add_all_field_writes(cfg, worklist, parameter_variable);
-				}
-			}
 		}
 	}
 
