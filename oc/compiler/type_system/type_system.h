@@ -104,18 +104,20 @@ typedef enum type_class_t {
 struct generic_type_t{
 	//The name of the type
 	dynamic_string_t type_name;
-	/**
-	 * The following pointers will be null except for the one that the type class
-	 * specifies this type belongs to
-	 */
-	basic_type_t* basic_type;
-	array_type_t* array_type;
-	pointer_type_t* pointer_type;
-	//For function pointers
-	function_type_t* function_type;
-	struct_type_t* struct_type;
-	enumerated_type_t* enumerated_type;
-	aliased_type_t* aliased_type;
+
+	//Based on the type class, we will
+	//interpret here as whichever type is appropriate
+	union{
+		basic_type_t* basic_type;
+		array_type_t* array_type;
+		pointer_type_t* pointer_type;
+		//For function pointers
+		function_type_t* function_type;
+		struct_type_t* struct_type;
+		enumerated_type_t* enumerated_type;
+		aliased_type_t* aliased_type;
+	} internal_types;
+
 	//When was it defined: -1 = generic type
 	int32_t line_number;
 	//All generic types have a size
@@ -326,6 +328,11 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
  * Dynamically allocate and create a struct type
  */
 generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number);
+
+/**
+ * Dynamically allocate and create a union type
+ */
+generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number);
 
 /**
  * Is the given binary operation valid for the type that was specificed?
