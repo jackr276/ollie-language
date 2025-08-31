@@ -2783,21 +2783,21 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->ast_node_type){
 		//In this case we'll only worry about the assignee
-		case AST_NODE_CLASS_IDENTIFIER:
+		case AST_NODE_TYPE_IDENTIFIER:
 		 	result_package.assignee = emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
 			return result_package;
 
 		//Same in this case - just an assignee in basic block
-		case AST_NODE_CLASS_CONSTANT:
+		case AST_NODE_TYPE_CONSTANT:
 			result_package.assignee = emit_constant_assignment(basic_block, primary_parent, is_branch_ending);
 			return result_package;
 
 		//This could potentially have ternaries - so we'll just return whatever is in here
-		case AST_NODE_CLASS_FUNCTION_CALL:
+		case AST_NODE_TYPE_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent, is_branch_ending);
 
 		//Emit an indirect function call here
-		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			return emit_indirect_function_call(basic_block, primary_parent, is_branch_ending);
 
 		//By default, we're emitting some kind of expression here
@@ -2863,7 +2863,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	cfg_result_package_t postfix_package = {basic_block, basic_block, NULL, BLANK};
 
 	//If this is itself not a postfix expression, we need to lose it here
-	if(postfix_parent->ast_node_type != AST_NODE_CLASS_POSTFIX_EXPR){
+	if(postfix_parent->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
 		return emit_primary_expr_code(basic_block, postfix_parent, temp_assignment_required, is_branch_ending);
 	}
 
@@ -2904,7 +2904,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 	//We could also go right into a terminal expression like a unary operator. If so
 	//handle it and then bail
-	if(cursor->ast_node_type == AST_NODE_CLASS_UNARY_OPERATOR){
+	if(cursor->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR){
 		//We'll let our helper do it here
 		postfix_package.assignee = emit_postoperation_code(current, primary_package.assignee, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 
@@ -2927,9 +2927,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	symtab_variable_record_t* memory_address_variable = current_var->linked_var;
 
 	//While we're hitting arrays and structs, we'll need to be memory conscious
-	while(cursor != NULL && cursor->ast_node_type != AST_NODE_CLASS_UNARY_OPERATOR){
+	while(cursor != NULL && cursor->ast_node_type != AST_NODE_TYPE_UNARY_OPERATOR){
 		//First of two potentialities is the array accessor
-		if(cursor->ast_node_type == AST_NODE_CLASS_ARRAY_ACCESSOR){
+		if(cursor->ast_node_type == AST_NODE_TYPE_ARRAY_ACCESSOR){
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
 			cfg_result_package_t expression_package = emit_expression(current, cursor->first_child, is_branch_ending, FALSE);
 
@@ -3113,7 +3113,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	}
 
 	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
-	if(cursor != NULL && cursor->ast_node_type == AST_NODE_CLASS_UNARY_OPERATOR){
+	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR){
 		//The helper can deal with this. Whatever it gives back is our assignee
 		postfix_package.assignee = emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 	} else {
@@ -3362,7 +3362,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 	switch(unary_expression->ast_node_type){
 		//If it's actually a unary expression, we can do some processing
 		//If we see the actual node here, we know that we are actually doing a unary operation
-		case AST_NODE_CLASS_UNARY_EXPR:	
+		case AST_NODE_TYPE_UNARY_EXPR:	
 			return emit_unary_operation(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
@@ -3544,7 +3544,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Have we hit the so-called "root level" here? If we have, then we're just going to pass this
 	//down to another rule
-	if(logical_or_expr->ast_node_type != AST_NODE_CLASS_BINARY_EXPR){
+	if(logical_or_expr->ast_node_type != AST_NODE_TYPE_BINARY_EXPR){
 		return emit_unary_expression(current_block, logical_or_expr, FALSE, is_branch_ending);
 	}
 
@@ -3676,7 +3676,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
-		case AST_NODE_CLASS_ASNMNT_EXPR:
+		case AST_NODE_TYPE_ASNMNT_EXPR:
 			//In our tree, an assignment statement decays into a unary expression
 			//on the left and a binary op expr on the right
 			
@@ -3736,20 +3736,20 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			//Return what we had
 			return result_package;
 	
-		case AST_NODE_CLASS_BINARY_EXPR:
+		case AST_NODE_TYPE_BINARY_EXPR:
 			//Emit the binary expression node
 			return emit_binary_expression(current_block, expr_node, is_branch_ending);
 
-		case AST_NODE_CLASS_FUNCTION_CALL:
+		case AST_NODE_TYPE_FUNCTION_CALL:
 			//Emit the function call statement
 			return emit_function_call(current_block, expr_node, is_branch_ending);
 
 		//Hanlde an indirect function call
-		case AST_NODE_CLASS_INDIRECT_FUNCTION_CALL:
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			//Let the helper rule deal with it
 			return emit_indirect_function_call(current_block, expr_node, is_branch_ending);
 
-		case AST_NODE_CLASS_TERNARY_EXPRESSION:
+		case AST_NODE_TYPE_TERNARY_EXPRESSION:
 			//Emit the ternary expression
 			 return emit_ternary_expression(basic_block, expr_node, is_branch_ending);
 
@@ -4550,7 +4550,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 		switch(ast_cursor->first_child->ast_node_type){
 			//We could have a let statement
-			case AST_NODE_CLASS_LET_STMT:
+			case AST_NODE_TYPE_LET_STMT:
 				//Let the subrule handle this
 				first_child_result_package = visit_let_statement(ast_cursor->first_child, FALSE);
 				//We'll need to merge the entry block here due to the way that let statements work
@@ -5004,7 +5004,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	generic_ast_node_t* else_if_cursor;
 
 	//So long as we keep seeing else-if clauses
-	while(cursor != NULL && cursor->ast_node_type == AST_NODE_CLASS_ELSE_IF_STMT){
+	while(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_ELSE_IF_STMT){
 		//This will be the expression
 		else_if_cursor = cursor->first_child;
 
@@ -5083,7 +5083,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	}
 
 	//Now that we're out of here - we may have an else statement on our hands
-	if(cursor != NULL && cursor->ast_node_type == AST_NODE_CLASS_COMPOUND_STMT){
+	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
 		//Let's handle the compound statement
 		
 		//Grab the compound statement
@@ -5363,7 +5363,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	while(cursor != NULL){
 		switch(cursor->ast_node_type){
 			//C-style case statement, we'll let the appropriate rule handle
-			case AST_NODE_CLASS_C_STYLE_CASE_STMT:
+			case AST_NODE_TYPE_C_STYLE_CASE_STMT:
 				//Let the helper rule handle it
 				case_default_results = visit_c_style_case_statement(cursor);
 
@@ -5373,7 +5373,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				break;
 
 			//C-style default, also let the appropriate rule handle
-			case AST_NODE_CLASS_C_STYLE_DEFAULT_STMT:
+			case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
 				//Let the helper rule handle it
 				case_default_results = visit_c_style_default_statement(cursor);
 
@@ -5637,7 +5637,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		//Switch based on the class
 		switch(case_stmt_cursor->ast_node_type){
 			//Handle a case statement
-			case AST_NODE_CLASS_CASE_STMT:
+			case AST_NODE_TYPE_CASE_STMT:
 				//Visit our case stmt here
 				case_default_results = visit_case_statement(case_stmt_cursor);
 
@@ -5647,7 +5647,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 				break;
 
 			//Handle a default statement
-			case AST_NODE_CLASS_DEFAULT_STMT:
+			case AST_NODE_TYPE_DEFAULT_STMT:
 				//Visit the default statement
 				case_default_results = visit_default_statement(case_stmt_cursor);
 
@@ -5790,7 +5790,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
-			case AST_NODE_CLASS_DECL_STMT:
+			case AST_NODE_TYPE_DECL_STMT:
 				generic_results = visit_declaration_statement(ast_cursor);
 
 				//If we're adding onto something(common case), we'll go here
@@ -5811,7 +5811,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_LET_STMT:
+			case AST_NODE_TYPE_LET_STMT:
 				//We'll visit the block here
 				generic_results = visit_let_statement(ast_cursor, FALSE);
 
@@ -5833,7 +5833,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_RET_STMT:
+			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
 					//We assume that this only happens once
@@ -5878,7 +5878,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//We're completely done here
 				return generic_results;
 		
-			case AST_NODE_CLASS_IF_STMT:
+			case AST_NODE_TYPE_IF_STMT:
 				//We'll now enter the if statement
 				generic_results = visit_if_statement(ast_cursor);
 			
@@ -5899,7 +5899,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_WHILE_STMT:
+			case AST_NODE_TYPE_WHILE_STMT:
 				//Visit the while statement
 				generic_results = visit_while_statement(ast_cursor);
 
@@ -5919,7 +5919,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	
 				break;
 
-			case AST_NODE_CLASS_DO_WHILE_STMT:
+			case AST_NODE_TYPE_DO_WHILE_STMT:
 				//Visit the statement
 				generic_results = visit_do_while_statement(ast_cursor);
 
@@ -5939,7 +5939,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_FOR_STMT:
+			case AST_NODE_TYPE_FOR_STMT:
 				//First visit the statement
 				generic_results = visit_for_statement(ast_cursor);
 
@@ -5959,7 +5959,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_CONTINUE_STMT:
+			case AST_NODE_TYPE_CONTINUE_STMT:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
@@ -6031,7 +6031,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 					break;
 
-			case AST_NODE_CLASS_BREAK_STMT:
+			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
@@ -6100,7 +6100,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_DEFER_STMT:
+			case AST_NODE_TYPE_DEFER_STMT:
 				//Grab a cursor here
 				defer_statement_cursor = ast_cursor->first_child;
 
@@ -6132,7 +6132,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 			//Label statements are unique because they'll force the creation of a new block with a
 			//given label name
-			case AST_NODE_CLASS_LABEL_STMT:
+			case AST_NODE_TYPE_LABEL_STMT:
 				//Allocate the label statement as the current block
 				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
 
@@ -6155,7 +6155,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 		
 			//A conditional user-defined jump works somewhat like a break
-			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
+			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
@@ -6203,7 +6203,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_SWITCH_STMT:
+			case AST_NODE_TYPE_SWITCH_STMT:
 				//Visit the switch statement
 				generic_results = visit_switch_statement(ast_cursor);
 
@@ -6223,7 +6223,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_C_STYLE_SWITCH_STMT:
+			case AST_NODE_TYPE_C_STYLE_SWITCH_STMT:
 				//Visit the switch statement
 				generic_results = visit_c_style_switch_statement(ast_cursor);
 
@@ -6243,7 +6243,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				break;
 
-			case AST_NODE_CLASS_COMPOUND_STMT:
+			case AST_NODE_TYPE_COMPOUND_STMT:
 				//We'll simply recall this function and let it handle it
 				generic_results = visit_compound_statement(ast_cursor);
 
@@ -6260,7 +6260,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 		
 
-			case AST_NODE_CLASS_ASM_INLINE_STMT:
+			case AST_NODE_TYPE_ASM_INLINE_STMT:
 				//If we find an assembly inline statement, the actuality of it is
 				//incredibly easy. All that we need to do is literally take the 
 				//user's statement and insert it into the code
@@ -6276,7 +6276,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			
 				break;
 
-			case AST_NODE_CLASS_IDLE_STMT:
+			case AST_NODE_TYPE_IDLE_STMT:
 				//Do we need a new block?
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
@@ -6357,7 +6357,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
-			case AST_NODE_CLASS_DECL_STMT:
+			case AST_NODE_TYPE_DECL_STMT:
 				generic_results = visit_declaration_statement(ast_cursor);
 
 				//If we're adding onto something(common case), we'll go here
@@ -6378,7 +6378,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_LET_STMT:
+			case AST_NODE_TYPE_LET_STMT:
 				//We'll visit the block here
 				generic_results = visit_let_statement(ast_cursor, FALSE);
 
@@ -6400,7 +6400,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_RET_STMT:
+			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
 					//We assume that this only happens once
@@ -6445,7 +6445,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//We're completely done here
 				return results;
 		
-			case AST_NODE_CLASS_IF_STMT:
+			case AST_NODE_TYPE_IF_STMT:
 				//We'll now enter the if statement
 				generic_results = visit_if_statement(ast_cursor);
 			
@@ -6466,7 +6466,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_WHILE_STMT:
+			case AST_NODE_TYPE_WHILE_STMT:
 				//Visit the while statement
 				generic_results = visit_while_statement(ast_cursor);
 
@@ -6486,7 +6486,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	
 				break;
 
-			case AST_NODE_CLASS_DO_WHILE_STMT:
+			case AST_NODE_TYPE_DO_WHILE_STMT:
 				//Visit the statement
 				generic_results = visit_do_while_statement(ast_cursor);
 
@@ -6506,7 +6506,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_FOR_STMT:
+			case AST_NODE_TYPE_FOR_STMT:
 				//First visit the statement
 				generic_results = visit_for_statement(ast_cursor);
 
@@ -6526,7 +6526,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_CONTINUE_STMT:
+			case AST_NODE_TYPE_CONTINUE_STMT:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
@@ -6598,7 +6598,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 					break;
 
-			case AST_NODE_CLASS_BREAK_STMT:
+			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
@@ -6667,7 +6667,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_DEFER_STMT:
+			case AST_NODE_TYPE_DEFER_STMT:
 				//Grab a cursor here
 				defer_statement_cursor = ast_cursor->first_child;
 
@@ -6704,7 +6704,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			 * Since a label statement will be jumped to, we need to have it 
 			 * as the start of a separate block
 			 */
-			case AST_NODE_CLASS_LABEL_STMT:
+			case AST_NODE_TYPE_LABEL_STMT:
 				//Allocate the label statement as the current block
 				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
 
@@ -6727,7 +6727,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				break;
 
 			//A conditional user-defined jump works somewhat like a break
-			case AST_NODE_CLASS_CONDITIONAL_JUMP_STMT:
+			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
@@ -6775,7 +6775,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_SWITCH_STMT:
+			case AST_NODE_TYPE_SWITCH_STMT:
 				//Visit the switch statement
 				generic_results = visit_switch_statement(ast_cursor);
 
@@ -6795,7 +6795,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_C_STYLE_SWITCH_STMT:
+			case AST_NODE_TYPE_C_STYLE_SWITCH_STMT:
 				//Visit the switch statement
 				generic_results = visit_c_style_switch_statement(ast_cursor);
 
@@ -6815,7 +6815,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
-			case AST_NODE_CLASS_COMPOUND_STMT:
+			case AST_NODE_TYPE_COMPOUND_STMT:
 				//We'll simply recall this function and let it handle it
 				generic_results = visit_compound_statement(ast_cursor);
 
@@ -6832,7 +6832,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				break;
 		
 
-			case AST_NODE_CLASS_ASM_INLINE_STMT:
+			case AST_NODE_TYPE_ASM_INLINE_STMT:
 				//If we find an assembly inline statement, the actuality of it is
 				//incredibly easy. All that we need to do is literally take the 
 				//user's statement and insert it into the code
@@ -6848,7 +6848,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			
 				break;
 
-			case AST_NODE_CLASS_IDLE_STMT:
+			case AST_NODE_TYPE_IDLE_STMT:
 				//Do we need a new block?
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc(1);
@@ -7116,9 +7116,9 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->ast_node_type){
 			//We won't do any dereferencing if we have these
-			case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
-			case AST_NODE_CLASS_STRING_INITIALIZER:
-			case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			case AST_NODE_TYPE_STRING_INITIALIZER:
+			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
@@ -7227,9 +7227,9 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->ast_node_type){
 			//We won't do any dereferencing if we have these
-			case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
-			case AST_NODE_CLASS_STRING_INITIALIZER:
-			case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			case AST_NODE_TYPE_STRING_INITIALIZER:
+			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
@@ -7278,15 +7278,15 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 	//root level node that will be able to decay into an expression or one of these
 	switch(initializer_root->ast_node_type){
 		//Make a direct call to the rule
-		case AST_NODE_CLASS_STRING_INITIALIZER:
+		case AST_NODE_TYPE_STRING_INITIALIZER:
 			return emit_string_initializer(current_block, assignee, initializer_root, is_branch_ending);
 
 		//Make a direct call to this one's rule as well
-		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			return emit_struct_initializer(current_block, assignee, initializer_root, is_branch_ending);
 		
 		//Make a direct call to this one's rule as well
-		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 			return emit_array_initializer(current_block, assignee, initializer_root, is_branch_ending);
 
 		//By default we just decay into the expression root
@@ -7401,7 +7401,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 		switch(ast_cursor->ast_node_type){
 			//We can see a function definition. In this case, we'll
 			//allow the helper to do it
-			case AST_NODE_CLASS_FUNC_DEF:
+			case AST_NODE_TYPE_FUNC_DEF:
 				//Visit the function definition
 				block = visit_function_definition(cfg, ast_cursor);
 			
@@ -7416,7 +7416,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			//========= WARNING - NOT YET SUPPORTED ========================
 			//We can also see a let statement
 			//TODO - should be a special global variable process for this
-			case AST_NODE_CLASS_LET_STMT:
+			case AST_NODE_TYPE_LET_STMT:
 				//We'll visit the block here
 				visit_let_statement(ast_cursor, FALSE);
 				
@@ -7425,7 +7425,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 		
 			//Finally, we could see a declaration
 			//TODO - should be a special global variable process for this
-			case AST_NODE_CLASS_DECL_STMT:
+			case AST_NODE_TYPE_DECL_STMT:
 				//We'll visit the block here
 				visit_declaration_statement(ast_cursor);
 				

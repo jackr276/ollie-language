@@ -183,13 +183,13 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	//Let's see if we have any special cases here that require extra attention
 	switch(node->ast_node_type){
 		//Asm inline is a special case because we'll need to copy the assembly over
-		case AST_NODE_CLASS_ASM_INLINE_STMT:
-		case AST_NODE_CLASS_IDENTIFIER:
+		case AST_NODE_TYPE_ASM_INLINE_STMT:
+		case AST_NODE_TYPE_IDENTIFIER:
 			duplicated->string_value = clone_dynamic_string(&(node->string_value));
 			break;
 
 		//Constants are another special case, because they contain a special inner node
-		case AST_NODE_CLASS_CONSTANT:
+		case AST_NODE_TYPE_CONSTANT:
 			//If we have a string constant, we'll duplicate the dynamic string
 			if(node->constant_type == STR_CONST){
 				duplicated->string_value = clone_dynamic_string(&(node->string_value));
@@ -304,9 +304,9 @@ void ast_dealloc(){
 		if(temp->node != NULL){
 			switch(temp->ast_node_type){
 				//Don't free these here, they'd be freed elsewhere
-				case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
-				case AST_NODE_CLASS_STRING_INITIALIZER:
-				case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+				case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				case AST_NODE_TYPE_STRING_INITIALIZER:
+				case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 					break;
 				default:
 					//Otherwise we can
@@ -316,13 +316,13 @@ void ast_dealloc(){
 
 		//Some additional freeing may be needed
 		switch(temp->ast_node_type){
-			case AST_NODE_CLASS_IDENTIFIER:
-			case AST_NODE_CLASS_ASM_INLINE_STMT:
+			case AST_NODE_TYPE_IDENTIFIER:
+			case AST_NODE_TYPE_ASM_INLINE_STMT:
 				dynamic_string_dealloc(&(temp->string_value));
 				break;
 
 			//We could see a case where this is a string const
-			case AST_NODE_CLASS_CONSTANT:
+			case AST_NODE_TYPE_CONSTANT:
 				if(temp->constant_type == STR_CONST){
 					dynamic_string_dealloc(&(temp->string_value));
 				}
