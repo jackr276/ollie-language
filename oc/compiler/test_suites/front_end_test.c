@@ -112,7 +112,7 @@ int main(int argc, char** argv){
 	front_end_results_package_t* parse_results = parse(options);
 
 	//Let's see what kind of results we got
-	if(parse_results->root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(parse_results->root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//Timer end
 		clock_t end = clock();
 
