@@ -1233,7 +1233,6 @@ static void sweep(cfg_t* cfg){
 }
 
 
-
 /**
  * Mark all statements that write to a given field in a structure. We're able to be more specific
  * here because a construct's layout is determined when the parser hits it. As such, if we're only
@@ -1371,7 +1370,7 @@ static void mark_and_add_all_definitions(cfg_t* cfg, three_addr_var_t* variable,
  * Mark definitions(assignment) of a three address variable within
  * the current function. If a definition is not marked, it must be added to the worklist
  */
-static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
 	if(variable == NULL || current_function == NULL){
 		return;
@@ -1580,7 +1579,7 @@ static void mark(cfg_t* cfg){
 					three_addr_var_t* phi_func_param = dynamic_array_get_at(params, i);
 
 					//Add the definitions in
-					mark_and_add_definition(cfg, stmt, phi_func_param, stmt->function, worklist);
+					mark_and_add_definition(cfg, phi_func_param, stmt->function, worklist);
 				}
 
 				break;
@@ -1593,7 +1592,7 @@ static void mark(cfg_t* cfg){
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-					mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
+					mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
 				}
 
 				break;
@@ -1603,14 +1602,14 @@ static void mark(cfg_t* cfg){
 			//the memory address of the function that we're calling
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
 
 				//Grab the parameters out
 				params = stmt->function_parameters;
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-					mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
+					mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
 				}
 
 				break;
@@ -1625,8 +1624,8 @@ static void mark(cfg_t* cfg){
 			//In all other cases, we'll just mark and add the two operands 
 			default:
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
-				mark_and_add_definition(cfg, stmt, stmt->op2, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op2, stmt->function, worklist);
 
 				break;
 		}
@@ -1721,7 +1720,7 @@ static void mark(cfg_t* cfg){
 			instruction_t* jump_to_if = rdf_block_stmt;
 
 			//Mark and add the definitions of the op1 that this conditional jump relies on as important
-			mark_and_add_definition(cfg, jump_to_if, jump_to_if->op1, stmt->function, worklist);
+			mark_and_add_definition(cfg, jump_to_if->op1, stmt->function, worklist);
 
 			//Now mark the jump to if. We don't need to add this one to
 			//any list - there's nothing else to mark
