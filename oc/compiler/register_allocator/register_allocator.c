@@ -1472,10 +1472,10 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 		//Crawl through every block
 		while(current != NULL){
 			//We'll skip all of these - we don't need them
-			if(current->CLASS == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT 
+			if(current->statement_type == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT 
 				&& current->source_register->associated_live_range == spill_range){
 				//We'll need to change the offset to now be the appropriate value here
-				current->offset->long_const = spill_range->stack_offset;
+				current->offset->constant_value.long_constant = spill_range->stack_offset;
 
 				//And we can move along, nothing else to do for this one
 				current = current->next_statement;

@@ -24,16 +24,22 @@ void negate_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value *= -1;
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value *= -1;
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value *= -1;
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = constant_node->int_long_val * -1;
+			constant_node->constant_value.signed_long_value *= -1;
 			break;
 		case FLOAT_CONST:
-			constant_node->float_val = constant_node->float_val * -1;
+			constant_node->constant_value.float_value *= -1;
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = constant_node->char_val * -1;
+			constant_node->constant_value.char_value *= -1;
 			break;
 		//This should never happen
 		default:
@@ -50,16 +56,22 @@ void decrement_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value--;
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value--;
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value--;
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = constant_node->int_long_val - 1;
+			constant_node->constant_value.signed_long_value--;
 			break;
 		case FLOAT_CONST:
-			constant_node->float_val = constant_node->float_val - 1;
+			constant_node->constant_value.float_value--;
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = constant_node->char_val - 1;
+			constant_node->constant_value.char_value--;
 			break;
 		//This should never happen
 		default:
@@ -76,16 +88,22 @@ void increment_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value++;
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value++;
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value++;
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = constant_node->int_long_val + 1;
+			constant_node->constant_value.signed_long_value++;
 			break;
 		case FLOAT_CONST:
-			constant_node->float_val = constant_node->float_val + 1;
+			constant_node->constant_value.float_value++;
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = constant_node->char_val + 1;
+			constant_node->constant_value.char_value++;
 			break;
 		//This should never happen
 		default:
@@ -102,13 +120,19 @@ void logical_not_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value = !(constant_node->constant_value.unsigned_int_value);
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value = !(constant_node->constant_value.signed_int_value);
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value = !(constant_node->constant_value.unsigned_long_value);
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = !(constant_node->int_long_val);
+			constant_node->constant_value.signed_long_value = !(constant_node->constant_value.signed_long_value);
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = !(constant_node->char_val);
+			constant_node->constant_value.char_value = !(constant_node->constant_value.char_value);
 			break;
 		//This should never happen
 		default:
@@ -125,13 +149,19 @@ void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value = ~(constant_node->constant_value.unsigned_int_value);
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value = ~(constant_node->constant_value.signed_int_value);
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value = ~(constant_node->constant_value.unsigned_long_value);
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = ~(constant_node->int_long_val);
+			constant_node->constant_value.signed_long_value = ~(constant_node->constant_value.signed_long_value);
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = ~(constant_node->char_val);
+			constant_node->constant_value.char_value = ~(constant_node->constant_value.char_value);
 			break;
 		//This should never happen
 		default:
@@ -151,15 +181,15 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	memcpy(duplicated, node, sizeof(generic_ast_node_t));
 
 	//Let's see if we have any special cases here that require extra attention
-	switch(node->CLASS){
+	switch(node->ast_node_type){
 		//Asm inline is a special case because we'll need to copy the assembly over
-		case AST_NODE_CLASS_ASM_INLINE_STMT:
-		case AST_NODE_CLASS_IDENTIFIER:
+		case AST_NODE_TYPE_ASM_INLINE_STMT:
+		case AST_NODE_TYPE_IDENTIFIER:
 			duplicated->string_value = clone_dynamic_string(&(node->string_value));
 			break;
 
 		//Constants are another special case, because they contain a special inner node
-		case AST_NODE_CLASS_CONSTANT:
+		case AST_NODE_TYPE_CONSTANT:
 			//If we have a string constant, we'll duplicate the dynamic string
 			if(node->constant_type == STR_CONST){
 				duplicated->string_value = clone_dynamic_string(&(node->string_value));
@@ -199,7 +229,7 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
  * that they want to use. It is assumed that the user already knows the proper type and takes appropriate action based
  * on that
 */
-generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
+generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
 
@@ -213,7 +243,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
 		current_ast_node = node;
 	}
 	//Assign the class
-	node->CLASS = CLASS;
+	node->ast_node_type = ast_node_type;
 
 	//Assign the side of the node
 	node->side = side;
@@ -272,11 +302,11 @@ void ast_dealloc(){
 
 		//We can off the bat free it's data
 		if(temp->node != NULL){
-			switch(temp->CLASS){
+			switch(temp->ast_node_type){
 				//Don't free these here, they'd be freed elsewhere
-				case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
-				case AST_NODE_CLASS_STRING_INITIALIZER:
-				case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+				case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				case AST_NODE_TYPE_STRING_INITIALIZER:
+				case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 					break;
 				default:
 					//Otherwise we can
@@ -285,14 +315,14 @@ void ast_dealloc(){
 		}
 
 		//Some additional freeing may be needed
-		switch(temp->CLASS){
-			case AST_NODE_CLASS_IDENTIFIER:
-			case AST_NODE_CLASS_ASM_INLINE_STMT:
+		switch(temp->ast_node_type){
+			case AST_NODE_TYPE_IDENTIFIER:
+			case AST_NODE_TYPE_ASM_INLINE_STMT:
 				dynamic_string_dealloc(&(temp->string_value));
 				break;
 
 			//We could see a case where this is a string const
-			case AST_NODE_CLASS_CONSTANT:
+			case AST_NODE_TYPE_CONSTANT:
 				if(temp->constant_type == STR_CONST){
 					dynamic_string_dealloc(&(temp->string_value));
 				}

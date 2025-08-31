@@ -149,7 +149,7 @@ u_int8_t is_instruction_binary_operation(instruction_t* instruction){
 	}
 
 	//Switch based on class
-	switch(instruction->CLASS){
+	switch(instruction->statement_type){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 			return TRUE;
@@ -169,7 +169,7 @@ u_int8_t is_instruction_assignment_operation(instruction_t* instruction){
 	}
 
 	//Switch based on class
-	switch(instruction->CLASS){
+	switch(instruction->statement_type){
 		case THREE_ADDR_CODE_ASSN_STMT:
 		case THREE_ADDR_CODE_ASSN_CONST_STMT:
 			return TRUE;
@@ -217,39 +217,39 @@ variable_size_t select_type_size(generic_type_t* type){
 		//Probably the most common option
 		case TYPE_CLASS_BASIC:
 			//Switch based on this
-			switch (type->basic_type->basic_type) {
-				case U_INT8:
-				case S_INT8:
+			switch (type->basic_type_token) {
+				case U8:
+				case I8:
 				case CHAR:
 					size = BYTE;
 					break;
 
-				case U_INT16:
-				case S_INT16:
+				case U16:
+				case I16:
 					size = WORD;
 					break;
 
 				//These are 32 bit(double word)
-				case S_INT32:
-				case U_INT32:
+				case I32:
+				case U32:
 				case SIGNED_INT_CONST:
 				case UNSIGNED_INT_CONST:
 					size = DOUBLE_WORD;
 					break;
 
 				//This is SP
-				case FLOAT32:
+				case F32:
 					size = SINGLE_PRECISION;
 					break;
 
 				//This is double precision
-				case FLOAT64:
+				case F64:
 					size = DOUBLE_PRECISION;
 					break;
 
 				//These are all quad word(64 bit)
-				case U_INT64:
-				case S_INT64:
+				case U64:
+				case I64:
 					size = QUAD_WORD;
 					break;
 			
@@ -299,37 +299,37 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 		//Probably the most common option
 		case TYPE_CLASS_BASIC:
 			//Switch based on this
-			switch (type->basic_type->basic_type) {
-				case U_INT8:
-				case S_INT8:
+			switch (type->basic_type_token) {
+				case U8:
+				case I8:
 				case CHAR:
 					size = BYTE;
 					break;
 
-				case U_INT16:
-				case S_INT16:
+				case U16:
+				case I16:
 					size = WORD;
 					break;
 
 				//These are 32 bit(double word)
-				case S_INT32:
-				case U_INT32:
+				case I32:
+				case U32:
 					size = DOUBLE_WORD;
 					break;
 
 				//This is SP
-				case FLOAT32:
+				case F32:
 					size = SINGLE_PRECISION;
 					break;
 
 				//This is double precision
-				case FLOAT64:
+				case F64:
 					size = DOUBLE_PRECISION;
 					break;
 
 				//These are all quad word(64 bit)
-				case U_INT64:
-				case S_INT64:
+				case U64:
+				case I64:
 					size = QUAD_WORD;
 					break;
 			
@@ -777,7 +777,7 @@ instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, th
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll make our populations
-	stmt->CLASS = THREE_ADDR_CODE_LEA_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	stmt->op2 = op2;
@@ -797,7 +797,7 @@ instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll make our populations
-	stmt->CLASS = THREE_ADDR_CODE_LEA_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	stmt->op2 = op2;
@@ -821,7 +821,7 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll make our populations
-	stmt->CLASS = THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT;
 	stmt->assignee = assignee;
 	//We store the jumping to block as our operand. It's really a jump table
 	stmt->jumping_to_block = op1;
@@ -841,7 +841,7 @@ instruction_t* emit_idle_instruction(){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Store the class
-	stmt->CLASS = THREE_ADDR_CODE_IDLE_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_IDLE_STMT;
 	//What function are we in
 	stmt->function = current_function;
 	//And we're done
@@ -1204,17 +1204,17 @@ void print_live_range(FILE* fl, live_range_t* live_range){
 static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "%d", constant->int_const);
+			fprintf(fl, "%d", constant->constant_value.integer_constant);
 			break;
 		case LONG_CONST:
-			fprintf(fl, "%ld", constant->long_const);
+			fprintf(fl, "%ld", constant->constant_value.long_constant);
 			break;
 		case CHAR_CONST:
 			//Special case here to for display reasons
-			if(constant->char_const == 0){
+			if(constant->constant_value.char_constant == 0){
 				fprintf(fl, "'\\0'");
 			} else {
-				fprintf(fl, "'%c'", constant->char_const);
+				fprintf(fl, "'%c'", constant->constant_value.char_constant);
 			}
 			break;
 		//We do not print out string constants directly. Instead, we print
@@ -1223,7 +1223,7 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			fprintf(fl, ".LC%d", constant->local_constant->local_constant_id);
 			break;
 		case FLOAT_CONST:
-			fprintf(fl, "%f", constant->float_const);
+			fprintf(fl, "%f", constant->constant_value.float_constant);
 			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
@@ -1330,7 +1330,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 	dynamic_array_t* func_params;
 
 	//Go based on what our statatement class is
-	switch(stmt->CLASS){
+	switch(stmt->statement_type){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 			//This one comes first
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
@@ -1622,16 +1622,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "$%d", constant->int_const);
+			fprintf(fl, "$%d", constant->constant_value.integer_constant);
 			break;
 		case LONG_CONST:
-			fprintf(fl, "$%ld", constant->long_const);
+			fprintf(fl, "$%ld", constant->constant_value.long_constant);
 			break;
 		case CHAR_CONST:
-			fprintf(fl, "$%d", constant->char_const);
+			fprintf(fl, "$%d", constant->constant_value.char_constant);
 			break;
 		case FLOAT_CONST:
-			fprintf(fl, "$%f", constant->float_const);
+			fprintf(fl, "$%f", constant->constant_value.float_constant);
 			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
@@ -1654,16 +1654,16 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "%d", constant->int_const);
+			fprintf(fl, "%d", constant->constant_value.integer_constant);
 			break;
 		case LONG_CONST:
-			fprintf(fl, "%ld", constant->long_const);
+			fprintf(fl, "%ld", constant->constant_value.long_constant);
 			break;
 		case CHAR_CONST:
-			fprintf(fl, "%d", constant->char_const);
+			fprintf(fl, "%d", constant->constant_value.char_constant);
 			break;
 		case FLOAT_CONST:
-			fprintf(fl, "%f", constant->float_const);
+			fprintf(fl, "%f", constant->constant_value.float_constant);
 			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
@@ -3019,7 +3019,7 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 	instruction_t* dec_stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we populate
-	dec_stmt->CLASS = THREE_ADDR_CODE_DEC_STMT;
+	dec_stmt->statement_type = THREE_ADDR_CODE_DEC_STMT;
 	dec_stmt->assignee = emit_var_copy(decrementee);
 	dec_stmt->op1 = decrementee;
 	//What function are we in
@@ -3039,7 +3039,7 @@ instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t*
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//We'll now set the type
-	stmt->CLASS = THREE_ADDR_CODE_TEST_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_TEST_STMT;
 
 	//Assign the assignee and op1
 	stmt->assignee = assignee;
@@ -3103,7 +3103,7 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 	instruction_t* inc_stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we populate
-	inc_stmt->CLASS = THREE_ADDR_CODE_INC_STMT;
+	inc_stmt->statement_type = THREE_ADDR_CODE_INC_STMT;
 	inc_stmt->assignee = emit_var_copy(incrementee);
 	inc_stmt->op1 = incrementee;
 	//What function are we in
@@ -3131,29 +3131,29 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	//Now based on what type we have we'll make assignments
 	switch(constant->const_type){
 		case CHAR_CONST:
-			constant->char_const = const_node->char_val;
+			constant->constant_value.char_constant = const_node->constant_value.char_value;
 			//Set the 0 flag if true
-			if(const_node->char_val == 0){
+			if(const_node->constant_value.char_value == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case INT_CONST:
-			constant->int_const = const_node->int_long_val;
+			constant->constant_value.integer_constant = const_node->constant_value.signed_int_value;
 			//Set the 0 flag if true
-			if(const_node->int_long_val == 0){
+			if(const_node->constant_value.signed_int_value == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case FLOAT_CONST:
-			constant->float_const = const_node->float_val;
+			constant->constant_value.float_constant = const_node->constant_value.float_value;
 			break;
 		case STR_CONST:
 			fprintf(stderr, "String constants may not be emitted directly\n");
 			exit(0);
 		case LONG_CONST:
-			constant->long_const = const_node->int_long_val;
+			constant->constant_value.long_constant = const_node->constant_value.signed_long_value;
 			//Set the 0 flag if 
-			if(const_node->int_long_val == 0){
+			if(const_node->constant_value.signed_long_value == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
@@ -3215,7 +3215,7 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it appropriately
-	stmt->CLASS = THREE_ADDR_CODE_RET_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_RET_STMT;
 	//Set op1 to be the returnee
 	stmt->op1 = returnee;
 	//What function are we in
@@ -3234,7 +3234,7 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with the appropriate values
-	stmt->CLASS = THREE_ADDR_CODE_BIN_OP_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_BIN_OP_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	stmt->op = op;
@@ -3260,7 +3260,7 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with the appropriate values
-	stmt->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	stmt->op = op;
@@ -3281,7 +3281,7 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Define the class
-	stmt->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 	//Let's now populate it with values
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
@@ -3300,7 +3300,7 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now define the class
-	stmt->CLASS = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
 
 	//Now we'll populate with values
 	stmt->assignee = assignee;
@@ -3431,7 +3431,7 @@ instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->CLASS = THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT;
+	stmt->statement_type = THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	//What function are we in
@@ -3449,7 +3449,7 @@ instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->CLASS = THREE_ADDR_CODE_MEM_ACCESS_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_MEM_ACCESS_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	//Record the function that we're in
@@ -3550,7 +3550,7 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 	stmt->assignee = assignee;
 	stmt->op1_const = constant;
 	//What function are we in
@@ -3568,7 +3568,7 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
 	stmt->jumping_to_block = jumping_to_block;
 	stmt->jump_type = jump_type;
 	//What function are we in
@@ -3587,7 +3587,7 @@ instruction_t* emit_incomplete_jmp_instruction(three_addr_var_t* relies_on, jump
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->CLASS = THREE_ADDR_CODE_JUMP_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
 	stmt->jump_type = jump_type;
 
 	//Store the variable that this relies on. This will be NULL for direct jumps,
@@ -3609,7 +3609,7 @@ instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_typ
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->CLASS = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
 	//The address we're jumping to is in op1
 	stmt->op1 = address;
 	stmt->jump_type = jump_type;
@@ -3628,7 +3628,7 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->CLASS = THREE_ADDR_CODE_FUNC_CALL;
+	stmt->statement_type = THREE_ADDR_CODE_FUNC_CALL;
 	stmt->called_function = func_record;
 	stmt->assignee = assigned_to;
 	//What function are we in
@@ -3647,7 +3647,7 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Populate it with the appropriate values
-	stmt->CLASS = THREE_ADDR_CODE_INDIRECT_FUNC_CALL;
+	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_FUNC_CALL;
 	//We will store the variable for the function that we're calling indirectly in op1
 	stmt->op1 = function_pointer;
 	//Mark the assignee
@@ -3672,13 +3672,13 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 	//Store the class
 	constant->const_type = INT_CONST;
 	//Store the int value
-	constant->int_const = int_const;
+	constant->constant_value.integer_constant = int_const;
 
 	//Lookup what we have in here(i32)
 	constant->type = lookup_type_name_only(symtab, "i32")->type;
 
 	//Set this flag if we need to
-	if(int_const == 0){
+	if(constant->constant_value.integer_constant == 0){
 		constant->is_value_0 = TRUE;
 	}
 
@@ -3700,7 +3700,7 @@ three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* sy
 	//Store the class
 	constant->const_type = CHAR_CONST;
 	//Store the char value
-	constant->char_const = char_const;
+	constant->constant_value.char_constant = char_const;
 
 	//Lookup what we have in here(char)
 	constant->type = lookup_type_name_only(symtab, "char")->type;
@@ -3724,13 +3724,13 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab
 	//Store the class
 	constant->const_type = INT_CONST;
 	//Store the int value
-	constant->int_const = int_const;
+	constant->constant_value.integer_constant = int_const;
 
 	//Lookup what we have in here(u32)
 	constant->type = lookup_type_name_only(symtab, "u32")->type;
 
 	//Set this flag if we need to
-	if(int_const == 0){
+	if(constant->constant_value.integer_constant == 0){
 		constant->is_value_0 = TRUE;
 	}
 
@@ -3752,7 +3752,7 @@ three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* sy
 	//Store the class
 	constant->const_type = LONG_CONST;
 	//Store the int value
-	constant->long_const = long_const;
+	constant->constant_value.long_constant = long_const;
 
 	//Lookup what we have in here(i32)
 	constant->type = lookup_type_name_only(symtab, "i64")->type;
@@ -3775,7 +3775,7 @@ instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll assign whatever we need
-	stmt->CLASS = THREE_ADDR_CODE_NEG_STATEMENT;
+	stmt->statement_type = THREE_ADDR_CODE_NEG_STATEMENT;
 	stmt->assignee = assignee;
 	stmt->op1 = negatee;
 	//What function are we in
@@ -3794,7 +3794,7 @@ instruction_t* emit_not_instruction(three_addr_var_t* var){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's make it a not stmt
-	stmt->CLASS = THREE_ADDR_CODE_BITWISE_NOT_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_BITWISE_NOT_STMT;
 	//The only var here is the assignee
 	stmt->assignee = var;
 	//For the potential of temp variables
@@ -3815,7 +3815,7 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's make it a logical not stmt
-	stmt->CLASS = THREE_ADDR_CODE_LOGICAL_NOT_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_LOGICAL_NOT_STMT;
 	stmt->assignee = assignee;
 	//Leave it in here
 	stmt->op1 = op1;
@@ -3836,7 +3836,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Store the class
-	stmt->CLASS = THREE_ADDR_CODE_ASM_INLINE_STMT;
+	stmt->statement_type = THREE_ADDR_CODE_ASM_INLINE_STMT;
 
 	//Copy this over
 	stmt->inlined_assembly = clone_dynamic_string(&(asm_inline_node->string_value));
@@ -3861,7 +3861,7 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable, generic_typ
 	stmt->assignee = emit_var(variable, FALSE);
 
 	//Note what kind of node this is
-	stmt->CLASS = THREE_ADDR_CODE_PHI_FUNC;
+	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
 	//What function are we in
 	stmt->function = current_function;
 
@@ -3957,33 +3957,33 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 		case INT_CONST_FORCE_U:
 			//If it's any of these we'll add the int value
 			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
-				constant2->int_const += constant1->int_const;
+				constant2->constant_value.integer_constant += constant1->constant_value.integer_constant;
 			//Otherwise add the long value
 			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
-				constant2->int_const += constant1->long_const;
+				constant2->constant_value.integer_constant += constant1->constant_value.long_constant;
 			//Only other option is char
 			} else {
-				constant2->int_const += constant1->char_const;
+				constant2->constant_value.integer_constant += constant1->constant_value.char_constant;
 			}
 			break;
 		case LONG_CONST:
 		case LONG_CONST_FORCE_U:
 			//If it's any of these we'll add the int value
 			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
-				constant2->long_const += constant1->int_const;
+				constant2->constant_value.long_constant += constant1->constant_value.integer_constant;
 			//Otherwise add the long value
 			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
-				constant2->long_const += constant1->long_const;
+				constant2->constant_value.long_constant += constant1->constant_value.long_constant;
 			//Only other option is char
 			} else {
-				constant2->long_const += constant1->char_const;
+				constant2->constant_value.long_constant += constant1->constant_value.char_constant;
 			}
 
 			break;
 		//Can't really see this ever happening, but it won't hurt
 		case CHAR_CONST:
 			//Add the other one's char const
-			constant2->char_const += constant1->char_const;
+			constant2->constant_value.char_constant += constant1->constant_value.char_constant;
 			break;
 		//Mainly for us as the programmer
 		default:

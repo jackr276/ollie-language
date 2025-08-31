@@ -89,6 +89,7 @@ static char* current_file_name = NULL;
 static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side);
 //What type are we given?
 static generic_type_t* type_specifier(FILE* fl);
+static u_int8_t alias_statement(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side);
 static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global);
@@ -201,7 +202,7 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t
 	//Increment the number of errors
 	num_errors++;
 	//Allocate and return an error node
-	return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 }
 
 
@@ -296,7 +297,7 @@ static void update_constant_type_in_subtree(generic_ast_node_t* sub_tree_node, g
  */
 static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, Token op, generic_ast_node_t* operand, side_type_t side){
 	//Grab the pointer type out
-	pointer_type_t* pointer_type = pointer->inferred_type->pointer_type;
+	pointer_type_t* pointer_type = pointer->inferred_type->internal_types.pointer_type;
 
 	//If this is a void pointer, we're done
 	if(pointer_type->is_void_pointer == TRUE){
@@ -304,16 +305,16 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	}
 
 	//Write out our constant multplicand
-	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
+	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 	//Mark the type too
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
-	constant_multiplicand->int_long_val = pointer_type->points_to->type_size;
+	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->points_to->type_size;
 	//Ensure that we give this a type
 	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
 	//Allocate an adjustment node
-	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 
 	//This is a multiplication node
 	adjustment->binary_operator = STAR;
@@ -325,7 +326,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	add_child_node(adjustment, constant_multiplicand);
 
 	//Generate a binary expression that we'll eventually return
-	generic_ast_node_t* return_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+	generic_ast_node_t* return_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 
 	//Save the operator
 	return_node->binary_operator = op;
@@ -363,7 +364,7 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	}
 
 	//Create the identifier node
-	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_CLASS_IDENTIFIER, side); //Add the identifier into the node itself
+	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side); //Add the identifier into the node itself
 	//Idents are assignable
 	ident_node->is_assignable = ASSIGNABLE;
 	//Clone the string in
@@ -384,9 +385,9 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
  * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
  * simplifies our development processes
  */
-static generic_ast_node_t* emit_direct_constant(u_int32_t constant){
+static generic_ast_node_t* emit_direct_constant(int32_t constant){
 	//Create our constant node
-	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
 	//Add the line number
 	constant_node->line_number = parser_line_num;
 
@@ -397,7 +398,7 @@ static generic_ast_node_t* emit_direct_constant(u_int32_t constant){
 	constant_node->inferred_type = generic_signed_int;
 
 	//Give it the value
-	constant_node->int_long_val = constant;
+	constant_node->constant_value.signed_int_value = constant;
 
 	return constant_node;
 }
@@ -421,7 +422,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 	lookahead = get_next_token(fl, &parser_line_num, const_search);
 
 	//Create our constant node
-	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 	//Add the line number
 	constant_node->line_number = parser_line_num;
 
@@ -433,7 +434,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_type = INT_CONST;
 
 			//Store the integer value
-			constant_node->int_long_val = atoi(lookahead.lexeme.string);
+			constant_node->constant_value.signed_int_value = atoi(lookahead.lexeme.string);
 
 			//This is signed by default
 			constant_node->inferred_type = generic_signed_int;
@@ -445,7 +446,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Mark what it is
 			constant_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			constant_node->int_long_val = atoi(lookahead.lexeme.string);
+			constant_node->constant_value.unsigned_int_value = atoi(lookahead.lexeme.string);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_unsigned_int;
@@ -457,7 +458,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Mark what it is 
 			constant_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			constant_node->int_long_val = strtol(lookahead.lexeme.string, NULL, 0);
+			constant_node->constant_value.signed_int_value = strtol(lookahead.lexeme.string, NULL, 0);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_signed_int;
@@ -470,7 +471,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			constant_node->int_long_val = atol(lookahead.lexeme.string);
+			constant_node->constant_value.signed_long_value = atol(lookahead.lexeme.string);
 
 			//This is a signed i64
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
@@ -483,7 +484,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			constant_node->int_long_val = atol(lookahead.lexeme.string);
+			constant_node->constant_value.unsigned_long_value = atol(lookahead.lexeme.string);
 
 			//By default, int constants are of type s_int64 
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
@@ -496,7 +497,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			float float_val = atof(lookahead.lexeme.string);
 
 			//Store the float value we were given
-			constant_node->float_val = float_val;
+			constant_node->constant_value.float_value = float_val;
 
 			//By default, float constants are of type float32
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f32")->type;
@@ -508,7 +509,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			char char_val = *(lookahead.lexeme.string);
 
 			//Store the char value that we were given
-			constant_node->char_val = char_val;
+			constant_node->constant_value.char_value = char_val;
 
 			//Char consts are of type char(obviously)
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "char")->type;
@@ -560,7 +561,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	generic_ast_node_t* ident = identifier(fl, side);
 
 	//We have a general error-probably will be quite uncommon
-	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//We'll let the node propogate up
 		return print_and_return_error("Non-identifier provided as funciton call", parser_line_num);
 	}
@@ -592,7 +593,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//This is the most common case - that we have a simple, direct function call
 	if(function_record != NULL){
 		//Allocate this as a regular function call node
-		function_call_node = ast_node_alloc(AST_NODE_CLASS_FUNCTION_CALL, side);
+		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
 
 		//Store the function record in the node
 		function_call_node->func_record = function_record;
@@ -601,7 +602,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		function_type = function_record->signature;
 
 		//Store our function signature
-		function_signature = function_record->signature->function_type;
+		function_signature = function_record->signature->internal_types.function_type;
 
 		//We'll also add in that the current function has called this one
 		call_function(current_function->call_graph_node, function_record->call_graph_node);
@@ -621,10 +622,10 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		}
 
 		//Now that we know this exists, we'll allocate this one as an indirect function call
-		function_call_node = ast_node_alloc(AST_NODE_CLASS_INDIRECT_FUNCTION_CALL, side);
+		function_call_node = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
 
 		//Store our funcion signature
-		function_signature = function_type->function_type;
+		function_signature = function_type->internal_types.function_type;
 
 		//Store the variable too
 		function_call_node->variable = function_pointer_variable;
@@ -664,7 +665,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 			//Print out the actual function record as well
 			num_errors++;
 			//Return the error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
 		//Otherwise if it was fine, we'll now pop the grouping stack
@@ -717,7 +718,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		current_param = ternary_expression(fl, side);
 
 		//We now have an error of some kind
-		if(current_param->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Bad parameter passed to function call", current_line);
 		}
 	
@@ -763,7 +764,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		//Error out
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 	}
 
 	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
@@ -807,7 +808,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	generic_ast_node_t* expr_node = logical_or_expression(fl, side);
 	
 	//If it's an error
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Unable to use sizeof on invalid expression",  parser_line_num);
 		num_errors++;
 		//It's already an error, so give it back that way
@@ -832,12 +833,12 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	generic_type_t* return_type = expr_node->inferred_type;
 
 	//Create a constant node
-	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
+	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 	//This will be an int const
 	const_node->constant_type = INT_CONST;
 	//Store the actual value of the type size
-	const_node->int_long_val = return_type->type_size;
+	const_node->constant_value.unsigned_int_value = return_type->type_size;
 	//Grab and store type info
 	//This will always end up as a generic signed int
 	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
@@ -900,14 +901,14 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	}
 
 	//Create a constant node
-	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, side);
+	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 	//Add the line number
 	const_node->line_number = parser_line_num;
 	//Add the constant
 	const_node->constant_type = INT_CONST;
 	//Store the actual value
-	const_node->int_long_val = type_size;
+	const_node->constant_value.unsigned_int_value = type_size;
 	//Grab and store type info
 	//These will be generic signed ints
 	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
@@ -957,7 +958,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			generic_ast_node_t* ident = identifier(fl, side);
 
 			//If there was a failure of some kind, we'll allow it to propogate up
-			if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				//Send the error up the chain
 				return ident;
 			}
@@ -1000,7 +1001,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//If it could be found, then we're all set
 			if(found_func != NULL){
 				//We'll change the type of this node from an identifier to a constant
-				ident->CLASS = AST_NODE_CLASS_CONSTANT;
+				ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
 
 				//The type of this value is a function constant
 				ident->constant_type = FUNC_CONST;
@@ -1065,7 +1066,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			generic_ast_node_t* expr = ternary_expression(fl, side);
 
 			//If it's an error, just give the node back
-			if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return expr;
 			}
 
@@ -1093,7 +1094,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			func_call = function_call(fl, side);
 
 			//If we failed here
-			if(func_call->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(func_call->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return func_call;
 			}
 
@@ -1175,7 +1176,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//If we make it here however, that means that we did see the assign keyword. Since
 	//this is the case, we'll make a new assignment node and take the appropriate actions here 
-	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_CLASS_ASNMNT_EXPR, SIDE_TYPE_LEFT);
+	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
 	//Add in the line number
 	asn_expr_node->line_number = current_line;
 
@@ -1186,7 +1187,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	generic_ast_node_t* left_hand_unary = unary_expression(fl, SIDE_TYPE_LEFT);
 
 	//Fail out here
-	if(left_hand_unary->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(left_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid left hand side given to assignment expression", current_line);
 	}
 	
@@ -1229,7 +1230,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	generic_ast_node_t* expr = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Fail case here
-	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
 	}
 
@@ -1335,7 +1336,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			//By the time that we get here, we know that all coercion has been completed
 			//We can now construct our final result
 			//Allocate the binary expression
-			generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, SIDE_TYPE_RIGHT);
+			generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
 			//Store the type and operator
 			binary_op_node->inferred_type = final_type;
 			binary_op_node->binary_operator = binary_op;
@@ -1396,7 +1397,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Otherwise we'll now make the node here
-	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_CLASS_STRUCT_ACCESSOR, side);
+	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_ACCESSOR, side);
 	//Add the line number
 	struct_access_node->line_number = current_line;
 
@@ -1414,23 +1415,23 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 		//We need to specifically see a pointer to a struct for the current type
 		//If it's something else, we fail out here
 		if(working_type->type_class != TYPE_CLASS_POINTER){
-			sprintf(info, "Type \"%s\" cannot be accessed with the => operator. First defined here:", working_type->type_name.string);
+			sprintf(info, "Type \"%s\" cannot be accessed with the :: operator. First defined here:", working_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
 		//We can now pick out what type we're referencing(should be construct)
-		referenced_type = working_type->pointer_type->points_to;
+		referenced_type = working_type->internal_types.pointer_type->points_to;
 
 		//Now we know that its a pointer, but what does it point to?
 		if(referenced_type->type_class != TYPE_CLASS_STRUCT){
-			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name.string);
+			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the :: operator. First defined here:", referenced_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, referenced_type));
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
 	//Otherwise we know that we have some kind of non-pointer here(or so we hope)
@@ -1441,7 +1442,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
 		//If we make it here we know that working type is a struct
@@ -1453,7 +1454,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	generic_ast_node_t* ident = identifier(fl, side); 
 
 	//For now we're just doing error checking
-	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Construct accessor could not find valid identifier", current_line);
 	}
 
@@ -1461,7 +1462,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	char* member_name = ident->string_value.string;
 
 	//Let's see if we can look this up inside of the type
-	symtab_variable_record_t* var_record = get_struct_member(referenced_type->struct_type, member_name)->variable;
+	symtab_variable_record_t* var_record = get_struct_member(referenced_type->internal_types.struct_type, member_name)->variable;
 
 	//If we can't find it we're out
 	if(var_record == NULL){
@@ -1514,7 +1515,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 	generic_ast_node_t* expr = ternary_expression(fl, side);
 
 	//If we fail, automatic exit here
-	if(expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid conditional expression given to array accessor", current_line);
 	}
 
@@ -1558,7 +1559,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 	}
 
 	//Now that we've done all of our checks have been done, we can create the actual node
-	generic_ast_node_t* array_acc_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_ACCESSOR, side);
+	generic_ast_node_t* array_acc_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_ACCESSOR, side);
 	//Add the line number
 	array_acc_node->line_number = current_line;
 
@@ -1591,7 +1592,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* result = primary_expression(fl, side);
 
 	//If we fail, then we're bailing out here
-	if(result->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(result->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//Just return, no need for any errors here
 		return result;
 	}
@@ -1617,7 +1618,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 	//If we make it down to here, we know that we're trying to access a variable. As such, 
 	//we need to make sure that we don't see a constant here
-	if(result->CLASS == AST_NODE_CLASS_CONSTANT){
+	if(result->ast_node_type == AST_NODE_TYPE_CONSTANT){
 		return print_and_return_error("Constants are not assignable", current_line);
 	}
 
@@ -1625,7 +1626,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
 	//post operation, so we can make the node for it
-	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_CLASS_POSTFIX_EXPR, side);
+	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
 	//Add the line number
 	postfix_expr_node->line_number = current_line;
 
@@ -1656,14 +1657,14 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				//Print it out
 				print_type_name(lookup_type(type_symtab, current_type));
 				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 			}
 
 			//Let the array accessor handle it
 			generic_ast_node_t* array_acc = array_accessor(fl, side);
 			
 			//Let's see if it actually worked
-			if(array_acc->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(array_acc->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Invalid array accessor found in postfix expression", current_line);
 			}
 
@@ -1673,10 +1674,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//Based on this, the current type is whatever this array contains. We'll also use this for size determinations
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
-				current_type = dealias_type(current_type->array_type->member_type);
+				current_type = dealias_type(current_type->internal_types.array_type->member_type);
 			} else {
 				//Otherwise we know that it must be a pointer
-				current_type = dealias_type(current_type->pointer_type->points_to);
+				current_type = dealias_type(current_type->internal_types.pointer_type->points_to);
 			}
 			
 			//The current type of any array access will be whatever the derferenced value is
@@ -1691,7 +1692,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 			generic_ast_node_t* struct_access = struct_accessor(fl, current_type, side);
 
 			//We have our fail case here
-			if(struct_access->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(struct_access->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Invalid construct accessor found in postfix expression", current_line);
 			}
 
@@ -1744,7 +1745,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 	//Otherwise if we get here we know that we either have post inc or dec
 	//Create the unary operator node
-	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR, side);
+	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
 
 	//Store the token
 	unary_post_op->unary_operator = lookahead.tok;
@@ -1834,7 +1835,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	//Otherwise, if we get down here we know that we have a unary operator
 	
 	//We'll first create the unary operator node for ourselves here
-	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_CLASS_UNARY_OPERATOR, side);
+	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
 	//Assign the operator to this
 	unary_op->unary_operator = lookahead.tok;
 
@@ -1842,7 +1843,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* cast_expr = cast_expression(fl, side);
 
 	//Let's check for errors
-	if(cast_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(cast_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid cast expression given after unary operator", parser_line_num);
 	}
 
@@ -1867,16 +1868,16 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 		
 			//Otherwise if we made it here, we only have one final tripping point
 			//Ensure that we aren't trying to deref a null pointer
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->pointer_type->is_void_pointer == TRUE){
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_types.pointer_type->is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 			}
 
 			//Otherwise our dereferencing worked, so the return type will be whatever this points to
 			//Grab what it references whether its a pointer or an array
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-				return_type = cast_expr->inferred_type->pointer_type->points_to;
+				return_type = cast_expr->inferred_type->internal_types.pointer_type->points_to;
 			} else {
-				return_type = cast_expr->inferred_type->array_type->member_type;
+				return_type = cast_expr->inferred_type->internal_types.array_type->member_type;
 			}
 
 			//This is assignable
@@ -1887,7 +1888,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 		//Address operator case
 		case SINGLE_AND:
 			//Is there an attempt to take the address of a constant
-			if(cast_expr->CLASS == AST_NODE_CLASS_CONSTANT){
+			if(cast_expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
 				return print_and_return_error("The address of a constant cannot be taken", parser_line_num);
 			}
 
@@ -2013,7 +2014,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	}
 
 	//If we have a constant here, we have a chance to do some optimizations
-	if(cast_expr->CLASS == AST_NODE_CLASS_CONSTANT){
+	if(cast_expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
 		//Go based on this
 		switch (unary_op_tok) {
 			case MINUS:
@@ -2042,7 +2043,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	}
 
 	//One we get here, we have both nodes that we need
-	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_CLASS_UNARY_EXPR, side);
+	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
 	
 	//The unary operator always comes first
 	add_child_node(unary_node, unary_op);
@@ -2116,7 +2117,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* right_hand_unary = unary_expression(fl, side);
 
 	//If it's an error we'll jump out
-	if(right_hand_unary->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(right_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return right_hand_unary;
 	}
 
@@ -2189,7 +2190,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 	generic_ast_node_t* sub_tree_root = cast_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -2217,7 +2218,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2229,7 +2230,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 		right_child = cast_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -2326,7 +2327,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -2353,7 +2354,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2365,7 +2366,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		right_child = multiplicative_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -2478,7 +2479,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = additive_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -2506,7 +2507,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2518,7 +2519,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 		right_child = additive_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -2613,7 +2614,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = shift_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -2632,7 +2633,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2653,7 +2654,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 		right_child = shift_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -2740,7 +2741,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = relational_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -2759,7 +2760,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2780,7 +2781,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 		right_child = relational_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -2868,7 +2869,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = equality_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -2884,7 +2885,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -2905,7 +2906,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 		right_child = equality_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -2996,7 +2997,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = and_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -3012,7 +3013,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3033,7 +3034,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 		right_child = and_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -3122,7 +3123,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -3138,7 +3139,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3159,7 +3160,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 		right_child = exclusive_or_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -3252,7 +3253,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//If this is an error, we can just propogate it up
 		return sub_tree_root;
 	}
@@ -3268,7 +3269,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3289,7 +3290,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 		right_child = inclusive_or_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
@@ -3384,7 +3385,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* sub_tree_root = logical_and_expression(fl, side);
 
 	//Obvious fail case here
-	if(sub_tree_root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//It's already an error node, so allow it to propogate
 		return sub_tree_root;
 	}
@@ -3400,7 +3401,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 		temp_holder = sub_tree_root;
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_CLASS_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -3421,7 +3422,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 		right_child = logical_and_expression(fl, side);
 
 		//If it's an error, just fail out
-		if(right_child->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//It's already an error node, so allow it to propogate
 			return right_child;
 		}
@@ -3504,7 +3505,7 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 
 	//Let's first allocate our initializer node. The initializer node will store
 	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_ARRAY_INITIALIZER_LIST, side);
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_INITIALIZER_LIST, side);
 
 	//Store the line number
 	initializer_list_node->line_number = parser_line_num;
@@ -3516,7 +3517,7 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 		generic_ast_node_t* initializer_node = initializer(fl, side);
 
 		//If this is an error, then the whole thing is invalid
-		if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid initializer given in array initializer", parser_line_num);
 		}
 
@@ -3557,7 +3558,7 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 
 	//Let's first allocate our initializer node. The initializer node will store
 	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_CLASS_STRUCT_INITIALIZER_LIST, side);
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_INITIALIZER_LIST, side);
 
 	//Store the line number
 	initializer_list_node->line_number = parser_line_num;
@@ -3569,7 +3570,7 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 		generic_ast_node_t* initializer_node = initializer(fl, side);
 
 		//If this is an error, then the whole thing is invalid
-		if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid initializer given in struct initializer", parser_line_num);
 		}
 
@@ -3649,7 +3650,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* conditional = logical_or_expression(fl, side);
 
 	//If this is an error, then the whole thing is over - we're done here
-	if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(conditional->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return conditional;
 	}
 
@@ -3674,7 +3675,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	}
 
 	//Allocate the ternary expression node
-	generic_ast_node_t* ternary_expression_node = ast_node_alloc(AST_NODE_CLASS_TERNARY_EXPRESSION, side);
+	generic_ast_node_t* ternary_expression_node = ast_node_alloc(AST_NODE_TYPE_TERNARY_EXPRESSION, side);
 
 	//The first child is the conditional
 	add_child_node(ternary_expression_node, conditional);
@@ -3683,7 +3684,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* if_branch = ternary_expression(fl, side);
 
 	//If this is invalid, then we bail out
-	if(if_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(if_branch->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid if branch given in ternary operator", parser_line_num);
 	}
 
@@ -3702,7 +3703,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* else_branch = ternary_expression(fl, side);
 
 	//If this is invalid, then we bail out
-	if(else_branch->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(else_branch->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid else branch given in ternary operator", parser_line_num);
 	}
 
@@ -3752,7 +3753,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	generic_ast_node_t* ident = identifier(fl, side);	
 
 	//Let's make sure it actually worked
-	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as construct member name", parser_line_num);
 		num_errors++;
 		//It's an error, so we'll propogate it up
@@ -3774,7 +3775,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	struct_type_field_t* duplicate = NULL;
 
 	//Is this a duplicate? If so, we fail out
-	if((duplicate = get_struct_member(construct->struct_type, name)) != NULL){
+	if((duplicate = get_struct_member(construct->internal_types.struct_type, name)) != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate->variable);
@@ -3988,7 +3989,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		//Is it mutable? If this token exists then it is
 		if(lookahead.tok == MUT){
 			//Store that this is mutable inside of the structure
-			function_type->function_type->parameters[parameter_count].is_mutable = TRUE;
+			function_type->internal_types.function_type->parameters[parameter_count].is_mutable = TRUE;
 		} else {
 			//Otherwise put this back
 			push_back_token(lookahead);
@@ -4003,7 +4004,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		}
 
 		//This is good, we'll store it in the parameter type
-		function_type->function_type->parameters[parameter_count].parameter_type = type;
+		function_type->internal_types.function_type->parameters[parameter_count].parameter_type = type;
 
 		//Increment the count
 		parameter_count++;
@@ -4014,7 +4015,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	} while(lookahead.tok == COMMA);
 
 	//Store the parameter count for down the road
-	function_type->function_type->num_params = parameter_count;
+	function_type->internal_types.function_type->num_params = parameter_count;
 
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
@@ -4054,10 +4055,10 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Let's now store the return type
-	function_type->function_type->return_type = return_type;
+	function_type->internal_types.function_type->return_type = return_type;
 
 	//Mark whether or not it's void as well
-	function_type->function_type->returns_void = is_void_type(return_type);
+	function_type->internal_types.function_type->returns_void = is_void_type(return_type);
 
 	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
 	//confusing syntactical mess that C function pointer declarations have
@@ -4076,7 +4077,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	generic_ast_node_t* identifier_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If this is an error, then we're going to fail out
-	if(identifier_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(identifier_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias type", parser_line_num);
 		num_errors++;
 		return FALSE;
@@ -4188,7 +4189,7 @@ static u_int8_t struct_definer(FILE* fl){
 	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//Fail case
-	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Valid identifier required after construct keyword", parser_line_num);
 		num_errors++;
 		//Destroy the node
@@ -4290,7 +4291,7 @@ static u_int8_t struct_definer(FILE* fl){
 	generic_ast_node_t* alias_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it was invalid
-	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(alias_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4367,6 +4368,64 @@ static u_int8_t struct_definer(FILE* fl){
 
 
 /**
+ * A union member list is a semicolon separated list of different variables that the union stores
+ */
+
+
+
+/**
+ * A union definer allows us to declare a discriminating union datatype
+ *
+ * NOTE: By the time that we get here, we have already seen the UNION keyword 
+ *
+ * BNF RULE: <union_definer> ::=  define union <identifier> {<union_member_list>} {as <identifier>}? ;
+ */
+static u_int8_t union_definer(FILE* fl){
+	//Lookahead token for searching
+	lexitem_t lookahead;
+	//Dynamic string for our type name
+	dynamic_string_t union_name;
+
+	//Allocate it
+	dynamic_string_alloc(&union_name);
+	
+	//Add the prefix in
+	dynamic_string_set(&union_name, "union ");
+
+	//We now need to see a name for our union type
+	generic_ast_node_t* name = identifier(fl, SIDE_TYPE_LEFT);
+
+	//If this is an error fail out
+	if(name->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as union name", parser_line_num);
+		return FAILURE;
+	}
+
+	//Add the ident into our overall name
+	dynamic_string_concatenate(&union_name, name->string_value.string);
+
+	//Now we'll need to scan through the type database to ensure that this isn't already in there
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, union_name.string);
+
+	//If we were able to find it, then someone has already declared this in scope. We'll print
+	//an appropriate message and leave
+	if(found_type != NULL){
+		sprintf(info, "Type %s has already been declared. First declare here:", union_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_type_name(found_type);
+		return FAILURE;
+	}
+
+
+
+	//If we get here it worked so
+	//TODO just fail out for now
+	return FAILURE;
+}
+
+
+
+/**
  * An enum member is simply an identifier. This rule performs all the needed checks to ensure
  * that it's not a duplicate of anything else that we've currently seen. Like all rules, this function
  * returns a reference to the root of the tree it created
@@ -4378,7 +4437,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 	generic_ast_node_t* ident = identifier(fl, side);
 
 	//If it fails, we'll blow the whole thing up
-	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid identifier given as enum member", parser_line_num);
 	}
 
@@ -4397,7 +4456,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 		print_function_name(found_func);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -4411,7 +4470,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 		print_variable_name(found_var);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -4425,7 +4484,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, side);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 	}
 
 	//Once we make it all the way down here, we know that we don't have any duplication
@@ -4443,7 +4502,7 @@ static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, s
 	insert_variable(variable_symtab,  enum_record);
 
 	//Finally, we'll construct the node that holds this item and send it out
-	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER, side);
+	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_TYPE_ENUM_MEMBER, side);
 	//Store the record in this for ease of access/modification
 	enum_member->variable = enum_record;
 	//Add the identifier as the child of this node
@@ -4468,7 +4527,7 @@ static generic_ast_node_t* enum_member_list(FILE* fl, side_type_t side){
 	u_int16_t current_member_val = 0;
 
 	//We will first create the list node
-	generic_ast_node_t* enum_list_node = ast_node_alloc(AST_NODE_CLASS_ENUM_MEMBER_LIST, side);
+	generic_ast_node_t* enum_list_node = ast_node_alloc(AST_NODE_TYPE_ENUM_MEMBER_LIST, side);
 
 	//Now, we can see as many enumerators as we'd like here, each separated by a comma
 	do{
@@ -4478,7 +4537,7 @@ static generic_ast_node_t* enum_member_list(FILE* fl, side_type_t side){
 		current_member_val++;
 
 		//If the member is bad, we bail right out
-		if(member->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid member given in enum definition", parser_line_num);
 		}
 
@@ -4531,7 +4590,7 @@ static u_int8_t enum_definer(FILE* fl){
 	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//Fail case here
-	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid name given to enum definition", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4574,7 +4633,7 @@ static u_int8_t enum_definer(FILE* fl){
 	generic_ast_node_t* member_list = enum_member_list(fl, SIDE_TYPE_LEFT);
 
 	//If it failed, we bail out
-	if(member_list->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(member_list->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid enumeration member list given in enum definition", current_line);
 		//Destroy the member list
 		return FAILURE;
@@ -4609,7 +4668,7 @@ static u_int8_t enum_definer(FILE* fl){
 	//Go through while the cursor isn't null
 	while(cursor != NULL){
 		//Sanity check here, this should be of type enum member
-		if(cursor->CLASS != AST_NODE_CLASS_ENUM_MEMBER){
+		if(cursor->ast_node_type != AST_NODE_TYPE_ENUM_MEMBER){
 			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Found non-member node in member list for enum", parser_line_num);
 			return FAILURE;
 		}
@@ -4625,9 +4684,9 @@ static u_int8_t enum_definer(FILE* fl){
 		enum_type->type_size += variable_rec->type_defined_as->type_size;
 
 		//We will store this in the enum types records
-		enum_type->enumerated_type->tokens[enum_type->enumerated_type->token_num] = variable_rec;
+		enum_type->internal_types.enumerated_type->tokens[enum_type->internal_types.enumerated_type->token_num] = variable_rec;
 		//Increment the number of tokens by one
-		(enum_type->enumerated_type->token_num)++;
+		(enum_type->internal_types.enumerated_type->token_num)++;
 
 		//Move the cursor up by one
 		cursor = cursor->next_sibling;
@@ -4662,7 +4721,7 @@ static u_int8_t enum_definer(FILE* fl){
 	generic_ast_node_t* alias_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it was invalid
-	if(alias_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(alias_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4776,16 +4835,16 @@ static symtab_type_record_t* type_name(FILE* fl){
 
 	switch(lookahead.tok){
 		case VOID:
-		case U_INT8:
-		case S_INT8:
-		case U_INT16:
-		case S_INT16:
-		case U_INT32:
-		case S_INT32:
-		case FLOAT32:
-		case U_INT64:
-		case S_INT64:
-		case FLOAT64:
+		case U8:
+		case I8:
+		case U16:
+		case I16:
+		case U32:
+		case I32:
+		case F32:
+		case U64:
+		case I64:
+		case F64:
 		case CHAR:
 			//We will now grab this record from the symtable to make our life easier
 			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
@@ -4809,7 +4868,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 			//If we fail, we'll bail out
-			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
 				//It's already an error so just give it back
 				return NULL;
@@ -4850,7 +4909,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 			//If we fail, we'll bail out
-			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as struct type name", parser_line_num);
 				//It's already an error so just give it back
 				return NULL;
@@ -4891,7 +4950,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			type_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 			//If we fail, we'll bail out
-			if(type_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
 				//Error increase here
 				num_errors++;
@@ -5040,7 +5099,7 @@ static generic_type_t* type_specifier(FILE* fl){
 		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
 
 		//If it failed, then we're done here
-		if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			print_parse_message(PARSE_ERROR, "Invalid constant given in array declaration", parser_line_num);
 			num_errors++;
 			return NULL;
@@ -5069,7 +5128,7 @@ static generic_type_t* type_specifier(FILE* fl){
 		}
 
 		//The constant value
-		int64_t constant_numeric_value = const_node->int_long_val;
+		int64_t constant_numeric_value = const_node->constant_value.unsigned_long_value;
 
 		//What if this is a negative or zero?
 		//If it's negative we fail like this
@@ -5158,12 +5217,12 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//Is this parameter constant? If so we'll just set a flag for later
 	if(lookahead.tok == DOTDOTDOT){
 		//This is a special elaborative param
-		parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_ELABORATIVE_PARAM, SIDE_TYPE_LEFT);
+		parameter_decl_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM, SIDE_TYPE_LEFT);
 		//We're done here
 		return parameter_decl_node;
 	} else {
 		//Otherwise we have a regular param node
-		parameter_decl_node = ast_node_alloc(AST_NODE_CLASS_PARAM_DECL, SIDE_TYPE_LEFT);
+		parameter_decl_node = ast_node_alloc(AST_NODE_TYPE_PARAM_DECL, SIDE_TYPE_LEFT);
 	}
 
 	if(lookahead.tok == MUT){
@@ -5178,7 +5237,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it didn't work we fail immediately
-	if(ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid name given to parameter in function definition", parser_line_num);
 	}
 
@@ -5197,7 +5256,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		print_function_name(found_func);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -5211,7 +5270,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		print_variable_name(found_var);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -5225,7 +5284,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Now we need to see a colon
@@ -5235,7 +5294,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	if(lookahead.tok != COLON){
 		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//We are now required to see a valid type specifier node
@@ -5246,7 +5305,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		print_parse_message(PARSE_ERROR, "Invalid type specifier gien to function parameter", parser_line_num);
 		num_errors++;
 		//It's already an error, just propogate it up
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Once we get here, we have actually seen an entire valid parameter 
@@ -5306,7 +5365,7 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 	push_token(grouping_stack, lookahead);
 
 	//Let's now create the parameter list node
-	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_CLASS_PARAM_LIST, SIDE_TYPE_LEFT);
+	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_TYPE_PARAM_LIST, SIDE_TYPE_LEFT);
 	//Initially no params
 	param_list_node->num_params = 0;
 
@@ -5358,13 +5417,13 @@ static generic_ast_node_t* parameter_list(FILE* fl){
 		generic_ast_node_t* param_decl = parameter_declaration(fl, function_parameter_number);
 
 		//It's invalid, we'll just send it up the chain
-		if(param_decl->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(param_decl->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//It's already an error so send it on up
 			return param_decl;
 		}
 
 		//Let's see if we have a special parameter elaboration type here
-		if(param_decl->CLASS == AST_NODE_CLASS_ELABORATIVE_PARAM){
+		if(param_decl->ast_node_type == AST_NODE_TYPE_ELABORATIVE_PARAM){
 			//Add it as a child node
 			add_child_node(param_list_node, param_decl);
 
@@ -5434,7 +5493,7 @@ static generic_ast_node_t* expression_statement(FILE* fl){
 	generic_ast_node_t* expr_node = assignment_expression(fl);
 
 	//If this fails, the whole thing is over
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//It's already an error, so just send it back up
 		return expr_node;
 	}
@@ -5474,7 +5533,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	}
 
 	//Let's create the label ident node
-	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_CLASS_LABEL_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_TYPE_LABEL_STMT, SIDE_TYPE_LEFT);
 	//Save our line number
 	label_stmt->line_number = parser_line_num;
 
@@ -5482,7 +5541,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it's bad we'll fail out here
-	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(label_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid identifier given as label ident statement", current_line);
 	}
 		
@@ -5508,7 +5567,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		print_variable_name(found_variable);
 		num_errors++;
 		//give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//We now need to make sure that it isn't a duplicate
@@ -5521,7 +5580,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		print_type_name(found_type);
 		num_errors++;
 		//give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//We now need to make sure that it isn't a duplicate
@@ -5534,7 +5593,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		print_function_name(found_function);
 		num_errors++;
 		//give back an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Grab the label type
@@ -5584,7 +5643,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 
 	//Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
 	//will be a child of this statement
-	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_CLASS_IF_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_TYPE_IF_STMT, SIDE_TYPE_LEFT);
 
 	//Remember, we've already seen the if token, so now we just need to see an L_PAREN
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5601,7 +5660,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	generic_ast_node_t* expression_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one
-	if(expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid conditional expression given as if statement condition", current_line);
 	}
 
@@ -5631,7 +5690,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
 	//If this node fails, whole thing is bad
-	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		num_errors++;
 		//It's already an error, so just send it back up
 		return compound_stmt_node;
@@ -5647,7 +5706,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	//So long as we see "else if's", we will keep repeating this process
 	while(lookahead.tok == ELSE && lookahead2.tok == IF){
 		//We've found one - let's create our fresh else if node
-		generic_ast_node_t* else_if_node = ast_node_alloc(AST_NODE_CLASS_ELSE_IF_STMT, SIDE_TYPE_LEFT);
+		generic_ast_node_t* else_if_node = ast_node_alloc(AST_NODE_TYPE_ELSE_IF_STMT, SIDE_TYPE_LEFT);
 
 		//Remember, we've already seen the if token, so now we just need to see an L_PAREN
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5664,7 +5723,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		generic_ast_node_t* else_if_expression_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 		//If we see an invalid one
-		if(else_if_expression_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(else_if_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid conditional expression given as else if statement condition", current_line);
 		}
 
@@ -5694,7 +5753,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		generic_ast_node_t* else_if_compound_stmt_node = compound_statement(fl);
 
 		//If this node fails, whole thing is bad
-		if(else_if_compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(else_if_compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			num_errors++;
 			//It's already an error, so just send it back up
 			return else_if_compound_stmt_node;
@@ -5721,7 +5780,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		generic_ast_node_t* else_compound_stmt = compound_statement(fl);
 		
 		//Let's see if it worked
-		if(else_compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(else_compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//It failed, send it up the chain
 			return else_compound_stmt;
 		}
@@ -5774,12 +5833,12 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If this failed, we're done
-	if(label_ident->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(label_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid label given to jump statement", parser_line_num);
 	}
 
 	//Allocate the jump statement
-	generic_ast_node_t* jump_statement = ast_node_alloc(AST_NODE_CLASS_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* jump_statement = ast_node_alloc(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
 
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5804,7 +5863,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 		generic_ast_node_t* conditional = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 		//If this is invalid, we fail out
-		if(conditional->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(conditional->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return conditional;
 		}
 
@@ -5884,7 +5943,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 	}
 
 	//Once we get here, we've already seen the continue keyword, so we can make the node
-	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_CLASS_CONTINUE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_TYPE_CONTINUE_STMT, SIDE_TYPE_LEFT);
 	//Store the line number
 	continue_stmt->line_number = parser_line_num;
 
@@ -5917,7 +5976,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid conditional expression given to continue when statement", parser_line_num);
 	}
 
@@ -5975,7 +6034,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	}
 
 	//Once we get here, we've already seen the break keyword, so we can make the node
-	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_CLASS_BREAK_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_TYPE_BREAK_STMT, SIDE_TYPE_LEFT);
 	//Store the line number
 	break_stmt->line_number = parser_line_num;
 
@@ -6008,7 +6067,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid conditional expression given to break when statement", parser_line_num);
 	}
 
@@ -6060,7 +6119,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	}
 
 	//We can create the node now
-	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_CLASS_RET_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_TYPE_RET_STMT, SIDE_TYPE_LEFT);
 
 	//Now we can optionally see the semicolon immediately. Let's check if we have that
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6068,13 +6127,13 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//If we see a semicolon, we can just leave
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
-		if(current_function->signature->function_type->returns_void == FALSE){
+		if(current_function->signature->internal_types.function_type->returns_void == FALSE){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//If we get out then we're fine
@@ -6082,13 +6141,13 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	} else {
 		//If we get here, but we do expect a void return, then this is an issue
-		if(current_function->signature->function_type->returns_void == TRUE){
+		if(current_function->signature->internal_types.function_type->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 		//Put it back if no
 		push_back_token(lookahead);
@@ -6098,7 +6157,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid expression given to return statement", parser_line_num);
 	}
 
@@ -6121,7 +6180,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		//Also print out the function
 		print_function_name(current_function);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//If this is the case, we'll need to propogate all of the types down the chain here
@@ -6184,7 +6243,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//NOTE: we may actually switch the class to a c-style switch statement here if we
 	//find a c-style node. All of our processing depends on what the first thing that we see
 	//looks like
-	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_CLASS_SWITCH_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_TYPE_SWITCH_STMT, SIDE_TYPE_LEFT);
 
 	//We will find these throughout our search
 	//Set the upper bound to be int_min
@@ -6207,7 +6266,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one we fail right out
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid conditional expression provided to switch on", current_line);
 	}
 	
@@ -6227,10 +6286,10 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
 	} else {
 		//Grab the basic type
-		Token basic_type = type->basic_type->basic_type;
+		Token basic_type = type->basic_type_token;
 
 		//It needs to be an int or char
-		if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
+		if(basic_type == VOID || basic_type == F32 || basic_type == F64){
 			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
 			return print_and_return_error(info, expr_node->line_number);
 		}
@@ -6301,9 +6360,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 				stmt = case_statement(fl, switch_stmt_node, values);
 
 				//Go based on what our class here
-				switch(stmt->CLASS){
+				switch(stmt->ast_node_type){
 					//C-style case statement
-					case AST_NODE_CLASS_C_STYLE_CASE_STMT:
+					case AST_NODE_TYPE_C_STYLE_CASE_STMT:
 						//The -1 would mean that it's not been declared yet.
 						//As such, since this is the first thing that we're seeing,
 						//we'll set this to be TRUE
@@ -6321,7 +6380,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 						break;
 
 					//Regular ollie style case statement
-					case AST_NODE_CLASS_CASE_STMT:
+					case AST_NODE_TYPE_CASE_STMT:
 						//The -1 would mean that it's not been declared yet.
 						//As such, since this is the first thing that we're seeing,
 						//we'll set this to be FALSE 
@@ -6340,7 +6399,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 
 					//It's already an error, just send it up
-					case AST_NODE_CLASS_ERR_NODE:
+					case AST_NODE_TYPE_ERR_NODE:
 						return stmt;
 					//We've hit some weird error here, so we'll bail out
 					default:
@@ -6363,9 +6422,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 				stmt = default_statement(fl);
 
 				//Go based on what our class here
-				switch(stmt->CLASS){
+				switch(stmt->ast_node_type){
 					//C-style default statement
-					case AST_NODE_CLASS_C_STYLE_DEFAULT_STMT:
+					case AST_NODE_TYPE_C_STYLE_DEFAULT_STMT:
 						//The -1 would mean that it's not been declared yet.
 						//As such, since this is the first thing that we're seeing,
 						//we'll set this to be TRUE
@@ -6386,7 +6445,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 						break;
 
 					//Regular ollie style default statement
-					case AST_NODE_CLASS_DEFAULT_STMT:
+					case AST_NODE_TYPE_DEFAULT_STMT:
 						//The -1 would mean that it's not been declared yet.
 						//As such, since this is the first thing that we're seeing,
 						//we'll set this to be FALSE 
@@ -6410,7 +6469,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 						break;
 
 					//It's already an error, just send it up
-					case AST_NODE_CLASS_ERR_NODE:
+					case AST_NODE_TYPE_ERR_NODE:
 						return stmt;
 					//We've hit some weird error here, so we'll bail out
 					default:
@@ -6443,7 +6502,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//If we do have a c-style switch statement here, we'll need to redefine the type
 	//that the origin switch node is
 	if(is_c_style == TRUE){
-		switch_stmt_node->CLASS = AST_NODE_CLASS_C_STYLE_SWITCH_STMT; 
+		switch_stmt_node->ast_node_type = AST_NODE_TYPE_C_STYLE_SWITCH_STMT; 
 	}
 	
 	//By the time we reach this, we should have seen a right curly
@@ -6482,7 +6541,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	push_nesting_level(nesting_stack, LOOP_STATEMENT);
 
 	//First create the actual node
-	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_CLASS_WHILE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_TYPE_WHILE_STMT, SIDE_TYPE_LEFT);
 
 	//We already have seen the while keyword, so now we need to see parenthesis surrounding a conditional expression
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6499,7 +6558,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	generic_ast_node_t* conditional_expr = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
-	if(conditional_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(conditional_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid expression in while statement",  parser_line_num);
 	}
 
@@ -6529,7 +6588,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
 	//If this is invalid we fail
-	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid compound statement in while expression", parser_line_num);
 	}
 
@@ -6564,14 +6623,14 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	push_nesting_level(nesting_stack, LOOP_STATEMENT);
 
 	//Let's first create the overall global root node
-	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_CLASS_DO_WHILE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_TYPE_DO_WHILE_STMT, SIDE_TYPE_LEFT);
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
 	generic_ast_node_t* compound_stmt = compound_statement(fl);
 
 	//If we fail, then we are done here
-	if(compound_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid compound statement given to do-while statement", current_line);
 	}
 
@@ -6601,7 +6660,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
-	if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid expression in while part of do-while statement",  parser_line_num);
 	}
 
@@ -6663,7 +6722,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	push_nesting_level(nesting_stack, LOOP_STATEMENT);
 
 	//We've already seen the for keyword, so let's create the root level node
-	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_CLASS_FOR_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
 
 	//We now need to first see a left paren
  	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -6692,12 +6751,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		generic_ast_node_t* let_stmt = let_statement(fl, FALSE);
 
 		//If it fails, we also fail
-		if(let_stmt->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(let_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid let statement given to for loop", current_line);
 		}
 
 		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		//Add this in as a child
 		add_child_node(for_loop_cond_node, let_stmt);
 
@@ -6716,17 +6775,17 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		generic_ast_node_t* asn_expr = assignment_expression(fl);
 
 		//If it fails, we fail too
-		if(asn_expr->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(asn_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid assignment expression given to for loop", current_line);
 		}
 
 		//This actually must be an assignment expression, so if it isn't we fail 
-		if(asn_expr->CLASS != AST_NODE_CLASS_ASNMNT_EXPR){
+		if(asn_expr->ast_node_type != AST_NODE_TYPE_ASNMNT_EXPR){
 			return print_and_return_error("Invalid assignment expression given to for loop", current_line);
 		}
 
 		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		//Add this in as a child
 		add_child_node(for_loop_cond_node, asn_expr);
 
@@ -6743,7 +6802,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 
 	//Just add in a blank node as a placeholder
 	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
@@ -6759,12 +6818,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
 		//If it fails, we fail too
-		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid conditional expression in for loop middle", parser_line_num);
 		}
 
 		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		//Add this in as a child
 		add_child_node(for_loop_cond_node, expr_node);
 
@@ -6799,12 +6858,12 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		generic_ast_node_t* expr_node = assignment_expression(fl);
 
 		//If it fails, we fail too
-		if(expr_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid conditional expression in for loop", parser_line_num);
 		}
 
 		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		//Add this in as a child
 		add_child_node(for_loop_cond_node, expr_node);
 
@@ -6815,7 +6874,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	//Create a blank node here as a placeholder
 	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_CLASS_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
@@ -6833,7 +6892,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
 	//If it's invalid, we'll fail out here
-	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//No error message, just pass the failure up
 		return compound_stmt_node;
 	}
@@ -6881,7 +6940,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 	push_token(grouping_stack, lookahead);
 
 	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_CLASS_COMPOUND_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
 	//Store the line number here
 	compound_stmt_node->line_number = parser_line_num;
 
@@ -6910,7 +6969,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 		}
 
 		//If it's invalid we'll pass right through, no error printing
-		if(stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//Send it right back
 			return stmt_node;
 		}
@@ -6967,7 +7026,7 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	print_parse_message(INFO, "Assembly inline statements are not analyzed by OC. Whatever is written will be executed verbatim. Please double check your assembly statements.", parser_line_num);
 
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
-	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_CLASS_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_TYPE_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
 
 	//Allocate the dynamic string in here
 	dynamic_string_alloc(&(assembly_node->string_value));
@@ -7037,14 +7096,14 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 
 	//Now if we see that this is NULL, we'll allocate here
 	if(deferred_stmts_node == NULL){
-		deferred_stmts_node = ast_node_alloc(AST_NODE_CLASS_DEFER_STMT, SIDE_TYPE_LEFT);
+		deferred_stmts_node = ast_node_alloc(AST_NODE_TYPE_DEFER_STMT, SIDE_TYPE_LEFT);
 	}
 
 	//We now expect to see a compound statement
 	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
 	//If this fails, we bail
-	if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid compound statement given to defer statement", current_line);
 	}
 
@@ -7078,7 +7137,7 @@ static generic_ast_node_t* idle_statement(FILE* fl){
 	}
 
 	//Create and populate the node
-	generic_ast_node_t* idle_statement = ast_node_alloc(AST_NODE_CLASS_IDLE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* idle_statement = ast_node_alloc(AST_NODE_TYPE_IDLE_STMT, SIDE_TYPE_LEFT);
 	idle_statement->line_number = parser_line_num;
 
 	//We'll create and return an idle statement
@@ -7107,6 +7166,9 @@ static generic_ast_node_t* idle_statement(FILE* fl){
 static generic_ast_node_t* statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Status variable for certain rules
+	u_int8_t status;
+
 
 	//Switch based on the token
 	switch(lookahead.tok){
@@ -7119,21 +7181,30 @@ static generic_ast_node_t* statement(FILE* fl){
 			//We now need to see a valid version
 			return declaration(fl, FALSE);
 
-		//Definition of type or alias statement
+		//Type definition
 		case DEFINE:
-		case ALIAS:
-			//Put the token back
-			push_back_token(lookahead);
+			//Call the helper
+			status = definition(fl);
 
-			//Let's see if it worked
-			u_int8_t status = definition(fl);
-
-			//If we fail here we'll throw an error
+			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				//Return an error node
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+				return print_and_return_error("Invalid definition statement", parser_line_num);
 			}
 
+			//Otherwise we'll just return null, the caller will know what to do with it
+			return NULL;
+			
+		//Type aliasing
+		case ALIAS:
+			//Call the helper
+			status = alias_statement(fl);
+
+			//If it's bad, we'll return an error node
+			if(status == FAILURE){
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+
+			//Otherwise we'll just return null, the caller will know what to do with it
 			return NULL;
 		
 		//If we see the pound symbol, we know that we are declaring a label
@@ -7231,7 +7302,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
 
 	//If we see default, we can just make the default node. We may change this class later, but this
 	//will do for now
-	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_CLASS_DEFAULT_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_TYPE_DEFAULT_STMT, SIDE_TYPE_LEFT);
 
 	//All that we need to see now is a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7247,7 +7318,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
 			default_compound_statement = compound_statement(fl);
 
 			//If this is an error, we fail out
-			if(default_compound_statement != NULL && default_compound_statement->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(default_compound_statement != NULL && default_compound_statement->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				//Send it back up
 				return default_compound_statement;
 			}
@@ -7264,7 +7335,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
 			push_nesting_level(nesting_stack, C_STYLE_CASE_STATEMENT);
 
 			//We'll need to reassign the value of the original default statement
-			default_stmt->CLASS = AST_NODE_CLASS_C_STYLE_DEFAULT_STMT;
+			default_stmt->ast_node_type = AST_NODE_TYPE_C_STYLE_DEFAULT_STMT;
 			
 			//Grab the next token to do our search
 			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7279,7 +7350,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
 				generic_ast_node_t* child = statement(fl);
 
 				//If this is not null and in an error, we'll return that
-				if(child != NULL && child->CLASS == AST_NODE_CLASS_ERR_NODE){
+				if(child != NULL && child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 					return child;
 				}
 
@@ -7327,7 +7398,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	
 	//Create the node. This could change later on based on whether we have a c-style switch
 	//statement or not
-	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_CLASS_CASE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_TYPE_CASE_STMT, SIDE_TYPE_LEFT);
 	
 	//Let's now lookahead and see if we have a valid constant or not
 	lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
@@ -7341,7 +7412,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			generic_ast_node_t* enum_ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 			//If it's invalid fail out
-			if(enum_ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(enum_ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return enum_ident_node;
 			}
 
@@ -7378,7 +7449,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			enum_ident_node->variable = enum_record;
 
 			//Grab the value of this case statement
-			case_stmt->int_long_val = enum_record->enum_member_value;
+			case_stmt->constant_value.signed_int_value = enum_record->enum_member_value;
 
 			//We already have the value -- so this doesn't need to be a child node
 			break;
@@ -7396,7 +7467,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
 
 			//If this fails, the whole thing is over
-			if(const_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Invalid constant found in switch statment", current_line);
 			}
 
@@ -7410,12 +7481,12 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				case LONG_CONST_FORCE_U:
 
 					//Store the value
-					case_stmt->int_long_val = const_node->int_long_val;
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
 					break;
 
 				case CHAR_CONST:
 					//Just assign the char value here
-					case_stmt->int_long_val = const_node->char_val;
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
 
 				default:
 					return print_and_return_error("Illegal type given as case statement value", parser_line_num);
@@ -7441,13 +7512,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 
 	//If it's higher than the upper bound, it now is the upper bound
-	if(case_stmt->int_long_val > switch_stmt_node->upper_bound){
-		switch_stmt_node->upper_bound = case_stmt->int_long_val;
+	if(case_stmt->constant_value.signed_int_value > switch_stmt_node->upper_bound){
+		switch_stmt_node->upper_bound = case_stmt->constant_value.signed_int_value;
 	}
 
 	//If it's lower than the lower bound, it is now the lower bound
-	if(case_stmt->int_long_val < switch_stmt_node->lower_bound){
-		switch_stmt_node->lower_bound = case_stmt->int_long_val;
+	if(case_stmt->constant_value.signed_int_value < switch_stmt_node->lower_bound){
+		switch_stmt_node->lower_bound = case_stmt->constant_value.signed_int_value;
 	}
 
 	//If these are too far apart, we won't go for it. We'll check here, because once
@@ -7458,13 +7529,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	}
 
 	//Now let's see if we have any duplicates. If there are, we error out
-	if(values[case_stmt->int_long_val % MAX_SWITCH_RANGE] == TRUE){
-		sprintf(info, "Value %ld is duplicated in the switch statement", case_stmt->int_long_val);
+	if(values[case_stmt->constant_value.signed_int_value % MAX_SWITCH_RANGE] == TRUE){
+		sprintf(info, "Value %d is duplicated in the switch statement", case_stmt->constant_value.signed_int_value);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Let's now store it for the future
-	values[case_stmt->int_long_val % MAX_SWITCH_RANGE] = TRUE;
+	values[case_stmt->constant_value.signed_int_value % MAX_SWITCH_RANGE] = TRUE;
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7480,7 +7551,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			switch_compound_statement = compound_statement(fl);
 
 			//If this is an error, we fail out
-			if(switch_compound_statement != NULL && switch_compound_statement->CLASS == AST_NODE_CLASS_ERR_NODE){
+			if(switch_compound_statement != NULL && switch_compound_statement->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				//Send it back up
 				return switch_compound_statement;
 			}
@@ -7497,7 +7568,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			push_nesting_level(nesting_stack, C_STYLE_CASE_STATEMENT);
 
 			//We'll need to reassign the value of the original case statement
-			case_stmt->CLASS = AST_NODE_CLASS_C_STYLE_CASE_STMT;
+			case_stmt->ast_node_type = AST_NODE_TYPE_C_STYLE_CASE_STMT;
 			
 			//Grab the next token to do our search
 			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7512,7 +7583,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				generic_ast_node_t* child = statement(fl);
 
 				//If this is not null and in an error, we'll return that
-				if(child != NULL && child->CLASS == AST_NODE_CLASS_ERR_NODE){
+				if(child != NULL && child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 					return child;
 				}
 
@@ -7562,7 +7633,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
 	//Let's first declare the root node
-	generic_ast_node_t* decl_node = ast_node_alloc(AST_NODE_CLASS_DECL_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* decl_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7585,7 +7656,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//The last thing before we perform checks is for us to see a valid identifier
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
-	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid identifier given in declaration", parser_line_num);
 	}
 
@@ -7611,7 +7682,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		print_function_name(found_func);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -7625,7 +7696,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -7640,7 +7711,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		print_variable_name(found_var);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Let's see if we've already named a constant this
@@ -7653,7 +7724,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		//Also print out the original declaration
 		print_constant_name(found_const);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	
@@ -7722,7 +7793,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
 	//Extract the actual array type for ease of use here
-	array_type_t* array = array_type->array_type;
+	array_type_t* array = array_type->internal_types.array_type;
 
 	//Grab the member type here out as well
 	generic_type_t* member_type = array->member_type;
@@ -7788,7 +7859,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  */
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
 	//Grab the raw struct type out
-	struct_type_t* raw_type = struct_type->struct_type;
+	struct_type_t* raw_type = struct_type->internal_types.struct_type;
 
 	//We'll need to extract the struct table and that max index that it holds
 	struct_type_field_t* fields = raw_type->struct_table;
@@ -7860,10 +7931,10 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
  */
 static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
 	//Extract the actual array type for ease of use here
-	array_type_t* array = array_type->array_type;
+	array_type_t* array = array_type->internal_types.array_type;
 
 	//Let's first validate that this array actually is a char[]
-	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type->basic_type != CHAR){
+	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type_token != CHAR){
 		//Print out the full error message
 		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
 
@@ -7897,7 +7968,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 	}
 
 	//Reassign the class here from a constant to a string initializer
-	string_constant->CLASS = AST_NODE_CLASS_STRING_INITIALIZER;
+	string_constant->ast_node_type = AST_NODE_TYPE_STRING_INITIALIZER;
 
 	//Reassign the type to match what was sent in
 	string_constant->inferred_type = array_type;
@@ -7919,9 +7990,9 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 
 	//Based on what the class of this initializer node is, there are several different
 	//paths that we can take
-	switch(initializer_node->CLASS){
+	switch(initializer_node->ast_node_type){
 		//If it's in error itself, we just leave
-		case AST_NODE_CLASS_ERR_NODE:
+		case AST_NODE_TYPE_ERR_NODE:
 			//Throw an error here
 			print_parse_message(PARSE_ERROR, "Invalid expression given as intializer", parser_line_num);
 			//Return null to mean failure
@@ -7929,7 +8000,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 
 		//An array initializer list has a special checking function
 		//that we must use
-		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 			//Run the validation step for the intializer list
 			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node);
 
@@ -7943,7 +8014,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			return return_type;
 			
 		//A struct initializer list also has it's own special checking function that we must use
-		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			//Run the validation step for a struct
 			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node);
 
@@ -7961,14 +8032,14 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//If we have a string constant, there's a chance that we could be seeing a string
 			//initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
 			//the helper deal with it
-			if(initializer_node->CLASS == AST_NODE_CLASS_CONSTANT && initializer_node->constant_type == STR_CONST
+			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT && initializer_node->constant_type == STR_CONST
 				&& target_type->type_class == TYPE_CLASS_ARRAY){
 				
 				//Dynamically set the initializer node here in the helper function
 				initializer_node = validate_or_set_bounds_for_string_initializer(target_type, initializer_node);
 
 				//If it's an error, we need to fail out now
-				if(initializer_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+				if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 					//Throw it up the chain by return null
 					return NULL;
 				}
@@ -8012,7 +8083,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
 	//Let's first declare the root node
-	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_CLASS_LET_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8035,7 +8106,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//The last thing before we perform checks is for us to see a valid identifier
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
-	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid identifier given in let statement", parser_line_num);
 	}
 
@@ -8061,7 +8132,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		print_function_name(found_func);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -8075,7 +8146,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		print_type_name(found_type);
 		num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -8089,7 +8160,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Let's see if we've already named a constant this
@@ -8102,7 +8173,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		//Also print out the original declaration
 		print_constant_name(found_const);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Now we need to see a colon
@@ -8142,7 +8213,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
@@ -8196,10 +8267,10 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	let_stmt_node->line_number = current_line;
 
 	//In special cases, we'll store this variable in the "node" section
-	switch(initializer_node->CLASS){
-		case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
-		case AST_NODE_CLASS_STRING_INITIALIZER:
-		case AST_NODE_CLASS_STRUCT_INITIALIZER_LIST:
+	switch(initializer_node->ast_node_type){
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			initializer_node->node = declared_var;
 			break;
 
@@ -8256,7 +8327,7 @@ static u_int8_t alias_statement(FILE* fl){
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If it's bad, we're also done here
-	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
 		num_errors++;
 		return FAILURE;
@@ -8348,36 +8419,23 @@ static u_int8_t alias_statement(FILE* fl){
  * NOTE: We assume that there is a define or alias token for us to use to switch based on
  */
 static u_int8_t definition(FILE* fl){
-	//Lookahead token
+	//We can now see construct or enum
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//Go based on the lookahead
 	switch(lookahead.tok){
-		//Type definition
-		case DEFINE:
-			//We can now see construct or enum
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		case STRUCT:
+			return struct_definer(fl);
+		case UNION:
+			return union_definer(fl);
+		case ENUM:
+			return enum_definer(fl);
+		case FN:
+			return function_pointer_definer(fl);
 
-			switch(lookahead.tok){
-				case STRUCT:
-					return struct_definer(fl);
-				case ENUM:
-					return enum_definer(fl);
-				case FN:
-					return function_pointer_definer(fl);
-
-				default:
-					print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
-					num_errors++;
-					return FAILURE;
-			}
-	
-		//Alias statement
-		case ALIAS:
-			return alias_statement(fl);
-
-		//Something wen wrong here
+		//Some failure here
 		default:
-			print_parse_message(PARSE_ERROR, "Definition expected define or alias keywords, found neither", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Expected \"union\", \"struct\", \"fn\" or \"enum\" definer keywords", parser_line_num);
 			num_errors++;
 			return FAILURE;
 	}
@@ -8512,7 +8570,7 @@ static int8_t check_jump_labels(){
  */
 static u_int8_t validate_main_function(generic_type_t* type){
 	//Let's extract the signature first for convenience
-	function_type_t* signature = type->function_type;
+	function_type_t* signature = type->internal_types.function_type;
 
 	//If the main function is not public, then we fail
 	if(signature->is_public == FALSE){
@@ -8537,7 +8595,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			parameter_type = signature->parameters[0].parameter_type;
 			
 			//If it isn't a basic type and it isn't an i32, we fail
-			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type->basic_type != S_INT32){
+			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
 				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				return FALSE;
@@ -8564,7 +8622,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
-	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type->basic_type != S_INT32){
+	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
 		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FALSE;
@@ -8638,13 +8696,13 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//We also have the AST function node, this will be intialized immediately
 	//It also requires a symtab record of the function, but this will be assigned
 	//later once we have it
-	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_CLASS_FUNC_DEF, SIDE_TYPE_LEFT);
+	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
 
 	//Now we must see a valid identifier as the name
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If we have a failure here, we're done for
-	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid name given as function name", current_line);
 	}
 
@@ -8671,7 +8729,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		print_function_name(function_record);
 		num_errors++;
 		//Create and return an error node
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 
 	//This is our interesting case. The function has been defined implicitly, and now we're trying to define it
 	//explicitly. We don't need to do any other checks if this is the case
@@ -8693,7 +8751,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_variable_name(found_variable);
 			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Check for duplicated type names
@@ -8706,7 +8764,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_type_name(found_type);
 			num_errors++;
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Let's see if we've already named a constant this
@@ -8719,7 +8777,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//Also print out the original declaration
 			print_constant_name(found_const);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
@@ -8761,7 +8819,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	generic_ast_node_t* param_list_node = parameter_list(fl);
 
 	//We have a bad parameter list
-	if(param_list_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(param_list_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid parameter list given in function declaration", current_line);
 		num_errors++;
 		//It's already an error, so just send it back up
@@ -8788,7 +8846,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//The internal function record param
 		symtab_variable_record_t* func_param;
 		//Grab the function signature out for processing
-		function_type_t* function_signature_type = function_record->signature->function_type;
+		function_type_t* function_signature_type = function_record->signature->internal_types.function_type;
 
 		//So long as this isn't null
 		while(param_list_cursor != NULL){
@@ -8800,7 +8858,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 				//Print the function out too
 				print_function_name(function_record);
 				num_errors++;
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 			//Grab the type out for validation 
@@ -8835,8 +8893,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
 			
 			//Store this into the function signature as well
-			function_signature->function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
-			function_signature->function_type->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
+			function_signature->internal_types.function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
+			function_signature->internal_types.function_type->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
 
 			//Increment the parameter count
 			(function_record->number_of_params)++;
@@ -8849,10 +8907,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Copy this over for later
-		function_signature->function_type->num_params = function_record->number_of_params;
+		function_signature->internal_types.function_type->num_params = function_record->number_of_params;
 
 		//Store whether or not this function is public
-		function_signature->function_type->is_public = is_public;
+		function_signature->internal_types.function_type->is_public = is_public;
 
 		//Store this in here
 		function_record->signature = function_signature;
@@ -8888,7 +8946,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 	}
 
@@ -8896,10 +8954,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	function_record->return_type = type;
 
 	//Record whether or not it's a void type
-	function_record->signature->function_type->returns_void = is_void_type(type);
+	function_record->signature->internal_types.function_type->returns_void = is_void_type(type);
 
 	//Store the return type as well
-	function_record->signature->function_type->return_type = type;
+	function_record->signature->internal_types.function_type->return_type = type;
 
 	//Now that the function record has been finalized, we'll need to produce the type name
 	generate_function_pointer_type_name(function_record->signature);
@@ -8922,7 +8980,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_parse_message(PARSE_ERROR, "The main function may not be defined implicitly. Implicit definition here:", parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//If we're for some reason defining a previous implicit function
@@ -8931,7 +8989,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
-			return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Finalize the variable scope
@@ -8957,7 +9015,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
 
 		//If this fails we'll just pass it through
-		if(compound_stmt_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return compound_stmt_node;
 		}
 	
@@ -8975,7 +9033,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//We could have an entirely null function body
 		if(cursor != NULL){
 			//So long as we don't see ret statements here, we keep going
-			while(cursor->next_sibling != NULL && cursor->CLASS != AST_NODE_CLASS_RET_STMT){
+			while(cursor->next_sibling != NULL && cursor->ast_node_type != AST_NODE_TYPE_RET_STMT){
 				//Advance
 				cursor = cursor->next_sibling;
 			}
@@ -8986,7 +9044,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//We now need to check and see if our jump statements are actually valid
 			if(check_jump_labels() == FAILURE){
 				//If this fails, we fail out here too
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 		} else {
@@ -9036,7 +9094,7 @@ static u_int8_t replace_statement(FILE* fl){
 	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
 
 	//If we failed, we're done here
-	if(ident_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to replace statement", parser_line_num);
 		num_errors++;
 		return FAILURE;
@@ -9122,7 +9180,7 @@ static u_int8_t replace_statement(FILE* fl){
 	generic_ast_node_t* constant_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
 
 	//If this fails, then we are done
-	if(constant_node->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(constant_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//Just return 0, printing already happened
 		return FAILURE;
 	}
@@ -9176,7 +9234,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 	if(lookahead.tok == ERROR){
 		print_parse_message(PARSE_ERROR, "Fatal error. Found error token\n", lookahead.line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Switch based on the token
@@ -9191,18 +9249,27 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 			//that will be caught above
 			return function_definition(fl);
 	
-		//Let the define and/or alias rule handle this
+		//Type definition
 		case DEFINE:
-		case ALIAS:
-			//Put whatever we saw back
-			push_back_token(lookahead);
-
-			//Call definition
+			//Call the helper
 			status = definition(fl);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+				return print_and_return_error("Invalid definition statement", parser_line_num);
+			}
+
+			//Otherwise we'll just return null, the caller will know what to do with it
+			return NULL;
+			
+		//Type aliasing
+		case ALIAS:
+			//Call the helper
+			status = alias_statement(fl);
+
+			//If it's bad, we'll return an error node
+			if(status == FAILURE){
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 			//Otherwise we'll just return null, the caller will know what to do with it
@@ -9215,7 +9282,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 			//Otherwise we'll just return null, the caller will know what to do with it
@@ -9253,7 +9320,7 @@ static generic_ast_node_t* program(FILE* fl){
 	//If prog is null we make it here
 	if(prog == NULL){
 		//Create the ROOT of the tree
-		prog = ast_node_alloc(AST_NODE_CLASS_PROG, SIDE_TYPE_LEFT);
+		prog = ast_node_alloc(AST_NODE_TYPE_PROG, SIDE_TYPE_LEFT);
 	}
 
 	//Let's lookahead to see what we have
@@ -9296,7 +9363,7 @@ static generic_ast_node_t* program(FILE* fl){
 		}
 
 		//It failed, we'll bail right out if this is the case
-		if(current->CLASS == AST_NODE_CLASS_ERR_NODE){
+		if(current->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//Just return the erroneous node
 			return current;
 		}
@@ -9380,7 +9447,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	prog = program(fl);
 
 	//We'll only perform these tests if we want debug printing enabled
-	if(enable_debug_printing == TRUE && prog->CLASS != AST_NODE_CLASS_ERR_NODE){
+	if(enable_debug_printing == TRUE && prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations

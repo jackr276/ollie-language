@@ -24,8 +24,6 @@
 
 //The generic global type type
 typedef struct generic_type_t generic_type_t;
-//The most basic type that we can have
-typedef struct basic_type_t basic_type_t;
 //An array type
 typedef struct array_type_t array_type_t;
 //A pointer type
@@ -104,36 +102,27 @@ typedef enum type_class_t {
 struct generic_type_t{
 	//The name of the type
 	dynamic_string_t type_name;
-	/**
-	 * The following pointers will be null except for the one that the type class
-	 * specifies this type belongs to
-	 */
-	basic_type_t* basic_type;
-	array_type_t* array_type;
-	pointer_type_t* pointer_type;
-	//For function pointers
-	function_type_t* function_type;
-	struct_type_t* struct_type;
-	enumerated_type_t* enumerated_type;
-	aliased_type_t* aliased_type;
+
+	//Based on the type class, we will
+	//interpret here as whichever type is appropriate
+	union{
+		array_type_t* array_type;
+		pointer_type_t* pointer_type;
+		//For function pointers
+		function_type_t* function_type;
+		struct_type_t* struct_type;
+		enumerated_type_t* enumerated_type;
+		aliased_type_t* aliased_type;
+	} internal_types;
+
 	//When was it defined: -1 = generic type
 	int32_t line_number;
 	//All generic types have a size
 	u_int32_t type_size;
+	//Basic types don't need anything crazy - just a token that stores what they are
+	Token basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
-};
-
-
-/**
- * The most basic type that we can have. Encompasses one of the BASIC_TYPEs from
- * above and encodes the pointer_level, size and the name
- */
-struct basic_type_t{
-	//What basic type is it
-	Token basic_type;
-	//Is it a label?
-	u_int8_t is_label;
 };
 
 
@@ -326,6 +315,11 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
  * Dynamically allocate and create a struct type
  */
 generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number);
+
+/**
+ * Dynamically allocate and create a union type
+ */
+generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number);
 
 /**
  * Is the given binary operation valid for the type that was specificed?

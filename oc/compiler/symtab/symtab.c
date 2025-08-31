@@ -230,7 +230,7 @@ static u_int16_t hash_type(generic_type_t* type){
 
 	//If this is an array, we'll add the bounds in
 	if(type->type_class == TYPE_CLASS_ARRAY){
-		key += type->array_type->num_members;
+		key += type->internal_types.array_type->num_members;
 	}
 
 	//Cut it down to our keyspace
@@ -497,11 +497,11 @@ void add_all_basic_types(type_symtab_t* symtab){
 	insert_type(symtab, create_type_record(type));
 
 	//s_int8 type
-	type = create_basic_type("i8", S_INT8);
+	type = create_basic_type("i8", I8);
 	insert_type(symtab,  create_type_record(type));
 
 	//u_int8 type
-	type = create_basic_type("u8", U_INT8);
+	type = create_basic_type("u8", U8);
 	insert_type(symtab,  create_type_record(type));
 
 	//char type
@@ -528,35 +528,35 @@ void add_all_basic_types(type_symtab_t* symtab){
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int16 type
-	type = create_basic_type("u16", U_INT16);
+	type = create_basic_type("u16", U16);
 	insert_type(symtab,  create_type_record(type));
 		
 	//s_int16 type
-	type = create_basic_type("i16", S_INT16);
+	type = create_basic_type("i16", I16);
 	insert_type(symtab,  create_type_record(type));
 	
 	//s_int32 type
-	type = create_basic_type("i32", S_INT32);
+	type = create_basic_type("i32", I32);
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int32 type
-	type = create_basic_type("u32", U_INT32);
+	type = create_basic_type("u32", U32);
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int64 type
-	type = create_basic_type("u64", U_INT64);
+	type = create_basic_type("u64", U64);
 	insert_type(symtab,  create_type_record(type));
 	
 	//s_int64 type
-	type = create_basic_type("i64", S_INT64);
+	type = create_basic_type("i64", I64);
 	insert_type(symtab,  create_type_record(type));
 
 	//float32 type
-	type = create_basic_type("f32", FLOAT32);
+	type = create_basic_type("f32", F32);
 	insert_type(symtab,  create_type_record(type));
 	
 	//float64 type
-	type = create_basic_type("f64", FLOAT64);
+	type = create_basic_type("f64", F64);
 	insert_type(symtab,  create_type_record(type));
 
 	//label type
@@ -865,7 +865,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 			if(strcmp(records_cursor->type->type_name.string, type->type_name.string) == 0){
 				//If we have an array type, we must compare bounds and they must match
 				if(type->type_class == TYPE_CLASS_ARRAY
-					&& type->array_type->num_members != records_cursor->type->array_type->num_members){
+					&& type->internal_types.array_type->num_members != records_cursor->type->internal_types.array_type->num_members){
 					return FALSE;
 				}
 
@@ -971,7 +971,7 @@ void print_type_record(symtab_type_record_t* record){
  * Print a function name out in a stylised way
  */
 void print_function_name(symtab_function_record_t* record){
-	if(record->signature->function_type->is_public == TRUE){
+	if(record->signature->internal_types.function_type->is_public == TRUE){
 		printf("\t---> %d | pub fn %s(", record->line_number, record->func_name.string);
 	} else {
 		printf("\t---> %d | fn %s(", record->line_number, record->func_name.string);
@@ -1062,19 +1062,25 @@ void print_constant_name(symtab_constant_record_t* record){
 	//We'll now switch based on what kind of constant that we have
 	switch (const_node->constant_type) {
 		case INT_CONST:
+			printf("%d\n", const_node->constant_value.signed_int_value);
+			break;
 		case INT_CONST_FORCE_U:
+			printf("%ud\n", const_node->constant_value.unsigned_int_value);
+			break;
 		case LONG_CONST_FORCE_U:
+			printf("%ld\n", const_node->constant_value.unsigned_long_value);
+			break;
 		case LONG_CONST:
-			printf("%ld", const_node->int_long_val);
+			printf("%ld\n", const_node->constant_value.signed_long_value);
 			break;
 		case CHAR_CONST:
-			printf("%d", const_node->char_val);
+			printf("%d\n", const_node->constant_value.char_value);
 			break;
 		case STR_CONST:
 			printf("%s", const_node->string_value.string);
 			break;
 		case FLOAT_CONST:
-			printf("%f", const_node->float_val);
+			printf("%f\n", const_node->constant_value.float_value);
 			break;
 		//We should never get here
 		default:
