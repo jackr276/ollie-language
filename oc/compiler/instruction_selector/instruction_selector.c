@@ -813,7 +813,7 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 	 * t26 <- t24 + 4
 	 * (t26) <- 3
 	 */
-	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+	if(address_calculation->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//So we know that the destination will be t26, the destination will remain unchanged
 		//We'll have a register source and an offset
 		memory_access->offset = address_calculation->op1_const;
@@ -833,7 +833,7 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		
 	//Or if we have a statement like this(rare but may happen, covering our bases)
-	} else if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+	} else if(address_calculation->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
 		//Grab both registers out
 		address_calc_reg1 = address_calculation->op1;
 		address_calc_reg2 = address_calculation->op2;
@@ -859,7 +859,7 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 
 	//It's either an assign const or regular assignment. Either way,
 	//we'll need to set the appropriate source value
-	if(memory_access->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+	if(memory_access->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		memory_access->source_immediate = memory_access->op1_const;
 	} else {
 		memory_access->source_register = memory_access->op1;
@@ -996,7 +996,7 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 	 * mov(w/l/q) $3, 4(t24)
 	 *     op1_const  op2_const assignee
 	 */
-	if(address_calculation->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+	if(address_calculation->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 		//So we know that the destination will be t26, the destination will remain unchanged
 		//We'll have a register source and an offset
 		memory_access->offset = address_calculation->op1_const;
@@ -1666,7 +1666,7 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 	//Now, we'll need to set the appropriate address calculation mode based
 	//on what we're given
 	//If we have op2, we'll have 2 registers
-	if(instruction->CLASS == THREE_ADDR_CODE_BIN_OP_STMT){
+	if(instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
 		//2 registers in this case
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
@@ -2620,7 +2620,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& is_operator_relational_operator(window->instruction1->op) == TRUE
-		&& (window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT)
+		&& (window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT)
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
 		//Set the comparison and assignment instructions
@@ -2679,9 +2679,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * Should become
 	 * mov(w/l/q) $3, 340(arr_0, arg_0, 4)
 	 */
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2 != NULL
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& is_instruction_assignment_operation(window->instruction3) == TRUE
 		&& window->instruction3->assignee->indirection_level == 1
 		&& window->instruction1->assignee->use_count <= 1
@@ -2710,10 +2710,10 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * Should become
 	 * mov(w/l/q) 340(arr_0, arg_0, 4), t9
 	 */
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2 != NULL && window->instruction3 != NULL
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction3->op1->indirection_level <= 1
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
@@ -2741,9 +2741,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * mov(w/l/q) 8(arr_0, t25), t29
 	 */
 	if(window->instruction2 != NULL && window->instruction3 != NULL
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction3->op1->indirection_level <= 1 //Only works for memory movement
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
@@ -2771,8 +2771,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * mov(w/l/q) t29, 8(arr_0, t25)
 	 */
 	if(window->instruction2 != NULL
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& is_instruction_assignment_operation(window->instruction3) == TRUE
 		&& window->instruction3->assignee->indirection_level == 1 //Only works for memory movement
 		&& window->instruction1->assignee->use_count <= 1
@@ -2837,7 +2837,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction2 != NULL
 		&& is_instruction_binary_operation(window->instruction1)
 		&& window->instruction1->op == PLUS
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE
 		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction2->op1->indirection_level == 1){
@@ -2855,8 +2855,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 
 	//Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
 		//This will be flagged as an indirect jump
 		window->instruction2->instruction_type = INDIRECT_JMP;
 
@@ -2881,7 +2881,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	instruction_t* instruction = window->instruction1;
 
 	//Switch on whatever we have currently
-	switch (instruction->CLASS) {
+	switch (instruction->statement_type) {
 		//These have a helper
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_register_to_register_move_instruction(instruction);
@@ -3012,7 +3012,7 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 	basic_block_t* jumps_to = NULL;
 
 	//If we have an exit statement that is a direct jump, then we've hit our match
-	if(block->exit_statement != NULL && block->exit_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT
+	if(block->exit_statement != NULL && block->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT
 	 && block->exit_statement->jump_type == JUMP_TYPE_JMP){
 		jumps_to = block->exit_statement->jumping_to_block;
 	}
@@ -3129,7 +3129,7 @@ static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
 	//This means that there is a stack offset
 	if(assignee->stack_offset != 0){
 		//We'll need to ensure that this is an addition statement
-		instruction->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 		instruction->op = PLUS;
 
 		//Now we'll need to either make a three address constant or update
@@ -3143,7 +3143,7 @@ static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
 	//Otherwise it's just the RSP value
 	} else {
 		//This is just an assignment statement then
-		instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+		instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 	}
 }
 
@@ -3181,8 +3181,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 
 	//If we see a constant assingment first and then we see a an assignment
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
-	 	&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
+	 	&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
 		
 		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
 		//we deal with temp variables. At this point in the program, all non-temp variables have been
@@ -3198,7 +3198,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			binary_operation->op1_const = window->instruction1->op1_const;
 
 			//Modify the type of the assignment
-			binary_operation->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+			binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 			//The use count here now goes down by one
 			binary_operation->op1->use_count--;
@@ -3219,8 +3219,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	//This is the same case as above, we'll just now check instructions 2 and 3
-	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
-	 	&& window->instruction3 != NULL && window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
+	 	&& window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT){
 
 		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
 		//we deal with temp variables. At this point in the program, all non-temp variables have been
@@ -3242,7 +3242,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			binary_operation->op1 = NULL;
 			
 			//Modify the type of the assignment
-			binary_operation->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+			binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 			//Once we've done this, the first statement is entirely useless
 			delete_statement(window->instruction2);
@@ -3263,9 +3263,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 * Can become: t27 <- 340
 	 */
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT 
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction2 != NULL
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == STAR
 		&& window->instruction1->assignee->is_temporary == TRUE
 		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
@@ -3274,7 +3274,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		multiply_constants(window->instruction2->op1_const, window->instruction1->op1_const);
 
 		//Instruction 2 is now simply an assign const statement
-		window->instruction2->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 		//Op1 is now used one less time
 		window->instruction2->op1->use_count--;
@@ -3335,8 +3335,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * 
 	 */
 	//If we have two consecutive assignment statements
-	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT &&
-		window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT &&
+		window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT){
 		//Grab these out for convenience
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
@@ -3382,8 +3382,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * NOTE: This does not work for division or modulus instructions
 	 */
 	//Check first with 1 and 2
-	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE
 			//Validate that the use count is less than 1
@@ -3395,7 +3395,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			instruction_t* const_assignment = window->instruction1;
 
 			//Let's mark that this is now a binary op with const statement
-			window->instruction2->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//op2 is now used one less time
 			window->instruction2->op2->use_count--;
@@ -3418,8 +3418,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	//Now check with 1 and 3. The prior compression may have made this more worthwhile
-	if(window->instruction3 != NULL && window->instruction3->CLASS == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+	if(window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE
 			//Validate that this is not being used more than once
@@ -3432,7 +3432,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			instruction_t* const_assignment = window->instruction1;
 
 			//Let's mark that this is now a binary op with const statement
-			window->instruction3->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+			window->instruction3->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//Op2 for instruction3 is now used one less time
 			window->instruction3->op2->use_count--;
@@ -3468,7 +3468,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
 	if(is_instruction_binary_operation(window->instruction2) == TRUE
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& is_operator_relational_operator(window->instruction2->op) == TRUE){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
@@ -3510,10 +3510,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	//If the first statement is an assignmehnt statement, and the second statement is a binary operation,
 	//and the third statement is an assignment statement, we have our chance to optimize
-	if(window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& is_instruction_binary_operation(window->instruction2) == TRUE
 		&& window->instruction3 != NULL
-		&& window->instruction3->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT){
 
 		//Grab these out for convenience
 		instruction_t* first = window->instruction1;
@@ -3562,8 +3562,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * NOTE: This will actually produce invalid binary operation instructions in the short run. However, 
 	 * when the instruction selector gets to them, we will turn them into memory move operations
 	 */
-	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT){
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
 		if(window->instruction1->assignee->is_temporary == TRUE &&
 	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
@@ -3600,7 +3600,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//We'll now transfrom instruction 2 into a bin op with const
 			window->instruction2->op2 = NULL;
 			window->instruction2->op = PLUS;
-			window->instruction2->CLASS = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//We can now scrap the first instruction entirely
 			delete_statement(window->instruction1);
@@ -3625,7 +3625,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction1 != NULL && window->instruction2 != NULL && window->instruction3 != NULL
 	 	&& window->instruction1->assignee != NULL && window->instruction3->assignee != NULL
 		&& window->instruction2->op1 != NULL
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& window->instruction2->cannot_be_combined == FALSE
 		&& window->instruction2->assignee->is_temporary == TRUE
 		&& window->instruction2->op1->is_temporary == TRUE
@@ -3673,7 +3673,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//operation, this is a potential match
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction2 != NULL
-		&& window->instruction2->CLASS == THREE_ADDR_CODE_ASSN_STMT){
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
 		//For convenience/memory ease
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
@@ -3759,7 +3759,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Grab the current instruction out
 		current_instruction = instructions[i];
 
-		if(current_instruction != NULL && current_instruction->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		if(current_instruction != NULL && current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 			//Grab this out for convenience
 			three_addr_const_t* constant = current_instruction->op1_const;
 
@@ -3826,7 +3826,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					case PLUS:
 					case MINUS:
 						//We're just assigning here
-						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 						//Wipe the values out
 						current_instruction->op1_const = NULL;
 
@@ -3837,7 +3837,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 					case STAR:
 						//Now we're assigning a const
-						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_CONST_STMT;
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 						//The constant is still the same thing(0), let's just wipe out the ops
 						if(current_instruction->op1 != NULL){
@@ -3879,7 +3879,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 						}
 
 						//Now turn it into an inc statement
-						current_instruction->CLASS = THREE_ADDR_CODE_INC_STMT;
+						current_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
 						//Wipe the values out
 						current_instruction->op1_const = NULL;
 						current_instruction->op = BLANK;
@@ -3895,7 +3895,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 						}
 
 						//Change what the class is
-						current_instruction->CLASS = THREE_ADDR_CODE_DEC_STMT;
+						current_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
 						//Wipe the values out
 						current_instruction->op1_const = NULL;
 						current_instruction->op = BLANK;
@@ -3908,7 +3908,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					case STAR:
 					case F_SLASH:
 						//Change it to a regular assignment statement
-						current_instruction->CLASS = THREE_ADDR_CODE_ASSN_STMT;
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 						//Wipe the operator out
 						current_instruction->op1_const = NULL;
 						current_instruction->op = BLANK;
@@ -3963,8 +3963,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * of two consecutive additions here for this reason. Any other two consecutive operations are usually quite uncommon
 	 */
 	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
-	if(window->instruction2 != NULL && window->instruction2->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == PLUS && window->instruction1->CLASS == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == PLUS && window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
 		&& window->instruction1->op == PLUS){
 
 		//Let's do this for convenience
@@ -4005,7 +4005,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 *  These are guaranteed to be useless, so we can eliminate them
 	 */
-	if(window->instruction1 != NULL && window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_STMT
+	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		//If we get here, we have a temp assignment who is completely useless, so we delete
 		&& window->instruction1->assignee->is_temporary == TRUE
 		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == TRUE){
@@ -4030,7 +4030,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 *  These are guaranteed to be useless, so we can eliminate them
 	 */
-	if(window->instruction1 != NULL && window->instruction1->CLASS == THREE_ADDR_CODE_ASSN_CONST_STMT
+	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		//If we get here, we have a temp assignment who is completely useless, so we delete
 		&& window->instruction1->assignee->is_temporary == TRUE
 		//Ensure that it's not being used at all

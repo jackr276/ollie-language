@@ -177,7 +177,7 @@ static u_int8_t compile(compiler_options_t* options){
 	num_warnings += results->num_warnings;
 
 	//This is our fail case
-	if(results->root->CLASS == AST_NODE_CLASS_ERR_NODE){
+	if(results->root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//Timer end
 		end = clock();
 
