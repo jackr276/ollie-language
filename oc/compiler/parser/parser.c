@@ -89,6 +89,7 @@ static char* current_file_name = NULL;
 static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side);
 //What type are we given?
 static generic_type_t* type_specifier(FILE* fl);
+static u_int8_t alias_statement(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side);
 static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global);
@@ -7107,6 +7108,9 @@ static generic_ast_node_t* idle_statement(FILE* fl){
 static generic_ast_node_t* statement(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Status variable for certain rules
+	u_int8_t status;
+
 
 	//Switch based on the token
 	switch(lookahead.tok){
@@ -7119,21 +7123,30 @@ static generic_ast_node_t* statement(FILE* fl){
 			//We now need to see a valid version
 			return declaration(fl, FALSE);
 
-		//Definition of type or alias statement
+		//Type definition
 		case DEFINE:
-		case ALIAS:
-			//Put the token back
-			push_back_token(lookahead);
+			//Call the helper
+			status = definition(fl);
 
-			//Let's see if it worked
-			u_int8_t status = definition(fl);
-
-			//If we fail here we'll throw an error
+			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				//Return an error node
 				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
+			//Otherwise we'll just return null, the caller will know what to do with it
+			return NULL;
+			
+		//Type aliasing
+		case ALIAS:
+			//Call the helper
+			status = alias_statement(fl);
+
+			//If it's bad, we'll return an error node
+			if(status == FAILURE){
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+
+			//Otherwise we'll just return null, the caller will know what to do with it
 			return NULL;
 		
 		//If we see the pound symbol, we know that we are declaring a label
@@ -8348,36 +8361,20 @@ static u_int8_t alias_statement(FILE* fl){
  * NOTE: We assume that there is a define or alias token for us to use to switch based on
  */
 static u_int8_t definition(FILE* fl){
-	//Lookahead token
+	//We can now see construct or enum
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//Go based on the lookahead
 	switch(lookahead.tok){
-		//Type definition
-		case DEFINE:
-			//We can now see construct or enum
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		case STRUCT:
+			return struct_definer(fl);
+		case ENUM:
+			return enum_definer(fl);
+		case FN:
+			return function_pointer_definer(fl);
 
-			switch(lookahead.tok){
-				case STRUCT:
-					return struct_definer(fl);
-				case ENUM:
-					return enum_definer(fl);
-				case FN:
-					return function_pointer_definer(fl);
-
-				default:
-					print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
-					num_errors++;
-					return FAILURE;
-			}
-	
-		//Alias statement
-		case ALIAS:
-			return alias_statement(fl);
-
-		//Something wen wrong here
 		default:
-			print_parse_message(PARSE_ERROR, "Definition expected define or alias keywords, found neither", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
 			num_errors++;
 			return FAILURE;
 	}
@@ -9191,14 +9188,23 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 			//that will be caught above
 			return function_definition(fl);
 	
-		//Let the define and/or alias rule handle this
+		//Type definition
 		case DEFINE:
-		case ALIAS:
-			//Put whatever we saw back
-			push_back_token(lookahead);
-
-			//Call definition
+			//Call the helper
 			status = definition(fl);
+
+			//If it's bad, we'll return an error node
+			if(status == FAILURE){
+				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+			}
+
+			//Otherwise we'll just return null, the caller will know what to do with it
+			return NULL;
+			
+		//Type aliasing
+		case ALIAS:
+			//Call the helper
+			status = alias_statement(fl);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
