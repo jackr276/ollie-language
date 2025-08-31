@@ -17,8 +17,8 @@ pub fn mutate_structure_pointer(mut struct_pointer:custom_struct*) -> i32 {
 	//Reassign the pointer
 	let mut ptr:custom_struct* := struct_pointer;
 
-	struct_pointer::y[2] := 32;
-	struct_pointer::lch := 'a';
+	ptr::y[2] := 32;
+	ptr::lch := 'a';
 
 	ret 0;
 }

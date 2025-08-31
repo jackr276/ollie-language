@@ -1259,9 +1259,15 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 		
 		//Run through every statement in here
 		while(cursor != NULL){
+			//If this is NULL or already marked then we don't care
+			if(cursor->assignee == NULL || cursor->mark == TRUE){
+				cursor = cursor->previous_statement;
+				continue;
+			}
+
 			//This will be in our "related write var" field. All we need to do is see
 			//if the related write field matches our var
-			if(cursor->assignee != NULL && cursor->assignee->related_memory_address != NULL
+			if(cursor->assignee->related_memory_address != NULL
 				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
 				&& cursor->assignee->related_memory_address == related_memory_address){
 
@@ -1270,30 +1276,25 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 					//Mark the statement itself
 					cursor->mark = TRUE;
 					dynamic_array_add(worklist, cursor);
-
-					//Keep track of the old assignee
-					three_addr_var_t* old_assignee = cursor->assignee;
-
-					/**
-					 * We know for a fact that all memory addresses have had a temp variable
-					 * assignment. As such, we need to crawl back and *also* mark that temp variable
-					 * assignment itself as important. That's what the following chunk of code
-					 * does
-					 */
-
-					//Push it back by one to start
-					cursor = cursor->previous_statement;
-
-					//Keep going so long as we don't know where this came from. We need to ignore
-					//indirection levels for this to work
-					while(variables_equal(old_assignee, cursor->assignee, TRUE) == FALSE){
-						cursor = cursor->previous_statement;
-					}
-
-					//Once we get here we know we got it
-					cursor->mark = TRUE;
-					dynamic_array_add(worklist, cursor);
 				}
+			
+			/**
+			 * There is however, one other case to check for here. It is possible
+			 * that the pointer which we marked as important was reassigned/moved around
+			 * to some other variable. If that's the case, then we need to find that other
+			 * important variable. We're already on a crawl here, so we may as well look for it
+			 *
+			 * CASE 1: something like this:
+			 * 	ptr_0 <- struct_pointer_0 
+			 *
+			 * 	If we're marking struct_pointer_0 as important, then we need to also mark pointer_0 as such
+			 */
+			} else if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+				if(cursor->op1 != NULL && cursor->op1->related_memory_address == related_memory_address){
+					printf("HIT IT with\n");
+					print_three_addr_code_stmt(stdout, cursor);
+				}
+
 			}
 
 			cursor = cursor->previous_statement;
@@ -1556,7 +1557,6 @@ static void mark(cfg_t* cfg){
 						&& current_stmt->assignee->related_memory_address->is_function_parameter == TRUE){
 						//This means we're writing to it
 						if(current_stmt->assignee->indirection_level > 0){
-						printf("MARKING with: %s\n", current_stmt->assignee->related_memory_address->var_name.string);
 							//Mark it
 							current_stmt->mark = TRUE;
 							//Add it to the list
