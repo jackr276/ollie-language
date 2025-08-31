@@ -2670,6 +2670,9 @@ static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, th
 		//This counts as a use
 		add_used_variable(basic_block, assignee);
 
+		//Copy the memory address bariable over
+		assignment->assignee->memory_address_variable = assignee->memory_address_variable;
+
 		//Reassign
 		assignee = assignment->assignee;
 	}
@@ -2685,6 +2688,9 @@ static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, th
 	indirect_var->indirection_level++;
 	//Temp or not same deal
 	indirect_var->is_temporary = assignee->is_temporary;
+
+	//Copy the memory address variable over
+	indirect_var->memory_address_variable = assignee->memory_address_variable;
 
 	//Store the dereferenced type
 	indirect_var->type = dereferenced_type;

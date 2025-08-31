@@ -11,6 +11,16 @@ define struct my_struct{
 
 
 /**
+* Test reassigning a double pointer
+*/
+pub fn double_pointer_reassign(mut ptr:i64**) -> i64**{
+	**ptr := 32;
+
+	ret ptr;
+}
+
+
+/**
 * A function that will mutate a structure in its entirety
 */
 pub fn mutate_structure_pointer(mut struct_pointer:custom_struct**) -> i32 {
@@ -27,6 +37,11 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	
 	//One more pointer
 	let mut b:custom_struct* := &a;
+
+	let mut x:i64 := 32;
+	let mut ptr:i64* := &x;
+
+	@double_pointer_reassign(&ptr);
 
 	//Call the mutator
 	@mutate_structure_pointer(&b);
