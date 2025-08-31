@@ -297,7 +297,7 @@ static void update_constant_type_in_subtree(generic_ast_node_t* sub_tree_node, g
  */
 static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, Token op, generic_ast_node_t* operand, side_type_t side){
 	//Grab the pointer type out
-	pointer_type_t* pointer_type = pointer->inferred_type->pointer_type;
+	pointer_type_t* pointer_type = pointer->inferred_type->internal_types.pointer_type;
 
 	//If this is a void pointer, we're done
 	if(pointer_type->is_void_pointer == TRUE){
@@ -602,7 +602,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		function_type = function_record->signature;
 
 		//Store our function signature
-		function_signature = function_record->signature->function_type;
+		function_signature = function_record->signature->internal_types.function_type;
 
 		//We'll also add in that the current function has called this one
 		call_function(current_function->call_graph_node, function_record->call_graph_node);
@@ -625,7 +625,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		function_call_node = ast_node_alloc(AST_NODE_CLASS_INDIRECT_FUNCTION_CALL, side);
 
 		//Store our funcion signature
-		function_signature = function_type->function_type;
+		function_signature = function_type->internal_types.function_type;
 
 		//Store the variable too
 		function_call_node->variable = function_pointer_variable;
@@ -1423,7 +1423,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 		}
 
 		//We can now pick out what type we're referencing(should be construct)
-		referenced_type = working_type->pointer_type->points_to;
+		referenced_type = working_type->internal_types.pointer_type->points_to;
 
 		//Now we know that its a pointer, but what does it point to?
 		if(referenced_type->type_class != TYPE_CLASS_STRUCT){
@@ -1462,7 +1462,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	char* member_name = ident->string_value.string;
 
 	//Let's see if we can look this up inside of the type
-	symtab_variable_record_t* var_record = get_struct_member(referenced_type->struct_type, member_name)->variable;
+	symtab_variable_record_t* var_record = get_struct_member(referenced_type->internal_types.struct_type, member_name)->variable;
 
 	//If we can't find it we're out
 	if(var_record == NULL){
@@ -1674,10 +1674,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//Based on this, the current type is whatever this array contains. We'll also use this for size determinations
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
-				current_type = dealias_type(current_type->array_type->member_type);
+				current_type = dealias_type(current_type->internal_types.array_type->member_type);
 			} else {
 				//Otherwise we know that it must be a pointer
-				current_type = dealias_type(current_type->pointer_type->points_to);
+				current_type = dealias_type(current_type->internal_types.pointer_type->points_to);
 			}
 			
 			//The current type of any array access will be whatever the derferenced value is
@@ -1868,16 +1868,16 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 		
 			//Otherwise if we made it here, we only have one final tripping point
 			//Ensure that we aren't trying to deref a null pointer
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->pointer_type->is_void_pointer == TRUE){
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_types.pointer_type->is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 			}
 
 			//Otherwise our dereferencing worked, so the return type will be whatever this points to
 			//Grab what it references whether its a pointer or an array
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-				return_type = cast_expr->inferred_type->pointer_type->points_to;
+				return_type = cast_expr->inferred_type->internal_types.pointer_type->points_to;
 			} else {
-				return_type = cast_expr->inferred_type->array_type->member_type;
+				return_type = cast_expr->inferred_type->internal_types.array_type->member_type;
 			}
 
 			//This is assignable
@@ -3775,7 +3775,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	struct_type_field_t* duplicate = NULL;
 
 	//Is this a duplicate? If so, we fail out
-	if((duplicate = get_struct_member(construct->struct_type, name)) != NULL){
+	if((duplicate = get_struct_member(construct->internal_types.struct_type, name)) != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate->variable);
@@ -3989,7 +3989,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		//Is it mutable? If this token exists then it is
 		if(lookahead.tok == MUT){
 			//Store that this is mutable inside of the structure
-			function_type->function_type->parameters[parameter_count].is_mutable = TRUE;
+			function_type->internal_types.function_type->parameters[parameter_count].is_mutable = TRUE;
 		} else {
 			//Otherwise put this back
 			push_back_token(lookahead);
@@ -4004,7 +4004,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		}
 
 		//This is good, we'll store it in the parameter type
-		function_type->function_type->parameters[parameter_count].parameter_type = type;
+		function_type->internal_types.function_type->parameters[parameter_count].parameter_type = type;
 
 		//Increment the count
 		parameter_count++;
@@ -4015,7 +4015,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	} while(lookahead.tok == COMMA);
 
 	//Store the parameter count for down the road
-	function_type->function_type->num_params = parameter_count;
+	function_type->internal_types.function_type->num_params = parameter_count;
 
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
@@ -4055,10 +4055,10 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Let's now store the return type
-	function_type->function_type->return_type = return_type;
+	function_type->internal_types.function_type->return_type = return_type;
 
 	//Mark whether or not it's void as well
-	function_type->function_type->returns_void = is_void_type(return_type);
+	function_type->internal_types.function_type->returns_void = is_void_type(return_type);
 
 	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
 	//confusing syntactical mess that C function pointer declarations have
@@ -4684,9 +4684,9 @@ static u_int8_t enum_definer(FILE* fl){
 		enum_type->type_size += variable_rec->type_defined_as->type_size;
 
 		//We will store this in the enum types records
-		enum_type->enumerated_type->tokens[enum_type->enumerated_type->token_num] = variable_rec;
+		enum_type->internal_types.enumerated_type->tokens[enum_type->internal_types.enumerated_type->token_num] = variable_rec;
 		//Increment the number of tokens by one
-		(enum_type->enumerated_type->token_num)++;
+		(enum_type->internal_types.enumerated_type->token_num)++;
 
 		//Move the cursor up by one
 		cursor = cursor->next_sibling;
@@ -6127,7 +6127,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//If we see a semicolon, we can just leave
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
-		if(current_function->signature->function_type->returns_void == FALSE){
+		if(current_function->signature->internal_types.function_type->returns_void == FALSE){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -6141,7 +6141,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	} else {
 		//If we get here, but we do expect a void return, then this is an issue
-		if(current_function->signature->function_type->returns_void == TRUE){
+		if(current_function->signature->internal_types.function_type->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print the function name
@@ -6286,7 +6286,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
 	} else {
 		//Grab the basic type
-		Token basic_type = type->basic_type->basic_type;
+		Token basic_type = type->internal_types.basic_type->basic_type;
 
 		//It needs to be an int or char
 		if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
@@ -7793,7 +7793,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
 	//Extract the actual array type for ease of use here
-	array_type_t* array = array_type->array_type;
+	array_type_t* array = array_type->internal_types.array_type;
 
 	//Grab the member type here out as well
 	generic_type_t* member_type = array->member_type;
@@ -7859,7 +7859,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  */
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
 	//Grab the raw struct type out
-	struct_type_t* raw_type = struct_type->struct_type;
+	struct_type_t* raw_type = struct_type->internal_types.struct_type;
 
 	//We'll need to extract the struct table and that max index that it holds
 	struct_type_field_t* fields = raw_type->struct_table;
@@ -7931,10 +7931,10 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
  */
 static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
 	//Extract the actual array type for ease of use here
-	array_type_t* array = array_type->array_type;
+	array_type_t* array = array_type->internal_types.array_type;
 
 	//Let's first validate that this array actually is a char[]
-	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type->basic_type != CHAR){
+	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->internal_types.basic_type->basic_type != CHAR){
 		//Print out the full error message
 		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
 
@@ -8570,7 +8570,7 @@ static int8_t check_jump_labels(){
  */
 static u_int8_t validate_main_function(generic_type_t* type){
 	//Let's extract the signature first for convenience
-	function_type_t* signature = type->function_type;
+	function_type_t* signature = type->internal_types.function_type;
 
 	//If the main function is not public, then we fail
 	if(signature->is_public == FALSE){
@@ -8595,7 +8595,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			parameter_type = signature->parameters[0].parameter_type;
 			
 			//If it isn't a basic type and it isn't an i32, we fail
-			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type->basic_type != S_INT32){
+			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->internal_types.basic_type->basic_type != S_INT32){
 				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				return FALSE;
@@ -8622,7 +8622,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
-	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type->basic_type != S_INT32){
+	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->internal_types.basic_type->basic_type != S_INT32){
 		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FALSE;
@@ -8846,7 +8846,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//The internal function record param
 		symtab_variable_record_t* func_param;
 		//Grab the function signature out for processing
-		function_type_t* function_signature_type = function_record->signature->function_type;
+		function_type_t* function_signature_type = function_record->signature->internal_types.function_type;
 
 		//So long as this isn't null
 		while(param_list_cursor != NULL){
@@ -8893,8 +8893,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
 			
 			//Store this into the function signature as well
-			function_signature->function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
-			function_signature->function_type->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
+			function_signature->internal_types.function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
+			function_signature->internal_types.function_type->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
 
 			//Increment the parameter count
 			(function_record->number_of_params)++;
@@ -8907,10 +8907,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Copy this over for later
-		function_signature->function_type->num_params = function_record->number_of_params;
+		function_signature->internal_types.function_type->num_params = function_record->number_of_params;
 
 		//Store whether or not this function is public
-		function_signature->function_type->is_public = is_public;
+		function_signature->internal_types.function_type->is_public = is_public;
 
 		//Store this in here
 		function_record->signature = function_signature;
@@ -8954,10 +8954,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	function_record->return_type = type;
 
 	//Record whether or not it's a void type
-	function_record->signature->function_type->returns_void = is_void_type(type);
+	function_record->signature->internal_types.function_type->returns_void = is_void_type(type);
 
 	//Store the return type as well
-	function_record->signature->function_type->return_type = type;
+	function_record->signature->internal_types.function_type->return_type = type;
 
 	//Now that the function record has been finalized, we'll need to produce the type name
 	generate_function_pointer_type_name(function_record->signature);

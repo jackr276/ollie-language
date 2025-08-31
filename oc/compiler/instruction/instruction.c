@@ -217,7 +217,7 @@ variable_size_t select_type_size(generic_type_t* type){
 		//Probably the most common option
 		case TYPE_CLASS_BASIC:
 			//Switch based on this
-			switch (type->basic_type->basic_type) {
+			switch (type->internal_types.basic_type->basic_type) {
 				case U_INT8:
 				case S_INT8:
 				case CHAR:
@@ -299,7 +299,7 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 		//Probably the most common option
 		case TYPE_CLASS_BASIC:
 			//Switch based on this
-			switch (type->basic_type->basic_type) {
+			switch (type->internal_types.basic_type->basic_type) {
 				case U_INT8:
 				case S_INT8:
 				case CHAR:
