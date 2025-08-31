@@ -4835,16 +4835,16 @@ static symtab_type_record_t* type_name(FILE* fl){
 
 	switch(lookahead.tok){
 		case VOID:
-		case U_INT8:
-		case S_INT8:
-		case U_INT16:
-		case S_INT16:
-		case U_INT32:
-		case S_INT32:
-		case FLOAT32:
-		case U_INT64:
-		case S_INT64:
-		case FLOAT64:
+		case U8:
+		case I8:
+		case U16:
+		case I16:
+		case U32:
+		case I32:
+		case F32:
+		case U64:
+		case I64:
+		case F64:
 		case CHAR:
 			//We will now grab this record from the symtable to make our life easier
 			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
@@ -8595,7 +8595,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			parameter_type = signature->parameters[0].parameter_type;
 			
 			//If it isn't a basic type and it isn't an i32, we fail
-			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != S_INT32){
+			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
 				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				return FALSE;
@@ -8622,7 +8622,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
-	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != S_INT32){
+	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
 		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FALSE;
