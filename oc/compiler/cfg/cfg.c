@@ -1929,7 +1929,7 @@ static void rename_block(basic_block_t* entry){
 	//So long as this isn't null
 	while(cursor != NULL){
 		//First option - if we encounter a phi function
-		if(cursor->CLASS == THREE_ADDR_CODE_PHI_FUNC){
+		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 			//We will rewrite the assigneed of the phi function(LHS)
 			//with the new name
 			lhs_new_name(cursor->assignee);
@@ -1956,7 +1956,7 @@ static void rename_block(basic_block_t* entry){
 			}
 
 			//Special case - do we have a function call?
-			if(cursor->CLASS == THREE_ADDR_CODE_FUNC_CALL){
+			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL){
 				//Grab it out
 				dynamic_array_t* func_params = cursor->function_parameters;
 				//Run through them all
@@ -1988,7 +1988,7 @@ static void rename_block(basic_block_t* entry){
 		instruction_t* succ_cursor = successor->leader_statement;
 
 		//So long as it isn't null AND it's a phi function
-		while(succ_cursor != NULL && succ_cursor->CLASS == THREE_ADDR_CODE_PHI_FUNC){
+		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 			//We have a phi function, so what are we assigning to it?
 			symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
 
@@ -2781,7 +2781,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
-	switch(primary_parent->CLASS){
+	switch(primary_parent->ast_node_type){
 		//In this case we'll only worry about the assignee
 		case AST_NODE_CLASS_IDENTIFIER:
 		 	result_package.assignee = emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
@@ -2863,7 +2863,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	cfg_result_package_t postfix_package = {basic_block, basic_block, NULL, BLANK};
 
 	//If this is itself not a postfix expression, we need to lose it here
-	if(postfix_parent->CLASS != AST_NODE_CLASS_POSTFIX_EXPR){
+	if(postfix_parent->ast_node_type != AST_NODE_CLASS_POSTFIX_EXPR){
 		return emit_primary_expr_code(basic_block, postfix_parent, temp_assignment_required, is_branch_ending);
 	}
 
@@ -2904,7 +2904,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 	//We could also go right into a terminal expression like a unary operator. If so
 	//handle it and then bail
-	if(cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
+	if(cursor->ast_node_type == AST_NODE_CLASS_UNARY_OPERATOR){
 		//We'll let our helper do it here
 		postfix_package.assignee = emit_postoperation_code(current, primary_package.assignee, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 
@@ -2927,9 +2927,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	symtab_variable_record_t* memory_address_variable = current_var->linked_var;
 
 	//While we're hitting arrays and structs, we'll need to be memory conscious
-	while(cursor != NULL && cursor->CLASS != AST_NODE_CLASS_UNARY_OPERATOR){
+	while(cursor != NULL && cursor->ast_node_type != AST_NODE_CLASS_UNARY_OPERATOR){
 		//First of two potentialities is the array accessor
-		if(cursor->CLASS == AST_NODE_CLASS_ARRAY_ACCESSOR){
+		if(cursor->ast_node_type == AST_NODE_CLASS_ARRAY_ACCESSOR){
 			//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
 			cfg_result_package_t expression_package = emit_expression(current, cursor->first_child, is_branch_ending, FALSE);
 
@@ -3113,7 +3113,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	}
 
 	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
-	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_UNARY_OPERATOR){
+	if(cursor != NULL && cursor->ast_node_type == AST_NODE_CLASS_UNARY_OPERATOR){
 		//The helper can deal with this. Whatever it gives back is our assignee
 		postfix_package.assignee = emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 	} else {
@@ -3359,7 +3359,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
  */
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Switch based on what class this node actually is
-	switch(unary_expression->CLASS){
+	switch(unary_expression->ast_node_type){
 		//If it's actually a unary expression, we can do some processing
 		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_CLASS_UNARY_EXPR:	
@@ -3544,7 +3544,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Have we hit the so-called "root level" here? If we have, then we're just going to pass this
 	//down to another rule
-	if(logical_or_expr->CLASS != AST_NODE_CLASS_BINARY_EXPR){
+	if(logical_or_expr->ast_node_type != AST_NODE_CLASS_BINARY_EXPR){
 		return emit_unary_expression(current_block, logical_or_expr, FALSE, is_branch_ending);
 	}
 
@@ -3675,7 +3675,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 	basic_block_t* current_block = basic_block;
 
 	//We'll process based on the class of our expression node
-	switch(expr_node->CLASS){
+	switch(expr_node->ast_node_type){
 		case AST_NODE_CLASS_ASNMNT_EXPR:
 			//In our tree, an assignment statement decays into a unary expression
 			//on the left and a binary op expr on the right
@@ -4548,7 +4548,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		//Create this for our results here
 		cfg_result_package_t first_child_result_package = {NULL, NULL, NULL, BLANK};
 
-		switch(ast_cursor->first_child->CLASS){
+		switch(ast_cursor->first_child->ast_node_type){
 			//We could have a let statement
 			case AST_NODE_CLASS_LET_STMT:
 				//Let the subrule handle this
@@ -5004,7 +5004,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	generic_ast_node_t* else_if_cursor;
 
 	//So long as we keep seeing else-if clauses
-	while(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_ELSE_IF_STMT){
+	while(cursor != NULL && cursor->ast_node_type == AST_NODE_CLASS_ELSE_IF_STMT){
 		//This will be the expression
 		else_if_cursor = cursor->first_child;
 
@@ -5083,7 +5083,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	}
 
 	//Now that we're out of here - we may have an else statement on our hands
-	if(cursor != NULL && cursor->CLASS == AST_NODE_CLASS_COMPOUND_STMT){
+	if(cursor != NULL && cursor->ast_node_type == AST_NODE_CLASS_COMPOUND_STMT){
 		//Let's handle the compound statement
 		
 		//Grab the compound statement
@@ -5361,7 +5361,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//So long as we haven't hit the end
 	while(cursor != NULL){
-		switch(cursor->CLASS){
+		switch(cursor->ast_node_type){
 			//C-style case statement, we'll let the appropriate rule handle
 			case AST_NODE_CLASS_C_STYLE_CASE_STMT:
 				//Let the helper rule handle it
@@ -5400,7 +5400,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			//an exit statement or not
 			if(previous_block->exit_statement != NULL){
 				//Switch based on what is in here
-				switch(previous_block->exit_statement->CLASS){
+				switch(previous_block->exit_statement->statement_type){
 					//If we already have an ending that's a hard jump, we don't
 					//need to go on
 					case THREE_ADDR_CODE_JUMP_STMT:
@@ -5453,7 +5453,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 */
 	if(current_block->exit_statement != NULL){
 		//Switch based on what the end of the current block is
-		switch(current_block->exit_statement->CLASS){
+		switch(current_block->exit_statement->statement_type){
 			//If it's a jump statement, we don't need to add one
 			case THREE_ADDR_CODE_JUMP_STMT:
 				if(current_block->exit_statement->jump_type == JUMP_TYPE_JMP){
@@ -5635,7 +5635,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//So long as this isn't null
 	while(case_stmt_cursor != NULL){
 		//Switch based on the class
-		switch(case_stmt_cursor->CLASS){
+		switch(case_stmt_cursor->ast_node_type){
 			//Handle a case statement
 			case AST_NODE_CLASS_CASE_STMT:
 				//Visit our case stmt here
@@ -5789,7 +5789,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	//Roll through the entire subtree
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
-		switch(ast_cursor->CLASS){
+		switch(ast_cursor->ast_node_type){
 			case AST_NODE_CLASS_DECL_STMT:
 				generic_results = visit_declaration_statement(ast_cursor);
 
@@ -6356,7 +6356,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	//Roll through the entire subtree
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
-		switch(ast_cursor->CLASS){
+		switch(ast_cursor->ast_node_type){
 			case AST_NODE_CLASS_DECL_STMT:
 				generic_results = visit_declaration_statement(ast_cursor);
 
@@ -6916,7 +6916,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
 		}
 
 		//If the exit statement is not a return statement, we need to know what's happening here
-		if(block->exit_statement == NULL || block->exit_statement->CLASS != THREE_ADDR_CODE_RET_STMT){
+		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 			//If this isn't void, then we need to throw a warning
 			if(function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
 				|| function_defined_in->return_type->basic_type_token != VOID){
@@ -7114,7 +7114,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		address->memory_address_variable = base_address->memory_address_variable;
 
 		//Determine if we need to emit an indirection instruction or not
-		switch(cursor->CLASS){
+		switch(cursor->ast_node_type){
 			//We won't do any dereferencing if we have these
 			case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
 			case AST_NODE_CLASS_STRING_INITIALIZER:
@@ -7225,7 +7225,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		address->memory_address_variable = base_address->memory_address_variable;
 
 		//Determine if we need to emit an indirection instruction or not
-		switch(cursor->CLASS){
+		switch(cursor->ast_node_type){
 			//We won't do any dereferencing if we have these
 			case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
 			case AST_NODE_CLASS_STRING_INITIALIZER:
@@ -7276,7 +7276,7 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 
 	//TODO: This is probably not going to work. We'll need our own "visit_initializer"
 	//root level node that will be able to decay into an expression or one of these
-	switch(initializer_root->CLASS){
+	switch(initializer_root->ast_node_type){
 		//Make a direct call to the rule
 		case AST_NODE_CLASS_STRING_INITIALIZER:
 			return emit_string_initializer(current_block, assignee, initializer_root, is_branch_ending);
@@ -7398,7 +7398,7 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
 		//Switch based on the class of cursor that we have here
-		switch(ast_cursor->CLASS){
+		switch(ast_cursor->ast_node_type){
 			//We can see a function definition. In this case, we'll
 			//allow the helper to do it
 			case AST_NODE_CLASS_FUNC_DEF:

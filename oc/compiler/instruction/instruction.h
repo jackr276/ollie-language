@@ -354,7 +354,7 @@ typedef enum{
 	THREE_ADDR_CODE_MEM_ACCESS_STMT,
 	//An address assignment instruction for memory address
 	THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT
-} instruction_stmt_class_t;
+} instruction_stmt_type_t;
 
 
 /**
@@ -514,8 +514,8 @@ struct instruction_t{
 	void* phi_function_parameters;
 	//The list of temp variable parameters at most 6
 	void* function_parameters;
-	//What is the three address code class
-	instruction_stmt_class_t CLASS;
+	//What is the three address code type
+	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
 	//The actual operator, stored as a token for size requirements

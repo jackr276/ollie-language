@@ -181,7 +181,7 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	memcpy(duplicated, node, sizeof(generic_ast_node_t));
 
 	//Let's see if we have any special cases here that require extra attention
-	switch(node->CLASS){
+	switch(node->ast_node_type){
 		//Asm inline is a special case because we'll need to copy the assembly over
 		case AST_NODE_CLASS_ASM_INLINE_STMT:
 		case AST_NODE_CLASS_IDENTIFIER:
@@ -229,7 +229,7 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
  * that they want to use. It is assumed that the user already knows the proper type and takes appropriate action based
  * on that
 */
-generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
+generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side){
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
 
@@ -243,7 +243,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side){
 		current_ast_node = node;
 	}
 	//Assign the class
-	node->CLASS = CLASS;
+	node->ast_node_type = ast_node_type;
 
 	//Assign the side of the node
 	node->side = side;
@@ -302,7 +302,7 @@ void ast_dealloc(){
 
 		//We can off the bat free it's data
 		if(temp->node != NULL){
-			switch(temp->CLASS){
+			switch(temp->ast_node_type){
 				//Don't free these here, they'd be freed elsewhere
 				case AST_NODE_CLASS_ARRAY_INITIALIZER_LIST:
 				case AST_NODE_CLASS_STRING_INITIALIZER:
@@ -315,7 +315,7 @@ void ast_dealloc(){
 		}
 
 		//Some additional freeing may be needed
-		switch(temp->CLASS){
+		switch(temp->ast_node_type){
 			case AST_NODE_CLASS_IDENTIFIER:
 			case AST_NODE_CLASS_ASM_INLINE_STMT:
 				dynamic_string_dealloc(&(temp->string_value));

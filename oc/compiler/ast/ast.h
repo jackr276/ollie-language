@@ -33,7 +33,7 @@ typedef enum{
 } variable_assignability_t;
 
 //What type is in the AST node?
-typedef enum ast_node_class_t{
+typedef enum ast_node_type_t{
 	AST_NODE_CLASS_PROG,
 	AST_NODE_CLASS_ALIAS_STMT,
 	AST_NODE_CLASS_FOR_LOOP_CONDITION,
@@ -90,7 +90,7 @@ typedef enum ast_node_class_t{
 	//A string initializer node
 	AST_NODE_CLASS_STRING_INITIALIZER,
 	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
-} ast_node_class_t;
+} ast_node_type_t;
 
 
 //What kind of address type specifier is it
@@ -148,7 +148,7 @@ struct generic_ast_node_t{
 	//What side is this node on
 	side_type_t side;
 	//What kind of node is it?
-	ast_node_class_t CLASS;
+	ast_node_type_t ast_node_type;
 	//The number of parameters
 	u_int8_t num_params;
 	//The type address specifier - for types
@@ -183,7 +183,7 @@ void logical_not_constant_value(generic_ast_node_t* constant_node);
 /**
  * Global node allocation function
  */
-generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side);
+generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
 
 /**
  * A utility function for node duplication
