@@ -1238,7 +1238,7 @@ static void sweep(cfg_t* cfg){
  * here because a construct's layout is determined when the parser hits it. As such, if we're only
  * ever using a certain field, we need only worry about writes to that given field
  */
-static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist, symtab_variable_record_t* related_memory_address){
+static void mark_and_add_memory_writes(cfg_t* cfg, dynamic_array_t* worklist, symtab_variable_record_t* related_memory_address){
 	//Run through every single block in the CFG
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the given block out
@@ -1260,7 +1260,7 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 		//Run through every statement in here
 		while(cursor != NULL){
 			//If this is NULL or already marked then we don't care
-			if(cursor->assignee == NULL || cursor->mark == TRUE){
+			if(cursor->assignee == NULL){
 				cursor = cursor->previous_statement;
 				continue;
 			}
@@ -1277,24 +1277,6 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 					cursor->mark = TRUE;
 					dynamic_array_add(worklist, cursor);
 				}
-			
-			/**
-			 * There is however, one other case to check for here. It is possible
-			 * that the pointer which we marked as important was reassigned/moved around
-			 * to some other variable. If that's the case, then we need to find that other
-			 * important variable. We're already on a crawl here, so we may as well look for it
-			 *
-			 * CASE 1: something like this:
-			 * 	ptr_0 <- struct_pointer_0 
-			 *
-			 * 	If we're marking struct_pointer_0 as important, then we need to also mark pointer_0 as such
-			 */
-			} else if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-				if(cursor->op1 != NULL && cursor->op1->related_memory_address == related_memory_address){
-					printf("HIT IT with\n");
-					print_three_addr_code_stmt(stdout, cursor);
-				}
-
 			}
 
 			cursor = cursor->previous_statement;
@@ -1388,7 +1370,7 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 	//If we're marking a variable that is a memory address type, then we need to ensure that all writes
 	//to said memory address are preserved
  	if(variable->related_memory_address != NULL){
-		mark_and_add_all_field_writes(cfg, worklist, variable->related_memory_address);
+		mark_and_add_memory_writes(cfg, worklist, variable->related_memory_address);
 	}
 
 	/**
@@ -1400,7 +1382,7 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 	 * in a memory related way
 	 */
 	if(variable->linked_var != NULL && is_memory_address_type(variable->linked_var->type_defined_as) == TRUE){
-		mark_and_add_all_field_writes(cfg, worklist, variable->linked_var);
+		mark_and_add_memory_writes(cfg, worklist, variable->linked_var);
 	}
 
 	//Run through everything here
@@ -1579,6 +1561,56 @@ static void mark(cfg_t* cfg){
 							dynamic_array_add(worklist, current_stmt);
 							//This has a mark
 							current->contains_mark = TRUE;
+						}
+					}
+
+					//What if we're reassigning a parameter pointer in the body? If so, we'll
+					//need to also keep track of the new value where it went
+					if(current_stmt->op1 != NULL
+						&& is_memory_address_type(current_stmt->op1->type) == TRUE
+						&& current_stmt->op1->linked_var != NULL){ //Can't just be a temp var
+						//Grab for convenience
+						three_addr_var_t* op1 = current_stmt->op1;
+						three_addr_var_t* assignee = current_stmt->assignee;
+
+						//If this is a function parameter, we'll need to mark whatever it's assigne to
+						if(op1->linked_var->is_function_parameter == TRUE 
+							&& is_memory_address_type(assignee->type) == TRUE){
+
+							//Two options here - we could have some kind of temp reassignment, or
+							//we could have a direct assignment
+							
+							/**
+							 * Case 1: direct assignment like this:
+							 * 	ptr_0 <- struct_pointer_0
+							 *
+							 * 	We'll need to mark everything with pointer 0
+							 */
+							if(assignee->linked_var != NULL){
+								mark_and_add_memory_writes(cfg, worklist, assignee->linked_var);
+
+							//Otherwise, keep crawling until you do hit one
+							} else {
+								//Grab a cursor
+								instruction_t* cursor = current_stmt->next_statement;
+
+								//Keep crawling down
+								while(cursor != NULL){
+									//We're looking for an assign statement where the op1 is
+									//the assignee of the old statement
+									if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT
+										&& cursor->assignee->is_temporary == FALSE
+										&& cursor->op1->temp_var_number == assignee->temp_var_number){
+
+										//Done here
+										mark_and_add_memory_writes(cfg, worklist, cursor->assignee->linked_var);
+										break;
+									}
+
+									//Keep going
+									cursor = cursor->next_statement;
+								}
+							}
 						}
 					}
 
