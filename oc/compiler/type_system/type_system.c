@@ -47,7 +47,7 @@ u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
 		//Let's see what we have here
 		case TYPE_CLASS_BASIC:
 			//If it's a u64 then yes
-			if(type->internal_types.basic_type->basic_type == U_INT64){
+			if(type->basic_type_token == U_INT64){
 				return TRUE;
 			}
 
@@ -70,7 +70,7 @@ u_int8_t is_type_32_bit_int(generic_type_t* type){
 	}
 
 	//Otherwise it is a basic type
-	switch(type->internal_types.basic_type->basic_type){
+	switch(type->basic_type_token){
 		//Our only real cases here
 		case U_INT32:
 		case S_INT32:
@@ -89,7 +89,7 @@ u_int8_t is_void_type(generic_type_t* type){
 		return FALSE;
 	}
 
-	if(type->internal_types.basic_type->basic_type != VOID){
+	if(type->basic_type_token != VOID){
 		return FALSE;
 	}
 
@@ -174,7 +174,7 @@ u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 		//Some more exploration needed here
 		case TYPE_CLASS_BASIC:
 			//Extract this
-			basic_type = type->internal_types.basic_type->basic_type;
+			basic_type = type->basic_type_token;
 		
 			//We're allowed to see 64 bit types here
 			if(basic_type == U_INT64 || basic_type == S_INT64){
@@ -212,7 +212,7 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
 			return TRUE;
 		case TYPE_CLASS_BASIC:
 			//Grab this out
-			basic_type_token = type->internal_types.basic_type->basic_type;
+			basic_type_token = type->basic_type_token;
 
 			//We just can't see floats or void here
 			if(basic_type_token == VOID || basic_type_token == FLOAT32
@@ -250,7 +250,7 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 		case TYPE_CLASS_BASIC:
 			//If it's void, then we can't have it. Otherwise
 			//it's fine
-			if(type->internal_types.basic_type->basic_type != VOID){
+			if(type->basic_type_token != VOID){
 				return TRUE;
 			} else {
 				return FALSE;
@@ -379,7 +379,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 			//Otherwise it needs to be a basic type
 			} else if(deref_source_type->type_class == TYPE_CLASS_BASIC){
 				//Grab the type out of here
-				source_basic_type = deref_source_type->internal_types.basic_type->basic_type;
+				source_basic_type = deref_source_type->basic_type_token;
 
 				//It needs to be 8 bits, otherwise we won't allow this
 				if(source_basic_type == U_INT8 || source_basic_type == S_INT8 || source_basic_type == CHAR){
@@ -399,7 +399,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 		case TYPE_CLASS_ARRAY:
 			//If this isn't a char[], we're done
 			if(deref_destination_type->internal_types.array_type->member_type->type_class != TYPE_CLASS_BASIC
-				|| deref_destination_type->internal_types.array_type->member_type->internal_types.basic_type->basic_type != CHAR){
+				|| deref_destination_type->internal_types.array_type->member_type->basic_type_token != CHAR){
 				return NULL;
 			}
 
@@ -413,7 +413,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				}
 
 				//If it's a char, then we're set
-				if(points_to->internal_types.basic_type->basic_type == CHAR){
+				if(points_to->basic_type_token == CHAR){
 					return deref_destination_type;
 				}
 			}
@@ -425,7 +425,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 			switch(deref_source_type->type_class){
 				case TYPE_CLASS_BASIC:
 					//This needs to be a u64, otherwise it's invalid
-					if(deref_source_type->internal_types.basic_type->basic_type == U_INT64){
+					if(deref_source_type->basic_type_token == U_INT64){
 						//We will keep this as the pointer
 						return deref_destination_type;
 					//Any other basic type will not work here
@@ -479,7 +479,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 		 */
 		case TYPE_CLASS_BASIC:
 			//Extract the destination's basic type
-			dest_basic_type = deref_destination_type->internal_types.basic_type->basic_type;
+			dest_basic_type = deref_destination_type->basic_type_token;
 
 			//Switch based on the type that we have here
 			switch(dest_basic_type){
@@ -490,8 +490,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				case FLOAT64:
 					//We must see another f64 or an f32(widening) here
 					if(deref_source_type->type_class == TYPE_CLASS_BASIC
-						&& (deref_source_type->internal_types.basic_type->basic_type == FLOAT64
-						|| deref_source_type->internal_types.basic_type->basic_type == FLOAT32)){
+						&& (deref_source_type->basic_type_token == FLOAT64
+						|| deref_source_type->basic_type_token == FLOAT32)){
 						return deref_destination_type;
 
 					//Otherwise nothing here will work
@@ -502,7 +502,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				case FLOAT32:
 					//We must see another an f32 here
 					if(deref_source_type->type_class == TYPE_CLASS_BASIC
-						&& deref_source_type->internal_types.basic_type->basic_type == FLOAT32){
+						&& deref_source_type->basic_type_token == FLOAT32){
 						return deref_destination_type;
 
 					//Otherwise nothing here will work
@@ -527,7 +527,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 					
 					//Once we get here, we know that the source type is a basic type. We now
 					//need to check that it's not a float or void
-					source_basic_type = deref_source_type->internal_types.basic_type->basic_type;
+					source_basic_type = deref_source_type->basic_type_token;
 
 					//Go based on what we have here
 					switch(source_basic_type){
@@ -571,9 +571,9 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
  * We'll need this because we always coerce to unsigned, *not* to signed,
  * if one operand in a certain equation is unsigned
  */
-static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, basic_type_t* type){
+static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generic_type_t* type){
 	//Switch based on what we have
-	switch(type->basic_type){
+	switch(type->basic_type_token){
 			//Char is already unsigned
 		case CHAR:
 			return lookup_type_name_only(symtab, "char")->type;
@@ -605,21 +605,21 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, basic_
  */
 static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
 	//Floats are never not signed, so this is useless for them
-	if((*a)->internal_types.basic_type->basic_type == FLOAT32 || (*a)->internal_types.basic_type->basic_type == FLOAT64){
+	if((*a)->basic_type_token == FLOAT32 || (*a)->basic_type_token == FLOAT64){
 		return;
 	}
 
 	//If a is unsigned, b must automatically go to unsigned
 	if(is_type_signed(*a) == FALSE){
 		//Convert b
-		*b = convert_to_unsigned_version(symtab, (*b)->internal_types.basic_type);
+		*b = convert_to_unsigned_version(symtab, *b);
 		return;
 	}
 
 	//Likewise, if b is unsigned, then a must automatically go to unsigned
 	if(is_type_signed(*b) == FALSE){
 		//Convert a
-		*a = convert_to_unsigned_version(symtab, (*a)->internal_types.basic_type);
+		*a = convert_to_unsigned_version(symtab, *a);
 		return;
 	}
 }
@@ -630,8 +630,8 @@ static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t
  */
 static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generic_type_t** a, generic_type_t** b){
 	//Grab these to avoid unneeded derefs
-	Token a_basic_type = (*a)->internal_types.basic_type->basic_type;
-	Token b_basic_type = (*b)->internal_types.basic_type->basic_type;
+	Token a_basic_type = (*a)->basic_type_token;
+	Token b_basic_type = (*b)->basic_type_token;
 
 	//These are our "flexible types" -- meaning that they can become any other
 	//kind of integer that we want
@@ -705,7 +705,7 @@ static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generi
  */
 static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a){
 	//Go based on what we have as our basic type
-	switch((*a)->internal_types.basic_type->basic_type){
+	switch((*a)->basic_type_token){
 		//These all decome f32's
 		case U_INT8:
 		case S_INT8:
@@ -785,7 +785,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//Now once we get here, we know that we have a basic type
 
 				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->internal_types.basic_type->basic_type == FLOAT32 || (*b)->internal_types.basic_type->basic_type == FLOAT64){
+				if((*b)->basic_type_token == FLOAT32 || (*b)->basic_type_token == FLOAT64){
 					return NULL;
 				}
 
@@ -812,7 +812,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//Now once we get here, we know that we have a basic type
 
 				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->internal_types.basic_type->basic_type == FLOAT32 || (*a)->internal_types.basic_type->basic_type == FLOAT64){
+				if((*a)->basic_type_token == FLOAT32 || (*a)->basic_type_token == FLOAT64){
 					return NULL;
 				}
 
@@ -829,11 +829,11 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			}
 
 			//If a is a floating point, we apply the float conversion to b
-			if((*a)->internal_types.basic_type->basic_type == FLOAT32 || (*a)->internal_types.basic_type->basic_type == FLOAT64){
+			if((*a)->basic_type_token == FLOAT32 || (*a)->basic_type_token == FLOAT64){
 				integer_to_floating_point(symtab, b);
 
 			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->internal_types.basic_type->basic_type == FLOAT32 || (*b)->internal_types.basic_type->basic_type == FLOAT64){
+			} else if((*b)->basic_type_token == FLOAT32 || (*b)->basic_type_token == FLOAT64){
 				integer_to_floating_point(symtab, a);
 			}
 
@@ -866,7 +866,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//Now once we get here, we know that we have a basic type
 
 				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->internal_types.basic_type->basic_type == FLOAT32 || (*b)->internal_types.basic_type->basic_type == FLOAT64){
+				if((*b)->basic_type_token == FLOAT32 || (*b)->basic_type_token == FLOAT64){
 					return NULL;
 				}
 
@@ -893,7 +893,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//Now once we get here, we know that we have a basic type
 
 				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->internal_types.basic_type->basic_type == FLOAT32 || (*a)->internal_types.basic_type->basic_type == FLOAT64){
+				if((*a)->basic_type_token == FLOAT32 || (*a)->basic_type_token == FLOAT64){
 					return NULL;
 				}
 
@@ -954,11 +954,11 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		case STAR:
 		case MOD:
 			//If a is a floating point, we apply the float conversion to b
-			if((*a)->internal_types.basic_type->basic_type == FLOAT32 || (*a)->internal_types.basic_type->basic_type == FLOAT64){
+			if((*a)->basic_type_token == FLOAT32 || (*a)->basic_type_token == FLOAT64){
 				integer_to_floating_point(symtab, b);
 
 			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->internal_types.basic_type->basic_type == FLOAT32 || (*b)->internal_types.basic_type->basic_type == FLOAT64){
+			} else if((*b)->basic_type_token == FLOAT32 || (*b)->basic_type_token == FLOAT64){
 				integer_to_floating_point(symtab, a);
 			}
 
@@ -999,7 +999,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//Now once we get here, we know that we have a basic type
 
 				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->internal_types.basic_type->basic_type == FLOAT32 || (*b)->internal_types.basic_type->basic_type == FLOAT64){
+				if((*b)->basic_type_token == FLOAT32 || (*b)->basic_type_token == FLOAT64){
 					return NULL;
 				}
 
@@ -1026,7 +1026,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//Now once we get here, we know that we have a basic type
 
 				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->internal_types.basic_type->basic_type == FLOAT32 || (*a)->internal_types.basic_type->basic_type == FLOAT64){
+				if((*a)->basic_type_token == FLOAT32 || (*a)->basic_type_token == FLOAT64){
 					return NULL;
 				}
 
@@ -1043,11 +1043,11 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			}
 
 			//If a is a floating point, we apply the float conversion to b
-			if((*a)->internal_types.basic_type->basic_type == FLOAT32 || (*a)->internal_types.basic_type->basic_type == FLOAT64){
+			if((*a)->basic_type_token == FLOAT32 || (*a)->basic_type_token == FLOAT64){
 				integer_to_floating_point(symtab, b);
 
 			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->internal_types.basic_type->basic_type == FLOAT32 || (*b)->internal_types.basic_type->basic_type == FLOAT64){
+			} else if((*b)->basic_type_token == FLOAT32 || (*b)->basic_type_token == FLOAT64){
 				integer_to_floating_point(symtab, a);
 			}
 		
@@ -1090,7 +1090,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 			}
 
 			//It's also invalid for void types
-			if(type->type_class == TYPE_CLASS_BASIC && type->internal_types.basic_type->basic_type == VOID){
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
 			}
 
@@ -1110,7 +1110,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 		//We can take the address of anything besides a void type
 		case SINGLE_AND:
 			//This is our only invalid case
-			if(type->type_class == TYPE_CLASS_BASIC && type->internal_types.basic_type->basic_type == VOID){
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
 			}
 
@@ -1125,7 +1125,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 			}
 
 			//This is the only other way we'd fail
-			if(type->internal_types.basic_type->basic_type == VOID){
+			if(type->basic_type_token == VOID){
 				return FALSE;
 			}
 
@@ -1140,7 +1140,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 			}
 
 			//Our other invalid case
-			if(type->type_class == TYPE_CLASS_BASIC && type->internal_types.basic_type->basic_type == VOID){
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
 			}
 
@@ -1155,7 +1155,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 			}
 
 			//Now that we know what it is, we'll see if it's a float or void
-			Token type_tok = type->internal_types.basic_type->basic_type;
+			Token type_tok = type->basic_type_token;
 			
 			//If it's float or void, we're done
 			if(type_tok == FLOAT32 || type_tok == FLOAT64 || type_tok == VOID){
@@ -1180,7 +1180,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 	type = dealias_type(type);
 
 	//Deconstructed basic type(since we'll be using it so much)
-	basic_type_t* basic_type = NULL;
+	Token basic_type;
 
 	//Function signatures are never valid for any binary operations
 	if(type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
@@ -1210,10 +1210,10 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 			}
 
 			//Deconstruct this
-			basic_type = type->internal_types.basic_type;
+			basic_type = type->basic_type_token;
 
 			//Let's now check and make sure it's not a float or void
-			if(basic_type->basic_type == VOID || basic_type->basic_type == FLOAT32 || basic_type->basic_type == FLOAT64){
+			if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
 				return FALSE;
 			}
 
@@ -1236,10 +1236,10 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 			}
 
 			//Deconstruct this
-			basic_type = type->internal_types.basic_type;
+			basic_type = type->basic_type_token;
 
 			//Let's now just make sure that it is not a void type
-			if(basic_type->basic_type == VOID){
+			if(basic_type == VOID){
 				return FALSE;
 			}
 
@@ -1270,10 +1270,10 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 			}
 
 			//Deconstruct this
-			basic_type = type->internal_types.basic_type;
+			basic_type = type->basic_type_token;
 
 			//Let's now just make sure that it is not a void type
-			if(basic_type->basic_type == VOID){
+			if(basic_type == VOID){
 				return FALSE;
 			}
 
@@ -1301,7 +1301,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 			}
 
 			//This also doesn't work for void types
-			if(type->type_class == TYPE_CLASS_BASIC && type->internal_types.basic_type->basic_type == VOID){
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
 			}
 
@@ -1322,7 +1322,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 			}
 
 			//This also doesn't work for void types
-			if(type->type_class == TYPE_CLASS_BASIC && type->internal_types.basic_type->basic_type == VOID){
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
 			}
 
@@ -1352,8 +1352,8 @@ generic_type_t* create_basic_type(char* type_name, Token basic_type){
 	//Defined line num is at -1 because it's a basic type
 	type->line_number = -1;
 
-	//Allocate a basic type, all other pointers will be null
-	type->internal_types.basic_type = calloc(1, sizeof(basic_type_t));
+	//Store the basic type token in here
+	type->basic_type_token = basic_type;
 	
 	//Create and allocate the name
 	dynamic_string_t name;
@@ -1366,7 +1366,7 @@ generic_type_t* create_basic_type(char* type_name, Token basic_type){
 	type->type_name = name;
 
 	//Assign the type in
-	type->internal_types.basic_type->basic_type = basic_type;
+	type->basic_type_token = basic_type;
 
 	//Now we can immediately determine the size based on what the actual type is
 	switch(basic_type){
@@ -1425,7 +1425,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	type->internal_types.pointer_type = calloc(1, sizeof(pointer_type_t));
 
 	//We need to determine if this is a generic(void) pointer
-	if(points_to->type_class == TYPE_CLASS_BASIC && points_to->internal_types.basic_type->basic_type == VOID){
+	if(points_to->type_class == TYPE_CLASS_BASIC && points_to->basic_type_token == VOID){
 		type->internal_types.pointer_type->is_void_pointer = TRUE;
 
 	//If we're pointing to a void*, we'll also need to carry that up the chain
@@ -1745,7 +1745,7 @@ u_int8_t is_type_signed(generic_type_t* type){
 	}
 
 	//If we get here there's a chance it could be signed
-	Token basic_type_token = type->internal_types.basic_type->basic_type;
+	Token basic_type_token = type->basic_type_token;
 
 	switch(basic_type_token){
 		case S_INT8:
@@ -1769,7 +1769,7 @@ static char* basic_type_to_string(generic_type_t* type){
 		return type->type_name.string;
 	}
 
-	switch(type->internal_types.basic_type->basic_type){
+	switch(type->basic_type_token){
 		case S_INT8:
 			return "i8";
 		case U_INT8:
@@ -1868,7 +1868,7 @@ u_int8_t is_type_string_array(generic_type_t* type){
 	generic_type_t* base_type = dealias_type(second_level->internal_types.pointer_type->points_to);
 
 	//If this isn't a char, we fail
-	if(base_type->type_class != TYPE_CLASS_BASIC || base_type->internal_types.basic_type->basic_type != CHAR){
+	if(base_type->type_class != TYPE_CLASS_BASIC || base_type->basic_type_token != CHAR){
 		return FALSE;
 	}
 
@@ -1900,9 +1900,6 @@ generic_type_t* dealias_type(generic_type_t* type){
 void type_dealloc(generic_type_t* type){
 	//Free based on what type of type we have
 	switch(type->type_class){
-		case TYPE_CLASS_BASIC:
-			free(type->internal_types.basic_type);
-			break;
 		case TYPE_CLASS_ALIAS:
 			free(type->internal_types.aliased_type);
 			break;

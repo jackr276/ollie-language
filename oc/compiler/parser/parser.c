@@ -6286,7 +6286,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
 	} else {
 		//Grab the basic type
-		Token basic_type = type->internal_types.basic_type->basic_type;
+		Token basic_type = type->basic_type_token;
 
 		//It needs to be an int or char
 		if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
@@ -7934,7 +7934,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 	array_type_t* array = array_type->internal_types.array_type;
 
 	//Let's first validate that this array actually is a char[]
-	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->internal_types.basic_type->basic_type != CHAR){
+	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type_token != CHAR){
 		//Print out the full error message
 		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
 
@@ -8595,7 +8595,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			parameter_type = signature->parameters[0].parameter_type;
 			
 			//If it isn't a basic type and it isn't an i32, we fail
-			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->internal_types.basic_type->basic_type != S_INT32){
+			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != S_INT32){
 				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				return FALSE;
@@ -8622,7 +8622,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
-	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->internal_types.basic_type->basic_type != S_INT32){
+	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != S_INT32){
 		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FALSE;

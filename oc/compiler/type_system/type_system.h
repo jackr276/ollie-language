@@ -24,8 +24,6 @@
 
 //The generic global type type
 typedef struct generic_type_t generic_type_t;
-//The most basic type that we can have
-typedef struct basic_type_t basic_type_t;
 //An array type
 typedef struct array_type_t array_type_t;
 //A pointer type
@@ -108,7 +106,6 @@ struct generic_type_t{
 	//Based on the type class, we will
 	//interpret here as whichever type is appropriate
 	union{
-		basic_type_t* basic_type;
 		array_type_t* array_type;
 		pointer_type_t* pointer_type;
 		//For function pointers
@@ -122,20 +119,10 @@ struct generic_type_t{
 	int32_t line_number;
 	//All generic types have a size
 	u_int32_t type_size;
+	//Basic types don't need anything crazy - just a token that stores what they are
+	Token basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
-};
-
-
-/**
- * The most basic type that we can have. Encompasses one of the BASIC_TYPEs from
- * above and encodes the pointer_level, size and the name
- */
-struct basic_type_t{
-	//What basic type is it
-	Token basic_type;
-	//Is it a label?
-	u_int8_t is_label;
 };
 
 

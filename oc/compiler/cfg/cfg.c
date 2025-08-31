@@ -2443,7 +2443,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			generic_type_t* type = constant_node->inferred_type;
 
 			//Go based on the type
-			switch(type->internal_types.basic_type->basic_type){
+			switch(type->basic_type_token){
 				//If it's unassigned by this point, we fall to defaults
 				case UNSIGNED_INT_CONST:
 					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u32")->type);
@@ -6919,7 +6919,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
 		if(block->exit_statement == NULL || block->exit_statement->CLASS != THREE_ADDR_CODE_RET_STMT){
 			//If this isn't void, then we need to throw a warning
 			if(function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
-				|| function_defined_in->return_type->internal_types.basic_type->basic_type != VOID){
+				|| function_defined_in->return_type->basic_type_token != VOID){
 				print_parse_message(WARNING, "Non-void function does not return in all control paths", 0);
 			}
 			
