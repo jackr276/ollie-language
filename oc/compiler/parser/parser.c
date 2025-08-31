@@ -1415,7 +1415,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 		//We need to specifically see a pointer to a struct for the current type
 		//If it's something else, we fail out here
 		if(working_type->type_class != TYPE_CLASS_POINTER){
-			sprintf(info, "Type \"%s\" cannot be accessed with the => operator. First defined here:", working_type->type_name.string);
+			sprintf(info, "Type \"%s\" cannot be accessed with the :: operator. First defined here:", working_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, working_type));
 			num_errors++;
@@ -1427,7 +1427,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 
 		//Now we know that its a pointer, but what does it point to?
 		if(referenced_type->type_class != TYPE_CLASS_STRUCT){
-			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the => operator. First defined here:", referenced_type->type_name.string);
+			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the :: operator. First defined here:", referenced_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_type_name(lookup_type(type_symtab, referenced_type));
 			num_errors++;
@@ -4368,6 +4368,21 @@ static u_int8_t struct_definer(FILE* fl){
 
 
 /**
+ * A union definer allows us to declare a discriminating union datatype
+ *
+ * BNF RULE: <union_definer> ::=  define union <identifier> {<union_member_list>} {as <identifier>}? ;
+ */
+static u_int8_t union_definer(FILE* fl){
+
+
+	//If we get here it worked so
+	//TODO just fail out for now
+	return FAILURE;
+}
+
+
+
+/**
  * An enum member is simply an identifier. This rule performs all the needed checks to ensure
  * that it's not a duplicate of anything else that we've currently seen. Like all rules, this function
  * returns a reference to the root of the tree it created
@@ -7130,7 +7145,7 @@ static generic_ast_node_t* statement(FILE* fl){
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+				return print_and_return_error("Invalid definition statement", parser_line_num);
 			}
 
 			//Otherwise we'll just return null, the caller will know what to do with it
@@ -8368,13 +8383,16 @@ static u_int8_t definition(FILE* fl){
 	switch(lookahead.tok){
 		case STRUCT:
 			return struct_definer(fl);
+		case UNION:
+			return union_definer(fl);
 		case ENUM:
 			return enum_definer(fl);
 		case FN:
 			return function_pointer_definer(fl);
 
+		//Some failure here
 		default:
-			print_parse_message(PARSE_ERROR, "Expected construct or enum keywords after define statement, saw neither", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Expected \"union\", \"struct\", \"fn\" or \"enum\" definer keywords", parser_line_num);
 			num_errors++;
 			return FAILURE;
 	}
@@ -9195,7 +9213,7 @@ static generic_ast_node_t* declaration_partition(FILE* fl){
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				return ast_node_alloc(AST_NODE_CLASS_ERR_NODE, SIDE_TYPE_LEFT);
+				return print_and_return_error("Invalid definition statement", parser_line_num);
 			}
 
 			//Otherwise we'll just return null, the caller will know what to do with it
