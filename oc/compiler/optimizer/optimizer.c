@@ -1261,9 +1261,9 @@ static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist,
 		while(cursor != NULL){
 			//This will be in our "related write var" field. All we need to do is see
 			//if the related write field matches our var
-			if(cursor->assignee != NULL && cursor->assignee->memory_address_variable != NULL
+			if(cursor->assignee != NULL && cursor->assignee->related_memory_address != NULL
 				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
-				&& cursor->assignee->memory_address_variable == variable){
+				&& cursor->assignee->related_memory_address == variable){
 
 				//This is a case where we mark
 				if(cursor->mark == FALSE){
@@ -1465,7 +1465,7 @@ static void mark(cfg_t* cfg){
 		instruction_t* current_stmt = current->leader_statement;
 
 		//For later storage
-		symtab_variable_record_t* memory_address_variable;
+		symtab_variable_record_t* related_memory_address;
 
 		//Now we'll run through every statement(operation) in this block
 		while(current_stmt != NULL){
@@ -1534,18 +1534,18 @@ static void mark(cfg_t* cfg){
 				case THREE_ADDR_CODE_ASSN_STMT:
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
 					//Grab out the linked variable
-					memory_address_variable = current_stmt->assignee->memory_address_variable;
+					related_memory_address = current_stmt->assignee->related_memory_address;
 
 					//Most common case, just skip out
-					if(memory_address_variable == NULL){
+					if(related_memory_address == NULL){
 						break;
 					}
 
 					//If we have a variable that is a function paramter *and* we're writing to it, then
 					//automatically every single write here is important
-					if(memory_address_variable->is_function_parameter == TRUE){
+					if(related_memory_address->is_function_parameter == TRUE){
 						//We need to mark and add anything that writes to this field
-						mark_and_add_all_field_writes(cfg, worklist, memory_address_variable);
+						mark_and_add_all_field_writes(cfg, worklist, related_memory_address);
 					}
 
 					break;

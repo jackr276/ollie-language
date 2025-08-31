@@ -115,8 +115,6 @@ struct generic_ast_node_t{
 	//These are the two pointers that make up the whole of the tree
 	generic_ast_node_t* first_child;
 	generic_ast_node_t* next_sibling;
-	//This is where we hold the actual node and/or structure table for structs
-	void* node;
 	//What variable do we have?
 	symtab_variable_record_t* variable;
 	//The symtab function record

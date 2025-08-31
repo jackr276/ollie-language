@@ -300,20 +300,6 @@ void ast_dealloc(){
 		//Advance root along
 		head_node = head_node->next_created_ast_node;
 
-		//We can off the bat free it's data
-		if(temp->node != NULL){
-			switch(temp->ast_node_type){
-				//Don't free these here, they'd be freed elsewhere
-				case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-				case AST_NODE_TYPE_STRING_INITIALIZER:
-				case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-					break;
-				default:
-					//Otherwise we can
-					free(temp->node);
-			}
-		}
-
 		//Some additional freeing may be needed
 		switch(temp->ast_node_type){
 			case AST_NODE_TYPE_IDENTIFIER:
