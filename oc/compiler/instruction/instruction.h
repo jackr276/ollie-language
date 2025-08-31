@@ -453,13 +453,15 @@ struct three_addr_const_t{
 	local_constant_t* local_constant;
 	//We hold the type info
 	generic_type_t* type;
-	//And we hold everything relevant about the constant
-	long long_const;
-	float float_const;
-	int int_const;
+	//Store the constant value in a union
+	union {
+		int64_t long_constant;
+		float float_constant;
+		int32_t integer_constant;
+		char char_constant;
+	} constant_value;
 	//What kind of constant is it
 	Token const_type;
-	char char_const;
 	//Is the value of this constant 0?
 	u_int8_t is_value_0;
 };

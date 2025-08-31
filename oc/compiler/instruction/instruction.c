@@ -1204,17 +1204,17 @@ void print_live_range(FILE* fl, live_range_t* live_range){
 static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "%d", constant->int_const);
+			fprintf(fl, "%d", constant->constant_value.integer_constant);
 			break;
 		case LONG_CONST:
-			fprintf(fl, "%ld", constant->long_const);
+			fprintf(fl, "%ld", constant->constant_value.long_constant);
 			break;
 		case CHAR_CONST:
 			//Special case here to for display reasons
-			if(constant->char_const == 0){
+			if(constant->constant_value.char_constant == 0){
 				fprintf(fl, "'\\0'");
 			} else {
-				fprintf(fl, "'%c'", constant->char_const);
+				fprintf(fl, "'%c'", constant->constant_value.char_constant);
 			}
 			break;
 		//We do not print out string constants directly. Instead, we print
@@ -1223,7 +1223,7 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			fprintf(fl, ".LC%d", constant->local_constant->local_constant_id);
 			break;
 		case FLOAT_CONST:
-			fprintf(fl, "%f", constant->float_const);
+			fprintf(fl, "%f", constant->constant_value.float_constant);
 			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
@@ -1622,16 +1622,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "$%d", constant->int_const);
+			fprintf(fl, "$%d", constant->constant_value.integer_constant);
 			break;
 		case LONG_CONST:
-			fprintf(fl, "$%ld", constant->long_const);
+			fprintf(fl, "$%ld", constant->constant_value.long_constant);
 			break;
 		case CHAR_CONST:
-			fprintf(fl, "$%d", constant->char_const);
+			fprintf(fl, "$%d", constant->constant_value.char_constant);
 			break;
 		case FLOAT_CONST:
-			fprintf(fl, "$%f", constant->float_const);
+			fprintf(fl, "$%f", constant->constant_value.float_constant);
 			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
@@ -1654,16 +1654,16 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "%d", constant->int_const);
+			fprintf(fl, "%d", constant->constant_value.integer_constant);
 			break;
 		case LONG_CONST:
-			fprintf(fl, "%ld", constant->long_const);
+			fprintf(fl, "%ld", constant->constant_value.long_constant);
 			break;
 		case CHAR_CONST:
-			fprintf(fl, "%d", constant->char_const);
+			fprintf(fl, "%d", constant->constant_value.char_constant);
 			break;
 		case FLOAT_CONST:
-			fprintf(fl, "%f", constant->float_const);
+			fprintf(fl, "%f", constant->constant_value.float_constant);
 			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
@@ -3131,27 +3131,27 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	//Now based on what type we have we'll make assignments
 	switch(constant->const_type){
 		case CHAR_CONST:
-			constant->char_const = const_node->constant_value.char_value;
+			constant->constant_value.char_constant = const_node->constant_value.char_value;
 			//Set the 0 flag if true
 			if(const_node->constant_value.char_value == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case INT_CONST:
-			constant->int_const = const_node->constant_value.signed_int_value;
+			constant->constant_value.integer_constant = const_node->constant_value.signed_int_value;
 			//Set the 0 flag if true
 			if(const_node->constant_value.signed_int_value == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case FLOAT_CONST:
-			constant->float_const = const_node->constant_value.float_value;
+			constant->constant_value.float_constant = const_node->constant_value.float_value;
 			break;
 		case STR_CONST:
 			fprintf(stderr, "String constants may not be emitted directly\n");
 			exit(0);
 		case LONG_CONST:
-			constant->long_const = const_node->constant_value.signed_long_value;
+			constant->constant_value.long_constant = const_node->constant_value.signed_long_value;
 			//Set the 0 flag if 
 			if(const_node->constant_value.signed_long_value == 0){
 				constant->is_value_0 = TRUE;
@@ -3672,13 +3672,13 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 	//Store the class
 	constant->const_type = INT_CONST;
 	//Store the int value
-	constant->int_const = int_const;
+	constant->constant_value.integer_constant = int_const;
 
 	//Lookup what we have in here(i32)
 	constant->type = lookup_type_name_only(symtab, "i32")->type;
 
 	//Set this flag if we need to
-	if(int_const == 0){
+	if(constant->constant_value.integer_constant == 0){
 		constant->is_value_0 = TRUE;
 	}
 
@@ -3700,7 +3700,7 @@ three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* sy
 	//Store the class
 	constant->const_type = CHAR_CONST;
 	//Store the char value
-	constant->char_const = char_const;
+	constant->constant_value.char_constant = char_const;
 
 	//Lookup what we have in here(char)
 	constant->type = lookup_type_name_only(symtab, "char")->type;
@@ -3724,13 +3724,13 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab
 	//Store the class
 	constant->const_type = INT_CONST;
 	//Store the int value
-	constant->int_const = int_const;
+	constant->constant_value.integer_constant = int_const;
 
 	//Lookup what we have in here(u32)
 	constant->type = lookup_type_name_only(symtab, "u32")->type;
 
 	//Set this flag if we need to
-	if(int_const == 0){
+	if(constant->constant_value.integer_constant == 0){
 		constant->is_value_0 = TRUE;
 	}
 
@@ -3752,7 +3752,7 @@ three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* sy
 	//Store the class
 	constant->const_type = LONG_CONST;
 	//Store the int value
-	constant->long_const = long_const;
+	constant->constant_value.long_constant = long_const;
 
 	//Lookup what we have in here(i32)
 	constant->type = lookup_type_name_only(symtab, "i64")->type;
@@ -3957,33 +3957,33 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 		case INT_CONST_FORCE_U:
 			//If it's any of these we'll add the int value
 			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
-				constant2->int_const += constant1->int_const;
+				constant2->constant_value.integer_constant += constant1->constant_value.integer_constant;
 			//Otherwise add the long value
 			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
-				constant2->int_const += constant1->long_const;
+				constant2->constant_value.integer_constant += constant1->constant_value.long_constant;
 			//Only other option is char
 			} else {
-				constant2->int_const += constant1->char_const;
+				constant2->constant_value.integer_constant += constant1->constant_value.char_constant;
 			}
 			break;
 		case LONG_CONST:
 		case LONG_CONST_FORCE_U:
 			//If it's any of these we'll add the int value
 			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
-				constant2->long_const += constant1->int_const;
+				constant2->constant_value.long_constant += constant1->constant_value.integer_constant;
 			//Otherwise add the long value
 			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
-				constant2->long_const += constant1->long_const;
+				constant2->constant_value.long_constant += constant1->constant_value.long_constant;
 			//Only other option is char
 			} else {
-				constant2->long_const += constant1->char_const;
+				constant2->constant_value.long_constant += constant1->constant_value.char_constant;
 			}
 
 			break;
 		//Can't really see this ever happening, but it won't hurt
 		case CHAR_CONST:
 			//Add the other one's char const
-			constant2->char_const += constant1->char_const;
+			constant2->constant_value.char_constant += constant1->constant_value.char_constant;
 			break;
 		//Mainly for us as the programmer
 		default:
