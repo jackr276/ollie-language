@@ -24,16 +24,22 @@ void negate_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value *= -1;
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value *= -1;
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value *= -1;
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = constant_node->int_long_val * -1;
+			constant_node->constant_value.signed_long_value *= -1;
 			break;
 		case FLOAT_CONST:
-			constant_node->float_val = constant_node->float_val * -1;
+			constant_node->constant_value.float_value *= -1;
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = constant_node->char_val * -1;
+			constant_node->constant_value.char_value *= -1;
 			break;
 		//This should never happen
 		default:
@@ -50,16 +56,22 @@ void decrement_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value--;
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value--;
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value--;
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = constant_node->int_long_val - 1;
+			constant_node->constant_value.signed_long_value--;
 			break;
 		case FLOAT_CONST:
-			constant_node->float_val = constant_node->float_val - 1;
+			constant_node->constant_value.float_value--;
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = constant_node->char_val - 1;
+			constant_node->constant_value.char_value--;
 			break;
 		//This should never happen
 		default:
@@ -76,16 +88,22 @@ void increment_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value++;
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value++;
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value++;
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = constant_node->int_long_val + 1;
+			constant_node->constant_value.signed_long_value++;
 			break;
 		case FLOAT_CONST:
-			constant_node->float_val = constant_node->float_val + 1;
+			constant_node->constant_value.float_value++;
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = constant_node->char_val + 1;
+			constant_node->constant_value.char_value++;
 			break;
 		//This should never happen
 		default:
@@ -102,13 +120,19 @@ void logical_not_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value = !(constant_node->constant_value.unsigned_int_value);
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value = !(constant_node->constant_value.signed_int_value);
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value = !(constant_node->constant_value.unsigned_long_value);
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = !(constant_node->int_long_val);
+			constant_node->constant_value.signed_long_value = !(constant_node->constant_value.signed_long_value);
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = !(constant_node->char_val);
+			constant_node->constant_value.char_value = !(constant_node->constant_value.char_value);
 			break;
 		//This should never happen
 		default:
@@ -125,13 +149,19 @@ void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 	switch(constant_node->constant_type){
 		//Negate these accordingly
 		case INT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_int_value = ~(constant_node->constant_value.unsigned_int_value);
+			break;
 		case INT_CONST:
+			constant_node->constant_value.signed_int_value = ~(constant_node->constant_value.signed_int_value);
+			break;
 		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value = ~(constant_node->constant_value.unsigned_long_value);
+			break;
 		case LONG_CONST:
-			constant_node->int_long_val = ~(constant_node->int_long_val);
+			constant_node->constant_value.signed_long_value = ~(constant_node->constant_value.signed_long_value);
 			break;
 		case CHAR_CONST:
-			constant_node->char_val = ~(constant_node->char_val);
+			constant_node->constant_value.char_value = ~(constant_node->constant_value.char_value);
 			break;
 		//This should never happen
 		default:

@@ -11,6 +11,7 @@
 #include "../type_system/type_system.h"
 #include "../symtab/symtab.h"
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 /**
@@ -122,12 +123,15 @@ struct generic_ast_node_t{
 	symtab_function_record_t* func_record;
 	//The type record that we have
 	symtab_type_record_t* type_record;
-	//Long/int value
-	int64_t int_long_val;
-	//Constant float value
-	float float_val;
-	//Character value
-	char char_val;
+	//Storing the constant values
+	union {
+		int64_t signed_long_value;
+		u_int64_t unsigned_long_value;
+		int32_t signed_int_value;
+		u_int32_t unsigned_int_value;
+		float float_value;
+		char char_value;
+	} constant_value;
 	//Holds the token for what kind of constant it is
 	Token constant_type;
 	//The upper and lower bound for switch statements
