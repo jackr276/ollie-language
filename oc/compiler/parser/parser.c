@@ -309,7 +309,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	//Mark the type too
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
-	constant_multiplicand->int_long_val = pointer_type->points_to->type_size;
+	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->points_to->type_size;
 	//Ensure that we give this a type
 	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
@@ -385,7 +385,7 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
  * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
  * simplifies our development processes
  */
-static generic_ast_node_t* emit_direct_constant(u_int32_t constant){
+static generic_ast_node_t* emit_direct_constant(int32_t constant){
 	//Create our constant node
 	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_CLASS_CONSTANT, SIDE_TYPE_RIGHT);
 	//Add the line number
@@ -398,7 +398,7 @@ static generic_ast_node_t* emit_direct_constant(u_int32_t constant){
 	constant_node->inferred_type = generic_signed_int;
 
 	//Give it the value
-	constant_node->int_long_val = constant;
+	constant_node->constant_value.signed_int_value = constant;
 
 	return constant_node;
 }
@@ -434,7 +434,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_type = INT_CONST;
 
 			//Store the integer value
-			constant_node->int_long_val = atoi(lookahead.lexeme.string);
+			constant_node->constant_value.signed_int_value = atoi(lookahead.lexeme.string);
 
 			//This is signed by default
 			constant_node->inferred_type = generic_signed_int;
@@ -446,7 +446,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Mark what it is
 			constant_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			constant_node->int_long_val = atoi(lookahead.lexeme.string);
+			constant_node->constant_value.unsigned_int_value = atoi(lookahead.lexeme.string);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_unsigned_int;
@@ -458,7 +458,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Mark what it is 
 			constant_node->constant_type = INT_CONST;
 			//Store the int value we were given
-			constant_node->int_long_val = strtol(lookahead.lexeme.string, NULL, 0);
+			constant_node->constant_value.signed_int_value = strtol(lookahead.lexeme.string, NULL, 0);
 
 			//If we force it to be unsigned then it will be
 			constant_node->inferred_type = generic_signed_int;
@@ -471,7 +471,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			constant_node->int_long_val = atol(lookahead.lexeme.string);
+			constant_node->constant_value.signed_long_value = atol(lookahead.lexeme.string);
 
 			//This is a signed i64
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
@@ -484,7 +484,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_type = LONG_CONST;
 
 			//Store the value we've been given
-			constant_node->int_long_val = atol(lookahead.lexeme.string);
+			constant_node->constant_value.unsigned_long_value = atol(lookahead.lexeme.string);
 
 			//By default, int constants are of type s_int64 
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
@@ -497,7 +497,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			float float_val = atof(lookahead.lexeme.string);
 
 			//Store the float value we were given
-			constant_node->float_val = float_val;
+			constant_node->constant_value.float_value = float_val;
 
 			//By default, float constants are of type float32
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f32")->type;
@@ -509,7 +509,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			char char_val = *(lookahead.lexeme.string);
 
 			//Store the char value that we were given
-			constant_node->char_val = char_val;
+			constant_node->constant_value.char_value = char_val;
 
 			//Char consts are of type char(obviously)
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "char")->type;
@@ -838,7 +838,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	//This will be an int const
 	const_node->constant_type = INT_CONST;
 	//Store the actual value of the type size
-	const_node->int_long_val = return_type->type_size;
+	const_node->constant_value.unsigned_int_value = return_type->type_size;
 	//Grab and store type info
 	//This will always end up as a generic signed int
 	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
@@ -908,7 +908,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	//Add the constant
 	const_node->constant_type = INT_CONST;
 	//Store the actual value
-	const_node->int_long_val = type_size;
+	const_node->constant_value.unsigned_int_value = type_size;
 	//Grab and store type info
 	//These will be generic signed ints
 	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
@@ -5128,7 +5128,7 @@ static generic_type_t* type_specifier(FILE* fl){
 		}
 
 		//The constant value
-		int64_t constant_numeric_value = const_node->int_long_val;
+		int64_t constant_numeric_value = const_node->constant_value.unsigned_long_value;
 
 		//What if this is a negative or zero?
 		//If it's negative we fail like this
@@ -7449,7 +7449,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			enum_ident_node->variable = enum_record;
 
 			//Grab the value of this case statement
-			case_stmt->int_long_val = enum_record->enum_member_value;
+			case_stmt->constant_value.signed_int_value = enum_record->enum_member_value;
 
 			//We already have the value -- so this doesn't need to be a child node
 			break;
@@ -7481,12 +7481,12 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				case LONG_CONST_FORCE_U:
 
 					//Store the value
-					case_stmt->int_long_val = const_node->int_long_val;
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
 					break;
 
 				case CHAR_CONST:
 					//Just assign the char value here
-					case_stmt->int_long_val = const_node->char_val;
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
 
 				default:
 					return print_and_return_error("Illegal type given as case statement value", parser_line_num);
@@ -7512,13 +7512,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 
 	//If it's higher than the upper bound, it now is the upper bound
-	if(case_stmt->int_long_val > switch_stmt_node->upper_bound){
-		switch_stmt_node->upper_bound = case_stmt->int_long_val;
+	if(case_stmt->constant_value.signed_int_value > switch_stmt_node->upper_bound){
+		switch_stmt_node->upper_bound = case_stmt->constant_value.signed_int_value;
 	}
 
 	//If it's lower than the lower bound, it is now the lower bound
-	if(case_stmt->int_long_val < switch_stmt_node->lower_bound){
-		switch_stmt_node->lower_bound = case_stmt->int_long_val;
+	if(case_stmt->constant_value.signed_int_value < switch_stmt_node->lower_bound){
+		switch_stmt_node->lower_bound = case_stmt->constant_value.signed_int_value;
 	}
 
 	//If these are too far apart, we won't go for it. We'll check here, because once
@@ -7529,13 +7529,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	}
 
 	//Now let's see if we have any duplicates. If there are, we error out
-	if(values[case_stmt->int_long_val % MAX_SWITCH_RANGE] == TRUE){
-		sprintf(info, "Value %ld is duplicated in the switch statement", case_stmt->int_long_val);
+	if(values[case_stmt->constant_value.signed_int_value % MAX_SWITCH_RANGE] == TRUE){
+		sprintf(info, "Value %d is duplicated in the switch statement", case_stmt->constant_value.signed_int_value);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Let's now store it for the future
-	values[case_stmt->int_long_val % MAX_SWITCH_RANGE] = TRUE;
+	values[case_stmt->constant_value.signed_int_value % MAX_SWITCH_RANGE] = TRUE;
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

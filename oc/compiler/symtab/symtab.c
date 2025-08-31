@@ -1062,19 +1062,25 @@ void print_constant_name(symtab_constant_record_t* record){
 	//We'll now switch based on what kind of constant that we have
 	switch (const_node->constant_type) {
 		case INT_CONST:
+			printf("%d\n", const_node->constant_value.signed_int_value);
+			break;
 		case INT_CONST_FORCE_U:
+			printf("%ud\n", const_node->constant_value.unsigned_int_value);
+			break;
 		case LONG_CONST_FORCE_U:
+			printf("%ld\n", const_node->constant_value.unsigned_long_value);
+			break;
 		case LONG_CONST:
-			printf("%ld", const_node->int_long_val);
+			printf("%ld\n", const_node->constant_value.signed_long_value);
 			break;
 		case CHAR_CONST:
-			printf("%d", const_node->char_val);
+			printf("%d\n", const_node->constant_value.char_value);
 			break;
 		case STR_CONST:
 			printf("%s", const_node->string_value.string);
 			break;
 		case FLOAT_CONST:
-			printf("%f", const_node->float_val);
+			printf("%f\n", const_node->constant_value.float_value);
 			break;
 		//We should never get here
 		default:

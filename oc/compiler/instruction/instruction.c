@@ -3131,29 +3131,29 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	//Now based on what type we have we'll make assignments
 	switch(constant->const_type){
 		case CHAR_CONST:
-			constant->char_const = const_node->char_val;
+			constant->char_const = const_node->constant_value.char_value;
 			//Set the 0 flag if true
-			if(const_node->char_val == 0){
+			if(const_node->constant_value.char_value == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case INT_CONST:
-			constant->int_const = const_node->int_long_val;
+			constant->int_const = const_node->constant_value.signed_int_value;
 			//Set the 0 flag if true
-			if(const_node->int_long_val == 0){
+			if(const_node->constant_value.signed_int_value == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
 		case FLOAT_CONST:
-			constant->float_const = const_node->float_val;
+			constant->float_const = const_node->constant_value.float_value;
 			break;
 		case STR_CONST:
 			fprintf(stderr, "String constants may not be emitted directly\n");
 			exit(0);
 		case LONG_CONST:
-			constant->long_const = const_node->int_long_val;
+			constant->long_const = const_node->constant_value.signed_long_value;
 			//Set the 0 flag if 
-			if(const_node->int_long_val == 0){
+			if(const_node->constant_value.signed_long_value == 0){
 				constant->is_value_0 = TRUE;
 			}
 			break;
