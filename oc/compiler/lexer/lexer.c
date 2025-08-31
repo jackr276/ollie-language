@@ -26,7 +26,7 @@
 #define FALSE 0
 
 //Total number of keywords
-#define KEYWORD_COUNT 49
+#define KEYWORD_COUNT 50
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -49,10 +49,10 @@ static lex_stack_t* pushed_back_tokens = NULL;
 
 //Token array, we will index using their enum values
 const Token tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
-					STATIC, EXTERNAL, U_INT8, S_INT8, U_INT16, S_INT16,
-					U_INT32, S_INT32, U_INT64, S_INT64, FLOAT32, FLOAT64, CHAR, DEFINE, ENUM,
+					STATIC, EXTERNAL, U8, I8, U16, I16,
+					U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB};
+					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION};
 
 //Direct one to one mapping
 const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
@@ -61,7 +61,7 @@ const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub"};
+						  "with", "lib", "idle", "pub", "union"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 

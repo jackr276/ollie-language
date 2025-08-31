@@ -133,7 +133,7 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 		//So long as this isn't null
 		while(current_stmt != NULL){
 			//If it's a jump statement AND the jump target is the empty block, we're interested
-			if(current_stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && current_stmt->jumping_to_block == empty_block){
+			if(current_stmt->statement_type == THREE_ADDR_CODE_JUMP_STMT && current_stmt->jumping_to_block == empty_block){
 				//Update the reference
 				current_stmt->jumping_to_block = replacement;
 				//Be sure to add the new block as a successor 
@@ -209,14 +209,14 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 		current = dynamic_array_get_at(postorder, _);
 
 		//Do we end in a jump statement? - this is the precursor to all optimizations in branch reduce
-		if(current->exit_statement != NULL && current->exit_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+		if(current->exit_statement != NULL && current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
 			//Now let's do a touch more work to see if we end in a conditional branch. We end in a conditional
 			//branch if the last two statements are jump statements. We already know that the last one 
 			//is, now we just need to check if the other one is
 			u_int8_t ends_in_branch = FALSE;
 
 			//If the prior statement is not NULL and it's a jump, we end in a conditional
-			if(current->exit_statement->previous_statement != NULL && current->exit_statement->previous_statement->CLASS == THREE_ADDR_CODE_JUMP_STMT
+			if(current->exit_statement->previous_statement != NULL && current->exit_statement->previous_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT
 			  && current->exit_statement->previous_statement->op != JUMP){
 				ends_in_branch = TRUE;
 			}
@@ -238,7 +238,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//So long as we are still branch ending and seeing statements
 				while(stmt != NULL && stmt->is_branch_ending == TRUE){
 					//If it isn't a jump statement, just move along
-					if(stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+					if(stmt->statement_type != THREE_ADDR_CODE_JUMP_STMT){
 						stmt = stmt->previous_statement;
 						continue;
 					}
@@ -352,16 +352,16 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			// conditional
 			// If the very first statement is branch ending and NOT a direct jump? If it is, we have a candidate for hoisting
 			if(ends_in_branch == FALSE && jumping_to_block->leader_statement != NULL && jumping_to_block->leader_statement->is_branch_ending == TRUE
-				&& jumping_to_block->leader_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+				&& jumping_to_block->leader_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT){
 	 			//Let's check now and see if it's truly a conditional branch only
 				
 				//If it's not a jump, we're out here
-	 			if(jumping_to_block->exit_statement == NULL || jumping_to_block->exit_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+	 			if(jumping_to_block->exit_statement == NULL || jumping_to_block->exit_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT){
 	 				continue;
 	 			}
 
 				//Final check: If the statement right before the exit also isn't a jump, we don't have a branch
-				if(jumping_to_block->exit_statement->previous_statement == NULL || jumping_to_block->exit_statement->previous_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+				if(jumping_to_block->exit_statement->previous_statement == NULL || jumping_to_block->exit_statement->previous_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT){
 					continue;
 				}
 
@@ -412,7 +412,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 					//One last thing -- if this is a jump statement, we'll need to update the predecessor and successor
 					//lists accordingly
-					if(cursor->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+					if(cursor->statement_type == THREE_ADDR_CODE_JUMP_STMT){
 						//Whatever we're jumping to is now a successor of cursor
 						add_successor(current, cursor->jumping_to_block);
 					}
@@ -866,12 +866,12 @@ static void optimize_compound_logic(cfg_t* cfg){
 
 
 		//If we don't end in two jumps, this isn't going to work. The exit must be a direct jump 
-		if(block->exit_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT || block->exit_statement->jump_type != JUMP_TYPE_JMP){
+		if(block->exit_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT || block->exit_statement->jump_type != JUMP_TYPE_JMP){
 			continue;
 		}
 
 		//Now we need to check for the if target. If it's null, not a jump statement, or a direct jump, we're out of here
-		if(block->exit_statement->previous_statement == NULL || block->exit_statement->previous_statement->CLASS != THREE_ADDR_CODE_JUMP_STMT
+		if(block->exit_statement->previous_statement == NULL || block->exit_statement->previous_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT
 			|| block->exit_statement->previous_statement->jump_type == JUMP_TYPE_JMP){
 			continue;
 		}
@@ -1119,7 +1119,7 @@ static void sweep(cfg_t* cfg){
 
 			//We've encountered a jump statement of some kind. Now this is interesting. We do NOT delete
 			//solitary jumps. We only delete jumps if they are a part of a conditional branch that has been deemed useless
-			if(stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT){
+			if(stmt->statement_type == THREE_ADDR_CODE_JUMP_STMT){
 				//If it's not a conditional jump - we don't care. just go onto the next
 				if(stmt->jump_type == JUMP_TYPE_JMP){
 					//One thing we can check for here: if we see an unconditional jump(which means we got here)
@@ -1135,7 +1135,7 @@ static void sweep(cfg_t* cfg){
 					 *
 					 * As such, we'll delete the .L9 jump and update successors
 					 */
-					if(stmt != NULL && stmt->CLASS == THREE_ADDR_CODE_JUMP_STMT && stmt->jump_type == JUMP_TYPE_JMP){
+					if(stmt != NULL && stmt->statement_type == THREE_ADDR_CODE_JUMP_STMT && stmt->jump_type == JUMP_TYPE_JMP){
 						instruction_t* temp = stmt;
 						//Advance stmt
 						stmt = stmt->next_statement;
@@ -1160,7 +1160,7 @@ static void sweep(cfg_t* cfg){
 					stmt = stmt->next_statement;
 					continue;
 				//If it's not a jump, we'll also just delete
-				} else if(stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+				} else if(stmt->statement_type != THREE_ADDR_CODE_JUMP_STMT){
 					//Perform the deletion and advancement
 					instruction_t* temp = stmt;
 					stmt = stmt->next_statement;
@@ -1205,7 +1205,7 @@ static void sweep(cfg_t* cfg){
 
 				//If we are deleting an indirect jump address calculation statement,
 				//then this statements jump table is useless
-				if(temp->CLASS == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+				if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
 					//We'll need to deallocate this jump table
 					jump_table_dealloc(temp->jumping_to_block);
 
@@ -1477,7 +1477,7 @@ static void mark(cfg_t* cfg){
 			//special types of statements like return statements,
 			//function call statements, etc, we'll mark values as
 			//important
-			switch(current_stmt->CLASS){
+			switch(current_stmt->statement_type){
 				case THREE_ADDR_CODE_RET_STMT:
 					//Mark this as useful
 					current_stmt->mark = TRUE;
@@ -1570,7 +1570,7 @@ static void mark(cfg_t* cfg){
 		dynamic_array_t* params;
 
 		//There are several unique cases that require extra attention
-		switch(stmt->CLASS){
+		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
 			case THREE_ADDR_CODE_PHI_FUNC:
 				params = stmt->phi_function_parameters;
@@ -1643,7 +1643,7 @@ static void mark(cfg_t* cfg){
 			//If this is a switch statement block, then we'll simply mark everything
 			//We'll know it's a switch statement block based on whether or not we have an indirect jump here.
 			//Indirect jumps in Ollie are only ever used in switch statements
-			if(rdf_block->exit_statement->CLASS == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
+			if(rdf_block->exit_statement->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
 				//Run through and mark everything in it
 				instruction_t* cursor = rdf_block->leader_statement;
 
@@ -1652,7 +1652,7 @@ static void mark(cfg_t* cfg){
 					if(cursor->mark == FALSE){
 						cursor->mark = TRUE;
 						//If it's not a jump, add to worklist
-						if(cursor->CLASS != THREE_ADDR_CODE_JUMP_STMT){
+						if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT){
 							dynamic_array_add(worklist, cursor);
 						}
 					}
@@ -1688,7 +1688,7 @@ static void mark(cfg_t* cfg){
 			 *
 			 * we don't care to look any further, so we'll continue to the next one
 			 */
-			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT 
+			if(rdf_block_stmt == NULL || rdf_block_stmt->statement_type != THREE_ADDR_CODE_JUMP_STMT 
 				|| rdf_block_stmt->jump_type != JUMP_TYPE_JMP){
 				continue;
 			}
@@ -1711,7 +1711,7 @@ static void mark(cfg_t* cfg){
 			 *
 			 * we don't care to look any further
 			 */
-			if(rdf_block_stmt == NULL || rdf_block_stmt->CLASS != THREE_ADDR_CODE_JUMP_STMT 
+			if(rdf_block_stmt == NULL || rdf_block_stmt->statement_type != THREE_ADDR_CODE_JUMP_STMT 
 				|| rdf_block_stmt->jump_type == JUMP_TYPE_JMP){
 				continue;
 			}

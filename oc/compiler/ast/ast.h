@@ -11,6 +11,7 @@
 #include "../type_system/type_system.h"
 #include "../symtab/symtab.h"
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 /**
@@ -32,64 +33,64 @@ typedef enum{
 } variable_assignability_t;
 
 //What type is in the AST node?
-typedef enum ast_node_class_t{
-	AST_NODE_CLASS_PROG,
-	AST_NODE_CLASS_ALIAS_STMT,
-	AST_NODE_CLASS_FOR_LOOP_CONDITION,
-	AST_NODE_CLASS_TERNARY_EXPRESSION,
-	AST_NODE_CLASS_DECL_STMT,
-	AST_NODE_CLASS_LET_STMT,
-	AST_NODE_CLASS_IDLE_STMT,
-	AST_NODE_CLASS_FUNC_DEF,
-	AST_NODE_CLASS_PARAM_LIST,
-	AST_NODE_CLASS_CONSTANT,
-	AST_NODE_CLASS_PARAM_DECL,
-	AST_NODE_CLASS_IDENTIFIER,
-	AST_NODE_CLASS_ASNMNT_EXPR,
-	AST_NODE_CLASS_BINARY_EXPR,
-	AST_NODE_CLASS_POSTFIX_EXPR,
-	AST_NODE_CLASS_UNARY_EXPR,
-	AST_NODE_CLASS_UNARY_OPERATOR,
-	AST_NODE_CLASS_STRUCT_ACCESSOR,
-	AST_NODE_CLASS_ARRAY_ACCESSOR,
-	AST_NODE_CLASS_FUNCTION_CALL,
-	AST_NODE_CLASS_INDIRECT_FUNCTION_CALL, //An indirect call, for function pointers
-	AST_NODE_CLASS_STRUCT_MEMBER_LIST,
-	AST_NODE_CLASS_STRUCT_MEMBER,
-	AST_NODE_CLASS_ENUM_MEMBER_LIST,
-	AST_NODE_CLASS_ENUM_MEMBER,
-	AST_NODE_CLASS_CASE_STMT,
-	AST_NODE_CLASS_C_STYLE_CASE_STMT, //With fallthrough
-	AST_NODE_CLASS_DEFAULT_STMT,
-	AST_NODE_CLASS_C_STYLE_DEFAULT_STMT, //With fallthrough
-	AST_NODE_CLASS_LABEL_STMT,
-	AST_NODE_CLASS_IF_STMT,
-	AST_NODE_CLASS_ELSE_IF_STMT,
-	AST_NODE_CLASS_JUMP_STMT,
-	AST_NODE_CLASS_CONDITIONAL_JUMP_STMT,
-	AST_NODE_CLASS_BREAK_STMT,
-	AST_NODE_CLASS_CONTINUE_STMT,
-	AST_NODE_CLASS_RET_STMT,
-	AST_NODE_CLASS_SWITCH_STMT,
-	AST_NODE_CLASS_C_STYLE_SWITCH_STMT, //Special kind of switch that's C-style
-	AST_NODE_CLASS_WHILE_STMT,
-	AST_NODE_CLASS_DO_WHILE_STMT,
-	AST_NODE_CLASS_FOR_STMT,
-	AST_NODE_CLASS_COMPOUND_STMT,
+typedef enum ast_node_type_t{
+	AST_NODE_TYPE_PROG,
+	AST_NODE_TYPE_ALIAS_STMT,
+	AST_NODE_TYPE_FOR_LOOP_CONDITION,
+	AST_NODE_TYPE_TERNARY_EXPRESSION,
+	AST_NODE_TYPE_DECL_STMT,
+	AST_NODE_TYPE_LET_STMT,
+	AST_NODE_TYPE_IDLE_STMT,
+	AST_NODE_TYPE_FUNC_DEF,
+	AST_NODE_TYPE_PARAM_LIST,
+	AST_NODE_TYPE_CONSTANT,
+	AST_NODE_TYPE_PARAM_DECL,
+	AST_NODE_TYPE_IDENTIFIER,
+	AST_NODE_TYPE_ASNMNT_EXPR,
+	AST_NODE_TYPE_BINARY_EXPR,
+	AST_NODE_TYPE_POSTFIX_EXPR,
+	AST_NODE_TYPE_UNARY_EXPR,
+	AST_NODE_TYPE_UNARY_OPERATOR,
+	AST_NODE_TYPE_STRUCT_ACCESSOR,
+	AST_NODE_TYPE_ARRAY_ACCESSOR,
+	AST_NODE_TYPE_FUNCTION_CALL,
+	AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, //An indirect call, for function pointers
+	AST_NODE_TYPE_STRUCT_MEMBER_LIST,
+	AST_NODE_TYPE_STRUCT_MEMBER,
+	AST_NODE_TYPE_ENUM_MEMBER_LIST,
+	AST_NODE_TYPE_ENUM_MEMBER,
+	AST_NODE_TYPE_CASE_STMT,
+	AST_NODE_TYPE_C_STYLE_CASE_STMT, //With fallthrough
+	AST_NODE_TYPE_DEFAULT_STMT,
+	AST_NODE_TYPE_C_STYLE_DEFAULT_STMT, //With fallthrough
+	AST_NODE_TYPE_LABEL_STMT,
+	AST_NODE_TYPE_IF_STMT,
+	AST_NODE_TYPE_ELSE_IF_STMT,
+	AST_NODE_TYPE_JUMP_STMT,
+	AST_NODE_TYPE_CONDITIONAL_JUMP_STMT,
+	AST_NODE_TYPE_BREAK_STMT,
+	AST_NODE_TYPE_CONTINUE_STMT,
+	AST_NODE_TYPE_RET_STMT,
+	AST_NODE_TYPE_SWITCH_STMT,
+	AST_NODE_TYPE_C_STYLE_SWITCH_STMT, //Special kind of switch that's C-style
+	AST_NODE_TYPE_WHILE_STMT,
+	AST_NODE_TYPE_DO_WHILE_STMT,
+	AST_NODE_TYPE_FOR_STMT,
+	AST_NODE_TYPE_COMPOUND_STMT,
 	//Has no body
-	AST_NODE_CLASS_DEFER_STMT,
+	AST_NODE_TYPE_DEFER_STMT,
 	//For special elaborative parameters
-	AST_NODE_CLASS_ELABORATIVE_PARAM,
+	AST_NODE_TYPE_ELABORATIVE_PARAM,
 	//For assembly inline statements
-	AST_NODE_CLASS_ASM_INLINE_STMT,
+	AST_NODE_TYPE_ASM_INLINE_STMT,
 	//An array initializer node
-	AST_NODE_CLASS_ARRAY_INITIALIZER_LIST,
+	AST_NODE_TYPE_ARRAY_INITIALIZER_LIST,
 	//A struct initializer
-	AST_NODE_CLASS_STRUCT_INITIALIZER_LIST,
+	AST_NODE_TYPE_STRUCT_INITIALIZER_LIST,
 	//A string initializer node
-	AST_NODE_CLASS_STRING_INITIALIZER,
-	AST_NODE_CLASS_ERR_NODE, /* errors as values approach going forward */
-} ast_node_class_t;
+	AST_NODE_TYPE_STRING_INITIALIZER,
+	AST_NODE_TYPE_ERR_NODE, /* errors as values approach going forward */
+} ast_node_type_t;
 
 
 //What kind of address type specifier is it
@@ -122,12 +123,15 @@ struct generic_ast_node_t{
 	symtab_function_record_t* func_record;
 	//The type record that we have
 	symtab_type_record_t* type_record;
-	//Long/int value
-	int64_t int_long_val;
-	//Constant float value
-	float float_val;
-	//Character value
-	char char_val;
+	//Storing the constant values
+	union {
+		int64_t signed_long_value;
+		u_int64_t unsigned_long_value;
+		int32_t signed_int_value;
+		u_int32_t unsigned_int_value;
+		float float_value;
+		char char_value;
+	} constant_value;
 	//Holds the token for what kind of constant it is
 	Token constant_type;
 	//The upper and lower bound for switch statements
@@ -144,7 +148,7 @@ struct generic_ast_node_t{
 	//What side is this node on
 	side_type_t side;
 	//What kind of node is it?
-	ast_node_class_t CLASS;
+	ast_node_type_t ast_node_type;
 	//The number of parameters
 	u_int8_t num_params;
 	//The type address specifier - for types
@@ -179,7 +183,7 @@ void logical_not_constant_value(generic_ast_node_t* constant_node);
 /**
  * Global node allocation function
  */
-generic_ast_node_t* ast_node_alloc(ast_node_class_t CLASS, side_type_t side);
+generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
 
 /**
  * A utility function for node duplication

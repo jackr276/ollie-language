@@ -27,7 +27,7 @@ static void print_assembly_block(FILE* fl, basic_block_t* block){
 
 		//If this is a public function, we'll print out the ".globl" so
 		//that it can be exposed to ld
-		if(block->function_defined_in->signature->function_type->is_public == TRUE){
+		if(block->function_defined_in->signature->internal_types.function_type->is_public == TRUE){
 			fprintf(fl, "\t.globl %s\n", block->function_defined_in->func_name.string);
 		}
 
