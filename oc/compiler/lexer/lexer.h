@@ -43,6 +43,7 @@ typedef enum {
 	ELSE,
 	DO,
 	WHILE,
+	UNION,
 	FOR,
 	AT,
 	CASE,
