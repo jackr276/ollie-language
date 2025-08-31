@@ -113,15 +113,15 @@ static void multiply_constants(three_addr_const_t* constant1, three_addr_const_t
 	//Handle our multiplications
 	if(constant1->const_type == INT_CONST){
 		if(constant2->const_type == INT_CONST){
-			constant1->int_const *= constant2->int_const;
+			constant1->constant_value.integer_constant *= constant2->constant_value.integer_constant;
 		} else {
-			constant1->int_const *= constant2->long_const;
+			constant1->constant_value.integer_constant *= constant2->constant_value.long_constant;
 		}
 	} else if(constant1->const_type == LONG_CONST){
 		if(constant2->const_type == INT_CONST){
-			constant1->long_const *= constant2->int_const;
+			constant1->constant_value.long_constant *= constant2->constant_value.integer_constant;
 		} else {
-			constant1->long_const *= constant2->long_const;
+			constant1->constant_value.long_constant *= constant2->constant_value.long_constant;
 		}
 	}
 }
@@ -3099,16 +3099,16 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
-			constant->int_const = log2_of_known_power_of_2(constant->int_const);
+			constant->constant_value.integer_constant = log2_of_known_power_of_2(constant->constant_value.integer_constant);
 			break;
 
 		case LONG_CONST:
 		case LONG_CONST_FORCE_U:
-			constant->long_const = log2_of_known_power_of_2(constant->long_const);
+			constant->constant_value.long_constant = log2_of_known_power_of_2(constant->constant_value.long_constant);
 			break;
 
 		case CHAR_CONST:
-			constant->char_const = log2_of_known_power_of_2(constant->char_const);
+			constant->constant_value.char_constant = log2_of_known_power_of_2(constant->constant_value.char_constant);
 			break;
 
 		//We should never get here
@@ -3135,7 +3135,7 @@ static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
 		//Now we'll need to either make a three address constant or update
 		//the existing one
 		if(instruction->op1_const != NULL){
-			instruction->op1_const->int_const = assignee->stack_offset;
+			instruction->op1_const->constant_value.integer_constant = assignee->stack_offset;
 		} else {
 			instruction->op1_const = emit_int_constant_direct(assignee->stack_offset, cfg->type_symtab);
 		}
@@ -3578,10 +3578,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//What kind of constant do we have?
 			if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U){
 				//If this is a the case, we'll multiply the address const by the int value
-				address_offset *= constant->int_const;
+				address_offset *= constant->constant_value.integer_constant;
 			//Otherwise, this has to be a long const
 			} else {
-				address_offset *= constant->long_const;
+				address_offset *= constant->constant_value.long_constant;
 			}
 
 			//Once we've done this, the address offset is now properly multiplied. We'll reuse
@@ -3592,7 +3592,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			constant->const_type = LONG_CONST;
 
 			//Set this to be the address offset
-			constant->long_const = address_offset;
+			constant->constant_value.long_constant = address_offset;
 
 			//Add it into instruction 2
 			window->instruction2->op1_const = constant;
@@ -3775,12 +3775,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				case INT_CONST:
 				case INT_CONST_FORCE_U:
 					//Set the flag if we find anything
-					if(constant->int_const == 0){
+					if(constant->constant_value.integer_constant == 0){
 						const_is_0 = TRUE;
-					} else if (constant->int_const == 1){
+					} else if (constant->constant_value.integer_constant == 1){
 						const_is_1 = TRUE;
 					} else {
-						const_is_power_of_2 = is_power_of_2(constant->int_const);
+						const_is_power_of_2 = is_power_of_2(constant->constant_value.integer_constant);
 					}
 					
 					break;
@@ -3789,24 +3789,24 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				case LONG_CONST:
 				case LONG_CONST_FORCE_U:
 					//Set the flag if we find zero
-					if(constant->long_const == 0){
+					if(constant->constant_value.long_constant == 0){
 						const_is_0 = TRUE;
-					} else if(constant->long_const == 1){
+					} else if(constant->constant_value.long_constant == 1){
 						const_is_1 = TRUE;
 					} else {
-						const_is_power_of_2 = is_power_of_2(constant->long_const);
+						const_is_power_of_2 = is_power_of_2(constant->constant_value.long_constant);
 					}
 					
 					break;
 
 				case CHAR_CONST:
 					//Set the flag if we find zero
-					if(constant->char_const == 0){
+					if(constant->constant_value.char_constant == 0){
 						const_is_0 = TRUE;
-					} else if(constant->char_const == 1){
+					} else if(constant->constant_value.char_constant == 1){
 						const_is_1 = TRUE;
 					} else {
-						const_is_power_of_2 = is_power_of_2(constant->long_const);
+						const_is_power_of_2 = is_power_of_2(constant->constant_value.long_constant);
 					}
 
 					break;
