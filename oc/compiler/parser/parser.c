@@ -6289,7 +6289,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		Token basic_type = type->basic_type_token;
 
 		//It needs to be an int or char
-		if(basic_type == VOID || basic_type == FLOAT32 || basic_type == FLOAT64){
+		if(basic_type == VOID || basic_type == F32 || basic_type == F64){
 			sprintf(info, "Type \"%s\" cannot be switched", type->type_name.string);
 			return print_and_return_error(info, expr_node->line_number);
 		}

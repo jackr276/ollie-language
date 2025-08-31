@@ -3925,8 +3925,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//What if we have a power of 2 here? For any kind of multiplication or division, this can
 			//be optimized into a left or right shift if we have a compatible type(not a float)
 			} else if(const_is_power_of_2 && current_instruction->assignee->type->type_class == TYPE_CLASS_BASIC 
-				&& current_instruction->assignee->type->basic_type_token != FLOAT32 
-				&& current_instruction->assignee->type->basic_type_token != FLOAT64){
+				&& current_instruction->assignee->type->basic_type_token != F32 
+				&& current_instruction->assignee->type->basic_type_token != F64){
 
 				//If we have a star that's a left shift
 				if(current_instruction->op == STAR){

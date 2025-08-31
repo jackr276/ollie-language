@@ -218,38 +218,38 @@ variable_size_t select_type_size(generic_type_t* type){
 		case TYPE_CLASS_BASIC:
 			//Switch based on this
 			switch (type->basic_type_token) {
-				case U_INT8:
-				case S_INT8:
+				case U8:
+				case I8:
 				case CHAR:
 					size = BYTE;
 					break;
 
-				case U_INT16:
-				case S_INT16:
+				case U16:
+				case I16:
 					size = WORD;
 					break;
 
 				//These are 32 bit(double word)
-				case S_INT32:
-				case U_INT32:
+				case I32:
+				case U32:
 				case SIGNED_INT_CONST:
 				case UNSIGNED_INT_CONST:
 					size = DOUBLE_WORD;
 					break;
 
 				//This is SP
-				case FLOAT32:
+				case F32:
 					size = SINGLE_PRECISION;
 					break;
 
 				//This is double precision
-				case FLOAT64:
+				case F64:
 					size = DOUBLE_PRECISION;
 					break;
 
 				//These are all quad word(64 bit)
-				case U_INT64:
-				case S_INT64:
+				case U64:
+				case I64:
 					size = QUAD_WORD;
 					break;
 			
@@ -300,36 +300,36 @@ variable_size_t select_variable_size(three_addr_var_t* variable){
 		case TYPE_CLASS_BASIC:
 			//Switch based on this
 			switch (type->basic_type_token) {
-				case U_INT8:
-				case S_INT8:
+				case U8:
+				case I8:
 				case CHAR:
 					size = BYTE;
 					break;
 
-				case U_INT16:
-				case S_INT16:
+				case U16:
+				case I16:
 					size = WORD;
 					break;
 
 				//These are 32 bit(double word)
-				case S_INT32:
-				case U_INT32:
+				case I32:
+				case U32:
 					size = DOUBLE_WORD;
 					break;
 
 				//This is SP
-				case FLOAT32:
+				case F32:
 					size = SINGLE_PRECISION;
 					break;
 
 				//This is double precision
-				case FLOAT64:
+				case F64:
 					size = DOUBLE_PRECISION;
 					break;
 
 				//These are all quad word(64 bit)
-				case U_INT64:
-				case S_INT64:
+				case U64:
+				case I64:
 					size = QUAD_WORD;
 					break;
 			
