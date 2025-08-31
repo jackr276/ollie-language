@@ -4368,11 +4368,54 @@ static u_int8_t struct_definer(FILE* fl){
 
 
 /**
+ * A union member list is a semicolon separated list of different variables that the union stores
+ */
+
+
+
+/**
  * A union definer allows us to declare a discriminating union datatype
+ *
+ * NOTE: By the time that we get here, we have already seen the UNION keyword 
  *
  * BNF RULE: <union_definer> ::=  define union <identifier> {<union_member_list>} {as <identifier>}? ;
  */
 static u_int8_t union_definer(FILE* fl){
+	//Lookahead token for searching
+	lexitem_t lookahead;
+	//Dynamic string for our type name
+	dynamic_string_t union_name;
+
+	//Allocate it
+	dynamic_string_alloc(&union_name);
+	
+	//Add the prefix in
+	dynamic_string_set(&union_name, "union ");
+
+	//We now need to see a name for our union type
+	generic_ast_node_t* name = identifier(fl, SIDE_TYPE_LEFT);
+
+	//If this is an error fail out
+	if(name->CLASS == AST_NODE_CLASS_ERR_NODE){
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as union name", parser_line_num);
+		return FAILURE;
+	}
+
+	//Add the ident into our overall name
+	dynamic_string_concatenate(&union_name, name->string_value.string);
+
+	//Now we'll need to scan through the type database to ensure that this isn't already in there
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, union_name.string);
+
+	//If we were able to find it, then someone has already declared this in scope. We'll print
+	//an appropriate message and leave
+	if(found_type != NULL){
+		sprintf(info, "Type %s has already been declared. First declare here:", union_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_type_name(found_type);
+		return FAILURE;
+	}
+
 
 
 	//If we get here it worked so
