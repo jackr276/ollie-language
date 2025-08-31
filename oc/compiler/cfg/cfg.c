@@ -5204,14 +5204,14 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 		results.final_block = case_compound_statement_results.final_block;
 
 		//Be sure that we copy over the case statement value as well
-		results.starting_block->case_stmt_val = case_stmt_cursor->int_long_val;
+		results.starting_block->case_stmt_val = case_stmt_cursor->constant_value.signed_int_value;
 
 	} else {
 		//We need to make the block first
 		basic_block_t* case_stmt = basic_block_alloc(1);
 
 		//Grab the value -- this should've already been done by the parser
-		case_stmt->case_stmt_val = case_stmt_cursor->int_long_val;
+		case_stmt->case_stmt_val = case_stmt_cursor->constant_value.signed_int_value;
 
 		//We'll set the front and end block to both be this
 		results.starting_block = case_stmt;
@@ -5368,7 +5368,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				case_default_results = visit_c_style_case_statement(cursor);
 
 				//Add this in as an entry to the jump table
-				add_jump_table_entry(root_level_block->jump_table, cursor->int_long_val - offset, case_default_results.starting_block);
+				add_jump_table_entry(root_level_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
 				break;
 
@@ -5643,7 +5643,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
-				add_jump_table_entry(root_level_block->jump_table, case_stmt_cursor->int_long_val - offset, case_default_results.starting_block);
+				add_jump_table_entry(root_level_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 				break;
 
 			//Handle a default statement
