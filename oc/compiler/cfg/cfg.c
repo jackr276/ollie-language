@@ -2055,7 +2055,7 @@ static void rename_all_variables(cfg_t* cfg){
  */
 static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
 	//Emit the constant size
-	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->pointer_type->points_to->type_size, type_symtab);
+	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->internal_types.pointer_type->points_to->type_size, type_symtab);
 
 	//We need this temp assignment for bookkeeping reasons
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
@@ -2443,7 +2443,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			generic_type_t* type = constant_node->inferred_type;
 
 			//Go based on the type
-			switch(type->basic_type->basic_type){
+			switch(type->internal_types.basic_type->basic_type){
 				//If it's unassigned by this point, we fall to defaults
 				case UNSIGNED_INT_CONST:
 					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u32")->type);
@@ -2948,10 +2948,10 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//What is the internal type that we're pointing to? This will determine our scale
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
 				//We'll dereference the current type
-				current_type = current_type->array_type->member_type;
+				current_type = current_type->internal_types.array_type->member_type;
 			} else {
 				//We'll dereference the current type
-				current_type = current_type->pointer_type->points_to;
+				current_type = current_type->internal_types.pointer_type->points_to;
 			}
 
 			/**
@@ -3028,7 +3028,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//If current var is a pointer, then we need to dereference it to get the actual struct type	
 			if(current_type->type_class == TYPE_CLASS_POINTER){
 				//We need to first dereference this
-				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->pointer_type->points_to);
+				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.pointer_type->points_to);
 
 				//Assign temp to be the current address
 				instruction_t* assnment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
@@ -3043,11 +3043,11 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				current_address = assnment->assignee;
 
 				//Dereference the current type
-				current_type = current_type->pointer_type->points_to;
+				current_type = current_type->internal_types.pointer_type->points_to;
 			}
 
 			//Now we'll grab the associated nstruct record
-			struct_type_field_t* field = get_struct_member(current_type->struct_type, var->var_name.string);
+			struct_type_field_t* field = get_struct_member(current_type->internal_types.struct_type, var->var_name.string);
 
 			//Save this for down the road
 			generic_type_t* struct_type = current_type;
@@ -3779,7 +3779,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
  	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
 	//Grab the function's signature type too
-	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->function_type;
+	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
 
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current = basic_block;
@@ -3900,7 +3900,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Grab this out first
 	symtab_function_record_t* func_record = function_call_node->func_record;
 	//Grab the function's signature type too
-	function_type_t* signature = func_record->signature->function_type;
+	function_type_t* signature = func_record->signature->internal_types.function_type;
 
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current = basic_block;
@@ -6919,7 +6919,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
 		if(block->exit_statement == NULL || block->exit_statement->CLASS != THREE_ADDR_CODE_RET_STMT){
 			//If this isn't void, then we need to throw a warning
 			if(function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
-				|| function_defined_in->return_type->basic_type->basic_type != VOID){
+				|| function_defined_in->return_type->internal_types.basic_type->basic_type != VOID){
 				print_parse_message(WARNING, "Non-void function does not return in all control paths", 0);
 			}
 			
@@ -7205,7 +7205,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
 	//Grab the struct type out for reference
-	struct_type_t* struct_type = struct_initializer->inferred_type->struct_type;
+	struct_type_t* struct_type = struct_initializer->inferred_type->internal_types.struct_type;
 
 	//Grab a cursor to the child
 	generic_ast_node_t* cursor = struct_initializer->first_child;
