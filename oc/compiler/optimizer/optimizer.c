@@ -1383,6 +1383,7 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 		return;
 	}
 
+
 	//If we're marking a variable that is a memory address type, then we need to ensure that all writes
 	//to said memory address are preserved
  	if(variable->related_memory_address != NULL){
@@ -1555,6 +1556,7 @@ static void mark(cfg_t* cfg){
 						&& current_stmt->assignee->related_memory_address->is_function_parameter == TRUE){
 						//This means we're writing to it
 						if(current_stmt->assignee->indirection_level > 0){
+						printf("MARKING with: %s\n", current_stmt->assignee->related_memory_address->var_name.string);
 							//Mark it
 							current_stmt->mark = TRUE;
 							//Add it to the list
@@ -1655,6 +1657,14 @@ static void mark(cfg_t* cfg){
 
 			//In all other cases, we'll just mark and add the two operands 
 			default:
+				/**
+				 * If we have an assignee that is being dereferenced, it's not truly an assignee. We'll
+				 * need to go through and handle the appropriate memory optimizations for this
+				 */
+				if(stmt->assignee != NULL && stmt->assignee->indirection_level > 0){
+					mark_and_add_definition(cfg, stmt->assignee, stmt->function, worklist);
+				}
+
 				//We need to mark the place where each definition is set
 				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
 				mark_and_add_definition(cfg, stmt->op2, stmt->function, worklist);
