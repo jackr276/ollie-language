@@ -1795,26 +1795,9 @@ static void mark(cfg_t* cfg){
 			//Mark and add the definitions of the op1 that this conditional jump relies on as important
 			mark_and_add_definition(cfg, jump_to_if->op1, stmt->function, worklist);
 
-			//Now mark the jump to if. We don't need to add this one to
-			//any list - there's nothing else to mark
-			if(jump_to_if->mark == FALSE){
-				printf("Marking if statement: ");
-				print_three_addr_code_stmt(stdout, jump_to_if);
-				printf("\n");
-
-				//Mark
-				jump_to_if->mark = TRUE;
-			}
-
-			//Mark the jump to else. We also don't need to add this one
-			//to any list - there's nothing else to mark
-			if(jump_to_else->mark == FALSE){
-				printf("Marking else statement: ");
-				print_three_addr_code_stmt(stdout, jump_to_else);
-				printf("\n");
-				//Mark
-				jump_to_else->mark = TRUE;
-			}
+			//Mark both of these values as important
+			jump_to_if->mark = TRUE;
+			jump_to_else->mark = TRUE;
 
 			//And we're done - we'll let this loop to the next statement
 		}
