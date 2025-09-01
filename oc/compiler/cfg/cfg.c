@@ -1871,6 +1871,27 @@ static void lhs_new_name(three_addr_var_t* var){
 
 
 /**
+ * Directly increment the counter without need
+ * for a three_addr_var_t that's holding it. This
+ * is used exclusively for function parameters that in 
+ * all technicality have already been assignedby virtue of 
+ * existing
+ */
+static void lhs_new_name_direct(symtab_variable_record_t* variable){
+	//Store the old generation level
+	u_int16_t generation_level = variable->counter;
+
+	//Increment the counter
+	(variable->counter)++;
+
+	//Push the old generation level onto here
+	lightstack_push(&(variable->counter_stack), generation_level);
+
+	//And that should be all
+}
+
+
+/**
  * Rename the variable with the top of the stack. This DOES NOT
  * manipulate the stack in any way
  */
@@ -1917,6 +1938,19 @@ static void rename_block(basic_block_t* entry){
 	//If we've previously visited this block, then return
 	if(entry->visited == TRUE){
 		return;
+	}
+
+	//If this is a function entry block, then all of it's
+	//parameters have technically already been "assigned"
+	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//Grab the record out
+		symtab_function_record_t* function_defined_in = entry->function_defined_in;
+		
+		//We'll run through the parameters and mark them as assigned
+		for(u_int16_t i = 0; i < function_defined_in->number_of_params; i++){
+			//make the new name here
+			lhs_new_name_direct(function_defined_in->func_params[i].associate_var);
+		}
 	}
 
 	//Otherwise we'll flag it for the future
@@ -2011,6 +2045,20 @@ static void rename_block(basic_block_t* entry){
 	//and perform the same operation
 	for(u_int16_t _ = 0; entry->dominator_children != NULL && _ < entry->dominator_children->current_index; _++){
 		rename_block(dynamic_array_get_at(entry->dominator_children, _));
+	}
+
+	//Again if this is a function entry block, then we need to unwind the stack
+	//so that we avoid excessive variable numbers here as well
+	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//Grab the record out
+		symtab_function_record_t* function_defined_in = entry->function_defined_in;
+		
+		//We need to pop these all only once so that we have parity with what we
+		//did up top
+		for(u_int16_t i = 0; i < function_defined_in->number_of_params; i++){
+			//Pop it off here
+			lightstack_pop(&(function_defined_in->func_params[i].associate_var->counter_stack));
+		}
 	}
 
 	//Once we're done, we'll need to unwind our stack here. Anything that involves an assignee, we'll

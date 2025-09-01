@@ -1234,71 +1234,51 @@ static void sweep(cfg_t* cfg){
 
 
 /**
- * Mark all definitions regardless of SSA level for a given variable. This rule is explicitly
- * used whenever we have a memory address assignment(&) that requires us to mark every single
- * write to the field whose address is being taken as important
+ * Mark all defintions of a variable whose SSA versions are greater than or equal to said variable's SSA threshold
+ *
+ * Here is a quick example:
+ * 	t1 <- memory address of x_2
+ *
+ * 	So we know that we need to keep track of all assignments to x that have an SSA generation *greater than or equal to 2*
  */
-static void mark_and_add_all_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	//If this is NULL, just leave
-	if(variable == NULL || current_function == NULL){
-		return;
-	}
-
+static void mark_and_add_greater_ssa_defintions(cfg_t* cfg, symtab_variable_record_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist, u_int32_t ssa_generation){
 	//Run through everything here
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
 
 		//If it's not in the current function and it's temporary, get rid of it
-		if(variable->is_temporary == TRUE && block->function_defined_in != current_function){
+		if(block->function_defined_in != current_function){
 			continue;
 		}
 
-		//If this does assign the variable, we'll look through it
-		if(variable->is_temporary == FALSE){
-			//Let's find where we assign it
-			instruction_t* stmt = block->exit_statement;
+		//Let's find where we assign it
+		instruction_t* stmt = block->exit_statement;
 
-			//So long as this isn't NULL
-			while(stmt != NULL){
-				//Is the assignee our variable AND it's unmarked?
-				if(stmt->mark == FALSE && stmt->assignee != NULL && stmt->assignee->linked_var == variable->linked_var){
-					//Add this in
-					dynamic_array_add(worklist, stmt);
-					//Mark it
-					stmt->mark = TRUE;
-					//Mark it
-					block->contains_mark = TRUE;
-				}
+		//So long as this isn't NULL
+		while(stmt != NULL){
+			//If it's marked we're out of here
+			if(stmt->mark == TRUE 
+				|| stmt->assignee == NULL 
+				|| stmt->assignee->is_temporary == TRUE){
 
-				//Advance the statement
 				stmt = stmt->previous_statement;
+				continue;
 			}
 
-		//If it's a temp var, the search is not so easy. We'll need to crawl through
-		//each statement and see if the assignee has the same temp number
-		} else {
-			//Let's find where we assign it
-			instruction_t* stmt = block->exit_statement;
-
-			//So long as this isn't NULL
-			while(stmt != NULL){
-				//Is the assignee our variable AND it's unmarked?
-				if(stmt->assignee != NULL && stmt->assignee->temp_var_number == variable->temp_var_number && stmt->mark == FALSE){
-					//Add this in
-					dynamic_array_add(worklist, stmt);
-					//Mark it
-					stmt->mark = TRUE;
-					//Mark the block
-					block->contains_mark = TRUE;
-
-					//Since this is a temp var, we don't need to keep hunting
-					return;
-				}
-
-				//Advance the statement
-				stmt = stmt->previous_statement;
+			//Is the assignee our variable AND it's unmarked?
+			if(stmt->assignee->linked_var == variable
+				&& stmt->assignee->ssa_generation >= ssa_generation){
+				//Add this in
+				dynamic_array_add(worklist, stmt);
+				//Mark it
+				stmt->mark = TRUE;
+				//Mark it
+				block->contains_mark = TRUE;
 			}
+
+			//Advance the statement
+			stmt = stmt->previous_statement;
 		}
 	}
 }
@@ -1521,7 +1501,7 @@ static void mark(cfg_t* cfg){
 						dynamic_array_add(worklist, current_stmt);
 						//The block now has a mark
 						current->contains_mark = TRUE;
-					}
+					} 
 
 					break;
 
@@ -1589,11 +1569,10 @@ static void mark(cfg_t* cfg){
 
 				break;
 
-			//A memory address assignment requires that we mark every single write to a given variable inside of a function, regardless
-			//of order
+			//Use a specialized function to mark all SSA generations of a given variable that are
+			//greater than or equal to the generation that we care about here
 			case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
-				//Force the optimizer to mark all definitions of a given variable, regardless of where they are in a function
-				mark_and_add_all_definitions(cfg, stmt->op1, stmt->function, worklist);
+				mark_and_add_greater_ssa_defintions(cfg, stmt->op1->linked_var, stmt->function, worklist, stmt->op1->ssa_generation);
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 
