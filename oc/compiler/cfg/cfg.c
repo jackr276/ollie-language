@@ -1951,7 +1951,8 @@ static void rename_block(basic_block_t* entry){
 			}
 
 			//Same goes for the assignee, except this one is the LHS
-			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE
+				&& cursor->assignee->indirection_level == 0){
 				lhs_new_name(cursor->assignee);
 			}
 
@@ -2020,7 +2021,8 @@ static void rename_block(basic_block_t* entry){
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
 		//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-		if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+		if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE
+			&& cursor->assignee->indirection_level == 0){
 			//Pop it off
 			lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
 		}
