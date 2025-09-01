@@ -1290,6 +1290,11 @@ static void mark_and_add_greater_ssa_defintions(cfg_t* cfg, symtab_variable_reco
  * the current function. If a definition is not marked, it must be added to the worklist
  */
 static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+	//If this is NULL, just leave
+	if(variable == NULL || current_function == NULL){
+		return;
+	}
+
 	//Run through everything here
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the block out
