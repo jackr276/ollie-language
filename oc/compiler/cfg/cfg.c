@@ -1943,7 +1943,14 @@ static void rename_block(basic_block_t* entry){
 	//If this is a function entry block, then all of it's
 	//parameters have technically already been "assigned"
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
-
+		//Grab the record out
+		symtab_function_record_t* function_defined_in = entry->function_defined_in;
+		
+		//We'll run through the parameters and mark them as assigned
+		for(u_int16_t i = 0; i < function_defined_in->number_of_params; i++){
+			//make the new name here
+			lhs_new_name_direct(function_defined_in->func_params[i].associate_var);
+		}
 	}
 
 	//Otherwise we'll flag it for the future
@@ -2038,6 +2045,20 @@ static void rename_block(basic_block_t* entry){
 	//and perform the same operation
 	for(u_int16_t _ = 0; entry->dominator_children != NULL && _ < entry->dominator_children->current_index; _++){
 		rename_block(dynamic_array_get_at(entry->dominator_children, _));
+	}
+
+	//Again if this is a function entry block, then we need to unwind the stack
+	//so that we avoid excessive variable numbers here as well
+	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//Grab the record out
+		symtab_function_record_t* function_defined_in = entry->function_defined_in;
+		
+		//We need to pop these all only once so that we have parity with what we
+		//did up top
+		for(u_int16_t i = 0; i < function_defined_in->number_of_params; i++){
+			//Pop it off here
+			lightstack_pop(&(function_defined_in->func_params[i].associate_var->counter_stack));
+		}
 	}
 
 	//Once we're done, we'll need to unwind our stack here. Anything that involves an assignee, we'll
