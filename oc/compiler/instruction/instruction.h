@@ -404,7 +404,7 @@ struct three_addr_var_t{
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What is this related to the writing of?
-	symtab_variable_record_t* memory_address_variable;
+	symtab_variable_record_t* related_memory_address;
 	//For memory management
 	three_addr_var_t* next_created;
 	//The related stack data area node. Not all variables have these,
@@ -627,6 +627,11 @@ u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
  * Is this a division instruction?
  */
 u_int8_t is_division_instruction(instruction_t* instruction);
+
+/**
+ * Is this constant value 0?
+ */
+u_int8_t is_constant_value_zero(three_addr_const_t* constant);
 
 /**
  * Is this a division instruction that is intended for modulus?

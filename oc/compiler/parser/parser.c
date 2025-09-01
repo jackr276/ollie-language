@@ -8271,7 +8271,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 		case AST_NODE_TYPE_STRING_INITIALIZER:
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			initializer_node->node = declared_var;
+			initializer_node->variable = declared_var;
 			break;
 
 		//Otherwise not

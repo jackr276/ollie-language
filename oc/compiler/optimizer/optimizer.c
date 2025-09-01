@@ -1233,69 +1233,6 @@ static void sweep(cfg_t* cfg){
 }
 
 
-
-/**
- * Mark all statements that write to a given field in a structure. We're able to be more specific
- * here because a construct's layout is determined when the parser hits it. As such, if we're only
- * ever using a certain field, we need only worry about writes to that given field
- */
-static void mark_and_add_all_field_writes(cfg_t* cfg, dynamic_array_t* worklist, symtab_variable_record_t* variable){
-	//Run through every single block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
-		//Grab the given block out
-		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, _);	
-
-		//If this block does not match the function that we're currently in, and the variable
-		//itself is not global, we'll skip it
-		if(variable->function_declared_in != NULL && variable->function_declared_in != current->function_defined_in){
-			//Skip to the next one, this can't possibly be what we want
-			continue;
-		}
-
-		//If we make it down here, we know that this block is writing to said memory address. Now we just need to figure
-		//out the statements that are doing it
-		
-		//Grab a cursor out	of this block. We'll need to traverse to see which statements in here are important
-		instruction_t* cursor = current->exit_statement;
-		
-		//Run through every statement in here
-		while(cursor != NULL){
-			//This will be in our "related write var" field. All we need to do is see
-			//if the related write field matches our var
-			if(cursor->assignee != NULL && cursor->assignee->memory_address_variable != NULL
-				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
-				&& cursor->assignee->memory_address_variable == variable){
-
-				//This is a case where we mark
-				if(cursor->mark == FALSE){
-					//Mark the statement itself
-					cursor->mark = TRUE;
-					dynamic_array_add(worklist, cursor);
-
-					//Keep track of the old assignee
-					three_addr_var_t* old_assignee = cursor->assignee;
-
-					//Push it back by one to start
-					cursor = cursor->previous_statement;
-
-					//Keep going so long as we don't know where this came from. We need to ignore
-					//indirection levels for this to work
-					while(variables_equal(old_assignee, cursor->assignee, TRUE) == FALSE){
-						cursor = cursor->previous_statement;
-					}
-
-					//Once we get here we know we got it
-					cursor->mark = TRUE;
-					dynamic_array_add(worklist, cursor);
-				}
-			}
-
-			cursor = cursor->previous_statement;
-		}	
-	}
-}
-
-
 /**
  * Mark all definitions regardless of SSA level for a given variable. This rule is explicitly
  * used whenever we have a memory address assignment(&) that requires us to mark every single
@@ -1371,18 +1308,10 @@ static void mark_and_add_all_definitions(cfg_t* cfg, three_addr_var_t* variable,
  * Mark definitions(assignment) of a three address variable within
  * the current function. If a definition is not marked, it must be added to the worklist
  */
-static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
 	if(variable == NULL || current_function == NULL){
 		return;
-	}
-
-	//If we're marking a variable that is a memory address type, then we need to ensure that all writes
-	//to said memory address are preserved
- 	if(variable->linked_var != NULL){
-		if(is_memory_address_type(variable->linked_var->type_defined_as) == TRUE){
-			mark_and_add_all_field_writes(cfg, worklist, variable->linked_var);
-		}
 	}
 
 	//Run through everything here
@@ -1402,19 +1331,22 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
+				//If it's marked we're out of here
+				if(stmt->mark == TRUE || stmt->assignee == NULL){
+					stmt = stmt->previous_statement;
+					continue;
+				}
+
 				//Is the assignee our variable AND it's unmarked?
-				if(stmt->mark == FALSE && stmt->assignee != NULL && stmt->assignee->linked_var == variable->linked_var){
-					if(stmt->assignee->ssa_generation == variable->ssa_generation){
-						//Add this in
-						dynamic_array_add(worklist, stmt);
-						//Mark it
-						stmt->mark = TRUE;
-						//Mark it
-						block->contains_mark = TRUE;
-						//Mark the block it's in
-						//And we're done
-						return;
-					}
+				if(stmt->assignee->linked_var == variable->linked_var
+					&& stmt->assignee->ssa_generation == variable->ssa_generation){
+					//Add this in
+					dynamic_array_add(worklist, stmt);
+					//Mark it
+					stmt->mark = TRUE;
+					//Mark it
+					block->contains_mark = TRUE;
+					return;
 				}
 
 				//Advance the statement
@@ -1429,8 +1361,14 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
+				//If this is the case, we'll just go onto the next one
+				if(stmt->mark == TRUE || stmt->assignee == NULL){
+					stmt = stmt->previous_statement;
+					continue;
+				}
+
 				//Is the assignee our variable AND it's unmarked?
-				if(stmt->assignee != NULL && stmt->assignee->temp_var_number == variable->temp_var_number && stmt->mark == FALSE){
+				if(stmt->assignee->temp_var_number == variable->temp_var_number){
 					//Add this in
 					dynamic_array_add(worklist, stmt);
 					//Mark it
@@ -1452,6 +1390,25 @@ static void mark_and_add_definition(cfg_t* cfg, instruction_t* stmt, three_addr_
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
+ *
+ * for each operation i:
+ * 	clear i's mark
+ * 	if i is critical then
+ * 		mark i
+ * 		add i to the worklist
+ * 	while worklist not empty
+ * 		remove i from the worklist i is x <- y op z
+ * 		if def(y) is not marked then
+ * 			mark def(y)
+ * 			add def(y) to worklist
+ * 		if def(z) is not marked then
+ * 			mark def(z)
+ * 			add def(y) to worklist
+ * 		for each block b in RDF(block(i))
+ * 			let j be the branch that ends b
+ * 			if j is unmarked then
+ * 				mark j
+ * 				add j to worklist
  */
 static void mark(cfg_t* cfg){
 	//First we'll need a worklist
@@ -1466,18 +1423,28 @@ static void mark(cfg_t* cfg){
 		instruction_t* current_stmt = current->leader_statement;
 
 		//For later storage
-		symtab_variable_record_t* memory_address_variable;
+		symtab_variable_record_t* related_memory_address;
 
-		//Now we'll run through every statement(operation) in this block
+		/**
+		 * We'll now go through and mark every statement that we
+		 * deem to be critical in the block. Statements are critical
+		 * if they:
+		 * 	1.) set a return value
+		 * 	2.) is an input/output statement
+		 * 	3.) affects the value in a storage location that could be
+		 * 		accessed outside of the procedure(i.e. a parameter that is a pointer)
+		 */
 		while(current_stmt != NULL){
 			//Clear it's mark
 			current_stmt->mark = FALSE;
 
-			//Go through statement by statement. In these
-			//special types of statements like return statements,
-			//function call statements, etc, we'll mark values as
-			//important
+			/**
+			 * We will go through every operation and determine its importance based on our rules
+			 */
 			switch(current_stmt->statement_type){
+				/**
+				 * Return statements are always considered important
+				 */
 				case THREE_ADDR_CODE_RET_STMT:
 					//Mark this as useful
 					current_stmt->mark = TRUE;
@@ -1487,8 +1454,12 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//These are added by the user and considered to
-				//always be of use
+				/**
+				 * Asm inline statements are also
+				 * always important because we don't 
+				 * analyze them, so the user assumes that
+				 * their direct code will be executed
+				 */
 				case THREE_ADDR_CODE_ASM_INLINE_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
@@ -1497,9 +1468,11 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//Since we don't know whether or not a function
-				//that is being called performs an important task,
-				//we also always consider it to be important
+				/**
+				 * Since we don't know whether or not a function
+				 * that is being called performs an important task,
+				 * we also always consider it to be important
+				 */
 				case THREE_ADDR_CODE_FUNC_CALL:
 					current_stmt->mark = TRUE;
 					//Add it to the list
@@ -1508,10 +1481,12 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//Indirect function calls are the same as function calls. They will
-				//always count becuase we do not know whether or not the indirectly
-				//called function performs some important task. As such, we will 
-				//mark it as important
+				/**
+				 * Indirect function calls are the same as function calls. They will 
+				 * always count becuase we do not know whether or not the indirectly
+				 * called function performs some important task. As such, we will 
+				 * mark it as important
+				 */
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 					current_stmt->mark = TRUE;
 					//Add it to the list
@@ -1520,9 +1495,11 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//And finally idle statements are considered important
-				//because they literally do nothing, so if the user
-				//put them there, we'll assume that it was for a good reason
+				/**
+				 * And finally idle statements are considered important
+				 * because they literally do nothing, so if the user
+				 * put them there, we'll assume that it was for a good reason
+				 */
 				case THREE_ADDR_CODE_IDLE_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
@@ -1531,22 +1508,19 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//These can also be special cases
+				/**
+				 * If we have an assignment statement that writes to a
+				 * memory address, we will mark that as important
+				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					//Grab out the linked variable
-					memory_address_variable = current_stmt->assignee->memory_address_variable;
-
-					//Most common case, just skip out
-					if(memory_address_variable == NULL){
-						break;
-					}
-
-					//If we have a variable that is a function paramter *and* we're writing to it, then
-					//automatically every single write here is important
-					if(memory_address_variable->is_function_parameter == TRUE){
-						//We need to mark and add anything that writes to this field
-						mark_and_add_all_field_writes(cfg, worklist, memory_address_variable);
+					//We deem all write operations to be important
+					if(current_stmt->assignee->indirection_level > 0){
+						current_stmt->mark = TRUE;
+						//Add it to the list
+						dynamic_array_add(worklist, current_stmt);
+						//The block now has a mark
+						current->contains_mark = TRUE;
 					}
 
 					break;
@@ -1580,7 +1554,7 @@ static void mark(cfg_t* cfg){
 					three_addr_var_t* phi_func_param = dynamic_array_get_at(params, i);
 
 					//Add the definitions in
-					mark_and_add_definition(cfg, stmt, phi_func_param, stmt->function, worklist);
+					mark_and_add_definition(cfg, phi_func_param, stmt->function, worklist);
 				}
 
 				break;
@@ -1593,7 +1567,7 @@ static void mark(cfg_t* cfg){
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-					mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
+					mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
 				}
 
 				break;
@@ -1603,14 +1577,14 @@ static void mark(cfg_t* cfg){
 			//the memory address of the function that we're calling
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
 
 				//Grab the parameters out
 				params = stmt->function_parameters;
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-					mark_and_add_definition(cfg, stmt, dynamic_array_get_at(params, i), stmt->function, worklist);
+					mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
 				}
 
 				break;
@@ -1624,9 +1598,17 @@ static void mark(cfg_t* cfg){
 
 			//In all other cases, we'll just mark and add the two operands 
 			default:
+				/**
+				 * If we have an assignee that is being dereferenced, it's not truly an assignee. We'll
+				 * need to go through and handle the appropriate memory optimizations for this
+				 */
+				if(stmt->assignee != NULL && stmt->assignee->indirection_level > 0){
+					mark_and_add_definition(cfg, stmt->assignee, stmt->function, worklist);
+				}
+
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(cfg, stmt, stmt->op1, stmt->function, worklist);
-				mark_and_add_definition(cfg, stmt, stmt->op2, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op2, stmt->function, worklist);
 
 				break;
 		}
@@ -1721,28 +1703,11 @@ static void mark(cfg_t* cfg){
 			instruction_t* jump_to_if = rdf_block_stmt;
 
 			//Mark and add the definitions of the op1 that this conditional jump relies on as important
-			mark_and_add_definition(cfg, jump_to_if, jump_to_if->op1, stmt->function, worklist);
+			mark_and_add_definition(cfg, jump_to_if->op1, stmt->function, worklist);
 
-			//Now mark the jump to if. We don't need to add this one to
-			//any list - there's nothing else to mark
-			if(jump_to_if->mark == FALSE){
-				printf("Marking if statement: ");
-				print_three_addr_code_stmt(stdout, jump_to_if);
-				printf("\n");
-
-				//Mark
-				jump_to_if->mark = TRUE;
-			}
-
-			//Mark the jump to else. We also don't need to add this one
-			//to any list - there's nothing else to mark
-			if(jump_to_else->mark == FALSE){
-				printf("Marking else statement: ");
-				print_three_addr_code_stmt(stdout, jump_to_else);
-				printf("\n");
-				//Mark
-				jump_to_else->mark = TRUE;
-			}
+			//Mark both of these values as important
+			jump_to_if->mark = TRUE;
+			jump_to_else->mark = TRUE;
 
 			//And we're done - we'll let this loop to the next statement
 		}

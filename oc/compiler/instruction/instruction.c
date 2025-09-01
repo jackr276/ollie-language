@@ -458,6 +458,41 @@ u_int8_t is_division_instruction(instruction_t* instruction){
 	}
 }
 
+
+/**
+ * Is this constant value 0?
+ */
+u_int8_t is_constant_value_zero(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case FUNC_CONST:
+			return FALSE;
+		case STR_CONST:
+			return FALSE;
+		case INT_CONST:
+			if(constant->constant_value.integer_constant == 0){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+		case LONG_CONST:
+			if(constant->constant_value.long_constant == 0){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+		case CHAR_CONST:
+			if(constant->constant_value.char_constant == 0){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+		//By default just return false
+		default:
+			return FALSE;
+	}
+}
+
+
 /**
  * Is this a division instruction that's intended for modulus??
  */
@@ -1654,13 +1689,19 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "%d", constant->constant_value.integer_constant);
+			if(constant->constant_value.integer_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.integer_constant);
+			}
 			break;
 		case LONG_CONST:
-			fprintf(fl, "%ld", constant->constant_value.long_constant);
+			if(constant->constant_value.long_constant != 0){
+				fprintf(fl, "%ld", constant->constant_value.long_constant);
+			}
 			break;
 		case CHAR_CONST:
-			fprintf(fl, "%d", constant->constant_value.char_constant);
+			if(constant->constant_value.char_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.char_constant);
+			}
 			break;
 		case FLOAT_CONST:
 			fprintf(fl, "%f", constant->constant_value.float_constant);
@@ -1751,7 +1792,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			break;
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
-		//Only print this if it's not 0
+			//Only print this if it's not 0
 			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
