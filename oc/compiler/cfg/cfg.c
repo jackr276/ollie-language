@@ -1871,6 +1871,27 @@ static void lhs_new_name(three_addr_var_t* var){
 
 
 /**
+ * Directly increment the counter without need
+ * for a three_addr_var_t that's holding it. This
+ * is used exclusively for function parameters that in 
+ * all technicality have already been assignedby virtue of 
+ * existing
+ */
+static void lhs_new_name_direct(symtab_variable_record_t* variable){
+	//Store the old generation level
+	u_int16_t generation_level = variable->counter;
+
+	//Increment the counter
+	(variable->counter)++;
+
+	//Push the old generation level onto here
+	lightstack_push(&(variable->counter_stack), generation_level);
+
+	//And that should be all
+}
+
+
+/**
  * Rename the variable with the top of the stack. This DOES NOT
  * manipulate the stack in any way
  */
@@ -1917,6 +1938,12 @@ static void rename_block(basic_block_t* entry){
 	//If we've previously visited this block, then return
 	if(entry->visited == TRUE){
 		return;
+	}
+
+	//If this is a function entry block, then all of it's
+	//parameters have technically already been "assigned"
+	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
+
 	}
 
 	//Otherwise we'll flag it for the future
