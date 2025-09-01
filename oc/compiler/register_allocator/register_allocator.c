@@ -1349,24 +1349,8 @@ static void handle_assignment_spill(cfg_t* cfg, three_addr_var_t* var, live_rang
 	//Link this in too
 	store->block_contained_in = block;
 
-	//Now all that's left to do is insert this after the instruction where it's the destination
-	//Grab out what used to be the next statement
-	instruction_t* old_next = instruction->next_statement;
-
-	//The store is now the next statement
-	instruction->next_statement = store;
-
-	//Link this one in
-	store->next_statement = old_next;
-	store->previous_statement = instruction;
-
-	//It can either have a next one that we need to link in, or
-	//it's at the end of a block
-	if(old_next != NULL){
-		old_next->previous_statement = store;
-	} else {
-		block->exit_statement = store;
-	}
+	//Insert the store after the assignment
+	insert_instruction_after_given(store, instruction);
 }
 
 
@@ -1397,20 +1381,8 @@ static three_addr_var_t* handle_use_spill(cfg_t* cfg, dynamic_array_t* live_rang
 	//Link the load instruction with what block it's in
 	load->block_contained_in = block;
 
-	//Grab the previous one out
-	instruction_t* previous = instruction->previous_statement;
-
-	//Link load and the prior instruction
-	load->previous_statement = previous;
-	if(previous != NULL){
-		previous->next_statement = load;
-	} else {
-		block->leader_statement = previous;
-	}
-
-	//And link the instruction to the load
-	load->next_statement = instruction;
-	instruction->previous_statement = load;
+	//Insert the load instruction before the use
+	insert_instruction_before_given(load, instruction);
 
 	//Give back this live range now
 	return new_var;
