@@ -629,6 +629,11 @@ u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
 u_int8_t is_division_instruction(instruction_t* instruction);
 
 /**
+ * Is this constant value 0?
+ */
+u_int8_t is_constant_value_zero(three_addr_const_t* constant);
+
+/**
  * Is this a division instruction that is intended for modulus?
  */
 u_int8_t is_modulus_instruction(instruction_t* instruction);
