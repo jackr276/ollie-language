@@ -1861,7 +1861,7 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
 	}
 
 	//Needed comma
-	fprintf(fl, ",");
+	fprintf(fl, ", ");
 
 	//Now print our destination
 	if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST){
