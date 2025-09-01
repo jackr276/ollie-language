@@ -1402,19 +1402,22 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
+				//If it's marked we're out of here
+				if(stmt->mark == TRUE || stmt->assignee == NULL){
+					stmt = stmt->previous_statement;
+					continue;
+				}
+
 				//Is the assignee our variable AND it's unmarked?
-				if(stmt->mark == FALSE && stmt->assignee != NULL && stmt->assignee->linked_var == variable->linked_var){
-					if(stmt->assignee->ssa_generation == variable->ssa_generation){
-						//Add this in
-						dynamic_array_add(worklist, stmt);
-						//Mark it
-						stmt->mark = TRUE;
-						//Mark it
-						block->contains_mark = TRUE;
-						//Mark the block it's in
-						//And we're done
-						return;
-					}
+				if(stmt->assignee->linked_var == variable->linked_var
+					&& stmt->assignee->ssa_generation == variable->ssa_generation){
+					//Add this in
+					dynamic_array_add(worklist, stmt);
+					//Mark it
+					stmt->mark = TRUE;
+					//Mark it
+					block->contains_mark = TRUE;
+					return;
 				}
 
 				//Advance the statement
@@ -1429,8 +1432,14 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 			//So long as this isn't NULL
 			while(stmt != NULL){
+				//If this is the case, we'll just go onto the next one
+				if(stmt->mark == TRUE || stmt->assignee == NULL){
+					stmt = stmt->previous_statement;
+					continue;
+				}
+
 				//Is the assignee our variable AND it's unmarked?
-				if(stmt->assignee != NULL && stmt->assignee->temp_var_number == variable->temp_var_number && stmt->mark == FALSE){
+				if(stmt->assignee->temp_var_number == variable->temp_var_number){
 					//Add this in
 					dynamic_array_add(worklist, stmt);
 					//Mark it
@@ -1487,16 +1496,26 @@ static void mark(cfg_t* cfg){
 		//For later storage
 		symtab_variable_record_t* related_memory_address;
 
-		//Now we'll run through every statement(operation) in this block
+		/**
+		 * We'll now go through and mark every statement that we
+		 * deem to be critical in the block. Statements are critical
+		 * if they:
+		 * 	1.) set a return value
+		 * 	2.) is an input/output statement
+		 * 	3.) affects the value in a storage location that could be
+		 * 		accessed outside of the procedure(i.e. a parameter that is a pointer)
+		 */
 		while(current_stmt != NULL){
 			//Clear it's mark
 			current_stmt->mark = FALSE;
 
-			//Go through statement by statement. In these
-			//special types of statements like return statements,
-			//function call statements, etc, we'll mark values as
-			//important
+			/**
+			 * We will go through every operation and determine its importance based on our rules
+			 */
 			switch(current_stmt->statement_type){
+				/**
+				 * Return statements are always considered important
+				 */
 				case THREE_ADDR_CODE_RET_STMT:
 					//Mark this as useful
 					current_stmt->mark = TRUE;
@@ -1506,8 +1525,12 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//These are added by the user and considered to
-				//always be of use
+				/**
+				 * Asm inline statements are also
+				 * always important because we don't 
+				 * analyze them, so the user assumes that
+				 * their direct code will be executed
+				 */
 				case THREE_ADDR_CODE_ASM_INLINE_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
@@ -1516,9 +1539,11 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//Since we don't know whether or not a function
-				//that is being called performs an important task,
-				//we also always consider it to be important
+				/**
+				 * Since we don't know whether or not a function
+				 * that is being called performs an important task,
+				 * we also always consider it to be important
+				 */
 				case THREE_ADDR_CODE_FUNC_CALL:
 					current_stmt->mark = TRUE;
 					//Add it to the list
@@ -1527,10 +1552,12 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//Indirect function calls are the same as function calls. They will
-				//always count becuase we do not know whether or not the indirectly
-				//called function performs some important task. As such, we will 
-				//mark it as important
+				/**
+				 * Indirect function calls are the same as function calls. They will 
+				 * always count becuase we do not know whether or not the indirectly
+				 * called function performs some important task. As such, we will 
+				 * mark it as important
+				 */
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 					current_stmt->mark = TRUE;
 					//Add it to the list
@@ -1539,9 +1566,11 @@ static void mark(cfg_t* cfg){
 					current->contains_mark = TRUE;
 					break;
 
-				//And finally idle statements are considered important
-				//because they literally do nothing, so if the user
-				//put them there, we'll assume that it was for a good reason
+				/**
+				 * And finally idle statements are considered important
+				 * because they literally do nothing, so if the user
+				 * put them there, we'll assume that it was for a good reason
+				 */
 				case THREE_ADDR_CODE_IDLE_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
