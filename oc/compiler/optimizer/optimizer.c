@@ -1260,15 +1260,16 @@ static void mark_and_add_memory_writes(cfg_t* cfg, dynamic_array_t* worklist, sy
 		//Run through every statement in here
 		while(cursor != NULL){
 			//If this is NULL or already marked then we don't care
-			if(cursor->assignee == NULL){
+			if(cursor->mark == TRUE 
+				|| cursor->assignee == NULL 
+				|| cursor->assignee->related_memory_address == NULL){
 				cursor = cursor->previous_statement;
 				continue;
 			}
 
 			//This will be in our "related write var" field. All we need to do is see
 			//if the related write field matches our var
-			if(cursor->assignee->related_memory_address != NULL
-				&& cursor->assignee->access_type == MEMORY_ACCESS_WRITE
+			if(cursor->assignee->access_type == MEMORY_ACCESS_WRITE
 				&& cursor->assignee->related_memory_address == related_memory_address){
 
 				//This is a case where we mark
@@ -1609,56 +1610,6 @@ static void mark(cfg_t* cfg){
 							dynamic_array_add(worklist, current_stmt);
 							//This has a mark
 							current->contains_mark = TRUE;
-						}
-					}
-
-					//What if we're reassigning a parameter pointer in the body? If so, we'll
-					//need to also keep track of the new value where it went
-					if(current_stmt->op1 != NULL
-						&& is_memory_address_type(current_stmt->op1->type) == TRUE
-						&& current_stmt->op1->linked_var != NULL){ //Can't just be a temp var
-						//Grab for convenience
-						three_addr_var_t* op1 = current_stmt->op1;
-						three_addr_var_t* assignee = current_stmt->assignee;
-
-						//If this is a function parameter, we'll need to mark whatever it's assigne to
-						if(op1->linked_var->is_function_parameter == TRUE 
-							&& is_memory_address_type(assignee->type) == TRUE){
-
-							//Two options here - we could have some kind of temp reassignment, or
-							//we could have a direct assignment
-							
-							/**
-							 * Case 1: direct assignment like this:
-							 * 	ptr_0 <- struct_pointer_0
-							 *
-							 * 	We'll need to mark everything with pointer 0
-							 */
-							if(assignee->linked_var != NULL){
-								mark_and_add_memory_writes(cfg, worklist, assignee->linked_var);
-
-							//Otherwise, keep crawling until you do hit one
-							} else {
-								//Grab a cursor
-								instruction_t* cursor = current_stmt->next_statement;
-
-								//Keep crawling down
-								while(cursor != NULL){
-									//We're looking for an assign statement where the op1 is
-									//the assignee of the old statement
-									if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT
-										&& cursor->assignee->is_temporary == FALSE
-										&& cursor->op1->temp_var_number == assignee->temp_var_number){
-
-										//Done here
-										mark_and_add_memory_writes(cfg, worklist, cursor->assignee->linked_var);
-										break;
-									}
-
-									//Keep going
-									cursor = cursor->next_statement;
-								}
-							}
 						}
 					}
 
