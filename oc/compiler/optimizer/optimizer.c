@@ -1452,6 +1452,25 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
+ *
+ * for each operation i:
+ * 	clear i's mark
+ * 	if i is critical then
+ * 		mark i
+ * 		add i to the worklist
+ * 	while worklist not empty
+ * 		remove i from the worklist i is x <- y op z
+ * 		if def(y) is not marked then
+ * 			mark def(y)
+ * 			add def(y) to worklist
+ * 		if def(z) is not marked then
+ * 			mark def(z)
+ * 			add def(y) to worklist
+ * 		for each block b in RDF(block(i))
+ * 			let j be the branch that ends b
+ * 			if j is unmarked then
+ * 				mark j
+ * 				add j to worklist
  */
 static void mark(cfg_t* cfg){
 	//First we'll need a worklist
