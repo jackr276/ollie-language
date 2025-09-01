@@ -1257,7 +1257,6 @@ static void mark_and_add_greater_ssa_defintions(cfg_t* cfg, symtab_variable_reco
 
 		//So long as this isn't NULL
 		while(stmt != NULL){
-			printf("HERE\n");
 			//If it's marked we're out of here
 			if(stmt->mark == TRUE 
 				|| stmt->assignee == NULL 
