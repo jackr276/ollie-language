@@ -11,12 +11,12 @@
 #include <time.h>
 #include "ast/ast.h"
 #include "parser/parser.h"
-#include "code_generator/code_generator.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
+#include "register_allocator/register_allocator.h"
+#include "instruction_selector/instruction_selector.h"
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
-#include "type_system/type_system.h"
 
 //For standardization across all modules
 #define TRUE 1
@@ -35,12 +35,13 @@ static void print_help(){
 	printf("\n######################################## Required Fields #########################################\n");
 	printf("-f <filename>: Required field. Specifies the .ol source file to be compiled\n");
 	printf("\n######################################## Optional Fields #########################################\n");
-	printf("-o <filename>: Specificy the output location. If none is given, out.ol will be used\n");
+	printf("-o <filename>: Specificy the output location. If none is given, out.s will be used\n");
 	printf("-s: Show a summary at the end of compilation\n");
 	printf("-a: Generate an assembly code file with a .s extension\n");
 	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
 	printf("-t: Time execution of compiler. Can be used for performance testing\n");
-	printf("-@: Should only be used for CI runs\n");
+	printf("-m: Time each module of the compiler. This is used for even more granular performance testing\n");
+	printf("-@: Should only be used for CI runs. Avoids generating any assembly files\n");
 	printf("-i: Print intermediate representations. This will generate *a lot* of text, so be careful\n");
 	printf("-h: Show help\n");
 	printf("\n==================================================================================================\n");
@@ -59,7 +60,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt(argc, argv, "ia@tdhsf:o:?")) != -1){
+	while((opt = getopt(argc, argv, "ima@tdhsf:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option
@@ -99,6 +100,10 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			case 'i':
 				options->print_irs = TRUE;
 				break;
+			//Specify that we want to have timing that is specific by module
+			case 'm':
+				options->module_specific_timing = TRUE;
+				break;
 			//Specific output file
 			case 'o':
 				options->output_file = optarg;
@@ -121,7 +126,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
  * Print a final summary for the ollie compiler. This could show success or
  * failure, based on what the caller wants
  */
-static void print_summary(compiler_options_t* options, double time_spent, u_int32_t lines_processed, u_int32_t num_errors, u_int32_t num_warnings, u_int8_t success){
+static void print_summary(compiler_options_t* options, module_times_t* times, u_int32_t lines_processed, u_int32_t num_errors, u_int32_t num_warnings, u_int8_t success){
 	//For holding our message
 	char info[500];
 
@@ -134,9 +139,21 @@ static void print_summary(compiler_options_t* options, double time_spent, u_int3
 
 	printf("============================================= SUMMARY =======================================\n");
 	printf("Lexer processed %d lines\n", lines_processed);
-	if(options->time_execution == TRUE){
-		printf("Compilation took %.8f seconds\n", time_spent);
+
+	//If we want module specific timing, we'll print out here
+	if(options->module_specific_timing == TRUE){
+		printf("Parser took: %.8f seconds\n", times->parser_time);
+		printf("CFG constuctor took: %.8f seconds\n", times->cfg_time);
+		printf("Optimizer took: %.8f seconds\n", times->optimizer_time);
+		printf("Instruction Selector took: %.8f seconds\n", times->selector_time);
+		printf("Register Allocator took: %.8f seconds\n", times->allocator_time);
 	}
+
+	//Print out the total time
+	if(options->time_execution == TRUE || options->module_specific_timing == TRUE){
+		printf("Compilation took %.8f seconds\n", times->total_time);
+	}
+
 	printf("%s\n", info);
 	printf("=============================================================================================\n");
 }
@@ -148,6 +165,9 @@ static void print_summary(compiler_options_t* options, double time_spent, u_int3
  * manages that for us
  */
 static u_int8_t compile(compiler_options_t* options){
+	//Declare our times and set all to 0
+	module_times_t times = {0, 0, 0, 0, 0, 0};
+
 	//Print out the file name if we're debug printing
 	if(options->enable_debug_printing == TRUE){
 		printf("Compiling source file: %s\n\n\n", options->file_name);
@@ -158,13 +178,19 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("[WARNING]: No output file name given. The name \"out.s\" will be used\n\n");
 	}
 
-	//Timer vars if we want to time things
-	double time_spent = 0;
+	//And we'll keep track of everything we have here
 	clock_t begin = 0;
+	clock_t parser_end = 0;
+	clock_t cfg_end = 0;
+	clock_t optimizer_end = 0;
+	clock_t selector_end = 0;
+	clock_t allocator_end = 0;
+
+	//This is the true "end" when all has finished
 	clock_t end = 0;
 
 	//If we want to time the execution, we'll start the clock
-	if(options->time_execution == TRUE){
+	if(options->time_execution == TRUE || options->module_specific_timing == TRUE){
 		begin = clock();
 	}
 
@@ -182,11 +208,11 @@ static u_int8_t compile(compiler_options_t* options){
 		end = clock();
 
 		//Crude time calculation
-		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+		times.total_time = (double)(end - begin) / CLOCKS_PER_SEC;
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, FALSE);
+			print_summary(options, &times, results->lines_processed, num_errors, num_warnings, FALSE);
 		}
 
 		//If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
@@ -198,6 +224,16 @@ static u_int8_t compile(compiler_options_t* options){
 		}
 	}
 
+	//If we are doing module specific timing, store the parser time
+	if(options->module_specific_timing == TRUE){
+		//End the parser timer
+		parser_end = clock();
+
+		//Crude time calculation
+		times.parser_time = (double)(parser_end - begin) / CLOCKS_PER_SEC;
+	}
+
+
 	//Now we'll build the cfg using our results
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
 
@@ -206,6 +242,15 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
 		print_all_cfg_blocks(cfg);
 		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
+	}
+
+	//If we are doing module specific timing, store the cfg time
+	if(options->module_specific_timing == TRUE){
+		//End the parser timer
+		cfg_end = clock();
+
+		//Crude time calculation. The CFG starts when the parser ends
+		times.cfg_time = (double)(cfg_end - parser_end) / CLOCKS_PER_SEC;
 	}
 
 	//Now we will run the optimizer
@@ -218,10 +263,52 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("============================================= AFTER OPTIMIZATION =======================================\n");
 	}
 
-	//Now that we're done optimizing, we can invoke the code generator
+	//If we are doing module specific timing, store the optimizer time
+	if(options->module_specific_timing == TRUE){
+		//End the optimizer timer
+		optimizer_end = clock();
+
+		//Crude time calculation. The optimizer starts when the cfg ends
+		times.optimizer_time = (double)(optimizer_end - cfg_end) / CLOCKS_PER_SEC;
+	}
+
+	//First we'll go through instruction selection
+	if(options->print_irs == TRUE){
+		printf("=============================== Instruction Selection ==================================\n");
+	}
 	
-	//Invoke the back end
-	generate_assembly_code(options, cfg);
+	//Run the instruction selector. This simplifies and selects instructions
+	select_all_instructions(options, cfg);
+
+	//If we are doing module specific timing, store the selector time
+	if(options->module_specific_timing == TRUE){
+		//End the selector timer
+		selector_end = clock();
+
+		//Crude time calculation. The selector starts when the optimizer ends
+		times.selector_time = (double)(selector_end - optimizer_end) / CLOCKS_PER_SEC;
+	}
+
+	if(options->print_irs == TRUE){
+		printf("=============================== Instruction Selection ==================================\n");
+		printf("=============================== Register Allocation ====================================\n");
+	}
+	
+	//Run the register allocator. This will take the OIR version and truly put it into assembler-ready code
+	allocate_all_registers(options, cfg);
+
+	//If we are doing module specific timing, store the selector time
+	if(options->module_specific_timing == TRUE){
+		//End the selector timer
+		allocator_end = clock();
+
+		//Crude time calculation. The allocator starts when the selector ends
+		times.allocator_time = (double)(allocator_end - selector_end) / CLOCKS_PER_SEC;
+	}
+
+	if(options->print_irs == TRUE){
+		printf("=============================== Register Allocation  ===================================\n");
+	}
 
 	//Now we'll assemble the file *if* we are not doing a CI run
 	if(options->is_test_run == FALSE){
@@ -229,17 +316,17 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	//Finish the timer here if we need to
-	if(options->time_execution == TRUE){
+	if(options->time_execution == TRUE || options->module_specific_timing == TRUE){
 		//Timer end
 		clock_t end = clock();
 
 		//Crude time calculation
-		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+		times.total_time = (double)(end - begin) / CLOCKS_PER_SEC;
 	}
 
 	//Show the summary if we need to
 	if(options->show_summary == TRUE){
-		print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, TRUE);
+		print_summary(options, &times, results->lines_processed, num_errors, num_warnings, TRUE);
 	}
 
 	/**

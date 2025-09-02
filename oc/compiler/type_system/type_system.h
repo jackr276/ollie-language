@@ -40,36 +40,6 @@ typedef struct struct_type_t struct_type_t;
 typedef struct struct_type_field_t struct_type_field_t;
 //An aliased type
 typedef struct aliased_type_t aliased_type_t;
-//Compiler option type
-typedef struct compiler_options_t compiler_options_t;
-
-
-/**
- * Define an enum that stores all compiler options.
- * This struct will be used throughout the compiler
- * to tell us what to print out
- */
-struct compiler_options_t {
-	//The name of the file(-f)
-	char* file_name;
-	//The name of the output file(-o )
-	char* output_file;
-	//Do we want to skip outputting
-	//to assembly? 
-	u_int8_t skip_output;
-	//Enable all debug printing 
-	u_int8_t enable_debug_printing;
-	//Print out summary? 
-	u_int8_t show_summary;
-	//Only output assembly(no .o)
-	u_int8_t go_to_assembly; 
-	//Time execution for performance testing
-	u_int8_t time_execution;
-	//Is this a CI run?
-	u_int8_t is_test_run;
-	//Print intermediate representations
-	u_int8_t print_irs;
-};
 
 
 //A type for which side we're on

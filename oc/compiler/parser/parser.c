@@ -3937,9 +3937,6 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Declare a token for search-ahead
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//Is a function parameter mutable? We always assume no by default
-	u_int8_t is_mutable;
-
 	//Now we need to see an L_PAREN
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
@@ -7295,8 +7292,6 @@ static generic_ast_node_t* statement(FILE* fl){
 static generic_ast_node_t* default_statement(FILE* fl){
 	//Lookaehad token
 	lexitem_t lookahead;
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
 	//Root level variable for the default compound statement
 	generic_ast_node_t* default_compound_statement;
 
@@ -8860,6 +8855,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 				num_errors++;
 				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 			}
+
+			//Extract the cursor variable for this one
+			func_param = param_list_cursor->variable;
 
 			//Grab the type out for validation 
 			generic_type_t* parameter_type = function_signature_type->parameters[param_count].parameter_type;
