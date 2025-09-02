@@ -4,7 +4,6 @@
  * The compiler for Ollie-Lang. Depends on the lexer and the parser. See documentation for
  * full option details
 */
-#include <ctime>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -12,9 +11,10 @@
 #include <time.h>
 #include "ast/ast.h"
 #include "parser/parser.h"
-#include "code_generator/code_generator.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
+#include "register_allocator/register_allocator.h"
+#include "instruction_selector/instruction_selector.h"
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
 
@@ -257,10 +257,28 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("============================================= AFTER OPTIMIZATION =======================================\n");
 	}
 
-	//Now that we're done optimizing, we can invoke the code generator
+	//Grab this out so we don't need to load every time
+	u_int8_t print_irs = options->print_irs;
+
+	//First we'll go through instruction selection
+	if(print_irs == TRUE){
+		printf("=============================== Instruction Selection ==================================\n");
+	}
 	
-	//Invoke the back end
-	generate_assembly_code(options, cfg);
+	//Run the instruction selector. This simplifies and selects instructions
+	select_all_instructions(options, cfg);
+
+	if(print_irs == TRUE){
+		printf("=============================== Instruction Selection ==================================\n");
+		printf("=============================== Register Allocation ====================================\n");
+	}
+	
+	//Run the register allocator. This will take the OIR version and truly put it into assembler-ready code
+	allocate_all_registers(options, cfg);
+
+	if(print_irs == TRUE){
+		printf("=============================== Register Allocation  ===================================\n");
+	}
 
 	//Now we'll assemble the file *if* we are not doing a CI run
 	if(options->is_test_run == FALSE){
