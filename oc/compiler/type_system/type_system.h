@@ -18,6 +18,8 @@
 #define MAX_TYPE_NAME_LENGTH 200
 //The maximum number of members in a construct
 #define MAX_STRUCT_MEMBERS 100
+//The maximum number of members in a union
+#define MAX_UNION_MEMBERS 100
 //The maximum number of members in an enumerated
 #define MAX_ENUMERATED_MEMBERS 200
 
@@ -40,6 +42,8 @@ typedef struct struct_type_t struct_type_t;
 typedef struct struct_type_field_t struct_type_field_t;
 //An aliased type
 typedef struct aliased_type_t aliased_type_t;
+//A union type
+typedef struct union_type_t union_type_t;
 
 
 //A type for which side we're on
@@ -59,6 +63,7 @@ typedef enum type_class_t {
 	TYPE_CLASS_ENUMERATED,
 	TYPE_CLASS_POINTER,
 	TYPE_CLASS_FUNCTION_SIGNATURE, /* Function pointer type */
+	TYPE_CLASS_UNION, /* For discriminating union types */
 	TYPE_CLASS_ALIAS /* Alias types */
 } type_class_t;
 
@@ -83,6 +88,7 @@ struct generic_type_t{
 		struct_type_t* struct_type;
 		enumerated_type_t* enumerated_type;
 		aliased_type_t* aliased_type;
+		union_type_t* union_type;
 	} internal_types;
 
 	//When was it defined: -1 = generic type
@@ -148,6 +154,20 @@ struct struct_type_t{
 	//The size of the largest member
 	u_int32_t largest_member_size;
 	//The next index
+	u_int8_t next_index;
+};
+
+
+/**
+ * A union type contains a list of fields(stored as variables) that reside inside
+ * of it. As such, the type here contains an array of generic types of at most 100
+ */
+struct union_type_t {
+	//The members, stored as symtab variables
+	void* members[MAX_UNION_MEMBERS];
+	//The size of the largest member - the overall size of the union is determined by this
+	u_int32_t largest_member_size;
+	//The next index in the members array
 	u_int8_t next_index;
 };
 

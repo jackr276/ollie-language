@@ -1525,7 +1525,22 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 /**
  * Dynamically allocate and create a union type
  */
-generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number){
+	//Dynamically allocate the union type
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Move the name over
+	type->type_name = type_name;
+
+	//The line number where this was created
+	type->line_number = line_number;
+
+	//Reserve space for the internal type as well
+	type->internal_types.union_type = calloc(1, sizeof(union_type_t));
+
+	//And give the type pointer back
+	return type;
+}
 
 
 /**
@@ -1894,6 +1909,7 @@ generic_type_t* dealias_type(generic_type_t* type){
 	return raw_type;
 }
 
+
 /**
  * Provide a way of destroying a type variable easily
 */
@@ -1917,6 +1933,9 @@ void type_dealloc(generic_type_t* type){
 			break;
 		case TYPE_CLASS_STRUCT:
 			free(type->internal_types.struct_type);
+			break;
+		case TYPE_CLASS_UNION:
+			free(type->internal_types.union_type);
 			break;
 		default:
 			break;
