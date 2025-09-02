@@ -16,7 +16,6 @@
 #include "cfg/cfg.h"
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
-#include "type_system/type_system.h"
 
 //For standardization across all modules
 #define TRUE 1

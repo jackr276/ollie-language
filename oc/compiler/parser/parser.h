@@ -13,6 +13,7 @@
 #include "../type_system/type_system.h"
 #include "../ast/ast.h"
 #include "../call_graph/call_graph.h"
+#include "../utils/compiler_options.h"
 #include <sys/types.h>
 
 typedef struct parse_message_t parse_message_t;
