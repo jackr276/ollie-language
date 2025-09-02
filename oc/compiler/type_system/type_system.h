@@ -11,7 +11,6 @@
 #include "../lexer/lexer.h"
 #include <sys/types.h>
 
-#define OUT_OF_BOUNDS 3
 #define MAX_FUNCTION_TYPE_PARAMS 6
 
 //Type names may not exceed 200 characters in length
@@ -165,8 +164,6 @@ struct struct_type_t{
 struct union_type_t {
 	//The members, stored as symtab variables
 	void* members[MAX_UNION_MEMBERS];
-	//The size of the largest member - the overall size of the union is determined by this
-	u_int32_t largest_member_size;
 	//The next index in the members array
 	u_int8_t next_index;
 };
@@ -330,6 +327,11 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
  * Add a value into a construct's table
  */
 u_int8_t add_struct_member(generic_type_t* type, void* member_var);
+
+/**
+ * Add a value into the union's list of members
+ */
+u_int8_t add_union_member(generic_type_t* union_type, void* member_var);
 
 /**
  * Finalize the struct alignment

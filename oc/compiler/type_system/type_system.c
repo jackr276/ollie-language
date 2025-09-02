@@ -1553,7 +1553,7 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 
 	//Check for size constraints
 	if(construct->next_index >= MAX_STRUCT_MEMBERS){
-		return OUT_OF_BOUNDS;
+		return FAILURE;
 	}
 
 	//Grab this reference out, for convenience
@@ -1650,6 +1650,36 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	construct->struct_table[construct->next_index] = entry;
 	construct->next_index += 1;
 
+	return SUCCESS;
+}
+
+
+/**
+ * Add a value into the union's list of members
+ */
+u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
+	//Let's extract the union member and variable record for convenience
+	symtab_variable_record_t* record = member_var;
+	union_type_t* internal_union_type = union_type->internal_types.union_type;
+
+	//We've overflowed the bounds here, so fail out
+	if(internal_union_type->next_index == MAX_UNION_MEMBERS){
+		return FAILURE;
+	}
+
+	//Add the member variable in
+	internal_union_type->members[internal_union_type->next_index] = member_var;
+
+	//Increment the next index
+	internal_union_type->next_index++;
+
+	//If the size of this value is larger than the total size, we need to reassign
+	//the total size to this. Union types are always as large as their largest memeber
+	if(record->type_defined_as->type_size > union_type->type_size){
+		union_type->type_size = record->type_defined_as->type_size;
+	}
+
+	//All went well
 	return SUCCESS;
 }
 

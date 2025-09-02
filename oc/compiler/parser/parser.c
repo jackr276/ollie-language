@@ -3731,7 +3731,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
  *
  * BNF Rule: <construct-member> ::= {mut}? <identifier> : <type-specifier> 
  */
-static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t side){
+static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this mutable? False by default
@@ -3750,7 +3750,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 
 	//Otherwise we know that it worked here
 	//Now we need to see a valid ident and check it for duplication
-	generic_ast_node_t* ident = identifier(fl, side);	
+	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);	
 
 	//Let's make sure it actually worked
 	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3842,7 +3842,14 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	member_record->is_mutable = is_mutable;
 
 	//Add it to the construct
-	add_struct_member(construct, member_record);
+	u_int8_t status = add_struct_member(construct, member_record);
+
+	//If this did not work, then we fail out
+	if(status == FAILURE){
+		sprintf(info, "Structs may only have up to %d members", MAX_STRUCT_MEMBERS);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		return FAILURE;
+	}
 
 	//Insert into the variable symtab
 	insert_variable(variable_symtab, member_record);
@@ -3858,7 +3865,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
  *
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
-static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct, side_type_t side){
+static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -3874,7 +3881,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct, side_typ
 		push_back_token(lookahead);
 
 		//We must first see a valid construct member
-		u_int8_t status = struct_member(fl, construct, side);
+		u_int8_t status = struct_member(fl, construct);
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
@@ -4232,7 +4239,7 @@ static u_int8_t struct_definer(FILE* fl){
 	generic_type_t* struct_type = create_struct_type(type_name, current_line);
 
 	//We are now required to see a valid construct member list
-	u_int8_t success = struct_member_list(fl, struct_type, SIDE_TYPE_LEFT);
+	u_int8_t success = struct_member_list(fl, struct_type);
 
 	//Automatic fail case here
 	if(success == FAILURE){
@@ -4367,6 +4374,9 @@ static u_int8_t struct_definer(FILE* fl){
 /**
  * A union member list is a semicolon separated list of different variables that the union stores
  */
+static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
+	return FALSE;
+}
 
 
 
@@ -4412,6 +4422,12 @@ static u_int8_t union_definer(FILE* fl){
 		print_type_name(found_type);
 		return FAILURE;
 	}
+
+	//Create the union type
+	generic_type_t* union_type = create_union_type(union_name, parser_line_num);
+
+	//Once we've created it, we can begin parsing the internals
+
 
 
 
