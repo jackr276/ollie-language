@@ -60,7 +60,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt(argc, argv, "ia@tdhsf:o:?")) != -1){
+	while((opt = getopt(argc, argv, "ima@tdhsf:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option
@@ -139,6 +139,15 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
 
 	printf("============================================= SUMMARY =======================================\n");
 	printf("Lexer processed %d lines\n", lines_processed);
+
+	//If we want module specific timing, we'll print out here
+	if(options->module_specific_timing == TRUE){
+		printf("Parser time: %.8f seconds\n", times->parser_time);
+		printf("CFG constuctor time: %.8f seconds\n", times->cfg_time);
+		printf("Optimizer took %.8f seconds\n", times->optimizer_time);
+		printf("Instruction Selector took %.8f seconds\n", times->selector_time);
+		printf("Register Allocator took %.8f seconds\n", times->allocator_time);
+	}
 
 	//Print out the total time
 	if(options->time_execution == TRUE || options->module_specific_timing == TRUE){
