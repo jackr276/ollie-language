@@ -7,10 +7,11 @@
 
 //Compiler option type
 typedef struct compiler_options_t compiler_options_t;
-
+//For storing times
+typedef struct module_times_t module_times_t;
 
 /**
- * Define an enum that stores all compiler options.
+ * Define a structure that stores all compiler options.
  * This struct will be used throughout the compiler
  * to tell us what to print out
  */
@@ -38,3 +39,22 @@ struct compiler_options_t {
 	u_int8_t print_irs;
 };
 
+
+/**
+ * Define a structure that contains all times 
+ * that we could have for the compiler
+*/
+struct module_times_t {
+	//Parser & lexer
+	double parser_time;
+	//Control flow graph constructor
+	double cfg_time;
+	//Optimizer
+	double optimizer_time;
+	//Instruction selector
+	double selector_time;
+	//Register allocator
+	double allocator_time;
+	//Overall compilation time
+	double total_time;
+};

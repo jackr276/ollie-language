@@ -126,7 +126,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
  * Print a final summary for the ollie compiler. This could show success or
  * failure, based on what the caller wants
  */
-static void print_summary(compiler_options_t* options, double time_spent, u_int32_t lines_processed, u_int32_t num_errors, u_int32_t num_warnings, u_int8_t success){
+static void print_summary(compiler_options_t* options, module_times_t* times, u_int32_t lines_processed, u_int32_t num_errors, u_int32_t num_warnings, u_int8_t success){
 	//For holding our message
 	char info[500];
 
@@ -139,9 +139,12 @@ static void print_summary(compiler_options_t* options, double time_spent, u_int3
 
 	printf("============================================= SUMMARY =======================================\n");
 	printf("Lexer processed %d lines\n", lines_processed);
-	if(options->time_execution == TRUE){
-		printf("Compilation took %.8f seconds\n", time_spent);
+
+	//Print out the total time
+	if(options->time_execution == TRUE || options->module_specific_timing == TRUE){
+		printf("Compilation took %.8f seconds\n", times->total_time);
 	}
+
 	printf("%s\n", info);
 	printf("=============================================================================================\n");
 }
@@ -153,13 +156,8 @@ static void print_summary(compiler_options_t* options, double time_spent, u_int3
  * manages that for us
  */
 static u_int8_t compile(compiler_options_t* options){
-	//Timer vars if we want to time things
-	double time_spent = 0;
-	double parser_time = 0;
-	double cfg_time = 0;
-	double optimizer_time = 0; 
-	double selector_time = 0;
-	double allocator_time = 0;
+	//Declare our times and set all to 0
+	module_times_t times = {0, 0, 0, 0, 0, 0};
 
 	//Print out the file name if we're debug printing
 	if(options->enable_debug_printing == TRUE){
@@ -201,11 +199,11 @@ static u_int8_t compile(compiler_options_t* options){
 		end = clock();
 
 		//Crude time calculation
-		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+		times.total_time = (double)(end - begin) / CLOCKS_PER_SEC;
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, FALSE);
+			print_summary(options, &times, results->lines_processed, num_errors, num_warnings, FALSE);
 		}
 
 		//If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
@@ -223,7 +221,7 @@ static u_int8_t compile(compiler_options_t* options){
 		parser_end = clock();
 
 		//Crude time calculation
-		parser_time = (double)(parser_end - begin) / CLOCKS_PER_SEC;
+		times.parser_time = (double)(parser_end - begin) / CLOCKS_PER_SEC;
 	}
 
 
@@ -243,7 +241,7 @@ static u_int8_t compile(compiler_options_t* options){
 		cfg_end = clock();
 
 		//Crude time calculation. The CFG starts when the parser ends
-		cfg_time = (double)(cfg_end - parser_end) / CLOCKS_PER_SEC;
+		times.cfg_time = (double)(cfg_end - parser_end) / CLOCKS_PER_SEC;
 	}
 
 	//Now we will run the optimizer
@@ -262,7 +260,7 @@ static u_int8_t compile(compiler_options_t* options){
 		optimizer_end = clock();
 
 		//Crude time calculation. The optimizer starts when the cfg ends
-		optimizer_time = (double)(optimizer_end - cfg_end) / CLOCKS_PER_SEC;
+		times.optimizer_time = (double)(optimizer_end - cfg_end) / CLOCKS_PER_SEC;
 	}
 
 	//First we'll go through instruction selection
@@ -279,7 +277,7 @@ static u_int8_t compile(compiler_options_t* options){
 		selector_end = clock();
 
 		//Crude time calculation. The selector starts when the optimizer ends
-		selector_time = (double)(selector_end - optimizer_end) / CLOCKS_PER_SEC;
+		times.selector_time = (double)(selector_end - optimizer_end) / CLOCKS_PER_SEC;
 	}
 
 	if(options->print_irs == TRUE){
@@ -296,7 +294,7 @@ static u_int8_t compile(compiler_options_t* options){
 		allocator_end = clock();
 
 		//Crude time calculation. The allocator starts when the selector ends
-		allocator_time = (double)(allocator_end - selector_end) / CLOCKS_PER_SEC;
+		times.allocator_time = (double)(allocator_end - selector_end) / CLOCKS_PER_SEC;
 	}
 
 	if(options->print_irs == TRUE){
@@ -314,12 +312,12 @@ static u_int8_t compile(compiler_options_t* options){
 		clock_t end = clock();
 
 		//Crude time calculation
-		time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+		times.total_time = (double)(end - begin) / CLOCKS_PER_SEC;
 	}
 
 	//Show the summary if we need to
 	if(options->show_summary == TRUE){
-		print_summary(options, time_spent, results->lines_processed, num_errors, num_warnings, TRUE);
+		print_summary(options, &times, results->lines_processed, num_errors, num_warnings, TRUE);
 	}
 
 	/**
