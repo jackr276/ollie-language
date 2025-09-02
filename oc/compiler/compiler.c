@@ -4,6 +4,7 @@
  * The compiler for Ollie-Lang. Depends on the lexer and the parser. See documentation for
  * full option details
 */
+#include <ctime>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -99,6 +100,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			case 'i':
 				options->print_irs = TRUE;
 				break;
+			//Specify that we want to have timing that is specific by module
 			case 'm':
 				options->module_specific_timing = TRUE;
 				break;
@@ -151,6 +153,14 @@ static void print_summary(compiler_options_t* options, double time_spent, u_int3
  * manages that for us
  */
 static u_int8_t compile(compiler_options_t* options){
+	//Timer vars if we want to time things
+	double time_spent = 0;
+	double parser_time = 0;
+	double cfg_time = 0;
+	double optimizer_time = 0; 
+	double selector_time = 0;
+	double allocator_time = 0;
+
 	//Print out the file name if we're debug printing
 	if(options->enable_debug_printing == TRUE){
 		printf("Compiling source file: %s\n\n\n", options->file_name);
@@ -161,13 +171,19 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("[WARNING]: No output file name given. The name \"out.s\" will be used\n\n");
 	}
 
-	//Timer vars if we want to time things
-	double time_spent = 0;
+	//And we'll keep track of everything we have here
 	clock_t begin = 0;
+	clock_t parser_end = 0;
+	clock_t cfg_end = 0;
+	clock_t optimizer_end = 0;
+	clock_t selector_end = 0;
+	clock_t allocator_end = 0;
+
+	//This is the true "end" when all has finished
 	clock_t end = 0;
 
 	//If we want to time the execution, we'll start the clock
-	if(options->time_execution == TRUE){
+	if(options->time_execution == TRUE || options->module_specific_timing == TRUE){
 		begin = clock();
 	}
 
@@ -201,8 +217,28 @@ static u_int8_t compile(compiler_options_t* options){
 		}
 	}
 
+	//If we are doing module specific timing, store the parser time
+	if(options->module_specific_timing == TRUE){
+		//End the parser timer
+		parser_end = clock();
+
+		//Crude time calculation
+		parser_time = (double)(parser_end - begin) / CLOCKS_PER_SEC;
+	}
+
+
 	//Now we'll build the cfg using our results
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
+
+	//If we are doing module specific timing, store the parser time
+	if(options->module_specific_timing == TRUE){
+		//End the parser timer
+		cfg_end = clock();
+
+		//Crude time calculation. The CFG starts when the parser ends
+		cfg_time = (double)(cfg_end - parser_end) / CLOCKS_PER_SEC;
+	}
+
 
 	//If we're doing debug printing, then we'll print this
 	if(options->print_irs == TRUE){
@@ -232,7 +268,7 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	//Finish the timer here if we need to
-	if(options->time_execution == TRUE){
+	if(options->time_execution == TRUE || options->module_specific_timing == TRUE){
 		//Timer end
 		clock_t end = clock();
 
