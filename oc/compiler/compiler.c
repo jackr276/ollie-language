@@ -142,11 +142,11 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
 
 	//If we want module specific timing, we'll print out here
 	if(options->module_specific_timing == TRUE){
-		printf("Parser time: %.8f seconds\n", times->parser_time);
-		printf("CFG constuctor time: %.8f seconds\n", times->cfg_time);
-		printf("Optimizer took %.8f seconds\n", times->optimizer_time);
-		printf("Instruction Selector took %.8f seconds\n", times->selector_time);
-		printf("Register Allocator took %.8f seconds\n", times->allocator_time);
+		printf("Parser took: %.8f seconds\n", times->parser_time);
+		printf("CFG constuctor took: %.8f seconds\n", times->cfg_time);
+		printf("Optimizer took: %.8f seconds\n", times->optimizer_time);
+		printf("Instruction Selector took: %.8f seconds\n", times->selector_time);
+		printf("Register Allocator took: %.8f seconds\n", times->allocator_time);
 	}
 
 	//Print out the total time
