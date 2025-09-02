@@ -230,21 +230,20 @@ static u_int8_t compile(compiler_options_t* options){
 	//Now we'll build the cfg using our results
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);
 
-	//If we are doing module specific timing, store the parser time
+	//If we're doing debug printing, then we'll print this
+	if(options->print_irs == TRUE){
+		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
+		print_all_cfg_blocks(cfg);
+		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
+	}
+
+	//If we are doing module specific timing, store the cfg time
 	if(options->module_specific_timing == TRUE){
 		//End the parser timer
 		cfg_end = clock();
 
 		//Crude time calculation. The CFG starts when the parser ends
 		cfg_time = (double)(cfg_end - parser_end) / CLOCKS_PER_SEC;
-	}
-
-
-	//If we're doing debug printing, then we'll print this
-	if(options->print_irs == TRUE){
-		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
-		print_all_cfg_blocks(cfg);
-		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
 	}
 
 	//Now we will run the optimizer
@@ -257,18 +256,33 @@ static u_int8_t compile(compiler_options_t* options){
 		printf("============================================= AFTER OPTIMIZATION =======================================\n");
 	}
 
-	//Grab this out so we don't need to load every time
-	u_int8_t print_irs = options->print_irs;
+	//If we are doing module specific timing, store the optimizer time
+	if(options->module_specific_timing == TRUE){
+		//End the optimizer timer
+		optimizer_end = clock();
+
+		//Crude time calculation. The optimizer starts when the cfg ends
+		optimizer_time = (double)(optimizer_end - cfg_end) / CLOCKS_PER_SEC;
+	}
 
 	//First we'll go through instruction selection
-	if(print_irs == TRUE){
+	if(options->print_irs == TRUE){
 		printf("=============================== Instruction Selection ==================================\n");
 	}
 	
 	//Run the instruction selector. This simplifies and selects instructions
 	select_all_instructions(options, cfg);
 
-	if(print_irs == TRUE){
+	//If we are doing module specific timing, store the selector time
+	if(options->module_specific_timing == TRUE){
+		//End the selector timer
+		selector_end = clock();
+
+		//Crude time calculation. The selector starts when the optimizer ends
+		selector_time = (double)(selector_end - optimizer_end) / CLOCKS_PER_SEC;
+	}
+
+	if(options->print_irs == TRUE){
 		printf("=============================== Instruction Selection ==================================\n");
 		printf("=============================== Register Allocation ====================================\n");
 	}
@@ -276,7 +290,16 @@ static u_int8_t compile(compiler_options_t* options){
 	//Run the register allocator. This will take the OIR version and truly put it into assembler-ready code
 	allocate_all_registers(options, cfg);
 
-	if(print_irs == TRUE){
+	//If we are doing module specific timing, store the selector time
+	if(options->module_specific_timing == TRUE){
+		//End the selector timer
+		allocator_end = clock();
+
+		//Crude time calculation. The allocator starts when the selector ends
+		allocator_time = (double)(allocator_end - selector_end) / CLOCKS_PER_SEC;
+	}
+
+	if(options->print_irs == TRUE){
 		printf("=============================== Register Allocation  ===================================\n");
 	}
 
