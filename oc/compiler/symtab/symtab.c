@@ -898,7 +898,6 @@ void print_function_record(symtab_function_record_t* record){
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->func_name.string);
 	printf("Hash: %d,\n", record->hash);
-	printf("Offset: %p\n", (void*)(record->offset));
 	printf("}\n");
 }
 
@@ -946,7 +945,6 @@ void print_variable_record(symtab_variable_record_t* record){
 	printf("Name: %s,\n", record->var_name.string);
 	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
-	printf("Offset: %p\n", (void*)(record->offset));
 	printf("}\n");
 }
 

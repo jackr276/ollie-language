@@ -102,10 +102,6 @@ struct symtab_function_record_t{
 	dynamic_string_t func_name;
 	//The data area for the whole function
 	stack_data_area_t data_area;
-	//Will be used later, the offset for the address in the data area
-	u_int64_t offset;
-	//The entrance CFG block to the function. There is always only one entrance
-	void* entrance_block;
 	//The associated call graph node with this function
 	void* call_graph_node;
 	//In case of collisions, we can chain these records
@@ -145,8 +141,6 @@ struct symtab_variable_record_t{
 	generic_type_t* type_defined_as;
 	//The next hashtable record
 	symtab_variable_record_t* next;
-	//The offset
-	u_int64_t offset;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it
@@ -200,8 +194,6 @@ struct symtab_type_record_t{
 	int16_t lexical_level;
 	//Line number
 	u_int16_t line_number;
-	//Was it initialized? This is usually for forward-declared structs
-	u_int8_t initialized;
 };
 
 

@@ -1563,7 +1563,6 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	if(construct->next_index == 0){
 		struct_type_field_t entry;	
 		//Currently, we don't need any padding
-		entry.padding = 0;
 		entry.variable = member_var;
 		//This if the very first struct member, so its offset is 0
 		entry.offset = 0;
@@ -1598,8 +1597,6 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 
 	//For right now let's just have this added in
 	entry.variable = var;
-	//And currently, we don't need any padding
-	entry.padding = 0;
 	
 	//Let's now see where the ending address of the struct is. We can find
 	//this ending dress by calculating the offset of the latest field plus
@@ -1633,9 +1630,6 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	} else {
 		needed_padding = current_end % new_entry_size;
 	}
-
-	//This needed padding will go as padding on the prior entry
-	construct->struct_table[construct->next_index - 1].padding = needed_padding;
 
 	//Now we can update the current end
 	current_end = current_end + needed_padding;
@@ -1721,9 +1715,6 @@ void finalize_struct_alignment(generic_type_t* type){
 	//final address
 	u_int32_t needed_padding = type->type_size % type->internal_types.struct_type->largest_member_size;
 
-	//Whatever this needed padding may be, we'll add it to the end as the final padding for our construct
-	type->internal_types.struct_type->struct_table[type->internal_types.struct_type->next_index - 1].padding = needed_padding;
-
 	//Increment the size accordingly
 	type->internal_types.struct_type->size += needed_padding;
 
@@ -1747,11 +1738,8 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 	//Copy the name
 	type->type_name = type_name;
 
-	//Dynamically allocate the aliased type record
-	type->internal_types.aliased_type = calloc(1, sizeof(aliased_type_t));
-
 	//Store this reference in here
-	type->internal_types.aliased_type->aliased_type = aliased_type;
+	type->internal_types.aliased_type = aliased_type;
 
 	return type;
 }
@@ -1932,7 +1920,7 @@ generic_type_t* dealias_type(generic_type_t* type){
 
 	//So long as we keep having an alias
 	while(raw_type->type_class == TYPE_CLASS_ALIAS){
-		raw_type = raw_type->internal_types.aliased_type->aliased_type;
+		raw_type = raw_type->internal_types.aliased_type;
 	}
 
 	//Give the stripped down type back
@@ -1946,9 +1934,6 @@ generic_type_t* dealias_type(generic_type_t* type){
 void type_dealloc(generic_type_t* type){
 	//Free based on what type of type we have
 	switch(type->type_class){
-		case TYPE_CLASS_ALIAS:
-			free(type->internal_types.aliased_type);
-			break;
 		case TYPE_CLASS_ENUMERATED:
 			free(type->internal_types.enumerated_type);
 			break;

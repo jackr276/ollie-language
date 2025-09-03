@@ -39,8 +39,6 @@ typedef struct enumerated_type_t enumerated_type_t;
 typedef struct struct_type_t struct_type_t;
 //A constructed type field
 typedef struct struct_type_field_t struct_type_field_t;
-//An aliased type
-typedef struct aliased_type_t aliased_type_t;
 //A union type
 typedef struct union_type_t union_type_t;
 
@@ -86,7 +84,8 @@ struct generic_type_t{
 		function_type_t* function_type;
 		struct_type_t* struct_type;
 		enumerated_type_t* enumerated_type;
-		aliased_type_t* aliased_type;
+		//The aliased type
+		generic_type_t* aliased_type;
 		union_type_t* union_type;
 	} internal_types;
 
@@ -131,8 +130,6 @@ struct pointer_type_t{
 struct struct_type_field_t{
 	//What variable is stored in here?
 	void* variable;
-	//What kind of padding do we need to ensure alignment?
-	u_int16_t padding;
 	//What is the offset(address) in bytes from the start of this field
 	u_int16_t offset;
 };
@@ -178,16 +175,6 @@ struct enumerated_type_t{
 	void* tokens[MAX_ENUMERATED_MEMBERS];
 	//The current number of tokens
 	u_int8_t token_num;
-};
-
-
-/**
- * An aliased type is quite simply a name that points to the real type. This can
- * be used by the programmer to define simpler names for themselves
- */
-struct aliased_type_t{
-	//What does it point to?
-	generic_type_t* aliased_type;
 };
 
 
