@@ -75,8 +75,13 @@ struct generic_type_t{
 	//The name of the type
 	dynamic_string_t type_name;
 
-	//Based on the type class, we will
-	//interpret here as whichever type is appropriate
+	/**
+	 * All fields in this union are
+	 * mutually exclusive with one another.
+	 * To save space, we'll bundle them all in a union
+	 * and then access whichever is needed based on the type 
+	 * class
+	 */
 	union{
 		array_type_t* array_type;
 		pointer_type_t* pointer_type;
@@ -145,8 +150,6 @@ struct struct_type_t{
 	//the construct members to compute it. Due to this, it would be advantageous for
 	//the programmer to order the structure table with larger elements first
 	struct_type_field_t struct_table[MAX_STRUCT_MEMBERS];
-	//The overall size in bytes of the struct
-	u_int32_t size;
 	//The size of the largest member
 	u_int32_t largest_member_size;
 	//The next index

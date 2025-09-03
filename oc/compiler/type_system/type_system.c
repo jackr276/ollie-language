@@ -1574,7 +1574,7 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 		symtab_variable_record_t* member = member_var;
 
 		//Increment the size by the amount of the type
-		construct->size += member->type_defined_as->type_size;
+		type->type_size += member->type_defined_as->type_size;
 
 		//Add this into the construct table
 		construct->struct_table[construct->next_index] = entry;
@@ -1638,7 +1638,7 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	entry.offset = current_end;
 
 	//Increment the size by the amount of the type and the padding we're adding in
-	construct->size += var->type_defined_as->type_size + needed_padding;
+	type->type_size += var->type_defined_as->type_size + needed_padding;
 
 	//Finally, we can add this new entry in
 	construct->struct_table[construct->next_index] = entry;
@@ -1716,10 +1716,7 @@ void finalize_struct_alignment(generic_type_t* type){
 	u_int32_t needed_padding = type->type_size % type->internal_types.struct_type->largest_member_size;
 
 	//Increment the size accordingly
-	type->internal_types.struct_type->size += needed_padding;
-
-	//Now we move this over to size
-	type->type_size = type->internal_types.struct_type->size;
+	type->type_size += needed_padding;
 }
 
 
