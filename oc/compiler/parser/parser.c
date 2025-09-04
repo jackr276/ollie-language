@@ -4477,6 +4477,9 @@ static u_int8_t enum_definer(FILE* fl){
 		return FAILURE;
 	}
 
+	//We can now create the enum type
+	generic_type_t* enum_type = create_enumerated_type(type_name, parser_line_num);
+
 	//Now that we know we don't have a duplicate, we can now start looking for the enum list
 	//We must first see an L_CURLY
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4491,74 +4494,51 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Push onto the stack for grouping
 	push_token(grouping_stack, lookahead);
-	
-	//Now we must see a valid enum member list
-	generic_ast_node_t* member_list = enum_member_list(fl, SIDE_TYPE_LEFT);
 
-	//If it failed, we bail out
-	if(member_list->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid enumeration member list given in enum definition", current_line);
-		//Destroy the member list
-		return FAILURE;
-	}
+	//The current value starts off at 0
+	u_int32_t current_value = 0;
 
-	//Now that we get down here the only thing left syntatically is to check for the closing curly
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Now we will enter a do-while loop where we can continue to identifiers for our enums
+	do {
+		//We need to see a valid identifier
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//First chance to fail
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enum member list", parser_line_num);
-		num_errors++;
-		//Destroy the member list
-		return FAILURE;
-	}
-
-	//We must also see matching ones here
-	if(pop_token(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected in enum defintion", parser_line_num);
-		num_errors++;
-		//Destroy the member list
-		return FAILURE;
-	}
-
-	//Now that we know everything here has worked, we can finally create the enum type
-	generic_type_t* enum_type = create_enumerated_type(type_name, current_line);
-
-	//Now we will crawl through all of the types that we had and add their references into this enum type's list
-	//This should in theory be an enum member node
-	generic_ast_node_t* cursor = member_list->first_child;	
-
-	//Go through while the cursor isn't null
-	while(cursor != NULL){
-		//Sanity check here, this should be of type enum member
-		if(cursor->ast_node_type != AST_NODE_TYPE_ENUM_MEMBER){
-			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Found non-member node in member list for enum", parser_line_num);
+		//If it's not an identifier, we're done
+		if(lookahead.tok != IDENT){
+			print_parse_message(PARSE_ERROR, "Identifier expected as enum member", parser_line_num);
+			num_errors++;
 			return FAILURE;
 		}
 
-		//Otherwise we're fine
-		//We'll now extract the symtab record that this node holds onto
-		symtab_variable_record_t* variable_rec = cursor->variable;
+		//Now that we have our identifier, we need to ensure it's not a duplicate of anything else
+		symtab_variable_record_t* found_var = lookup_variable(variable_symtab, lookahead.lexeme.string);
 
-		//Associate the type here as well
-		variable_rec->type_defined_as = enum_type;
+		if(found_var != NULL){
 
-		//Increment the size here
-		enum_type->type_size += variable_rec->type_defined_as->type_size;
+		}
 
-		//We will store this in the enum types records
-		enum_type->internal_types.enumerated_type->tokens[enum_type->internal_types.enumerated_type->token_num] = variable_rec;
-		//Increment the number of tokens by one
-		(enum_type->internal_types.enumerated_type->token_num)++;
 
-		//Move the cursor up by one
-		cursor = cursor->next_sibling;
+
+
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//So long as we keep seeing commas
+	} while(lookahead.tok == COMMA);
+
+	//If we get out here, then the lookahead must be an RCURLY. If we don't see it, then fail out
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enumeration definition", parser_line_num); 
+		num_errors++;
+		return FAILURE;
 	}
 
-	//Now that this is all filled out, we can add this to the type symtab
-	insert_type(type_symtab, create_type_record(enum_type));
-
-	//Once we're here the member list is useless, so we'll deallocate it
+	//Ensure that the grouping stack matches
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num); 
+		num_errors++;
+		return FAILURE;
+	}
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
 	//for redefining variables immediately upon declaration. They are prefaced by the "As" keyword
