@@ -80,7 +80,7 @@ struct generic_type_t{
 	 * and then access whichever is needed based on the type 
 	 * class
 	 */
-	union{
+	union {
 		array_type_t* array_type;
 		//What does a pointer type point to?
 		generic_type_t* points_to;
@@ -93,6 +93,21 @@ struct generic_type_t{
 		union_type_t* union_type;
 	} internal_types;
 
+	/**
+	 * Some types like array types also store their
+	 * number of members. Types like pointer
+	 * types store flags that represent whether or not
+	 * they are a void pointer. We'll have this
+	 * "internal values" field to store these mutually
+	 * exclusive fields in an efficient way
+	 */
+	union {
+
+		//Is a type a void pointer?
+		u_int8_t is_void_pointer;
+	} internal_values;
+
+
 	//When was it defined: -1 = generic type
 	int32_t line_number;
 	//All generic types have a size
@@ -101,8 +116,6 @@ struct generic_type_t{
 	Token basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
-	//Is a type a void pointer?
-	u_int8_t is_void_pointer;
 };
 
 

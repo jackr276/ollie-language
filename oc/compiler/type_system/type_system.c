@@ -445,10 +445,10 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				//Likely the most common case
 				case TYPE_CLASS_POINTER:
 					//If this itself is a void pointer, then we're good
-					if(deref_source_type->is_void_pointer == TRUE){
+					if(deref_source_type->internal_values.is_void_pointer == TRUE){
 						return deref_destination_type;
 					//This is also fine, we just give the destination type back
-					} else if(deref_destination_type->is_void_pointer == TRUE){
+					} else if(deref_destination_type->internal_values.is_void_pointer == TRUE){
 						return deref_destination_type;
 					//Let's see if what they point to is the exact same
 					} else {
@@ -1423,11 +1423,11 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 
 	//We need to determine if this is a generic(void) pointer
 	if(points_to->type_class == TYPE_CLASS_BASIC && points_to->basic_type_token == VOID){
-		type->is_void_pointer = TRUE;
+		type->internal_values.is_void_pointer = TRUE;
 
 	//If we're pointing to a void*, we'll also need to carry that up the chain
-	} else if(points_to->type_class == TYPE_CLASS_POINTER && points_to->is_void_pointer == TRUE){
-		type->is_void_pointer = TRUE;
+	} else if(points_to->type_class == TYPE_CLASS_POINTER && points_to->internal_values.is_void_pointer == TRUE){
+		type->internal_values.is_void_pointer = TRUE;
 	}
 
 	//Store what it points to

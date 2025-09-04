@@ -300,7 +300,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	generic_type_t* pointer_type = pointer->inferred_type;
 
 	//If this is a void pointer, we're done
-	if(pointer_type->is_void_pointer == TRUE){
+	if(pointer_type->internal_values.is_void_pointer == TRUE){
 		return print_and_return_error("Void pointers cannot be added or subtracted to", parser_line_num);
 	}
 
@@ -1868,7 +1868,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 		
 			//Otherwise if we made it here, we only have one final tripping point
 			//Ensure that we aren't trying to deref a null pointer
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->is_void_pointer == TRUE){
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_values.is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 			}
 
