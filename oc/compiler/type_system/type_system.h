@@ -30,8 +30,6 @@ typedef struct function_type_t function_type_t;
 typedef struct function_type_parameter_t function_type_parameter_t;
 //An enumerated type
 typedef struct enumerated_type_t enumerated_type_t;
-//A constructed type
-typedef struct struct_type_t struct_type_t;
 //A union type
 typedef struct union_type_t union_type_t;
 
