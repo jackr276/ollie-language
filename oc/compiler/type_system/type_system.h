@@ -9,14 +9,13 @@
 #define TYPE_SYSTEM_H
 
 #include "../lexer/lexer.h"
+#include "../dynamic_array/dynamic_array.h"
 #include <sys/types.h>
 
 #define MAX_FUNCTION_TYPE_PARAMS 6
 
 //Type names may not exceed 200 characters in length
 #define MAX_TYPE_NAME_LENGTH 200
-//The maximum number of members in a construct
-#define MAX_STRUCT_MEMBERS 100
 //The maximum number of members in a union
 #define MAX_UNION_MEMBERS 100
 //The maximum number of members in an enumerated
@@ -33,8 +32,6 @@ typedef struct function_type_parameter_t function_type_parameter_t;
 typedef struct enumerated_type_t enumerated_type_t;
 //A constructed type
 typedef struct struct_type_t struct_type_t;
-//A constructed type field
-typedef struct struct_type_field_t struct_type_field_t;
 //A union type
 typedef struct union_type_t union_type_t;
 
@@ -85,7 +82,7 @@ struct generic_type_t{
 		generic_type_t* points_to;
 		//For function pointers
 		function_type_t* function_type;
-		struct_type_t* struct_type;
+		dynamic_array_t* struct_table;
 		enumerated_type_t* enumerated_type;
 		//The aliased type
 		generic_type_t* aliased_type;
@@ -119,32 +116,6 @@ struct generic_type_t{
 	Token basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
-};
-
-
-/**
- * The struct type's individual members
- */
-struct struct_type_field_t{
-	//What variable is stored in here?
-	void* variable;
-};
-
-
-/**
- * A constructed type contains a list of other types that are inside of it.
- * As such, the type here contains an array of generic types of at most 100
- */
-struct struct_type_t{
-	//We will store internally a pre-aligned construct table. The construct
-	//table itself will be aligned internally, and we'll use the given order of
-	//the construct members to compute it. Due to this, it would be advantageous for
-	//the programmer to order the structure table with larger elements first
-	struct_type_field_t struct_table[MAX_STRUCT_MEMBERS];
-	//The size of the largest member
-	u_int32_t largest_member_size;
-	//The next index
-	u_int8_t next_index;
 };
 
 
@@ -320,9 +291,9 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var);
 void finalize_struct_alignment(generic_type_t* type);
 
 /**
- * Does a constructed type contain a given member variable?
+ * Does this struct contain said member? Return the variable if yes, NULL if not
  */
-struct_type_field_t* get_struct_member(struct_type_t* structure, char* name);
+void* get_struct_member(generic_type_t* structure, char* name);
 
 /**
  * Dynamically allocate and create an array type

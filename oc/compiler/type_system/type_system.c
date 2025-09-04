@@ -1509,8 +1509,8 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 
 	type->type_name = type_name;
 
-	//Reserve space for this
-	type->internal_types.struct_type = calloc(1, sizeof(struct_type_t));
+	//Reserve dynamic array space for the struct table
+	type->internal_types.struct_table = dynamic_array_alloc();
 
 	return type;
 }
@@ -1538,30 +1538,49 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 
 /**
+ * Does this struct contain said member? Return the variable if yes, NULL if not
+ */
+void* get_struct_member(generic_type_t* structure, char* name){
+	//The current variable that we have
+	symtab_variable_record_t* var;
+
+	//Extract for convenience
+	dynamic_array_t* struct_table = structure->internal_types.struct_table;
+
+	//Run through everything here
+	for(u_int16_t _ = 0; _ < struct_table->current_index; _++){
+		//Grab the variable out
+		var = dynamic_array_get_at(struct_table, _);
+
+		//Now we'll do a simple comparison. If they match, we're set
+		if(strcmp(var->var_name.string, name) == 0){
+			//Return the whole record if we find it
+			return var;
+		}
+	}
+
+	//Otherwise if we get down here, it didn't work
+	return NULL;
+}
+
+
+/**
  * Add a value to a struct type. The void* here is a 
  * symtab variable record
  */
 u_int8_t add_struct_member(generic_type_t* type, void* member_var){
-	//Grab this out for convenience
-	struct_type_t* construct = type->internal_types.struct_type;
-
-	//Check for size constraints
-	if(construct->next_index >= MAX_STRUCT_MEMBERS){
-		return FAILURE;
-	}
-
 	//Grab this reference out, for convenience
 	symtab_variable_record_t* var = member_var;
 
+	//Mark that this is a struct member
+	var->is_struct_member = TRUE;
+
 	//If this is the very first one, then we'll 
-	if(construct->next_index == 0){
-		struct_type_field_t entry;	
-		//Currently, we don't need any padding
-		entry.variable = var;
+	if(type->internal_types.struct_table->current_index == 0){
 		var->struct_offset = 0;
 
 		//Also by defualt, this is currently the largest variable that we've seen
-		construct->largest_member_size = var->type_defined_as->type_size;
+		type->internal_values.largest_member_size = var->type_defined_as->type_size;
 
 		//Just grab this as a reference to avoid the need to cast
 		symtab_variable_record_t* member = member_var;
@@ -1569,34 +1588,25 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 		//Increment the size by the amount of the type
 		type->type_size += member->type_defined_as->type_size;
 
-		//Add this into the construct table
-		construct->struct_table[construct->next_index] = entry;
-
-		//Increment the index for the next go around
-		construct->next_index += 1;
+		//Add the variable into the struct table
+		dynamic_array_add(type->internal_types.struct_table, var);
 
 		//This worked, so return success
 		return SUCCESS;
 	}
 	
-	//Otherwise, if we make it down here, it means that we'll need to pay a bit more
-	//attention to alignment as there is more than one field
-	struct_type_field_t entry;
 	//We'll update the largest member, if applicable
-	if(var->type_defined_as->type_size > construct->largest_member_size){
+	if(var->type_defined_as->type_size > type->internal_values.largest_member_size){
 		//Update the largest member if this happens
-		construct->largest_member_size = var->type_defined_as->type_size;
+		type->internal_values.largest_member_size = var->type_defined_as->type_size;
 	}
 
-	//For right now let's just have this added in
-	entry.variable = var;
-	
 	//Let's now see where the ending address of the struct is. We can find
 	//this ending dress by calculating the offset of the latest field plus
 	//the size of the latest variable
 	
 	//The prior variable
-	symtab_variable_record_t* prior_variable = construct->struct_table[construct->next_index - 1].variable;
+	symtab_variable_record_t* prior_variable = dynamic_array_get_at(type->internal_types.struct_table, type->internal_types.struct_table->current_index - 1);
 
 	//And the offset of this entry
 	u_int32_t offset = prior_variable->struct_offset;
@@ -1634,9 +1644,8 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//Increment the size by the amount of the type and the padding we're adding in
 	type->type_size += var->type_defined_as->type_size + needed_padding;
 
-	//Finally, we can add this new entry in
-	construct->struct_table[construct->next_index] = entry;
-	construct->next_index += 1;
+	//Add the variable into the table
+	dynamic_array_add(type->internal_types.struct_table, var);
 
 	return SUCCESS;
 }
@@ -1673,30 +1682,6 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 
 
 /**
- * Does this construct contain said member? Return the variable if yes, NULL if not
- */
-struct_type_field_t* get_struct_member(struct_type_t* construct, char* name){
-	//The current variable that we have
-	symtab_variable_record_t* var;
-
-	//Run through everything here
-	for(u_int16_t _ = 0; _ < construct->next_index; _++){
-		//Grab the variable out
-		var = construct->struct_table[_].variable;
-
-		//Now we'll do a simple comparison. If they match, we're set
-		if(strcmp(var->var_name.string, name) == 0){
-			//Return the whole record if we find it
-			return &(construct->struct_table[_]);
-		}
-	}
-
-	//Otherwise if we get down here, it didn't work
-	return NULL;
-}
-
-
-/**
  * Finalize the construct alignment. This should only be invoked 
  * when we're done processing members
  *
@@ -1707,7 +1692,7 @@ struct_type_field_t* get_struct_member(struct_type_t* construct, char* name){
 void finalize_struct_alignment(generic_type_t* type){
 	//Let's see how far off we are from being a multiple of the
 	//final address
-	u_int32_t needed_padding = type->type_size % type->internal_types.struct_type->largest_member_size;
+	u_int32_t needed_padding = type->type_size % type->internal_values.largest_member_size;
 
 	//Increment the size accordingly
 	type->type_size += needed_padding;
@@ -1931,8 +1916,9 @@ void type_dealloc(generic_type_t* type){
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			free(type->internal_types.function_type);
 			break;
+		//For this one we can deallocate the struct table
 		case TYPE_CLASS_STRUCT:
-			free(type->internal_types.struct_type);
+			dynamic_array_dealloc(type->internal_types.struct_table);
 			break;
 		case TYPE_CLASS_UNION:
 			free(type->internal_types.union_type);

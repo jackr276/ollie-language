@@ -165,7 +165,7 @@ struct symtab_variable_record_t{
 	u_int8_t function_parameter_order;
 	//Is this mutable?
 	u_int8_t is_mutable;
-	//Is this a struct member
+	//Is this a struct member?
 	u_int8_t is_struct_member;
 	//Is it an enumeration member?
 	u_int8_t is_enumeration_member;

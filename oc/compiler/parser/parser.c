@@ -1462,7 +1462,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	char* member_name = ident->string_value.string;
 
 	//Let's see if we can look this up inside of the type
-	symtab_variable_record_t* var_record = get_struct_member(referenced_type->internal_types.struct_type, member_name)->variable;
+	symtab_variable_record_t* var_record = get_struct_member(referenced_type, member_name);
 
 	//If we can't find it we're out
 	if(var_record == NULL){
@@ -3772,13 +3772,13 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//The field, if we can find it
-	struct_type_field_t* duplicate = NULL;
+	symtab_variable_record_t* duplicate = NULL;
 
 	//Is this a duplicate? If so, we fail out
-	if((duplicate = get_struct_member(construct->internal_types.struct_type, name)) != NULL){
+	if((duplicate = get_struct_member(construct, name)) != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(duplicate->variable);
+		print_variable_name(duplicate);
 		num_errors++;
 		return FAILURE;
 	}
@@ -3834,8 +3834,6 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	symtab_variable_record_t* member_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
-	//Mark that this is a construct member
-	member_record->is_struct_member = TRUE;
 	//Store what the type is
 	member_record->type_defined_as = type_spec;
 	//Is it mutable or not
@@ -3843,13 +3841,6 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 
 	//Add it to the construct
 	u_int8_t status = add_struct_member(construct, member_record);
-
-	//If this did not work, then we fail out
-	if(status == FAILURE){
-		sprintf(info, "Structs may only have up to %d members", MAX_STRUCT_MEMBERS);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		return FAILURE;
-	}
 
 	//Insert into the variable symtab
 	insert_variable(variable_symtab, member_record);
@@ -7866,14 +7857,11 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * up
  */
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
-	//Grab the raw struct type out
-	struct_type_t* raw_type = struct_type->internal_types.struct_type;
-
 	//We'll need to extract the struct table and that max index that it holds
-	struct_type_field_t* fields = raw_type->struct_table;
+	dynamic_array_t* struct_table = struct_type->internal_types.struct_table;
 
 	//The number of fields that were defined in the type is here
-	u_int32_t num_fields = raw_type->next_index;
+	u_int32_t num_fields = struct_table->current_index;
 
 	//Initialize a cursor to the initializer list node itself
 	generic_ast_node_t* cursor = initializer_list_node->first_child;
@@ -7891,7 +7879,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		}
 
 		//Grab the variable out
-		symtab_variable_record_t* variable = fields->variable;
+		symtab_variable_record_t* variable = dynamic_array_get_at(struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
 		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor);
@@ -7901,13 +7889,8 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 			return FALSE;
 		}
 
-		//Otherwise it worked, so we'll go to the next one
-		
 		//Increment this counter
 		seen_count++;
-
-		//Push the field pointer up by 1
-		fields++;
 
 		//Advance to the next sibling
 		cursor = cursor->next_sibling;

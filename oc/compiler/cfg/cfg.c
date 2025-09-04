@@ -3094,13 +3094,10 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			}
 
 			//Now we'll grab the associated nstruct record
-			struct_type_field_t* field = get_struct_member(current_type->internal_types.struct_type, var->var_name.string);
+			symtab_variable_record_t* member = get_struct_member(current_type, var->var_name.string);
 
 			//Save this for down the road
 			generic_type_t* struct_type = current_type;
-
-			//The field we have
-			symtab_variable_record_t* member = field->variable;
 
 			//The constant that represents the offset
 			three_addr_const_t* offset = emit_int_constant_direct(member->struct_offset, type_symtab);
@@ -7269,7 +7266,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
 	//Grab the struct type out for reference
-	struct_type_t* struct_type = struct_initializer->inferred_type->internal_types.struct_type;
+	generic_type_t* struct_type = struct_initializer->inferred_type;
 
 	//Grab a cursor to the child
 	generic_ast_node_t* cursor = struct_initializer->first_child;
@@ -7279,8 +7276,11 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
+		//Grab it out
+		symtab_variable_record_t* member_variable = dynamic_array_get_at(struct_type->internal_types.struct_table, member);
+
 		//Grab the offset directly from the struct table
-		u_int32_t offset = ((symtab_variable_record_t*)struct_type->struct_table[member].variable)->struct_offset;
+		u_int32_t offset = member_variable->struct_offset;
 
 		//We'll need to emit the proper address offset calculation for each one
 		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_long_constant_direct(offset, type_symtab), is_branch_ending);
