@@ -263,6 +263,11 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 u_int8_t add_struct_member(generic_type_t* type, void* member_var);
 
 /**
+ * Add a value to an enumeration's list of values
+ */
+u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member);
+
+/**
  * Add a value into the union's list of members
  */
 u_int8_t add_union_member(generic_type_t* union_type, void* member_var);

@@ -1654,6 +1654,20 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 
 
 /**
+ * Add a value to an enumeration's list of values
+ */
+u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member){
+	//Just throw the member in
+	dynamic_array_add(enum_type->internal_types.enumeration_table, enum_member);
+
+	//TODO in the future we can have extra checks for custom-defined enum types
+
+	//All went well
+	return SUCCESS;
+}
+
+
+/**
  * Add a value into the union's list of members
  */
 u_int8_t add_union_member(generic_type_t* union_type, void* member_var){

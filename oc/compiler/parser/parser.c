@@ -4510,15 +4510,53 @@ static u_int8_t enum_definer(FILE* fl){
 			return FAILURE;
 		}
 
-		//Now that we have our identifier, we need to ensure it's not a duplicate of anything else
-		symtab_variable_record_t* found_var = lookup_variable(variable_symtab, lookahead.lexeme.string);
+		//Grab this out for convenience
+		char* member_name = lookahead.lexeme.string;
 
-		if(found_var != NULL){
+		//Check that it isn't some duplicated function name
+		symtab_function_record_t* found_func = lookup_function(function_symtab, member_name);
 
+		//Fail out here
+		if(found_func != NULL){
+			sprintf(info, "Attempt to redefine function \"%s\". First defined here:", member_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print out the function declaration
+			print_function_name(found_func);
+			num_errors++;
+			//Fail out
+			return FAILURE;
 		}
 
+		//Check that it isn't some duplicated variable name
+		symtab_variable_record_t* found_var = lookup_variable(variable_symtab, member_name);
 
+		//Fail out here
+		if(found_var != NULL){
+			sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", member_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print out the original declaration
+			print_variable_name(found_var);
+			num_errors++;
+			//Fail out
+			return FAILURE;
+		}
 
+		//Finally check that it isn't a duplicated type name
+		found_type = lookup_type_name_only(type_symtab, member_name);
+
+		//Fail out here
+		if(found_type!= NULL){
+			sprintf(info, "Attempt to redefine type \"%s\". First defined here:", member_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print out the original declaration
+			print_type_name(found_type);
+			num_errors++;
+			//Fail out
+			return FAILURE;
+		}
+
+		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
+		//to create the record and assign it a type
 
 		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
