@@ -4480,6 +4480,9 @@ static u_int8_t enum_definer(FILE* fl){
 	//We can now create the enum type
 	generic_type_t* enum_type = create_enumerated_type(type_name, parser_line_num);
 
+	//Insert into the type symtab
+	insert_type(type_symtab, create_type_record(enum_type));
+
 	//Now that we know we don't have a duplicate, we can now start looking for the enum list
 	//We must first see an L_CURLY
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4557,6 +4560,19 @@ static u_int8_t enum_definer(FILE* fl){
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
+		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, STORAGE_CLASS_NORMAL);
+
+		//Once it's been created, mark that it is an enum member
+		member_record->is_enumeration_member = TRUE;
+
+		//Going from there, we'll assign the type as the enum type
+		member_record->type_defined_as = enum_type;
+
+		//Now we can insert this into the symtab
+		insert_variable(variable_symtab, member_record);
+
+		//Add this in as a member to our current enum
+		add_enum_member(enum_type, member_record);
 
 		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4576,6 +4592,15 @@ static u_int8_t enum_definer(FILE* fl){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num); 
 		num_errors++;
 		return FAILURE;
+	}
+
+	//Now that we know everything has been assigned, we will go through and assign the actual values
+	for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
+		//Grab it out
+		symtab_variable_record_t* var = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
+
+		//Assign the value here
+		var->enum_member_value = i;
 	}
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
