@@ -103,6 +103,8 @@ struct generic_type_t{
 	union {
 		//The number of members in an array
 		u_int32_t num_members;
+		//The largest member size - used for structs
+		u_int32_t largest_member_size;
 
 		//Is a type a void pointer?
 		u_int8_t is_void_pointer;
@@ -126,8 +128,6 @@ struct generic_type_t{
 struct struct_type_field_t{
 	//What variable is stored in here?
 	void* variable;
-	//What is the offset(address) in bytes from the start of this field
-	u_int16_t offset;
 };
 
 

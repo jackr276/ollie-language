@@ -3103,7 +3103,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			symtab_variable_record_t* member = field->variable;
 
 			//The constant that represents the offset
-			three_addr_const_t* offset = emit_int_constant_direct(field->offset, type_symtab);
+			three_addr_const_t* offset = emit_int_constant_direct(member->struct_offset, type_symtab);
 
 			//This is now the member's type
 			current_type = member->type_defined_as;
@@ -7280,7 +7280,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
 		//Grab the offset directly from the struct table
-		u_int32_t offset = struct_type->struct_table[member].offset;
+		u_int32_t offset = ((symtab_variable_record_t*)struct_type->struct_table[member].variable)->struct_offset;
 
 		//We'll need to emit the proper address offset calculation for each one
 		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_long_constant_direct(offset, type_symtab), is_branch_ending);

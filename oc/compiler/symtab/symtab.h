@@ -153,6 +153,8 @@ struct symtab_variable_record_t{
 	u_int16_t line_number;
 	//What is the enum member value
 	u_int16_t enum_member_value;
+	//What is the struct offset for this variable
+	u_int16_t struct_offset;
 	//Was it initialized?
 	u_int8_t initialized;
 	//Was it assigned to?

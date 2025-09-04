@@ -1557,9 +1557,8 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	if(construct->next_index == 0){
 		struct_type_field_t entry;	
 		//Currently, we don't need any padding
-		entry.variable = member_var;
-		//This if the very first struct member, so its offset is 0
-		entry.offset = 0;
+		entry.variable = var;
+		var->struct_offset = 0;
 
 		//Also by defualt, this is currently the largest variable that we've seen
 		construct->largest_member_size = var->type_defined_as->type_size;
@@ -1598,8 +1597,9 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	
 	//The prior variable
 	symtab_variable_record_t* prior_variable = construct->struct_table[construct->next_index - 1].variable;
+
 	//And the offset of this entry
-	u_int32_t offset = construct->struct_table[construct->next_index - 1].offset;
+	u_int32_t offset = prior_variable->struct_offset;
 	
 	//The current ending address is the offset of the last variable plus its size
 	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
@@ -1629,7 +1629,7 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	current_end = current_end + needed_padding;
 
 	//And now we can add in the new variable's offset
-	entry.offset = current_end;
+	var->struct_offset = current_end;
 
 	//Increment the size by the amount of the type and the padding we're adding in
 	type->type_size += var->type_defined_as->type_size + needed_padding;
