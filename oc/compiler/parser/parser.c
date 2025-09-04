@@ -297,7 +297,7 @@ static void update_constant_type_in_subtree(generic_ast_node_t* sub_tree_node, g
  */
 static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, Token op, generic_ast_node_t* operand, side_type_t side){
 	//Grab the pointer type out
-	pointer_type_t* pointer_type = pointer->inferred_type->internal_types.pointer_type;
+	generic_type_t* pointer_type = pointer->inferred_type;
 
 	//If this is a void pointer, we're done
 	if(pointer_type->is_void_pointer == TRUE){
@@ -309,7 +309,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	//Mark the type too
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
-	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->points_to->type_size;
+	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->internal_types.points_to->type_size;
 	//Ensure that we give this a type
 	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
@@ -1423,7 +1423,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 		}
 
 		//We can now pick out what type we're referencing(should be construct)
-		referenced_type = working_type->internal_types.pointer_type->points_to;
+		referenced_type = working_type->internal_types.points_to;
 
 		//Now we know that its a pointer, but what does it point to?
 		if(referenced_type->type_class != TYPE_CLASS_STRUCT){
@@ -1677,7 +1677,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				current_type = dealias_type(current_type->internal_types.array_type->member_type);
 			} else {
 				//Otherwise we know that it must be a pointer
-				current_type = dealias_type(current_type->internal_types.pointer_type->points_to);
+				current_type = dealias_type(current_type->internal_types.points_to);
 			}
 			
 			//The current type of any array access will be whatever the derferenced value is
@@ -1868,14 +1868,14 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 		
 			//Otherwise if we made it here, we only have one final tripping point
 			//Ensure that we aren't trying to deref a null pointer
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_types.pointer_type->is_void_pointer == TRUE){
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 			}
 
 			//Otherwise our dereferencing worked, so the return type will be whatever this points to
 			//Grab what it references whether its a pointer or an array
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-				return_type = cast_expr->inferred_type->internal_types.pointer_type->points_to;
+				return_type = cast_expr->inferred_type->internal_types.points_to;
 			} else {
 				return_type = cast_expr->inferred_type->internal_types.array_type->member_type;
 			}

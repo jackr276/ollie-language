@@ -112,7 +112,7 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 				current_type = current_type->internal_types.array_type->member_type;
 				break;
 			case TYPE_CLASS_POINTER:
-				current_type = current_type->internal_types.pointer_type->points_to;
+				current_type = current_type->internal_types.points_to;
 				break;
 			//Nothing for us here
 			default:
@@ -405,7 +405,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 			//If it's a pointer
 			if(deref_source_type->type_class == TYPE_CLASS_POINTER){
-				generic_type_t* points_to = deref_source_type->internal_types.pointer_type->points_to;
+				generic_type_t* points_to = deref_source_type->internal_types.points_to;
 
 				//If it's not a basic type then leave
 				if(points_to->type_class != TYPE_CLASS_BASIC){
@@ -435,7 +435,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 				case TYPE_CLASS_ARRAY:
 					//If these are the exact same types, then we're set
-					if(types_equivalent(deref_destination_type->internal_types.pointer_type->points_to, deref_source_type->internal_types.array_type->member_type) == TRUE){
+					if(types_equivalent(deref_destination_type->internal_types.points_to, deref_source_type->internal_types.array_type->member_type) == TRUE){
 						return deref_destination_type;
 					//Otherwise this won't work at all
 					} else{
@@ -445,15 +445,15 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				//Likely the most common case
 				case TYPE_CLASS_POINTER:
 					//If this itself is a void pointer, then we're good
-					if(deref_source_type->internal_types.pointer_type->is_void_pointer == TRUE){
+					if(deref_source_type->is_void_pointer == TRUE){
 						return deref_destination_type;
 					//This is also fine, we just give the destination type back
-					} else if(deref_destination_type->internal_types.pointer_type->is_void_pointer == TRUE){
+					} else if(deref_destination_type->is_void_pointer == TRUE){
 						return deref_destination_type;
 					//Let's see if what they point to is the exact same
 					} else {
 						//They need to be the exact same
-						if(types_equivalent(deref_source_type->internal_types.pointer_type->points_to, deref_destination_type->internal_types.pointer_type->points_to) == TRUE){
+						if(types_equivalent(deref_source_type->internal_types.points_to, deref_destination_type->internal_types.points_to) == TRUE){
 							return deref_destination_type;
 						} else {
 							return NULL;
@@ -1421,20 +1421,17 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	//Add the star at the end
 	dynamic_string_add_char_to_back(&(type->type_name), '*');
 
-	//Now we'll make the actual pointer type
-	type->internal_types.pointer_type = calloc(1, sizeof(pointer_type_t));
-
 	//We need to determine if this is a generic(void) pointer
 	if(points_to->type_class == TYPE_CLASS_BASIC && points_to->basic_type_token == VOID){
-		type->internal_types.pointer_type->is_void_pointer = TRUE;
+		type->is_void_pointer = TRUE;
 
 	//If we're pointing to a void*, we'll also need to carry that up the chain
-	} else if(points_to->type_class == TYPE_CLASS_POINTER && points_to->internal_types.pointer_type->is_void_pointer == TRUE){
-		type->internal_types.pointer_type->is_void_pointer = TRUE;
+	} else if(points_to->type_class == TYPE_CLASS_POINTER && points_to->is_void_pointer == TRUE){
+		type->is_void_pointer = TRUE;
 	}
 
 	//Store what it points to
-	type->internal_types.pointer_type->points_to = points_to;
+	type->internal_types.points_to = points_to;
 
 	//A pointer is always 8 bytes(Ollie lang is for x86-64 only)
 	type->type_size = 8;
@@ -1887,7 +1884,7 @@ u_int8_t is_type_string_array(generic_type_t* type){
 	}
 
 	//Now we go one level deeper
-	generic_type_t* second_level = dealias_type(first_level->internal_types.pointer_type->points_to);
+	generic_type_t* second_level = dealias_type(first_level->internal_types.points_to);
 
 	//If it isn't a pointer, we fail out
 	if(second_level->type_class != TYPE_CLASS_POINTER){
@@ -1895,7 +1892,7 @@ u_int8_t is_type_string_array(generic_type_t* type){
 	}
 
 	//Now we get to the base type
-	generic_type_t* base_type = dealias_type(second_level->internal_types.pointer_type->points_to);
+	generic_type_t* base_type = dealias_type(second_level->internal_types.points_to);
 
 	//If this isn't a char, we fail
 	if(base_type->type_class != TYPE_CLASS_BASIC || base_type->basic_type_token != CHAR){
@@ -1939,9 +1936,6 @@ void type_dealloc(generic_type_t* type){
 			break;
 		case TYPE_CLASS_ARRAY:
 			free(type->internal_types.array_type);
-			break;
-		case TYPE_CLASS_POINTER:
-			free(type->internal_types.pointer_type);
 			break;
 		case TYPE_CLASS_STRUCT:
 			free(type->internal_types.struct_type);

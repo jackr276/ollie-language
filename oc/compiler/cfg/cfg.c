@@ -2105,7 +2105,7 @@ static void rename_all_variables(cfg_t* cfg){
  */
 static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
 	//Emit the constant size
-	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->internal_types.pointer_type->points_to->type_size, type_symtab);
+	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->internal_types.points_to->type_size, type_symtab);
 
 	//We need this temp assignment for bookkeeping reasons
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
@@ -2998,7 +2998,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				current_type = current_type->internal_types.array_type->member_type;
 			} else {
 				//We'll dereference the current type
-				current_type = current_type->internal_types.pointer_type->points_to;
+				current_type = current_type->internal_types.points_to;
 			}
 
 			/**
@@ -3075,7 +3075,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//If current var is a pointer, then we need to dereference it to get the actual struct type	
 			if(current_type->type_class == TYPE_CLASS_POINTER){
 				//We need to first dereference this
-				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.pointer_type->points_to, related_memory_address);
+				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.points_to, related_memory_address);
 
 				//Assign temp to be the current address
 				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
@@ -3090,7 +3090,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				current_address = assignment->assignee;
 
 				//Dereference the current type
-				current_type = current_type->internal_types.pointer_type->points_to;
+				current_type = current_type->internal_types.points_to;
 			}
 
 			//Now we'll grab the associated nstruct record

@@ -27,8 +27,6 @@
 typedef struct generic_type_t generic_type_t;
 //An array type
 typedef struct array_type_t array_type_t;
-//A pointer type
-typedef struct pointer_type_t pointer_type_t;
 //A function type
 typedef struct function_type_t function_type_t;
 //A function type's individual parameter
@@ -84,7 +82,8 @@ struct generic_type_t{
 	 */
 	union{
 		array_type_t* array_type;
-		pointer_type_t* pointer_type;
+		//What does a pointer type point to?
+		generic_type_t* points_to;
 		//For function pointers
 		function_type_t* function_type;
 		struct_type_t* struct_type;
@@ -102,6 +101,8 @@ struct generic_type_t{
 	Token basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
+	//Is a type a void pointer?
+	u_int8_t is_void_pointer;
 };
 
 
@@ -113,19 +114,6 @@ struct array_type_t{
 	generic_type_t* member_type;
 	//Array bounds
 	u_int32_t num_members;
-};
-
-
-/**
- * A pointer type contains a reference to the memory address of another 
- * variable in memory. This other type may very well itself be a pointer, which is why the
- * actual type pointed to is generic
- */
-struct pointer_type_t{
-	//What do we point to?
-	generic_type_t* points_to;
-	//Is this a void*
-	u_int8_t is_void_pointer;
 };
 
 
