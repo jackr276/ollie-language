@@ -1656,7 +1656,24 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 /**
  * Add a value to an enumeration's list of values
  */
-u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member){
+u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values){
+	//Are we using user-defined enum values? If so, we need to check for duplicates
+	//that already exist in the list
+	if(user_defined_values == TRUE){
+		//Extract the enum member's actual value
+		for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
+			//Grab the variable out
+			symtab_variable_record_t* variable = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
+
+			//If these 2 equal, we fail out
+			if(variable->enum_member_value == ((symtab_variable_record_t*)enum_member)->enum_member_value){
+				return FAILURE;
+			}
+		}
+
+		//If we survive to here, then we're good
+	}
+
 	//Just throw the member in
 	dynamic_array_add(enum_type->internal_types.enumeration_table, enum_member);
 

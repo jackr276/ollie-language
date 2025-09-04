@@ -4498,8 +4498,12 @@ static u_int8_t enum_definer(FILE* fl){
 	//Push onto the stack for grouping
 	push_token(grouping_stack, lookahead);
 
-	//The current value starts off at 0
-	u_int32_t current_value = 0;
+	//Are we using user-defined enum values? If so, then we need to always see those
+	//from the user
+	u_int8_t user_defined_enum_values = FALSE;
+
+	//What is the largest value that an enum has. By default we assume 0
+	u_int32_t largest_value = 0;
 
 	//Now we will enter a do-while loop where we can continue to identifiers for our enums
 	do {
@@ -4566,13 +4570,18 @@ static u_int8_t enum_definer(FILE* fl){
 		member_record->is_enumeration_member = TRUE;
 
 		//Going from there, we'll assign the type as the enum type
+		//TODO with the new enhancement we won't have this
 		member_record->type_defined_as = enum_type;
+
+		//By virtue of being an enum, this has been initialized 
+		member_record->initialized = TRUE;
 
 		//Now we can insert this into the symtab
 		insert_variable(variable_symtab, member_record);
 
 		//Add this in as a member to our current enum
-		add_enum_member(enum_type, member_record);
+		//TODO we need to change this paradigm soon
+		add_enum_member(enum_type, member_record, FALSE);
 
 		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

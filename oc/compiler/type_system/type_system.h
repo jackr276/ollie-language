@@ -265,7 +265,7 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var);
 /**
  * Add a value to an enumeration's list of values
  */
-u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member);
+u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values);
 
 /**
  * Add a value into the union's list of members
