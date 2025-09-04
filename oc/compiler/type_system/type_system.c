@@ -109,7 +109,7 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 		switch (current_type->type_class) {
 			//This is really all we should have here
 			case TYPE_CLASS_ARRAY:
-				current_type = current_type->internal_types.array_type->member_type;
+				current_type = current_type->internal_types.member_type;
 				break;
 			case TYPE_CLASS_POINTER:
 				current_type = current_type->internal_types.points_to;
@@ -140,7 +140,7 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 
 	//If these are both arrays
 	if(typeA->type_class == TYPE_CLASS_ARRAY
-		&& typeA->internal_types.array_type->num_members != typeB->internal_types.array_type->num_members){
+		&& typeA->internal_values.num_members != typeB->internal_values.num_members){
 		//We can disqualify quickly if this happens
 		return FALSE;
 	}
@@ -398,8 +398,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 		//Only one type of array is assignable - and that would be a char[] to a char*
 		case TYPE_CLASS_ARRAY:
 			//If this isn't a char[], we're done
-			if(deref_destination_type->internal_types.array_type->member_type->type_class != TYPE_CLASS_BASIC
-				|| deref_destination_type->internal_types.array_type->member_type->basic_type_token != CHAR){
+			if(deref_destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
+				|| deref_destination_type->internal_types.member_type->basic_type_token != CHAR){
 				return NULL;
 			}
 
@@ -435,7 +435,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 				case TYPE_CLASS_ARRAY:
 					//If these are the exact same types, then we're set
-					if(types_equivalent(deref_destination_type->internal_types.points_to, deref_source_type->internal_types.array_type->member_type) == TRUE){
+					if(types_equivalent(deref_destination_type->internal_types.points_to, deref_source_type->internal_types.member_type) == TRUE){
 						return deref_destination_type;
 					//Otherwise this won't work at all
 					} else{
@@ -1461,14 +1461,11 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Add the star at the end
 	dynamic_string_concatenate(&(type->type_name), "[]");
 
-	//Now we'll make the actual pointer type
-	type->internal_types.array_type = calloc(1, sizeof(array_type_t));
-
 	//Store what it points to
-	type->internal_types.array_type->member_type = points_to;
+	type->internal_types.member_type = points_to;
 	
 	//Store the number of members
-	type->internal_types.array_type->num_members = num_members;
+	type->internal_values.num_members = num_members;
 
 	//Store this in here
 	type->type_size = points_to->type_size * num_members;
@@ -1933,9 +1930,6 @@ void type_dealloc(generic_type_t* type){
 			break;
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			free(type->internal_types.function_type);
-			break;
-		case TYPE_CLASS_ARRAY:
-			free(type->internal_types.array_type);
 			break;
 		case TYPE_CLASS_STRUCT:
 			free(type->internal_types.struct_type);

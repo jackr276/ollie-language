@@ -25,8 +25,6 @@
 
 //The generic global type type
 typedef struct generic_type_t generic_type_t;
-//An array type
-typedef struct array_type_t array_type_t;
 //A function type
 typedef struct function_type_t function_type_t;
 //A function type's individual parameter
@@ -81,7 +79,8 @@ struct generic_type_t{
 	 * class
 	 */
 	union {
-		array_type_t* array_type;
+		//What is the member type of an array
+		generic_type_t* member_type;
 		//What does a pointer type point to?
 		generic_type_t* points_to;
 		//For function pointers
@@ -102,6 +101,8 @@ struct generic_type_t{
 	 * exclusive fields in an efficient way
 	 */
 	union {
+		//The number of members in an array
+		u_int32_t num_members;
 
 		//Is a type a void pointer?
 		u_int8_t is_void_pointer;
@@ -116,17 +117,6 @@ struct generic_type_t{
 	Token basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
-};
-
-
-/**
- * An array type is a linear, contiguous collection of other types in memory.
- */
-struct array_type_t{
-	//Whatever the members are in the array
-	generic_type_t* member_type;
-	//Array bounds
-	u_int32_t num_members;
 };
 
 

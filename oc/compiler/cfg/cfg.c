@@ -2995,7 +2995,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//What is the internal type that we're pointing to? This will determine our scale
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
 				//We'll dereference the current type
-				current_type = current_type->internal_types.array_type->member_type;
+				current_type = current_type->internal_types.member_type;
 			} else {
 				//We'll dereference the current type
 				current_type = current_type->internal_types.points_to;

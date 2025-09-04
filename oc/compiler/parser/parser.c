@@ -1674,7 +1674,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//Based on this, the current type is whatever this array contains. We'll also use this for size determinations
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
-				current_type = dealias_type(current_type->internal_types.array_type->member_type);
+				current_type = dealias_type(current_type->internal_types.member_type);
 			} else {
 				//Otherwise we know that it must be a pointer
 				current_type = dealias_type(current_type->internal_types.points_to);
@@ -1877,7 +1877,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER){
 				return_type = cast_expr->inferred_type->internal_types.points_to;
 			} else {
-				return_type = cast_expr->inferred_type->internal_types.array_type->member_type;
+				return_type = cast_expr->inferred_type->internal_types.member_type;
 			}
 
 			//This is assignable
@@ -7803,14 +7803,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
-	//Extract the actual array type for ease of use here
-	array_type_t* array = array_type->internal_types.array_type;
-
 	//Grab the member type here out as well
-	generic_type_t* member_type = array->member_type;
+	generic_type_t* member_type = array_type->internal_types.member_type;
 
 	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
-	u_int32_t num_members = array->num_members;
+	u_int32_t num_members = array_type->internal_values.num_members;
 
 	//Let's also keep a record of the number of members that we've seen in total
 	u_int32_t initializer_list_members = 0;
@@ -7849,10 +7846,10 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 		}
 	//Otherwise, we'll need to set the number of members accordingly here
 	} else {
-		array->num_members = initializer_list_members;
+		array_type->internal_values.num_members = initializer_list_members;
 
 		//Reup the acutal size here
-		array_type->type_size = initializer_list_members * array->member_type->type_size;
+		array_type->type_size = initializer_list_members * array_type->internal_types.member_type->type_size;
 	}
 
 	//If we make it here, then we can set the type of the initializer list to match the array
@@ -7941,11 +7938,8 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
  * node as its child
  */
 static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
-	//Extract the actual array type for ease of use here
-	array_type_t* array = array_type->internal_types.array_type;
-
 	//Let's first validate that this array actually is a char[]
-	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type_token != CHAR){
+	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
 		//Print out the full error message
 		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
 
@@ -7962,16 +7956,16 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 	
 	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
 	//lenght of the array to be whatever we have in here
-	if(array->num_members == 0){
+	if(array_type->internal_values.num_members == 0){
 		//Set the number of members
-		array->num_members = length;
+		array_type->internal_values.num_members = length;
 
 		//Since these are all chars, the size of the array is just the length
 		array_type->type_size = length;
 	} else {
 		//If these are different, then we fail out
-		if(array->num_members != length){
-			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array->num_members, length);
+		if(array_type->internal_values.num_members != length){
+			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array_type->internal_values.num_members, length);
 			return print_and_return_error(info, parser_line_num);
 		}
 
