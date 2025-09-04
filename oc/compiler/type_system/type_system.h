@@ -18,9 +18,6 @@
 #define MAX_TYPE_NAME_LENGTH 200
 //The maximum number of members in a union
 #define MAX_UNION_MEMBERS 100
-//The maximum number of members in an enumerated
-#define MAX_ENUMERATED_MEMBERS 200
-
 
 //The generic global type type
 typedef struct generic_type_t generic_type_t;
@@ -28,8 +25,6 @@ typedef struct generic_type_t generic_type_t;
 typedef struct function_type_t function_type_t;
 //A function type's individual parameter
 typedef struct function_type_parameter_t function_type_parameter_t;
-//An enumerated type
-typedef struct enumerated_type_t enumerated_type_t;
 //A union type
 typedef struct union_type_t union_type_t;
 
@@ -80,8 +75,10 @@ struct generic_type_t{
 		generic_type_t* points_to;
 		//For function pointers
 		function_type_t* function_type;
+		//Store all values in a struct
 		dynamic_array_t* struct_table;
-		enumerated_type_t* enumerated_type;
+		//The enumeration table stores all values in an enum
+		dynamic_array_t* enumeration_table;
 		//The aliased type
 		generic_type_t* aliased_type;
 		union_type_t* union_type;
@@ -100,7 +97,6 @@ struct generic_type_t{
 		u_int32_t num_members;
 		//The largest member size - used for structs
 		u_int32_t largest_member_size;
-
 		//Is a type a void pointer?
 		u_int8_t is_void_pointer;
 	} internal_values;
@@ -126,18 +122,6 @@ struct union_type_t {
 	void* members[MAX_UNION_MEMBERS];
 	//The next index in the members array
 	u_int8_t next_index;
-};
-
-
-/**
- * An enumerated type has a name and an array of enumeration tokens. These tokens
- * are positionally encoded and this encoding is fixed at declaration
-*/
-struct enumerated_type_t{
-	//The number of enumerated types
-	void* tokens[MAX_ENUMERATED_MEMBERS];
-	//The current number of tokens
-	u_int8_t token_num;
 };
 
 

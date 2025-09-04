@@ -4428,154 +4428,13 @@ static u_int8_t union_definer(FILE* fl){
 }
 
 
-
-/**
- * An enum member is simply an identifier. This rule performs all the needed checks to ensure
- * that it's not a duplicate of anything else that we've currently seen. Like all rules, this function
- * returns a reference to the root of the tree it created
- *
- * BNF Rule: <enum-member> ::= <identifier>
- */
-static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, side_type_t side){
-	//We really just need to see a valid identifier here
-	generic_ast_node_t* ident = identifier(fl, side);
-
-	//If it fails, we'll blow the whole thing up
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid identifier given as enum member", parser_line_num);
-	}
-
-	//Now if we make it here, we'll need to check and make sure that it isn't a duplicate of anything else
-	//Grab this for convenience
-	char* name = ident->string_value.string;
-
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-	}
-
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-	}
-
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-	}
-
-	//Once we make it all the way down here, we know that we don't have any duplication
-	//We can now make the record of the enum
-	symtab_variable_record_t* enum_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
-	//Store the current value
-	enum_record->enum_member_value = current_member_val;
-	//It is an enum member
-	enum_record->is_enumeration_member = 1;
-	//This is always initialized
-	enum_record->initialized = 1;
-	//Later down the line, we'll assign the type that this thing is
-	
-	//We can now add it into the symtab
-	insert_variable(variable_symtab,  enum_record);
-
-	//Finally, we'll construct the node that holds this item and send it out
-	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_TYPE_ENUM_MEMBER, side);
-	//Store the record in this for ease of access/modification
-	enum_member->variable = enum_record;
-	//Add the identifier as the child of this node
-	add_child_node(enum_member, ident);
-
-	//Finally we'll give the reference back
-	return enum_member;
-}
-
-
-/**
- * An enumeration list guarantees that we have at least one enumerator. It also allows us to
- * chain enumerators using commas. Like all rules, this rule returns a reference to the root of 
- * the subtree that it creates
- *
- * BNF Rule: <enum-member-list> ::= <enum-member>{, <enum-member>}*
- */
-static generic_ast_node_t* enum_member_list(FILE* fl, side_type_t side){
-	//Lookahead token
-	lexitem_t lookahead;
-	//The enum member current number
-	u_int16_t current_member_val = 0;
-
-	//We will first create the list node
-	generic_ast_node_t* enum_list_node = ast_node_alloc(AST_NODE_TYPE_ENUM_MEMBER_LIST, side);
-
-	//Now, we can see as many enumerators as we'd like here, each separated by a comma
-	do{
-		//First we need to see a valid enum member
-		generic_ast_node_t* member = enum_member(fl, current_member_val, side);
-		//Increment this
-		current_member_val++;
-
-		//If the member is bad, we bail right out
-		if(member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid member given in enum definition", parser_line_num);
-		}
-
-		//We can now add this in as a child of the enum list
-		add_child_node(enum_list_node, member);
-
-		//Finally once we make it here we'll refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Keep going as long as we see commas
-	} while(lookahead.tok == COMMA);
-
-	//Once we make it out here, we know that we didn't see a comma. We know that we really need to see an
-	//R_CURLY when we get here, so if we didn't we can give a more helpful error message here
-	if(lookahead.tok != R_CURLY){
-		return print_and_return_error("Enum members must be separated by commas in defintion", parser_line_num);
-	}
-	
-	//Otherwise if we end up here all went well. We'll let the caller do the final checking with the R_CURLY so 
-	//we'll give it back
-	push_back_token(lookahead);
-
-	//We'll now give back the list node itself
-	return enum_list_node;
-}
-
-
 /**
  * An enumeration definition is where we see the actual definition of an enum. Since this is a compiler
  * only rule, we will only return success or failure from this node
  *
  * Important note: By the time we get here, we will have already consume the "define" and "enum" tokens
  *
- * BNF Rule: <enum-definer> ::= define enum <identifier> { <enum-member-list> } {as <identifier>}?;
+ * BNF Rule: <enum-definer> ::= define enum <identifier> { <identifier> {, <identifier>}* } {as <identifier>}?;
  */
 static u_int8_t enum_definer(FILE* fl){
 	//Freeze the current line number
@@ -4823,6 +4682,7 @@ static u_int8_t enum_definer(FILE* fl){
  * 						   | f64 
  * 						   | char 
  * 						   | enum <identifier>
+ * 						   | union <identifier>
  * 						   | struct <identifier>
  * 						   | <identifier>
  */

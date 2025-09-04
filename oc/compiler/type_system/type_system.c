@@ -1478,6 +1478,7 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
  * Dynamically allocate and create an enumerated type
  */
 generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number){
+	//Dynamically allocate, 0 out
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
@@ -1486,10 +1487,11 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 	//Where is the declaration?
 	type->line_number = line_number;
 
+	//Store the name
 	type->type_name = type_name;
 
-	//Reserve space for this
-	type->internal_types.enumerated_type = calloc(1, sizeof(enumerated_type_t));
+	//Reserve space for the enum table
+	type->internal_types.enumeration_table = dynamic_array_alloc();
 
 	return type;
 }
@@ -1911,7 +1913,7 @@ void type_dealloc(generic_type_t* type){
 	//Free based on what type of type we have
 	switch(type->type_class){
 		case TYPE_CLASS_ENUMERATED:
-			free(type->internal_types.enumerated_type);
+			free(type->internal_types.enumeration_table);
 			break;
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			free(type->internal_types.function_type);
