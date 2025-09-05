@@ -4604,19 +4604,11 @@ static u_int8_t enum_definer(FILE* fl){
 		//Once it's been created, mark that it is an enum member
 		member_record->is_enumeration_member = TRUE;
 
-		//Going from there, we'll assign the type as the enum type
-		//TODO with the new enhancement we won't have this
-		member_record->type_defined_as = enum_type;
-
 		//By virtue of being an enum, this has been initialized 
 		member_record->initialized = TRUE;
 
 		//Now we can insert this into the symtab
 		insert_variable(variable_symtab, member_record);
-
-		//Add this in as a member to our current enum
-		//TODO we need to change this paradigm soon
-		add_enum_member(enum_type, member_record, FALSE);
 
 		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4676,6 +4668,9 @@ static u_int8_t enum_definer(FILE* fl){
 				largest_value = current;
 			}
 
+			//Assign the value in
+			member_record->enum_member_value = current;
+
 		//We did not see an equals
 		} else {
 			//Are we using user-defined values? If so,
@@ -4692,6 +4687,17 @@ static u_int8_t enum_definer(FILE* fl){
 
 			//The largest value that we've seen is now also this
 			largest_value = current_enum_value;
+		}
+
+		//Add this in as a member to our current enum
+		u_int8_t success = add_enum_member(enum_type, member_record, user_defined_enum_values);
+
+		//This means that the user attempted to add a duplicate value
+		if(success == FAILURE){
+			sprintf(info, "Duplicate enum value %ld", member_record->enum_member_value);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
 		}
 
 		//This goes up by 1
@@ -4716,19 +4722,15 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Now, based on our largest value, we need to determine the bit-width needed for this
 	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
+	generic_type_t* type_needed = determine_required_minimum_integer_type_size(largest_value);
 
-
-	//Now that we know everything has been assigned, we will go through and assign the actual values
+	//We now go through and set the type now that we know what it is
 	for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
-
-		//we will actually be setting the type here
-
-
 		//Grab it out
 		symtab_variable_record_t* var = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
 
-		//Assign the value here
-//		var->enum_member_value = i;
+		//Store the type that we have
+		var->type_defined_as = type_needed;
 	}
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient

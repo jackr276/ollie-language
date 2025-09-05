@@ -382,6 +382,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				source_basic_type = deref_source_type->basic_type_token;
 
 				//It needs to be 8 bits, otherwise we won't allow this
+				//TODO THIS IS BROKEN!!!!
 				if(source_basic_type == U8 || source_basic_type == I8 || source_basic_type == CHAR){
 					//This is assignable
 					return deref_destination_type;
