@@ -662,6 +662,9 @@ static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generi
 	} else if(b_basic_type == SIGNED_INT_CONST || b_basic_type == UNSIGNED_INT_CONST){
 		//If B is not one of these, we'll just make A whatever B is
 		if(a_basic_type != SIGNED_INT_CONST && a_basic_type != UNSIGNED_INT_CONST){
+
+
+		printf("HERE\n\n\n");
 			*b = *a;
 			return;
 		}

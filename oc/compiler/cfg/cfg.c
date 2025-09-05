@@ -2496,10 +2496,13 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			switch(type->basic_type_token){
 				//If it's unassigned by this point, we fall to defaults
 				case UNSIGNED_INT_CONST:
+					printf("FORCING CONST\n\n\n\n");
+
 					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u32")->type);
 					break;
 				
 				case SIGNED_INT_CONST:
+					printf("FORCING CONST\n\n\n\n");
 					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "i32")->type);
 					break;
 
@@ -2550,11 +2553,8 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Handle an enumerated type right here
 	if(ident_node->variable->is_enumeration_member == TRUE) {
-		//Look up the type
-		symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, "u8");
-		generic_type_t* type = type_record->type;
 		//Just create a constant here with the enum
-		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), type, is_branch_ending);
+		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), ident_node->variable->type_defined_as, is_branch_ending);
 	}
 
 	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
