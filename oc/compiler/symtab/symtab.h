@@ -141,6 +141,8 @@ struct symtab_variable_record_t{
 	generic_type_t* type_defined_as;
 	//The next hashtable record
 	symtab_variable_record_t* next;
+	//What is the enum member value
+	u_int32_t enum_member_value;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it
@@ -151,8 +153,6 @@ struct symtab_variable_record_t{
 	u_int16_t counter;
 	//Line number
 	u_int16_t line_number;
-	//What is the enum member value
-	u_int16_t enum_member_value;
 	//What is the struct offset for this variable
 	u_int16_t struct_offset;
 	//Was it initialized?

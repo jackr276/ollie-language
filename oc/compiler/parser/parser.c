@@ -4434,13 +4434,14 @@ static u_int8_t union_definer(FILE* fl){
  *
  * Important note: By the time we get here, we will have already consume the "define" and "enum" tokens
  *
- * BNF Rule: <enum-definer> ::= define enum <identifier> { <identifier> {, <identifier>}* } {as <identifier>}?;
+ * BNF Rule: <enum-definer> ::= define enum <identifier> { <identifier> {= <constant>}? {, <identifier>{ = <constant>}?}* } {as <identifier>}?;
  */
 static u_int8_t enum_definer(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//Reserve space for the type name
 	dynamic_string_t type_name;
 
 	//Allocate it
@@ -4502,8 +4503,8 @@ static u_int8_t enum_definer(FILE* fl){
 	//from the user
 	u_int8_t user_defined_enum_values = FALSE;
 
-	//What is the largest value that an enum has. By default we assume 0
-	u_int32_t largest_value = 0;
+	//If we are not using a user-defined enum, then this is the current value
+	u_int32_t current_enum_value = 0;
 
 	//Now we will enter a do-while loop where we can continue to identifiers for our enums
 	do {
@@ -4586,6 +4587,43 @@ static u_int8_t enum_definer(FILE* fl){
 		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+		//If we see an equals sign, this means that we have a user-defined enum value
+		if(lookahead.tok == EQUALS){
+			//If this value is 0, this is the very first iteration. That means that this
+			//first element sets the rule for everything
+			if(current_enum_value == 0){
+				//Set this flag for all future values
+				user_defined_enum_values = TRUE;
+			}
+
+			//The other case - if this is FALSE and we saw this,
+			//then we have an error
+			if(user_defined_enum_values == FALSE){
+				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", enum_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+
+		//We did not see an equals
+		} else {
+			//Are we using user-defined values? If so,
+			//then this is wrong
+			if(user_defined_enum_values == TRUE){
+				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", enum_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Otherwise, this one's value is the current enum value
+			member_record->enum_member_value = current_enum_value;
+		}
+
+		//This goes up by 1
+		current_enum_value++;
+
 	//So long as we keep seeing commas
 	} while(lookahead.tok == COMMA);
 
@@ -4605,6 +4643,10 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Now that we know everything has been assigned, we will go through and assign the actual values
 	for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
+
+		//we will actually be setting the type here
+
+
 		//Grab it out
 		symtab_variable_record_t* var = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
 
