@@ -4674,6 +4674,9 @@ static u_int8_t enum_definer(FILE* fl){
 			//Assign the value in
 			member_record->enum_member_value = current;
 
+			//We need to refresh the lookahead here
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
 		//We did not see an equals
 		} else {
 			//Are we using user-defined values? If so,
@@ -4729,6 +4732,9 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Store this in the enum
 	enum_type->internal_values.enum_integer_type = type_needed;
+
+	//Assign the size over as well
+	enum_type->type_size = type_needed->type_size;
 
 	//We now go through and set the type now that we know what it is
 	for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
