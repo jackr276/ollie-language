@@ -367,33 +367,31 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 		//Enumerated types are internally a u8
 		case TYPE_CLASS_ENUMERATED:
-			//If we have an enumerated type here as well
-			if(deref_destination_type->type_class == TYPE_CLASS_ENUMERATED){
-				//These need to be the exact same, otherwise this will not work
-				if(strcmp(deref_source_type->type_name.string, deref_destination_type->type_name.string) == 0){
-					return deref_destination_type;
-				} else {
+			//Go based on what the source it
+			switch(deref_source_type->type_class){
+				case TYPE_CLASS_ENUMERATED:
+					//These need to be the exact same, otherwise this will not work
+					if(strcmp(deref_source_type->type_name.string, deref_destination_type->type_name.string) == 0){
+						return deref_destination_type;
+					} else {
+						return NULL;
+					}
+
+				//If we have a basic type, we can just compare it with the enum's internal int
+				case TYPE_CLASS_BASIC:
+					switch(deref_source_type->basic_type_token){
+						//These are all bad
+						case F32:
+						case F64:
+						case VOID:
+							return NULL;
+						default:
+							return types_assignable(&(deref_destination_type->internal_values.enum_integer_type), source_type);
+					}
+
+				//Anything else is bad
+				default:
 					return NULL;
-				}
-
-			//Otherwise it needs to be a basic type
-			} else if(deref_source_type->type_class == TYPE_CLASS_BASIC){
-				//Grab the type out of here
-				source_basic_type = deref_source_type->basic_type_token;
-
-				//It needs to be 8 bits, otherwise we won't allow this
-				//TODO THIS IS BROKEN!!!!
-				if(source_basic_type == U8 || source_basic_type == I8 || source_basic_type == CHAR){
-					//This is assignable
-					return deref_destination_type;
-				} else {
-					//It's not assignable
-					return NULL;
-				}
-
-			//This isn't going to work otherewise
-			} else {
-				return NULL;
 			}
 
 		//Only one type of array is assignable - and that would be a char[] to a char*
@@ -749,14 +747,14 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 	*a = dealias_type(*a);
 	*b = dealias_type(*b);
 
-	//All enumerated types are in reality u8's
+	//Lookup what the enum type actually is and use that
 	if((*a)->type_class == TYPE_CLASS_ENUMERATED){
-		*a = lookup_type_name_only(symtab, "u8")->type;
+		*a = (*a)->internal_values.enum_integer_type;
 	}
 
-	//All enumerated types are in reality u8's
+	//Lookup what the enum type actually is and use that
 	if((*b)->type_class == TYPE_CLASS_ENUMERATED){
-		*b = lookup_type_name_only(symtab, "u8")->type;
+		*b = (*b)->internal_values.enum_integer_type;
 	}
 	
 	/**

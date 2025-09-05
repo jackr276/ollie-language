@@ -93,6 +93,8 @@ struct generic_type_t{
 	 * exclusive fields in an efficient way
 	 */
 	union {
+		//What is the integer type that an enum uses?
+		generic_type_t* enum_integer_type;
 		//The number of members in an array
 		u_int32_t num_members;
 		//The largest member size - used for structs
