@@ -148,6 +148,11 @@ struct function_type_t{
 u_int8_t is_memory_address_type(generic_type_t* type);
 
 /**
+ * What is the alignment size required for this type?
+ */
+u_int32_t get_type_alignment_size(generic_type_t* type);
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */

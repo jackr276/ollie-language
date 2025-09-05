@@ -32,6 +32,32 @@ u_int8_t is_memory_address_type(generic_type_t* type){
 
 
 /**
+ * What is the value that this needs to be aligned by?
+ *
+ * For arrays -> we align so that the base address is a multiple of the member type
+ * For structs -> we align so that the base address is a multiple of the largest
+ * member
+ */
+u_int32_t get_type_alignment_size(generic_type_t* type){
+	switch(type->type_class){
+		//However for an array, we need to find the
+		//size of the member type
+		case TYPE_CLASS_ARRAY:
+			//Recursively get the size of the member type
+			return get_type_alignment_size(type->internal_types.member_type);
+
+		//A struct it's the largest member size
+		case TYPE_CLASS_STRUCT:
+			return type->internal_values.largest_member_size;
+
+		//By default just give the size back
+		default:
+			return type->type_size;
+	}
+}
+
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -1576,30 +1602,28 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//Mark that this is a struct member
 	var->is_struct_member = TRUE;
 
+	//We'll update the largest member, if applicable
+	if(var->type_defined_as->type_size > type->internal_values.largest_member_size){
+		//Update the largest member if this happens
+		type->internal_values.largest_member_size = var->type_defined_as->type_size;
+	}
+
 	//If this is the very first one, then we'll 
 	if(type->internal_types.struct_table->current_index == 0){
+		//This one's offset is 0
 		var->struct_offset = 0;
 
 		//Also by defualt, this is currently the largest variable that we've seen
 		type->internal_values.largest_member_size = var->type_defined_as->type_size;
 
-		//Just grab this as a reference to avoid the need to cast
-		symtab_variable_record_t* member = member_var;
-
 		//Increment the size by the amount of the type
-		type->type_size += member->type_defined_as->type_size;
+		type->type_size += var->type_defined_as->type_size;
 
 		//Add the variable into the struct table
 		dynamic_array_add(type->internal_types.struct_table, var);
 
 		//This worked, so return success
 		return SUCCESS;
-	}
-	
-	//We'll update the largest member, if applicable
-	if(var->type_defined_as->type_size > type->internal_values.largest_member_size){
-		//Update the largest member if this happens
-		type->internal_values.largest_member_size = var->type_defined_as->type_size;
 	}
 
 	//Let's now see where the ending address of the struct is. We can find
@@ -1615,15 +1639,15 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//The current ending address is the offset of the last variable plus its size
 	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
 
-	//Now for alignment, we need the offset of this new variable to be a multiple of the new variable's
-	//size
-	u_int32_t new_entry_size = var->type_defined_as->type_size;
+	//What is the size of the internal type? If this is an array, we need to drill
+	//down to the bottom of the array type size
+	u_int32_t new_entry_alignment_size = get_type_alignment_size(var->type_defined_as);
 
 	//We will satisfy this by adding the remainder of the division of the new variable with the current
 	//end in as padding to the previous entry
 	
 	//What padding is needed?
-	u_int32_t needed_padding;
+	u_int32_t needed_padding = 0;
 	
 	if(current_end < new_entry_size){
 		//If it's more than 16(i.e an array), the most we'd need is 16-byte aligned
@@ -1648,6 +1672,7 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//Add the variable into the table
 	dynamic_array_add(type->internal_types.struct_table, var);
 
+	//This worked
 	return SUCCESS;
 }
 
