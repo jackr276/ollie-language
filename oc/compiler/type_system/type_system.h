@@ -94,10 +94,10 @@ struct generic_type_t{
 	union {
 		//What is the integer type that an enum uses?
 		generic_type_t* enum_integer_type;
+		//The largest member type in a struct
+		generic_type_t* largest_member_type;
 		//The number of members in an array
 		u_int32_t num_members;
-		//The largest member size - used for structs
-		u_int32_t largest_member_size;
 		//Is a type a void pointer?
 		u_int8_t is_void_pointer;
 	} internal_values;
@@ -146,11 +146,6 @@ struct function_type_t{
  * Does this type represent a memory address?
  */
 u_int8_t is_memory_address_type(generic_type_t* type);
-
-/**
- * What is the alignment size required for this type?
- */
-u_int32_t get_type_alignment_size(generic_type_t* type);
 
 /**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 

@@ -38,21 +38,21 @@ u_int8_t is_memory_address_type(generic_type_t* type){
  * For structs -> we align so that the base address is a multiple of the largest
  * member
  */
-u_int32_t get_type_alignment_size(generic_type_t* type){
+static generic_type_t* get_base_alignment_type(generic_type_t* type){
 	switch(type->type_class){
 		//However for an array, we need to find the
 		//size of the member type
 		case TYPE_CLASS_ARRAY:
 			//Recursively get the size of the member type
-			return get_type_alignment_size(type->internal_types.member_type);
+			return get_base_alignment_type(type->internal_types.member_type);
 
 		//A struct it's the largest member size
 		case TYPE_CLASS_STRUCT:
-			return type->internal_values.largest_member_size;
+			return get_base_alignment_type(type->internal_values.largest_member_type);
 
 		//By default just give the size back
 		default:
-			return type->type_size;
+			return type;
 	}
 }
 
@@ -1594,6 +1594,9 @@ void* get_struct_member(generic_type_t* structure, char* name){
 /**
  * Add a value to a struct type. The void* here is a 
  * symtab variable record
+ *
+ * For alignment, it is important to note that we only ever align by primitive data type
+ * sizes. The largest an internal alignment can be is by 8
  */
 u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//Grab this reference out, for convenience
@@ -1602,25 +1605,19 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//Mark that this is a struct member
 	var->is_struct_member = TRUE;
 
-	//We'll update the largest member, if applicable
-	if(var->type_defined_as->type_size > type->internal_values.largest_member_size){
-		//Update the largest member if this happens
-		type->internal_values.largest_member_size = var->type_defined_as->type_size;
-	}
-
 	//If this is the very first one, then we'll 
 	if(type->internal_types.struct_table->current_index == 0){
 		//This one's offset is 0
 		var->struct_offset = 0;
-
-		//Also by defualt, this is currently the largest variable that we've seen
-		type->internal_values.largest_member_size = var->type_defined_as->type_size;
 
 		//Increment the size by the amount of the type
 		type->type_size += var->type_defined_as->type_size;
 
 		//Add the variable into the struct table
 		dynamic_array_add(type->internal_types.struct_table, var);
+
+		//The largest member size here is the alignment of the biggest type
+		type->internal_values.largest_member_type = get_base_alignment_type(var->type_defined_as);
 
 		//This worked, so return success
 		return SUCCESS;
@@ -1639,9 +1636,14 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//The current ending address is the offset of the last variable plus its size
 	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
 
-	//What is the size of the internal type? If this is an array, we need to drill
-	//down to the bottom of the array type size
-	u_int32_t new_entry_alignment_size = get_type_alignment_size(var->type_defined_as);
+	//Get the primitive type that we will need to align by here
+	generic_type_t* aligning_by_type = get_base_alignment_type(var->type_defined_as);
+
+	//If we have a larger contender for alignment here, then this will become our largest
+	//member type
+	if(aligning_by_type->type_size > type->internal_values.largest_member_type->type_size){
+		type->internal_values.largest_member_type = aligning_by_type;
+	}
 
 	//We will satisfy this by adding the remainder of the division of the new variable with the current
 	//end in as padding to the previous entry
@@ -1649,15 +1651,10 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//What padding is needed?
 	u_int32_t needed_padding = 0;
 	
-	if(current_end < new_entry_size){
-		//If it's more than 16(i.e an array), the most we'd need is 16-byte aligned
-		if(new_entry_size > 16){
-			needed_padding = 16 - current_end;
-		} else {
-			needed_padding = new_entry_size - current_end;
-		}
+	if(current_end < aligning_by_type->type_size){
+		needed_padding = aligning_by_type->type_size - current_end;
 	} else {
-		needed_padding = current_end % new_entry_size;
+		needed_padding = current_end % aligning_by_type->type_size;
 	}
 
 	//Now we can update the current end
@@ -1740,7 +1737,7 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 void finalize_struct_alignment(generic_type_t* type){
 	//Let's see how far off we are from being a multiple of the
 	//final address
-	u_int32_t needed_padding = type->type_size % type->internal_values.largest_member_size;
+	u_int32_t needed_padding = type->type_size % type->internal_values.largest_member_type->type_size;
 
 	//Increment the size accordingly
 	type->type_size += needed_padding;
