@@ -1016,7 +1016,10 @@ void print_variable_name(symtab_variable_record_t* record){
 	} else if (record->is_label == TRUE){
 		printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
 		return;
-	} else if(record->is_enumeration_member == TRUE || record->is_struct_member == TRUE){
+	} else if(record->is_enumeration_member == TRUE){
+		//The var name
+		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name.string);
+	} else if(record->is_struct_member == TRUE){
 		//The var name
 		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
 	} else {

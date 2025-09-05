@@ -16,8 +16,6 @@
 
 //Type names may not exceed 200 characters in length
 #define MAX_TYPE_NAME_LENGTH 200
-//The maximum number of members in a union
-#define MAX_UNION_MEMBERS 100
 
 //The generic global type type
 typedef struct generic_type_t generic_type_t;
@@ -79,9 +77,10 @@ struct generic_type_t{
 		dynamic_array_t* struct_table;
 		//The enumeration table stores all values in an enum
 		dynamic_array_t* enumeration_table;
+		//The union table
+		dynamic_array_t* union_table;
 		//The aliased type
 		generic_type_t* aliased_type;
-		union_type_t* union_type;
 	} internal_types;
 
 	/**
@@ -103,7 +102,6 @@ struct generic_type_t{
 		u_int8_t is_void_pointer;
 	} internal_values;
 
-
 	//When was it defined: -1 = generic type
 	int32_t line_number;
 	//All generic types have a size
@@ -112,18 +110,6 @@ struct generic_type_t{
 	Token basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
-};
-
-
-/**
- * A union type contains a list of fields(stored as variables) that reside inside
- * of it. As such, the type here contains an array of generic types of at most 100
- */
-struct union_type_t {
-	//The members, stored as symtab variables
-	void* members[MAX_UNION_MEMBERS];
-	//The next index in the members array
-	u_int8_t next_index;
 };
 
 

@@ -4604,6 +4604,9 @@ static u_int8_t enum_definer(FILE* fl){
 		//Once it's been created, mark that it is an enum member
 		member_record->is_enumeration_member = TRUE;
 
+		//Store the line number
+		member_record->line_number = parser_line_num;
+
 		//By virtue of being an enum, this has been initialized 
 		member_record->initialized = TRUE;
 

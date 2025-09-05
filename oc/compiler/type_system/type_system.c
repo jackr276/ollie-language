@@ -1530,8 +1530,8 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 	//The line number where this was created
 	type->line_number = line_number;
 
-	//Reserve space for the internal type as well
-	type->internal_types.union_type = calloc(1, sizeof(union_type_t));
+	//Reserve the dynamic array as well
+	type->internal_types.union_table = dynamic_array_alloc();
 
 	//And give the type pointer back
 	return type;
@@ -1676,8 +1676,6 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 	//Just throw the member in
 	dynamic_array_add(enum_type->internal_types.enumeration_table, enum_member);
 
-	//TODO in the future we can have extra checks for custom-defined enum types
-
 	//All went well
 	return SUCCESS;
 }
@@ -1689,18 +1687,11 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 	//Let's extract the union member and variable record for convenience
 	symtab_variable_record_t* record = member_var;
-	union_type_t* internal_union_type = union_type->internal_types.union_type;
 
-	//We've overflowed the bounds here, so fail out
-	if(internal_union_type->next_index == MAX_UNION_MEMBERS){
-		return FAILURE;
-	}
+	//TODO may or may not need to check for duplicates in here
 
-	//Add the member variable in
-	internal_union_type->members[internal_union_type->next_index] = member_var;
-
-	//Increment the next index
-	internal_union_type->next_index++;
+	//Add this in
+	dynamic_array_add(union_type->internal_types.union_table, member_var);
 
 	//If the size of this value is larger than the total size, we need to reassign
 	//the total size to this. Union types are always as large as their largest memeber
@@ -1953,7 +1944,7 @@ void type_dealloc(generic_type_t* type){
 			dynamic_array_dealloc(type->internal_types.struct_table);
 			break;
 		case TYPE_CLASS_UNION:
-			free(type->internal_types.union_type);
+			dynamic_array_dealloc(type->internal_types.union_table);
 			break;
 		default:
 			break;
