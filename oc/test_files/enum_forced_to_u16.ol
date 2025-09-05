@@ -1,14 +1,14 @@
 /**
 * Author: Jack Robbins
-* Testing OC's handling of a user-defined enum
+* Test an attempt to mix enums together
 */
 
 define enum my_enum {
-	A = 88,
-	B = 89,
-	C = 'a',
-	D = 99,
-	E = 'b'
+	A = 305,
+	B = 304,
+	C = 307, //These are more than 255, so we'll force to a u16
+	D = 299,
+	E = 301
 } as custom_enum;
 
 fn tester(mut param:custom_enum) -> i32{

@@ -1,11 +1,11 @@
 /**
 * Author: Jack Robbins
-* Testing OC's handling of a user-defined enum
+* Test an attempt to mix enums together
 */
 
 define enum my_enum {
 	A = 88,
-	B = 89,
+	B, // This is invalid. If one is user defined, then they all are
 	C = 'a',
 	D = 99,
 	E = 'b'

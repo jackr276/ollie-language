@@ -2496,13 +2496,10 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			switch(type->basic_type_token){
 				//If it's unassigned by this point, we fall to defaults
 				case UNSIGNED_INT_CONST:
-					printf("FORCING CONST\n\n\n\n");
-
 					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u32")->type);
 					break;
 				
 				case SIGNED_INT_CONST:
-					printf("FORCING CONST\n\n\n\n");
 					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "i32")->type);
 					break;
 
