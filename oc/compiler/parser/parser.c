@@ -194,6 +194,37 @@ static Token compressed_assignment_to_binary_op(Token op){
 
 
 /**
+ * Determine the minimum bit width for an integer field that is needed based on a value that is passed
+ * in
+ *
+ * Rules:
+ * 	If we bit shift left by 8 and have 0, then our value can fit in 8 bits
+ * 	If we shift left by 16 and have 0, then we can fit in 16 bits
+ * 	If we shift left by 32 and have 0, then we can fit in 32 bits
+ * 	Anything else -> 64 bits
+ */
+static generic_type_t* determine_required_minimum_integer_type_size(u_int64_t value){
+	//The case where we can use a u8
+	if(value >> 8 == 0){
+		return lookup_type_name_only(type_symtab, "u8")->type;
+	}
+
+	//We'll use u16
+	if(value >> 16 == 0){
+		return lookup_type_name_only(type_symtab, "u16")->type;
+	}
+
+	//We'll use u32
+	if(value >> 32 == 0){
+		return lookup_type_name_only(type_symtab, "u32")->type;
+	}
+
+	//Otherwise, we need 64 bits
+	return lookup_type_name_only(type_symtab, "u64")->type;
+}
+
+
+/**
  * Print out an error message. This avoids code duplicatoin becuase of how much we do this
  */
 static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t parser_line_num){
@@ -4640,6 +4671,10 @@ static u_int8_t enum_definer(FILE* fl){
 					return FAILURE;
 			}
 
+			//Keep track of what our largest value is
+			if(current > largest_value){
+				largest_value = current;
+			}
 
 		//We did not see an equals
 		} else {
@@ -4678,6 +4713,10 @@ static u_int8_t enum_definer(FILE* fl){
 		num_errors++;
 		return FAILURE;
 	}
+
+	//Now, based on our largest value, we need to determine the bit-width needed for this
+	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
+
 
 	//Now that we know everything has been assigned, we will go through and assign the actual values
 	for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
