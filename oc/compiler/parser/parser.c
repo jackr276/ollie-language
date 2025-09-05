@@ -4506,6 +4506,9 @@ static u_int8_t enum_definer(FILE* fl){
 	//If we are not using a user-defined enum, then this is the current value
 	u_int32_t current_enum_value = 0;
 
+	//What is the largest value that we see in the enum?
+	u_int64_t largest_value = 0;
+
 	//Now we will enter a do-while loop where we can continue to identifiers for our enums
 	do {
 		//We need to see a valid identifier
@@ -4605,6 +4608,38 @@ static u_int8_t enum_definer(FILE* fl){
 				return FAILURE;
 			}
 
+			//Now that we've caught all potential errors, we need to see a constant here
+			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+			//Something to store the current value in
+			u_int64_t current = 0;
+
+			//Switch based on what we have
+			switch(lookahead.tok){
+				//Just translate here
+				case INT_CONST_FORCE_U:
+				case INT_CONST:
+					current = atoi(lookahead.lexeme.string);
+					break;
+
+				case LONG_CONST_FORCE_U:
+				case LONG_CONST:
+				case HEX_CONST:
+					current = atol(lookahead.lexeme.string);
+					break;
+
+				//Character constants are allowed
+				case CHAR_CONST:
+					current = *(lookahead.lexeme.string);
+					break;
+
+				//If we see anything else, leave
+				default:
+					print_parse_message(PARSE_ERROR, "Integer or char constant expected after = in enum definer", parser_line_num);
+					num_errors++;
+					return FAILURE;
+			}
+
 
 		//We did not see an equals
 		} else {
@@ -4619,6 +4654,9 @@ static u_int8_t enum_definer(FILE* fl){
 
 			//Otherwise, this one's value is the current enum value
 			member_record->enum_member_value = current_enum_value;
+
+			//The largest value that we've seen is now also this
+			largest_value = current_enum_value;
 		}
 
 		//This goes up by 1
@@ -4651,7 +4689,7 @@ static u_int8_t enum_definer(FILE* fl){
 		symtab_variable_record_t* var = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
 
 		//Assign the value here
-		var->enum_member_value = i;
+//		var->enum_member_value = i;
 	}
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
