@@ -1738,6 +1738,12 @@ void finalize_struct_alignment(generic_type_t* type){
 	//Grab the alignable type size
 	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
 
+	//If the size is already a multiple of the alignable type size,
+	//then we can stop here and leave
+	if(type->type_size % alignable_type_size == 0){
+		return;
+	}
+
 	/**
 	 * The alignable type size is either: 1, 2, 4 or 8
 	 *
