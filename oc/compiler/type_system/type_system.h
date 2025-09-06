@@ -148,6 +148,12 @@ struct function_type_t{
 u_int8_t is_memory_address_type(generic_type_t* type);
 
 /**
+ * Get the type that we need to align for. On structs, it's the largest
+ * primitive member and on arrays, it's the member size
+ */
+generic_type_t* get_base_alignment_type(generic_type_t* type);
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */

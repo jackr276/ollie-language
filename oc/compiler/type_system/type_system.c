@@ -38,7 +38,7 @@ u_int8_t is_memory_address_type(generic_type_t* type){
  * For structs -> we align so that the base address is a multiple of the largest
  * member
  */
-static generic_type_t* get_base_alignment_type(generic_type_t* type){
+generic_type_t* get_base_alignment_type(generic_type_t* type){
 	switch(type->type_class){
 		//However for an array, we need to find the
 		//size of the member type
