@@ -1735,12 +1735,19 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
  * throughout the entirety of construction, so this should be easy
  */
 void finalize_struct_alignment(generic_type_t* type){
-	//Let's see how far off we are from being a multiple of the
-	//final address
-	u_int32_t needed_padding = type->type_size % type->internal_values.largest_member_type->type_size;
+	//Grab the alignable type size
+	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
 
-	//Increment the size accordingly
-	type->type_size += needed_padding;
+	/**
+	 * The alignable type size is either: 1, 2, 4 or 8
+	 *
+	 * We will add this alignable type size on so that we are guaranteed to be over
+	 * the next highest multiple of said type size
+	 *
+	 * Then we will and by the 2's complement of this value to 0 out the lowest bits
+	 * that need to be 0'd out. At most, we will 0 out the bottom 3 bits for 8-byte aligned
+	 */
+	type->type_size = (type->type_size + alignable_type_size) & (-alignable_type_size);
 }
 
 
