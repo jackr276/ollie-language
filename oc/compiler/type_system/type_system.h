@@ -9,37 +9,22 @@
 #define TYPE_SYSTEM_H
 
 #include "../lexer/lexer.h"
+#include "../dynamic_array/dynamic_array.h"
 #include <sys/types.h>
 
-#define OUT_OF_BOUNDS 3
 #define MAX_FUNCTION_TYPE_PARAMS 6
 
 //Type names may not exceed 200 characters in length
 #define MAX_TYPE_NAME_LENGTH 200
-//The maximum number of members in a construct
-#define MAX_STRUCT_MEMBERS 100
-//The maximum number of members in an enumerated
-#define MAX_ENUMERATED_MEMBERS 200
-
 
 //The generic global type type
 typedef struct generic_type_t generic_type_t;
-//An array type
-typedef struct array_type_t array_type_t;
-//A pointer type
-typedef struct pointer_type_t pointer_type_t;
 //A function type
 typedef struct function_type_t function_type_t;
 //A function type's individual parameter
 typedef struct function_type_parameter_t function_type_parameter_t;
-//An enumerated type
-typedef struct enumerated_type_t enumerated_type_t;
-//A constructed type
-typedef struct struct_type_t struct_type_t;
-//A constructed type field
-typedef struct struct_type_field_t struct_type_field_t;
-//An aliased type
-typedef struct aliased_type_t aliased_type_t;
+//A union type
+typedef struct union_type_t union_type_t;
 
 
 //A type for which side we're on
@@ -59,6 +44,7 @@ typedef enum type_class_t {
 	TYPE_CLASS_ENUMERATED,
 	TYPE_CLASS_POINTER,
 	TYPE_CLASS_FUNCTION_SIGNATURE, /* Function pointer type */
+	TYPE_CLASS_UNION, /* For discriminating union types */
 	TYPE_CLASS_ALIAS /* Alias types */
 } type_class_t;
 
@@ -73,17 +59,48 @@ struct generic_type_t{
 	//The name of the type
 	dynamic_string_t type_name;
 
-	//Based on the type class, we will
-	//interpret here as whichever type is appropriate
-	union{
-		array_type_t* array_type;
-		pointer_type_t* pointer_type;
+	/**
+	 * All fields in this union are
+	 * mutually exclusive with one another.
+	 * To save space, we'll bundle them all in a union
+	 * and then access whichever is needed based on the type 
+	 * class
+	 */
+	union {
+		//What is the member type of an array
+		generic_type_t* member_type;
+		//What does a pointer type point to?
+		generic_type_t* points_to;
 		//For function pointers
 		function_type_t* function_type;
-		struct_type_t* struct_type;
-		enumerated_type_t* enumerated_type;
-		aliased_type_t* aliased_type;
+		//Store all values in a struct
+		dynamic_array_t* struct_table;
+		//The enumeration table stores all values in an enum
+		dynamic_array_t* enumeration_table;
+		//The union table
+		dynamic_array_t* union_table;
+		//The aliased type
+		generic_type_t* aliased_type;
 	} internal_types;
+
+	/**
+	 * Some types like array types also store their
+	 * number of members. Types like pointer
+	 * types store flags that represent whether or not
+	 * they are a void pointer. We'll have this
+	 * "internal values" field to store these mutually
+	 * exclusive fields in an efficient way
+	 */
+	union {
+		//What is the integer type that an enum uses?
+		generic_type_t* enum_integer_type;
+		//The largest member type in a struct
+		generic_type_t* largest_member_type;
+		//The number of members in an array
+		u_int32_t num_members;
+		//Is a type a void pointer?
+		u_int8_t is_void_pointer;
+	} internal_values;
 
 	//When was it defined: -1 = generic type
 	int32_t line_number;
@@ -93,84 +110,6 @@ struct generic_type_t{
 	Token basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
-};
-
-
-/**
- * An array type is a linear, contiguous collection of other types in memory.
- */
-struct array_type_t{
-	//Whatever the members are in the array
-	generic_type_t* member_type;
-	//Array bounds
-	u_int32_t num_members;
-};
-
-
-/**
- * A pointer type contains a reference to the memory address of another 
- * variable in memory. This other type may very well itself be a pointer, which is why the
- * actual type pointed to is generic
- */
-struct pointer_type_t{
-	//What do we point to?
-	generic_type_t* points_to;
-	//Is this a void*
-	u_int8_t is_void_pointer;
-};
-
-
-/**
- * The struct type's individual members
- */
-struct struct_type_field_t{
-	//What variable is stored in here?
-	void* variable;
-	//What kind of padding do we need to ensure alignment?
-	u_int16_t padding;
-	//What is the offset(address) in bytes from the start of this field
-	u_int16_t offset;
-};
-
-
-/**
- * A constructed type contains a list of other types that are inside of it.
- * As such, the type here contains an array of generic types of at most 100
- */
-struct struct_type_t{
-	//We will store internally a pre-aligned construct table. The construct
-	//table itself will be aligned internally, and we'll use the given order of
-	//the construct members to compute it. Due to this, it would be advantageous for
-	//the programmer to order the structure table with larger elements first
-	struct_type_field_t struct_table[MAX_STRUCT_MEMBERS];
-	//The overall size in bytes of the struct
-	u_int32_t size;
-	//The size of the largest member
-	u_int32_t largest_member_size;
-	//The next index
-	u_int8_t next_index;
-};
-
-
-/**
- * An enumerated type has a name and an array of enumeration tokens. These tokens
- * are positionally encoded and this encoding is fixed at declaration
-*/
-struct enumerated_type_t{
-	//The number of enumerated types
-	void* tokens[MAX_ENUMERATED_MEMBERS];
-	//The current number of tokens
-	u_int8_t token_num;
-};
-
-
-/**
- * An aliased type is quite simply a name that points to the real type. This can
- * be used by the programmer to define simpler names for themselves
- */
-struct aliased_type_t{
-	//What does it point to?
-	generic_type_t* aliased_type;
 };
 
 
@@ -207,6 +146,12 @@ struct function_type_t{
  * Does this type represent a memory address?
  */
 u_int8_t is_memory_address_type(generic_type_t* type);
+
+/**
+ * Get the type that we need to align for. On structs, it's the largest
+ * primitive member and on arrays, it's the member size
+ */
+generic_type_t* get_base_alignment_type(generic_type_t* type);
 
 /**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
@@ -309,7 +254,17 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 /**
  * Add a value into a construct's table
  */
-u_int8_t add_struct_member(generic_type_t* type, void* member_var);
+void add_struct_member(generic_type_t* type, void* member_var);
+
+/**
+ * Add a value to an enumeration's list of values
+ */
+u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values);
+
+/**
+ * Add a value into the union's list of members
+ */
+u_int8_t add_union_member(generic_type_t* union_type, void* member_var);
 
 /**
  * Finalize the struct alignment
@@ -317,9 +272,9 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var);
 void finalize_struct_alignment(generic_type_t* type);
 
 /**
- * Does a constructed type contain a given member variable?
+ * Does this struct contain said member? Return the variable if yes, NULL if not
  */
-struct_type_field_t* get_struct_member(struct_type_t* structure, char* name);
+void* get_struct_member(generic_type_t* structure, char* name);
 
 /**
  * Dynamically allocate and create an array type

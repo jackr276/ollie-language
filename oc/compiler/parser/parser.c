@@ -194,6 +194,37 @@ static Token compressed_assignment_to_binary_op(Token op){
 
 
 /**
+ * Determine the minimum bit width for an integer field that is needed based on a value that is passed
+ * in
+ *
+ * Rules:
+ * 	If we bit shift left by 8 and have 0, then our value can fit in 8 bits
+ * 	If we shift left by 16 and have 0, then we can fit in 16 bits
+ * 	If we shift left by 32 and have 0, then we can fit in 32 bits
+ * 	Anything else -> 64 bits
+ */
+static generic_type_t* determine_required_minimum_integer_type_size(u_int64_t value){
+	//The case where we can use a u8
+	if(value >> 8 == 0){
+		return lookup_type_name_only(type_symtab, "u8")->type;
+	}
+
+	//We'll use u16
+	if(value >> 16 == 0){
+		return lookup_type_name_only(type_symtab, "u16")->type;
+	}
+
+	//We'll use u32
+	if(value >> 32 == 0){
+		return lookup_type_name_only(type_symtab, "u32")->type;
+	}
+
+	//Otherwise, we need 64 bits
+	return lookup_type_name_only(type_symtab, "u64")->type;
+}
+
+
+/**
  * Print out an error message. This avoids code duplicatoin becuase of how much we do this
  */
 static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t parser_line_num){
@@ -297,10 +328,10 @@ static void update_constant_type_in_subtree(generic_ast_node_t* sub_tree_node, g
  */
 static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, Token op, generic_ast_node_t* operand, side_type_t side){
 	//Grab the pointer type out
-	pointer_type_t* pointer_type = pointer->inferred_type->internal_types.pointer_type;
+	generic_type_t* pointer_type = pointer->inferred_type;
 
 	//If this is a void pointer, we're done
-	if(pointer_type->is_void_pointer == TRUE){
+	if(pointer_type->internal_values.is_void_pointer == TRUE){
 		return print_and_return_error("Void pointers cannot be added or subtracted to", parser_line_num);
 	}
 
@@ -309,7 +340,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	//Mark the type too
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
-	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->points_to->type_size;
+	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->internal_types.points_to->type_size;
 	//Ensure that we give this a type
 	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
 
@@ -1423,7 +1454,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 		}
 
 		//We can now pick out what type we're referencing(should be construct)
-		referenced_type = working_type->internal_types.pointer_type->points_to;
+		referenced_type = working_type->internal_types.points_to;
 
 		//Now we know that its a pointer, but what does it point to?
 		if(referenced_type->type_class != TYPE_CLASS_STRUCT){
@@ -1462,7 +1493,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	char* member_name = ident->string_value.string;
 
 	//Let's see if we can look this up inside of the type
-	symtab_variable_record_t* var_record = get_struct_member(referenced_type->internal_types.struct_type, member_name)->variable;
+	symtab_variable_record_t* var_record = get_struct_member(referenced_type, member_name);
 
 	//If we can't find it we're out
 	if(var_record == NULL){
@@ -1674,10 +1705,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//Based on this, the current type is whatever this array contains. We'll also use this for size determinations
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
-				current_type = dealias_type(current_type->internal_types.array_type->member_type);
+				current_type = dealias_type(current_type->internal_types.member_type);
 			} else {
 				//Otherwise we know that it must be a pointer
-				current_type = dealias_type(current_type->internal_types.pointer_type->points_to);
+				current_type = dealias_type(current_type->internal_types.points_to);
 			}
 			
 			//The current type of any array access will be whatever the derferenced value is
@@ -1868,16 +1899,16 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 		
 			//Otherwise if we made it here, we only have one final tripping point
 			//Ensure that we aren't trying to deref a null pointer
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_types.pointer_type->is_void_pointer == TRUE){
+			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_values.is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 			}
 
 			//Otherwise our dereferencing worked, so the return type will be whatever this points to
 			//Grab what it references whether its a pointer or an array
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-				return_type = cast_expr->inferred_type->internal_types.pointer_type->points_to;
+				return_type = cast_expr->inferred_type->internal_types.points_to;
 			} else {
-				return_type = cast_expr->inferred_type->internal_types.array_type->member_type;
+				return_type = cast_expr->inferred_type->internal_types.member_type;
 			}
 
 			//This is assignable
@@ -3731,7 +3762,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
  *
  * BNF Rule: <construct-member> ::= {mut}? <identifier> : <type-specifier> 
  */
-static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t side){
+static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this mutable? False by default
@@ -3750,7 +3781,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 
 	//Otherwise we know that it worked here
 	//Now we need to see a valid ident and check it for duplication
-	generic_ast_node_t* ident = identifier(fl, side);	
+	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);	
 
 	//Let's make sure it actually worked
 	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3772,13 +3803,13 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	}
 
 	//The field, if we can find it
-	struct_type_field_t* duplicate = NULL;
+	symtab_variable_record_t* duplicate = NULL;
 
 	//Is this a duplicate? If so, we fail out
-	if((duplicate = get_struct_member(construct->internal_types.struct_type, name)) != NULL){
+	if((duplicate = get_struct_member(construct, name)) != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(duplicate->variable);
+		print_variable_name(duplicate);
 		num_errors++;
 		return FAILURE;
 	}
@@ -3834,8 +3865,6 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
 	symtab_variable_record_t* member_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
-	//Mark that this is a construct member
-	member_record->is_struct_member = TRUE;
 	//Store what the type is
 	member_record->type_defined_as = type_spec;
 	//Is it mutable or not
@@ -3858,7 +3887,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct, side_type_t s
  *
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
-static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct, side_type_t side){
+static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -3874,7 +3903,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct, side_typ
 		push_back_token(lookahead);
 
 		//We must first see a valid construct member
-		u_int8_t status = struct_member(fl, construct, side);
+		u_int8_t status = struct_member(fl, construct);
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
@@ -4232,7 +4261,7 @@ static u_int8_t struct_definer(FILE* fl){
 	generic_type_t* struct_type = create_struct_type(type_name, current_line);
 
 	//We are now required to see a valid construct member list
-	u_int8_t success = struct_member_list(fl, struct_type, SIDE_TYPE_LEFT);
+	u_int8_t success = struct_member_list(fl, struct_type);
 
 	//Automatic fail case here
 	if(success == FAILURE){
@@ -4367,6 +4396,9 @@ static u_int8_t struct_definer(FILE* fl){
 /**
  * A union member list is a semicolon separated list of different variables that the union stores
  */
+static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
+	return FALSE;
+}
 
 
 
@@ -4413,152 +4445,17 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
+	//Create the union type
+	generic_type_t* union_type = create_union_type(union_name, parser_line_num);
+
+	//Once we've created it, we can begin parsing the internals
+
+
 
 
 	//If we get here it worked so
 	//TODO just fail out for now
 	return FAILURE;
-}
-
-
-
-/**
- * An enum member is simply an identifier. This rule performs all the needed checks to ensure
- * that it's not a duplicate of anything else that we've currently seen. Like all rules, this function
- * returns a reference to the root of the tree it created
- *
- * BNF Rule: <enum-member> ::= <identifier>
- */
-static generic_ast_node_t* enum_member(FILE* fl, u_int16_t current_member_val, side_type_t side){
-	//We really just need to see a valid identifier here
-	generic_ast_node_t* ident = identifier(fl, side);
-
-	//If it fails, we'll blow the whole thing up
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid identifier given as enum member", parser_line_num);
-	}
-
-	//Now if we make it here, we'll need to check and make sure that it isn't a duplicate of anything else
-	//Grab this for convenience
-	char* name = ident->string_value.string;
-
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-	}
-
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-	}
-
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-	}
-
-	//Once we make it all the way down here, we know that we don't have any duplication
-	//We can now make the record of the enum
-	symtab_variable_record_t* enum_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
-	//Store the current value
-	enum_record->enum_member_value = current_member_val;
-	//It is an enum member
-	enum_record->is_enumeration_member = 1;
-	//This is always initialized
-	enum_record->initialized = 1;
-	//Later down the line, we'll assign the type that this thing is
-	
-	//We can now add it into the symtab
-	insert_variable(variable_symtab,  enum_record);
-
-	//Finally, we'll construct the node that holds this item and send it out
-	generic_ast_node_t* enum_member = ast_node_alloc(AST_NODE_TYPE_ENUM_MEMBER, side);
-	//Store the record in this for ease of access/modification
-	enum_member->variable = enum_record;
-	//Add the identifier as the child of this node
-	add_child_node(enum_member, ident);
-
-	//Finally we'll give the reference back
-	return enum_member;
-}
-
-
-/**
- * An enumeration list guarantees that we have at least one enumerator. It also allows us to
- * chain enumerators using commas. Like all rules, this rule returns a reference to the root of 
- * the subtree that it creates
- *
- * BNF Rule: <enum-member-list> ::= <enum-member>{, <enum-member>}*
- */
-static generic_ast_node_t* enum_member_list(FILE* fl, side_type_t side){
-	//Lookahead token
-	lexitem_t lookahead;
-	//The enum member current number
-	u_int16_t current_member_val = 0;
-
-	//We will first create the list node
-	generic_ast_node_t* enum_list_node = ast_node_alloc(AST_NODE_TYPE_ENUM_MEMBER_LIST, side);
-
-	//Now, we can see as many enumerators as we'd like here, each separated by a comma
-	do{
-		//First we need to see a valid enum member
-		generic_ast_node_t* member = enum_member(fl, current_member_val, side);
-		//Increment this
-		current_member_val++;
-
-		//If the member is bad, we bail right out
-		if(member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid member given in enum definition", parser_line_num);
-		}
-
-		//We can now add this in as a child of the enum list
-		add_child_node(enum_list_node, member);
-
-		//Finally once we make it here we'll refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Keep going as long as we see commas
-	} while(lookahead.tok == COMMA);
-
-	//Once we make it out here, we know that we didn't see a comma. We know that we really need to see an
-	//R_CURLY when we get here, so if we didn't we can give a more helpful error message here
-	if(lookahead.tok != R_CURLY){
-		return print_and_return_error("Enum members must be separated by commas in defintion", parser_line_num);
-	}
-	
-	//Otherwise if we end up here all went well. We'll let the caller do the final checking with the R_CURLY so 
-	//we'll give it back
-	push_back_token(lookahead);
-
-	//We'll now give back the list node itself
-	return enum_list_node;
 }
 
 
@@ -4568,13 +4465,14 @@ static generic_ast_node_t* enum_member_list(FILE* fl, side_type_t side){
  *
  * Important note: By the time we get here, we will have already consume the "define" and "enum" tokens
  *
- * BNF Rule: <enum-definer> ::= define enum <identifier> { <enum-member-list> } {as <identifier>}?;
+ * BNF Rule: <enum-definer> ::= define enum <identifier> { <identifier> {= <constant>}? {, <identifier>{ = <constant>}?}* } {as <identifier>}?;
  */
 static u_int8_t enum_definer(FILE* fl){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//Reserve space for the type name
 	dynamic_string_t type_name;
 
 	//Allocate it
@@ -4611,6 +4509,12 @@ static u_int8_t enum_definer(FILE* fl){
 		return FAILURE;
 	}
 
+	//We can now create the enum type
+	generic_type_t* enum_type = create_enumerated_type(type_name, parser_line_num);
+
+	//Insert into the type symtab
+	insert_type(type_symtab, create_type_record(enum_type));
+
 	//Now that we know we don't have a duplicate, we can now start looking for the enum list
 	//We must first see an L_CURLY
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4625,74 +4529,221 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Push onto the stack for grouping
 	push_token(grouping_stack, lookahead);
-	
-	//Now we must see a valid enum member list
-	generic_ast_node_t* member_list = enum_member_list(fl, SIDE_TYPE_LEFT);
 
-	//If it failed, we bail out
-	if(member_list->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid enumeration member list given in enum definition", current_line);
-		//Destroy the member list
-		return FAILURE;
-	}
+	//Are we using user-defined enum values? If so, then we need to always see those
+	//from the user
+	u_int8_t user_defined_enum_values = FALSE;
 
-	//Now that we get down here the only thing left syntatically is to check for the closing curly
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//If we are not using a user-defined enum, then this is the current value
+	u_int32_t current_enum_value = 0;
 
-	//First chance to fail
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enum member list", parser_line_num);
-		num_errors++;
-		//Destroy the member list
-		return FAILURE;
-	}
+	//What is the largest value that we see in the enum?
+	u_int64_t largest_value = 0;
 
-	//We must also see matching ones here
-	if(pop_token(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected in enum defintion", parser_line_num);
-		num_errors++;
-		//Destroy the member list
-		return FAILURE;
-	}
+	//Now we will enter a do-while loop where we can continue to identifiers for our enums
+	do {
+		//We need to see a valid identifier
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//Now that we know everything here has worked, we can finally create the enum type
-	generic_type_t* enum_type = create_enumerated_type(type_name, current_line);
-
-	//Now we will crawl through all of the types that we had and add their references into this enum type's list
-	//This should in theory be an enum member node
-	generic_ast_node_t* cursor = member_list->first_child;	
-
-	//Go through while the cursor isn't null
-	while(cursor != NULL){
-		//Sanity check here, this should be of type enum member
-		if(cursor->ast_node_type != AST_NODE_TYPE_ENUM_MEMBER){
-			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Found non-member node in member list for enum", parser_line_num);
+		//If it's not an identifier, we're done
+		if(lookahead.tok != IDENT){
+			print_parse_message(PARSE_ERROR, "Identifier expected as enum member", parser_line_num);
+			num_errors++;
 			return FAILURE;
 		}
 
-		//Otherwise we're fine
-		//We'll now extract the symtab record that this node holds onto
-		symtab_variable_record_t* variable_rec = cursor->variable;
+		//Grab this out for convenience
+		char* member_name = lookahead.lexeme.string;
 
-		//Associate the type here as well
-		variable_rec->type_defined_as = enum_type;
+		//Check that it isn't some duplicated function name
+		symtab_function_record_t* found_func = lookup_function(function_symtab, member_name);
 
-		//Increment the size here
-		enum_type->type_size += variable_rec->type_defined_as->type_size;
+		//Fail out here
+		if(found_func != NULL){
+			sprintf(info, "Attempt to redefine function \"%s\". First defined here:", member_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print out the function declaration
+			print_function_name(found_func);
+			num_errors++;
+			//Fail out
+			return FAILURE;
+		}
 
-		//We will store this in the enum types records
-		enum_type->internal_types.enumerated_type->tokens[enum_type->internal_types.enumerated_type->token_num] = variable_rec;
-		//Increment the number of tokens by one
-		(enum_type->internal_types.enumerated_type->token_num)++;
+		//Check that it isn't some duplicated variable name
+		symtab_variable_record_t* found_var = lookup_variable(variable_symtab, member_name);
 
-		//Move the cursor up by one
-		cursor = cursor->next_sibling;
+		//Fail out here
+		if(found_var != NULL){
+			sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", member_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print out the original declaration
+			print_variable_name(found_var);
+			num_errors++;
+			//Fail out
+			return FAILURE;
+		}
+
+		//Finally check that it isn't a duplicated type name
+		found_type = lookup_type_name_only(type_symtab, member_name);
+
+		//Fail out here
+		if(found_type!= NULL){
+			sprintf(info, "Attempt to redefine type \"%s\". First defined here:", member_name);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			//Also print out the original declaration
+			print_type_name(found_type);
+			num_errors++;
+			//Fail out
+			return FAILURE;
+		}
+
+		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
+		//to create the record and assign it a type
+		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, STORAGE_CLASS_NORMAL);
+
+		//Once it's been created, mark that it is an enum member
+		member_record->is_enumeration_member = TRUE;
+
+		//Store the line number
+		member_record->line_number = parser_line_num;
+
+		//By virtue of being an enum, this has been initialized 
+		member_record->initialized = TRUE;
+
+		//Now we can insert this into the symtab
+		insert_variable(variable_symtab, member_record);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//If we see an equals sign, this means that we have a user-defined enum value
+		if(lookahead.tok == EQUALS){
+			//If this value is 0, this is the very first iteration. That means that this
+			//first element sets the rule for everything
+			if(current_enum_value == 0){
+				//Set this flag for all future values
+				user_defined_enum_values = TRUE;
+			}
+
+			//The other case - if this is FALSE and we saw this,
+			//then we have an error
+			if(user_defined_enum_values == FALSE){
+				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", enum_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Now that we've caught all potential errors, we need to see a constant here
+			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+			//Something to store the current value in
+			u_int64_t current = 0;
+
+			//Switch based on what we have
+			switch(lookahead.tok){
+				//Just translate here
+				case INT_CONST_FORCE_U:
+				case INT_CONST:
+					current = atoi(lookahead.lexeme.string);
+					break;
+
+				case LONG_CONST_FORCE_U:
+				case LONG_CONST:
+				case HEX_CONST:
+					current = atol(lookahead.lexeme.string);
+					break;
+
+				//Character constants are allowed
+				case CHAR_CONST:
+					current = *(lookahead.lexeme.string);
+					break;
+
+				//If we see anything else, leave
+				default:
+					print_parse_message(PARSE_ERROR, "Integer or char constant expected after = in enum definer", parser_line_num);
+					num_errors++;
+					return FAILURE;
+			}
+
+			//Keep track of what our largest value is
+			if(current > largest_value){
+				largest_value = current;
+			}
+
+			//Assign the value in
+			member_record->enum_member_value = current;
+
+			//We need to refresh the lookahead here
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//We did not see an equals
+		} else {
+			//Are we using user-defined values? If so,
+			//then this is wrong
+			if(user_defined_enum_values == TRUE){
+				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", enum_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Otherwise, this one's value is the current enum value
+			member_record->enum_member_value = current_enum_value;
+
+			//The largest value that we've seen is now also this
+			largest_value = current_enum_value;
+		}
+
+		//Add this in as a member to our current enum
+		u_int8_t success = add_enum_member(enum_type, member_record, user_defined_enum_values);
+
+		//This means that the user attempted to add a duplicate value
+		if(success == FAILURE){
+			sprintf(info, "Duplicate enum value %ld", member_record->enum_member_value);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//This goes up by 1
+		current_enum_value++;
+
+	//So long as we keep seeing commas
+	} while(lookahead.tok == COMMA);
+
+	//If we get out here, then the lookahead must be an RCURLY. If we don't see it, then fail out
+	if(lookahead.tok != R_CURLY){
+		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enumeration definition", parser_line_num); 
+		num_errors++;
+		return FAILURE;
 	}
 
-	//Now that this is all filled out, we can add this to the type symtab
-	insert_type(type_symtab, create_type_record(enum_type));
+	//Ensure that the grouping stack matches
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num); 
+		num_errors++;
+		return FAILURE;
+	}
 
-	//Once we're here the member list is useless, so we'll deallocate it
+	//Now, based on our largest value, we need to determine the bit-width needed for this
+	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
+	generic_type_t* type_needed = determine_required_minimum_integer_type_size(largest_value);
+
+	//Store this in the enum
+	enum_type->internal_values.enum_integer_type = type_needed;
+
+	//Assign the size over as well
+	enum_type->type_size = type_needed->type_size;
+
+	//We now go through and set the type now that we know what it is
+	for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
+		//Grab it out
+		symtab_variable_record_t* var = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
+
+		//Store the type that we have
+		var->type_defined_as = type_needed;
+	}
 
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
 	//for redefining variables immediately upon declaration. They are prefaced by the "As" keyword
@@ -4816,6 +4867,7 @@ static u_int8_t enum_definer(FILE* fl){
  * 						   | f64 
  * 						   | char 
  * 						   | enum <identifier>
+ * 						   | union <identifier>
  * 						   | struct <identifier>
  * 						   | <identifier>
  */
@@ -7787,14 +7839,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
-	//Extract the actual array type for ease of use here
-	array_type_t* array = array_type->internal_types.array_type;
-
 	//Grab the member type here out as well
-	generic_type_t* member_type = array->member_type;
+	generic_type_t* member_type = array_type->internal_types.member_type;
 
 	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
-	u_int32_t num_members = array->num_members;
+	u_int32_t num_members = array_type->internal_values.num_members;
 
 	//Let's also keep a record of the number of members that we've seen in total
 	u_int32_t initializer_list_members = 0;
@@ -7833,10 +7882,10 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 		}
 	//Otherwise, we'll need to set the number of members accordingly here
 	} else {
-		array->num_members = initializer_list_members;
+		array_type->internal_values.num_members = initializer_list_members;
 
 		//Reup the acutal size here
-		array_type->type_size = initializer_list_members * array->member_type->type_size;
+		array_type->type_size = initializer_list_members * array_type->internal_types.member_type->type_size;
 	}
 
 	//If we make it here, then we can set the type of the initializer list to match the array
@@ -7853,14 +7902,11 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * up
  */
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
-	//Grab the raw struct type out
-	struct_type_t* raw_type = struct_type->internal_types.struct_type;
-
 	//We'll need to extract the struct table and that max index that it holds
-	struct_type_field_t* fields = raw_type->struct_table;
+	dynamic_array_t* struct_table = struct_type->internal_types.struct_table;
 
 	//The number of fields that were defined in the type is here
-	u_int32_t num_fields = raw_type->next_index;
+	u_int32_t num_fields = struct_table->current_index;
 
 	//Initialize a cursor to the initializer list node itself
 	generic_ast_node_t* cursor = initializer_list_node->first_child;
@@ -7878,7 +7924,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		}
 
 		//Grab the variable out
-		symtab_variable_record_t* variable = fields->variable;
+		symtab_variable_record_t* variable = dynamic_array_get_at(struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
 		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor);
@@ -7888,13 +7934,8 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 			return FALSE;
 		}
 
-		//Otherwise it worked, so we'll go to the next one
-		
 		//Increment this counter
 		seen_count++;
-
-		//Push the field pointer up by 1
-		fields++;
 
 		//Advance to the next sibling
 		cursor = cursor->next_sibling;
@@ -7925,11 +7966,8 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
  * node as its child
  */
 static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
-	//Extract the actual array type for ease of use here
-	array_type_t* array = array_type->internal_types.array_type;
-
 	//Let's first validate that this array actually is a char[]
-	if(array->member_type->type_class != TYPE_CLASS_BASIC || array->member_type->basic_type_token != CHAR){
+	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
 		//Print out the full error message
 		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
 
@@ -7946,16 +7984,16 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 	
 	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
 	//lenght of the array to be whatever we have in here
-	if(array->num_members == 0){
+	if(array_type->internal_values.num_members == 0){
 		//Set the number of members
-		array->num_members = length;
+		array_type->internal_values.num_members = length;
 
 		//Since these are all chars, the size of the array is just the length
 		array_type->type_size = length;
 	} else {
 		//If these are different, then we fail out
-		if(array->num_members != length){
-			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array->num_members, length);
+		if(array_type->internal_values.num_members != length){
+			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array_type->internal_values.num_members, length);
 			return print_and_return_error(info, parser_line_num);
 		}
 

@@ -3,6 +3,9 @@
 */
 
 pub fn main(arg:i32, argv:char**) -> i32{
+	/**
+	* Size should be: 1 + 3 pad + 320 + 1 + 3 pad + 4
+	*/
 	define struct my_struct{
 		mut ch:char;
 		mut x:i32[80];

@@ -2105,7 +2105,7 @@ static void rename_all_variables(cfg_t* cfg){
  */
 static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
 	//Emit the constant size
-	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->internal_types.pointer_type->points_to->type_size, type_symtab);
+	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->internal_types.points_to->type_size, type_symtab);
 
 	//We need this temp assignment for bookkeeping reasons
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
@@ -2550,11 +2550,8 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Handle an enumerated type right here
 	if(ident_node->variable->is_enumeration_member == TRUE) {
-		//Look up the type
-		symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, "u8");
-		generic_type_t* type = type_record->type;
 		//Just create a constant here with the enum
-		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), type, is_branch_ending);
+		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), ident_node->variable->type_defined_as, is_branch_ending);
 	}
 
 	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
@@ -2995,10 +2992,10 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//What is the internal type that we're pointing to? This will determine our scale
 			if(current_type->type_class == TYPE_CLASS_ARRAY){
 				//We'll dereference the current type
-				current_type = current_type->internal_types.array_type->member_type;
+				current_type = current_type->internal_types.member_type;
 			} else {
 				//We'll dereference the current type
-				current_type = current_type->internal_types.pointer_type->points_to;
+				current_type = current_type->internal_types.points_to;
 			}
 
 			/**
@@ -3075,7 +3072,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//If current var is a pointer, then we need to dereference it to get the actual struct type	
 			if(current_type->type_class == TYPE_CLASS_POINTER){
 				//We need to first dereference this
-				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.pointer_type->points_to, related_memory_address);
+				three_addr_var_t* dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.points_to, related_memory_address);
 
 				//Assign temp to be the current address
 				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
@@ -3090,20 +3087,17 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				current_address = assignment->assignee;
 
 				//Dereference the current type
-				current_type = current_type->internal_types.pointer_type->points_to;
+				current_type = current_type->internal_types.points_to;
 			}
 
 			//Now we'll grab the associated nstruct record
-			struct_type_field_t* field = get_struct_member(current_type->internal_types.struct_type, var->var_name.string);
+			symtab_variable_record_t* member = get_struct_member(current_type, var->var_name.string);
 
 			//Save this for down the road
 			generic_type_t* struct_type = current_type;
 
-			//The field we have
-			symtab_variable_record_t* member = field->variable;
-
 			//The constant that represents the offset
-			three_addr_const_t* offset = emit_int_constant_direct(field->offset, type_symtab);
+			three_addr_const_t* offset = emit_int_constant_direct(member->struct_offset, type_symtab);
 
 			//This is now the member's type
 			current_type = member->type_defined_as;
@@ -7269,7 +7263,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
 	//Grab the struct type out for reference
-	struct_type_t* struct_type = struct_initializer->inferred_type->internal_types.struct_type;
+	generic_type_t* struct_type = struct_initializer->inferred_type;
 
 	//Grab a cursor to the child
 	generic_ast_node_t* cursor = struct_initializer->first_child;
@@ -7279,8 +7273,11 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
+		//Grab it out
+		symtab_variable_record_t* member_variable = dynamic_array_get_at(struct_type->internal_types.struct_table, member);
+
 		//Grab the offset directly from the struct table
-		u_int32_t offset = struct_type->struct_table[member].offset;
+		u_int32_t offset = member_variable->struct_offset;
 
 		//We'll need to emit the proper address offset calculation for each one
 		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_long_constant_direct(offset, type_symtab), is_branch_ending);

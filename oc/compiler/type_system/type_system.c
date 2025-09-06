@@ -32,6 +32,32 @@ u_int8_t is_memory_address_type(generic_type_t* type){
 
 
 /**
+ * What is the value that this needs to be aligned by?
+ *
+ * For arrays -> we align so that the base address is a multiple of the member type
+ * For structs -> we align so that the base address is a multiple of the largest
+ * member
+ */
+generic_type_t* get_base_alignment_type(generic_type_t* type){
+	switch(type->type_class){
+		//However for an array, we need to find the
+		//size of the member type
+		case TYPE_CLASS_ARRAY:
+			//Recursively get the size of the member type
+			return get_base_alignment_type(type->internal_types.member_type);
+
+		//A struct it's the largest member size
+		case TYPE_CLASS_STRUCT:
+			return get_base_alignment_type(type->internal_values.largest_member_type);
+
+		//By default just give the size back
+		default:
+			return type;
+	}
+}
+
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */
@@ -109,10 +135,10 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 		switch (current_type->type_class) {
 			//This is really all we should have here
 			case TYPE_CLASS_ARRAY:
-				current_type = current_type->internal_types.array_type->member_type;
+				current_type = current_type->internal_types.member_type;
 				break;
 			case TYPE_CLASS_POINTER:
-				current_type = current_type->internal_types.pointer_type->points_to;
+				current_type = current_type->internal_types.points_to;
 				break;
 			//Nothing for us here
 			default:
@@ -140,7 +166,7 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
 
 	//If these are both arrays
 	if(typeA->type_class == TYPE_CLASS_ARRAY
-		&& typeA->internal_types.array_type->num_members != typeB->internal_types.array_type->num_members){
+		&& typeA->internal_values.num_members != typeB->internal_values.num_members){
 		//We can disqualify quickly if this happens
 		return FALSE;
 	}
@@ -365,47 +391,46 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 			}
 			
 
-		//Enumerated types are internally a u8
+		//Enum's can internally be anything
 		case TYPE_CLASS_ENUMERATED:
-			//If we have an enumerated type here as well
-			if(deref_destination_type->type_class == TYPE_CLASS_ENUMERATED){
-				//These need to be the exact same, otherwise this will not work
-				if(strcmp(deref_source_type->type_name.string, deref_destination_type->type_name.string) == 0){
-					return deref_destination_type;
-				} else {
+			//Go based on what the source it
+			switch(deref_source_type->type_class){
+				case TYPE_CLASS_ENUMERATED:
+					//These need to be the exact same, otherwise this will not work
+					if(strcmp(deref_source_type->type_name.string, deref_destination_type->type_name.string) == 0){
+						return deref_destination_type;
+					} else {
+						return NULL;
+					}
+
+				//If we have a basic type, we can just compare it with the enum's internal int
+				case TYPE_CLASS_BASIC:
+					switch(deref_source_type->basic_type_token){
+						//These are all bad
+						case F32:
+						case F64:
+						case VOID:
+							return NULL;
+						default:
+							return types_assignable(&(deref_destination_type->internal_values.enum_integer_type), source_type);
+					}
+
+				//Anything else is bad
+				default:
 					return NULL;
-				}
-
-			//Otherwise it needs to be a basic type
-			} else if(deref_source_type->type_class == TYPE_CLASS_BASIC){
-				//Grab the type out of here
-				source_basic_type = deref_source_type->basic_type_token;
-
-				//It needs to be 8 bits, otherwise we won't allow this
-				if(source_basic_type == U8 || source_basic_type == I8 || source_basic_type == CHAR){
-					//This is assignable
-					return deref_destination_type;
-				} else {
-					//It's not assignable
-					return NULL;
-				}
-
-			//This isn't going to work otherewise
-			} else {
-				return NULL;
 			}
 
 		//Only one type of array is assignable - and that would be a char[] to a char*
 		case TYPE_CLASS_ARRAY:
 			//If this isn't a char[], we're done
-			if(deref_destination_type->internal_types.array_type->member_type->type_class != TYPE_CLASS_BASIC
-				|| deref_destination_type->internal_types.array_type->member_type->basic_type_token != CHAR){
+			if(deref_destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
+				|| deref_destination_type->internal_types.member_type->basic_type_token != CHAR){
 				return NULL;
 			}
 
 			//If it's a pointer
 			if(deref_source_type->type_class == TYPE_CLASS_POINTER){
-				generic_type_t* points_to = deref_source_type->internal_types.pointer_type->points_to;
+				generic_type_t* points_to = deref_source_type->internal_types.points_to;
 
 				//If it's not a basic type then leave
 				if(points_to->type_class != TYPE_CLASS_BASIC){
@@ -435,7 +460,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 				case TYPE_CLASS_ARRAY:
 					//If these are the exact same types, then we're set
-					if(types_equivalent(deref_destination_type->internal_types.pointer_type->points_to, deref_source_type->internal_types.array_type->member_type) == TRUE){
+					if(types_equivalent(deref_destination_type->internal_types.points_to, deref_source_type->internal_types.member_type) == TRUE){
 						return deref_destination_type;
 					//Otherwise this won't work at all
 					} else{
@@ -445,15 +470,15 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				//Likely the most common case
 				case TYPE_CLASS_POINTER:
 					//If this itself is a void pointer, then we're good
-					if(deref_source_type->internal_types.pointer_type->is_void_pointer == TRUE){
+					if(deref_source_type->internal_values.is_void_pointer == TRUE){
 						return deref_destination_type;
 					//This is also fine, we just give the destination type back
-					} else if(deref_destination_type->internal_types.pointer_type->is_void_pointer == TRUE){
+					} else if(deref_destination_type->internal_values.is_void_pointer == TRUE){
 						return deref_destination_type;
 					//Let's see if what they point to is the exact same
 					} else {
 						//They need to be the exact same
-						if(types_equivalent(deref_source_type->internal_types.pointer_type->points_to, deref_destination_type->internal_types.pointer_type->points_to) == TRUE){
+						if(types_equivalent(deref_source_type->internal_types.points_to, deref_destination_type->internal_types.points_to) == TRUE){
 							return deref_destination_type;
 						} else {
 							return NULL;
@@ -748,14 +773,14 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 	*a = dealias_type(*a);
 	*b = dealias_type(*b);
 
-	//All enumerated types are in reality u8's
+	//Lookup what the enum type actually is and use that
 	if((*a)->type_class == TYPE_CLASS_ENUMERATED){
-		*a = lookup_type_name_only(symtab, "u8")->type;
+		*a = (*a)->internal_values.enum_integer_type;
 	}
 
-	//All enumerated types are in reality u8's
+	//Lookup what the enum type actually is and use that
 	if((*b)->type_class == TYPE_CLASS_ENUMERATED){
-		*b = lookup_type_name_only(symtab, "u8")->type;
+		*b = (*b)->internal_values.enum_integer_type;
 	}
 	
 	/**
@@ -1421,20 +1446,17 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	//Add the star at the end
 	dynamic_string_add_char_to_back(&(type->type_name), '*');
 
-	//Now we'll make the actual pointer type
-	type->internal_types.pointer_type = calloc(1, sizeof(pointer_type_t));
-
 	//We need to determine if this is a generic(void) pointer
 	if(points_to->type_class == TYPE_CLASS_BASIC && points_to->basic_type_token == VOID){
-		type->internal_types.pointer_type->is_void_pointer = TRUE;
+		type->internal_values.is_void_pointer = TRUE;
 
 	//If we're pointing to a void*, we'll also need to carry that up the chain
-	} else if(points_to->type_class == TYPE_CLASS_POINTER && points_to->internal_types.pointer_type->is_void_pointer == TRUE){
-		type->internal_types.pointer_type->is_void_pointer = TRUE;
+	} else if(points_to->type_class == TYPE_CLASS_POINTER && points_to->internal_values.is_void_pointer == TRUE){
+		type->internal_values.is_void_pointer = TRUE;
 	}
 
 	//Store what it points to
-	type->internal_types.pointer_type->points_to = points_to;
+	type->internal_types.points_to = points_to;
 
 	//A pointer is always 8 bytes(Ollie lang is for x86-64 only)
 	type->type_size = 8;
@@ -1464,14 +1486,11 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Add the star at the end
 	dynamic_string_concatenate(&(type->type_name), "[]");
 
-	//Now we'll make the actual pointer type
-	type->internal_types.array_type = calloc(1, sizeof(array_type_t));
-
 	//Store what it points to
-	type->internal_types.array_type->member_type = points_to;
+	type->internal_types.member_type = points_to;
 	
 	//Store the number of members
-	type->internal_types.array_type->num_members = num_members;
+	type->internal_values.num_members = num_members;
 
 	//Store this in here
 	type->type_size = points_to->type_size * num_members;
@@ -1484,6 +1503,7 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
  * Dynamically allocate and create an enumerated type
  */
 generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number){
+	//Dynamically allocate, 0 out
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
@@ -1492,10 +1512,11 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 	//Where is the declaration?
 	type->line_number = line_number;
 
+	//Store the name
 	type->type_name = type_name;
 
-	//Reserve space for this
-	type->internal_types.enumerated_type = calloc(1, sizeof(enumerated_type_t));
+	//Reserve space for the enum table
+	type->internal_types.enumeration_table = dynamic_array_alloc();
 
 	return type;
 }
@@ -1515,8 +1536,8 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 
 	type->type_name = type_name;
 
-	//Reserve space for this
-	type->internal_types.struct_type = calloc(1, sizeof(struct_type_t));
+	//Reserve dynamic array space for the struct table
+	type->internal_types.struct_table = dynamic_array_alloc();
 
 	return type;
 }
@@ -1525,141 +1546,183 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 /**
  * Dynamically allocate and create a union type
  */
-generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number){
+	//Dynamically allocate the union type
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
+	//Move the name over
+	type->type_name = type_name;
 
-/**
- * Add a value to a struct type. The void* here is a 
- * symtab variable record
- */
-u_int8_t add_struct_member(generic_type_t* type, void* member_var){
-	//Grab this out for convenience
-	struct_type_t* construct = type->internal_types.struct_type;
+	//The line number where this was created
+	type->line_number = line_number;
 
-	//Check for size constraints
-	if(construct->next_index >= MAX_STRUCT_MEMBERS){
-		return OUT_OF_BOUNDS;
-	}
+	//Reserve the dynamic array as well
+	type->internal_types.union_table = dynamic_array_alloc();
 
-	//Grab this reference out, for convenience
-	symtab_variable_record_t* var = member_var;
-
-	//If this is the very first one, then we'll 
-	if(construct->next_index == 0){
-		struct_type_field_t entry;	
-		//Currently, we don't need any padding
-		entry.padding = 0;
-		entry.variable = member_var;
-		//This if the very first struct member, so its offset is 0
-		entry.offset = 0;
-
-		//Also by defualt, this is currently the largest variable that we've seen
-		construct->largest_member_size = var->type_defined_as->type_size;
-
-		//Just grab this as a reference to avoid the need to cast
-		symtab_variable_record_t* member = member_var;
-
-		//Increment the size by the amount of the type
-		construct->size += member->type_defined_as->type_size;
-
-		//Add this into the construct table
-		construct->struct_table[construct->next_index] = entry;
-
-		//Increment the index for the next go around
-		construct->next_index += 1;
-
-		//This worked, so return success
-		return SUCCESS;
-	}
-	
-	//Otherwise, if we make it down here, it means that we'll need to pay a bit more
-	//attention to alignment as there is more than one field
-	struct_type_field_t entry;
-	//We'll update the largest member, if applicable
-	if(var->type_defined_as->type_size > construct->largest_member_size){
-		//Update the largest member if this happens
-		construct->largest_member_size = var->type_defined_as->type_size;
-	}
-
-	//For right now let's just have this added in
-	entry.variable = var;
-	//And currently, we don't need any padding
-	entry.padding = 0;
-	
-	//Let's now see where the ending address of the struct is. We can find
-	//this ending dress by calculating the offset of the latest field plus
-	//the size of the latest variable
-	
-	//The prior variable
-	symtab_variable_record_t* prior_variable = construct->struct_table[construct->next_index - 1].variable;
-	//And the offset of this entry
-	u_int32_t offset = construct->struct_table[construct->next_index - 1].offset;
-	
-	//The current ending address is the offset of the last variable plus its size
-	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
-
-	//Now for alignment, we need the offset of this new variable to be a multiple of the new variable's
-	//size
-	u_int32_t new_entry_size = var->type_defined_as->type_size;
-
-	//We will satisfy this by adding the remainder of the division of the new variable with the current
-	//end in as padding to the previous entry
-	
-	//What padding is needed?
-	u_int32_t needed_padding;
-	
-	if(current_end < new_entry_size){
-		//If it's more than 16(i.e an array), the most we'd need is 16-byte aligned
-		if(new_entry_size > 16){
-			needed_padding = 16 - current_end;
-		} else {
-			needed_padding = new_entry_size - current_end;
-		}
-	} else {
-		needed_padding = current_end % new_entry_size;
-	}
-
-	//This needed padding will go as padding on the prior entry
-	construct->struct_table[construct->next_index - 1].padding = needed_padding;
-
-	//Now we can update the current end
-	current_end = current_end + needed_padding;
-
-	//And now we can add in the new variable's offset
-	entry.offset = current_end;
-
-	//Increment the size by the amount of the type and the padding we're adding in
-	construct->size += var->type_defined_as->type_size + needed_padding;
-
-	//Finally, we can add this new entry in
-	construct->struct_table[construct->next_index] = entry;
-	construct->next_index += 1;
-
-	return SUCCESS;
+	//And give the type pointer back
+	return type;
 }
 
 
 /**
- * Does this construct contain said member? Return the variable if yes, NULL if not
+ * Does this struct contain said member? Return the variable if yes, NULL if not
  */
-struct_type_field_t* get_struct_member(struct_type_t* construct, char* name){
+void* get_struct_member(generic_type_t* structure, char* name){
 	//The current variable that we have
 	symtab_variable_record_t* var;
 
+	//Extract for convenience
+	dynamic_array_t* struct_table = structure->internal_types.struct_table;
+
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < construct->next_index; _++){
+	for(u_int16_t _ = 0; _ < struct_table->current_index; _++){
 		//Grab the variable out
-		var = construct->struct_table[_].variable;
+		var = dynamic_array_get_at(struct_table, _);
 
 		//Now we'll do a simple comparison. If they match, we're set
 		if(strcmp(var->var_name.string, name) == 0){
 			//Return the whole record if we find it
-			return &(construct->struct_table[_]);
+			return var;
 		}
 	}
 
 	//Otherwise if we get down here, it didn't work
 	return NULL;
+}
+
+
+/**
+ * Add a value to a struct type. The void* here is a 
+ * symtab variable record
+ *
+ * For alignment, it is important to note that we only ever align by primitive data type
+ * sizes. The largest an internal alignment can be is by 8
+ */
+void add_struct_member(generic_type_t* type, void* member_var){
+	//Grab this reference out, for convenience
+	symtab_variable_record_t* var = member_var;
+
+	//Mark that this is a struct member
+	var->is_struct_member = TRUE;
+
+	//If this is the very first one, then we'll 
+	if(type->internal_types.struct_table->current_index == 0){
+		//This one's offset is 0
+		var->struct_offset = 0;
+
+		//Increment the size by the amount of the type
+		type->type_size += var->type_defined_as->type_size;
+
+		//Add the variable into the struct table
+		dynamic_array_add(type->internal_types.struct_table, var);
+
+		//The largest member size here is the alignment of the biggest type
+		type->internal_values.largest_member_type = get_base_alignment_type(var->type_defined_as);
+
+		//Hop out here
+		return;
+	}
+
+	//Let's now see where the ending address of the struct is. We can find
+	//this ending dress by calculating the offset of the latest field plus
+	//the size of the latest variable
+	
+	//The prior variable
+	symtab_variable_record_t* prior_variable = dynamic_array_get_at(type->internal_types.struct_table, type->internal_types.struct_table->current_index - 1);
+
+	//And the offset of this entry
+	u_int32_t offset = prior_variable->struct_offset;
+	
+	//The current ending address is the offset of the last variable plus its size
+	u_int32_t current_end = offset + prior_variable->type_defined_as->type_size;
+
+	//Get the primitive type that we will need to align by here
+	generic_type_t* aligning_by_type = get_base_alignment_type(var->type_defined_as);
+
+	//If we have a larger contender for alignment here, then this will become our largest
+	//member type
+	if(aligning_by_type->type_size > type->internal_values.largest_member_type->type_size){
+		type->internal_values.largest_member_type = aligning_by_type;
+	}
+
+	//We will satisfy this by adding the remainder of the division of the new variable with the current
+	//end in as padding to the previous entry
+	
+	//What padding is needed?
+	u_int32_t needed_padding = 0;
+	
+	if(current_end < aligning_by_type->type_size){
+		needed_padding = aligning_by_type->type_size - current_end;
+	} else {
+		needed_padding = current_end % aligning_by_type->type_size;
+	}
+
+	//Now we can update the current end
+	current_end = current_end + needed_padding;
+
+	//And now we can add in the new variable's offset
+	var->struct_offset = current_end;
+
+	//Increment the size by the amount of the type and the padding we're adding in
+	type->type_size += var->type_defined_as->type_size + needed_padding;
+
+	//Add the variable into the table
+	dynamic_array_add(type->internal_types.struct_table, var);
+
+	//Done
+	return; 
+}
+
+
+/**
+ * Add a value to an enumeration's list of values
+ */
+u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values){
+	//Are we using user-defined enum values? If so, we need to check for duplicates
+	//that already exist in the list
+	if(user_defined_values == TRUE){
+		//Extract the enum member's actual value
+		for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
+			//Grab the variable out
+			symtab_variable_record_t* variable = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
+
+			//If these 2 equal, we fail out
+			if(variable->enum_member_value == ((symtab_variable_record_t*)enum_member)->enum_member_value){
+				return FAILURE;
+			}
+		}
+
+		//If we survive to here, then we're good
+	}
+
+	//Just throw the member in
+	dynamic_array_add(enum_type->internal_types.enumeration_table, enum_member);
+
+	//All went well
+	return SUCCESS;
+}
+
+
+/**
+ * Add a value into the union's list of members
+ */
+u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
+	//Let's extract the union member and variable record for convenience
+	symtab_variable_record_t* record = member_var;
+
+	//TODO may or may not need to check for duplicates in here
+
+	//Add this in
+	dynamic_array_add(union_type->internal_types.union_table, member_var);
+
+	//If the size of this value is larger than the total size, we need to reassign
+	//the total size to this. Union types are always as large as their largest memeber
+	if(record->type_defined_as->type_size > union_type->type_size){
+		union_type->type_size = record->type_defined_as->type_size;
+	}
+
+	//All went well
+	return SUCCESS;
 }
 
 
@@ -1672,18 +1735,25 @@ struct_type_field_t* get_struct_member(struct_type_t* construct, char* name){
  * throughout the entirety of construction, so this should be easy
  */
 void finalize_struct_alignment(generic_type_t* type){
-	//Let's see how far off we are from being a multiple of the
-	//final address
-	u_int32_t needed_padding = type->type_size % type->internal_types.struct_type->largest_member_size;
+	//Grab the alignable type size
+	int32_t alignable_type_size = type->internal_values.largest_member_type->type_size;
 
-	//Whatever this needed padding may be, we'll add it to the end as the final padding for our construct
-	type->internal_types.struct_type->struct_table[type->internal_types.struct_type->next_index - 1].padding = needed_padding;
+	//If the size is already a multiple of the alignable type size,
+	//then we can stop here and leave
+	if(type->type_size % alignable_type_size == 0){
+		return;
+	}
 
-	//Increment the size accordingly
-	type->internal_types.struct_type->size += needed_padding;
-
-	//Now we move this over to size
-	type->type_size = type->internal_types.struct_type->size;
+	/**
+	 * The alignable type size is either: 1, 2, 4 or 8
+	 *
+	 * We will add this alignable type size on so that we are guaranteed to be over
+	 * the next highest multiple of said type size
+	 *
+	 * Then we will and by the 2's complement of this value to 0 out the lowest bits
+	 * that need to be 0'd out. At most, we will 0 out the bottom 3 bits for 8-byte aligned
+	 */
+	type->type_size = (type->type_size + alignable_type_size) & (-alignable_type_size);
 }
 
 
@@ -1702,11 +1772,8 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 	//Copy the name
 	type->type_name = type_name;
 
-	//Dynamically allocate the aliased type record
-	type->internal_types.aliased_type = calloc(1, sizeof(aliased_type_t));
-
 	//Store this reference in here
-	type->internal_types.aliased_type->aliased_type = aliased_type;
+	type->internal_types.aliased_type = aliased_type;
 
 	return type;
 }
@@ -1857,7 +1924,7 @@ u_int8_t is_type_string_array(generic_type_t* type){
 	}
 
 	//Now we go one level deeper
-	generic_type_t* second_level = dealias_type(first_level->internal_types.pointer_type->points_to);
+	generic_type_t* second_level = dealias_type(first_level->internal_types.points_to);
 
 	//If it isn't a pointer, we fail out
 	if(second_level->type_class != TYPE_CLASS_POINTER){
@@ -1865,7 +1932,7 @@ u_int8_t is_type_string_array(generic_type_t* type){
 	}
 
 	//Now we get to the base type
-	generic_type_t* base_type = dealias_type(second_level->internal_types.pointer_type->points_to);
+	generic_type_t* base_type = dealias_type(second_level->internal_types.points_to);
 
 	//If this isn't a char, we fail
 	if(base_type->type_class != TYPE_CLASS_BASIC || base_type->basic_type_token != CHAR){
@@ -1887,12 +1954,13 @@ generic_type_t* dealias_type(generic_type_t* type){
 
 	//So long as we keep having an alias
 	while(raw_type->type_class == TYPE_CLASS_ALIAS){
-		raw_type = raw_type->internal_types.aliased_type->aliased_type;
+		raw_type = raw_type->internal_types.aliased_type;
 	}
 
 	//Give the stripped down type back
 	return raw_type;
 }
+
 
 /**
  * Provide a way of destroying a type variable easily
@@ -1900,23 +1968,18 @@ generic_type_t* dealias_type(generic_type_t* type){
 void type_dealloc(generic_type_t* type){
 	//Free based on what type of type we have
 	switch(type->type_class){
-		case TYPE_CLASS_ALIAS:
-			free(type->internal_types.aliased_type);
-			break;
 		case TYPE_CLASS_ENUMERATED:
-			free(type->internal_types.enumerated_type);
+			free(type->internal_types.enumeration_table);
 			break;
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			free(type->internal_types.function_type);
 			break;
-		case TYPE_CLASS_ARRAY:
-			free(type->internal_types.array_type);
-			break;
-		case TYPE_CLASS_POINTER:
-			free(type->internal_types.pointer_type);
-			break;
+		//For this one we can deallocate the struct table
 		case TYPE_CLASS_STRUCT:
-			free(type->internal_types.struct_type);
+			dynamic_array_dealloc(type->internal_types.struct_table);
+			break;
+		case TYPE_CLASS_UNION:
+			dynamic_array_dealloc(type->internal_types.union_table);
 			break;
 		default:
 			break;

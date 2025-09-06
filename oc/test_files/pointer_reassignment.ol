@@ -3,6 +3,9 @@
 * This program is made for the purposes of testing struct pointers
 */
 
+/**
+* Size should be 1 + 3 pad + 12 + 1 + 3 pad = 20
+*/
 define struct my_struct{
 	mut ch:char;
 	mut y:i32[3];

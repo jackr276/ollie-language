@@ -230,7 +230,7 @@ static u_int16_t hash_type(generic_type_t* type){
 
 	//If this is an array, we'll add the bounds in
 	if(type->type_class == TYPE_CLASS_ARRAY){
-		key += type->internal_types.array_type->num_members;
+		key += type->internal_values.num_members;
 	}
 
 	//Cut it down to our keyspace
@@ -865,7 +865,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 			if(strcmp(records_cursor->type->type_name.string, type->type_name.string) == 0){
 				//If we have an array type, we must compare bounds and they must match
 				if(type->type_class == TYPE_CLASS_ARRAY
-					&& type->internal_types.array_type->num_members != records_cursor->type->internal_types.array_type->num_members){
+					&& type->internal_values.num_members != records_cursor->type->internal_values.num_members){
 					return FALSE;
 				}
 
@@ -898,7 +898,6 @@ void print_function_record(symtab_function_record_t* record){
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->func_name.string);
 	printf("Hash: %d,\n", record->hash);
-	printf("Offset: %p\n", (void*)(record->offset));
 	printf("}\n");
 }
 
@@ -946,7 +945,6 @@ void print_variable_record(symtab_variable_record_t* record){
 	printf("Name: %s,\n", record->var_name.string);
 	printf("Hash: %d,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
-	printf("Offset: %p\n", (void*)(record->offset));
 	printf("}\n");
 }
 
@@ -1018,7 +1016,10 @@ void print_variable_name(symtab_variable_record_t* record){
 	} else if (record->is_label == TRUE){
 		printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
 		return;
-	} else if(record->is_enumeration_member == TRUE || record->is_struct_member == TRUE){
+	} else if(record->is_enumeration_member == TRUE){
+		//The var name
+		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name.string);
+	} else if(record->is_struct_member == TRUE){
 		//The var name
 		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
 	} else {

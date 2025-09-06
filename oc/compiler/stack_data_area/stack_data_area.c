@@ -109,10 +109,9 @@ void align_stack_data_area(stack_data_area_t* area){
 
 /**
  * Add a node into the stack data area
- * 
- * NOTE: We guarantee that each address in the stack will be at least
- * 4-byte aligned. As such, the size of the variable on the stack may not 
- * match the size of the variable in the stack data area
+ *
+ * We'll need to guarantee that the base and ending address of each
+ * variable in here is a multiple of their alignment requirement K
  */
 void add_variable_to_stack(stack_data_area_t* area, void* variable){
 	//We already know it's one of these
