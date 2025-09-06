@@ -3871,7 +3871,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	member_record->is_mutable = is_mutable;
 
 	//Add it to the construct
-	u_int8_t status = add_struct_member(construct, member_record);
+	add_struct_member(construct, member_record);
 
 	//Insert into the variable symtab
 	insert_variable(variable_symtab, member_record);

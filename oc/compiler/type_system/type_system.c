@@ -1598,7 +1598,7 @@ void* get_struct_member(generic_type_t* structure, char* name){
  * For alignment, it is important to note that we only ever align by primitive data type
  * sizes. The largest an internal alignment can be is by 8
  */
-u_int8_t add_struct_member(generic_type_t* type, void* member_var){
+void add_struct_member(generic_type_t* type, void* member_var){
 	//Grab this reference out, for convenience
 	symtab_variable_record_t* var = member_var;
 
@@ -1619,8 +1619,8 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 		//The largest member size here is the alignment of the biggest type
 		type->internal_values.largest_member_type = get_base_alignment_type(var->type_defined_as);
 
-		//This worked, so return success
-		return SUCCESS;
+		//Hop out here
+		return;
 	}
 
 	//Let's now see where the ending address of the struct is. We can find
@@ -1669,8 +1669,8 @@ u_int8_t add_struct_member(generic_type_t* type, void* member_var){
 	//Add the variable into the table
 	dynamic_array_add(type->internal_types.struct_table, var);
 
-	//This worked
-	return SUCCESS;
+	//Done
+	return; 
 }
 
 

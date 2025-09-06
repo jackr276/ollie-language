@@ -254,7 +254,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 /**
  * Add a value into a construct's table
  */
-u_int8_t add_struct_member(generic_type_t* type, void* member_var);
+void add_struct_member(generic_type_t* type, void* member_var);
 
 /**
  * Add a value to an enumeration's list of values
