@@ -1949,7 +1949,7 @@ static void rename_block(basic_block_t* entry){
 		//We'll run through the parameters and mark them as assigned
 		for(u_int16_t i = 0; i < function_defined_in->number_of_params; i++){
 			//make the new name here
-			lhs_new_name_direct(function_defined_in->func_params[i].associate_var);
+			lhs_new_name_direct(function_defined_in->func_params[i]);
 		}
 	}
 
@@ -2057,7 +2057,7 @@ static void rename_block(basic_block_t* entry){
 		//did up top
 		for(u_int16_t i = 0; i < function_defined_in->number_of_params; i++){
 			//Pop it off here
-			lightstack_pop(&(function_defined_in->func_params[i].associate_var->counter_stack));
+			lightstack_pop(&(function_defined_in->func_params[i]->counter_stack));
 		}
 	}
 

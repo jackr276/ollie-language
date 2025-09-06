@@ -8907,7 +8907,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			}
 
 			//Otherwise it's fine, so we'll overwrite the entire thing in the record
-			function_record->func_params[param_count].associate_var = param_list_cursor->variable;
+			function_record->func_params[param_count] = param_list_cursor->variable;
 
 			//Advance this
 			param_list_cursor = param_list_cursor->next_sibling;
@@ -8926,7 +8926,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			symtab_variable_record_t* param_rec = param_list_cursor->variable;
 
 			//We'll add it in as a reference to the function
-			function_record->func_params[function_record->number_of_params].associate_var = param_rec;
+			function_record->func_params[function_record->number_of_params] = param_rec;
 			
 			//Store this into the function signature as well
 			function_signature->internal_types.function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;

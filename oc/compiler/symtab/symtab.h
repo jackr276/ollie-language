@@ -50,27 +50,12 @@ typedef struct symtab_constant_record_t symtab_constant_record_t;
 //The definition of a local constant(.LCx) block
 typedef struct local_constant_t local_constant_t;
 
-//Parameter type
-typedef struct parameter_t parameter_t;
-
-
 //The storage class of a given item
 typedef enum STORAGE_CLASS_T{
 	STORAGE_CLASS_STATIC,
 	STORAGE_CLASS_EXTERNAL,
 	STORAGE_CLASS_NORMAL,
 } STORAGE_CLASS_T;
-
-
-/**
- * A parameter has a type and a name
- */
-struct parameter_t{
-	//The associated variable for a parameter, since a parameter is a variable
-	symtab_variable_record_t* associate_var;
-	//Was it ever referenced?
-	u_int8_t referenced;
-};
 
 
 /**
@@ -93,8 +78,8 @@ struct local_constant_t{
  * numbers, parameter types, return types, etc.
  */
 struct symtab_function_record_t{
-	//The parameters
-	parameter_t func_params[MAX_FUNCTION_PARAMS];
+	//The parameters for the function
+	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
 	//Won't be important until the register allocator. Remember- the actual enum value
 	//of the register is one more than the index here
 	u_int8_t used_registers[15];

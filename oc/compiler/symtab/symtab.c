@@ -978,11 +978,11 @@ void print_function_name(symtab_function_record_t* record){
 	//Print out the params
 	for(u_int8_t i = 0; i < record->number_of_params; i++){
 		//Print if it's mutable
-		if(record->func_params[i].associate_var->is_mutable == 1){
+		if(record->func_params[i]->is_mutable == 1){
 			printf("mut ");
 		}
 
-		printf("%s : %s", record->func_params[i].associate_var->var_name.string, record->func_params[i].associate_var->type_defined_as->type_name.string);
+		printf("%s : %s", record->func_params[i]->var_name.string, record->func_params[i]->type_defined_as->type_name.string);
 		//Comma if needed
 		if(i < record->number_of_params-1){
 			printf(", ");
