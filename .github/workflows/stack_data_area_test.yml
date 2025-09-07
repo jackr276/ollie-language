@@ -2,8 +2,7 @@ name: Stack Data Area Test
 
 on:
   push:
-    branches: 
-      - '*'
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
