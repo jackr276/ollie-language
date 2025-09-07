@@ -199,16 +199,16 @@ void print_stack_data_area(stack_data_area_t* area){
 		return;
 	}
 
-	//Otherwise run through everything and print
-	for(u_int16_t i = 0; i < area->variables->current_index; i++){
+	//Otherwise run through everything backwards and print
+	for(int16_t i = area->variables->current_index - 1; i >= 0; i--){
 		//Grab the variable out
 		three_addr_var_t* variable = dynamic_array_get_at(area->variables, i);
 
 		//We'll take the variable and the size
 		if(variable->is_temporary == FALSE){
-			printf("%10s\t%8d\t%8d\n", variable->linked_var->var_name.string, variable->variable_size, variable->stack_offset);
+			printf("%10s\t%8d\t%8d\n", variable->linked_var->var_name.string, variable->type->type_size, variable->stack_offset);
 		} else {
-			printf("temp %d\t%8d\t%8d\n", variable->temp_var_number, variable->variable_size, variable->stack_offset);
+			printf("temp %d\t%8d\t%8d\n", variable->temp_var_number, variable->type->type_size, variable->stack_offset);
 		}
 	}
 
