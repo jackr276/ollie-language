@@ -4373,11 +4373,21 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 
 
 /**
+ * Parse the union member list for a given union type
+ *
+ * BNF RULE: <union-member-list> ::= { {<union-member>;}+ }
+ */
+static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
+
+}
+
+
+/**
  * A union definer allows us to declare a discriminating union datatype
  *
  * NOTE: By the time that we get here, we have already seen the UNION keyword 
  *
- * BNF RULE: <union_definer> ::=  define union <identifier> {{<union-member>;}+} {as <identifier>}? ;
+ * BNF RULE: <union_definer> ::=  define union <identifier> <union-member-list> {as <identifier>}? ;
  */
 static u_int8_t union_definer(FILE* fl){
 	//Lookahead token for searching
@@ -4415,10 +4425,11 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Create the union type
+	//Create the union type now that we have enough information
 	generic_type_t* union_type = create_union_type(union_name, parser_line_num);
 
-	//Once we've created it, we can begin parsing the internals
+	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
+	//and let it handle everything else
 
 
 

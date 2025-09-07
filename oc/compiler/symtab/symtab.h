@@ -59,6 +59,19 @@ typedef enum STORAGE_CLASS_T{
 
 
 /**
+ * What is the membership that a variable has?
+ */
+typedef enum variable_membership_t {
+	NO_MEMBERSHIP = 0, //Generic var, no type/function members
+	STRUCT_MEMBER = 1,
+	UNION_MEMBER = 2,
+	ENUM_MEMBER = 3,
+	GLOBAL_VARIABLE = 4,
+	FUNCTION_PARAMETER = 5,
+} variable_membership_t;
+
+
+/**
  * A local constant(.LCx) is a value like a string that is intended to 
  * be used by a function. We define them separately because they have many less
  * fields than an actual basic block
@@ -144,20 +157,12 @@ struct symtab_variable_record_t{
 	u_int8_t initialized;
 	//Was it assigned to?
 	u_int8_t assigned_to;
-	//Is it a function parameter?
-	u_int8_t is_function_parameter;
 	//What is the parameter order for this value?
 	u_int8_t function_parameter_order;
 	//Is this mutable?
 	u_int8_t is_mutable;
-	//Is this a struct member?
-	u_int8_t is_struct_member;
-	//Is it an enumeration member?
-	u_int8_t is_enumeration_member;
-	//Is this a label?
-	u_int8_t is_label;
-	//Is this a global variable?
-	u_int8_t is_global;
+	//What type structure or language concept does this variable belong to?
+	variable_membership_t membership;
 	//Does this need to be spilled
 	u_int8_t must_be_spilled;
 	//What's the storage class?
@@ -280,7 +285,6 @@ struct function_symtab_t{
  * Initialize a function symtab
  */
 function_symtab_t* function_symtab_alloc();
-
 
 /**
  * Initialize a symbol table for variables.

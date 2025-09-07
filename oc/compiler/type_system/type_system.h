@@ -20,9 +20,6 @@ typedef struct generic_type_t generic_type_t;
 typedef struct function_type_t function_type_t;
 //A function type's individual parameter
 typedef struct function_type_parameter_t function_type_parameter_t;
-//A union type
-typedef struct union_type_t union_type_t;
-
 
 //A type for which side we're on
 typedef enum{
@@ -72,10 +69,10 @@ struct generic_type_t{
 		function_type_t* function_type;
 		//Store all values in a struct
 		dynamic_array_t* struct_table;
-		//The enumeration table stores all values in an enum
-		dynamic_array_t* enumeration_table;
 		//The union table
 		dynamic_array_t* union_table;
+		//The enumeration table stores all values in an enum
+		dynamic_array_t* enumeration_table;
 		//The aliased type
 		generic_type_t* aliased_type;
 	} internal_types;
@@ -91,7 +88,7 @@ struct generic_type_t{
 	union {
 		//What is the integer type that an enum uses?
 		generic_type_t* enum_integer_type;
-		//The largest member type in a struct
+		//The largest member type in a struct/union
 		generic_type_t* largest_member_type;
 		//The number of members in an array
 		u_int32_t num_members;
