@@ -3,7 +3,7 @@ name: Dynamic array test
 on:
   push:
     branches: 
-      - '*'
+      - [ "main" ]
   pull_request:
     branches: [ "main" ]
 
