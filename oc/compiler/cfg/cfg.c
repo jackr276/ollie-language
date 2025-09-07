@@ -2549,7 +2549,7 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Handle an enumerated type right here
-	if(ident_node->variable->is_enumeration_member == TRUE) {
+	if(ident_node->variable->membership == ENUM_MEMBER) {
 		//Just create a constant here with the enum
 		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), ident_node->variable->type_defined_as, is_branch_ending);
 	}

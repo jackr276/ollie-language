@@ -4379,6 +4379,8 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
  */
 static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
 
+	//If we make it here then we know that it worked
+	return SUCCESS;
 }
 
 
@@ -5630,7 +5632,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	//Store the type
 	label->type_defined_as = label_type->type;
 	//Store the fact that it is a label
-	label->is_label = TRUE;
+	label->membership = LABEL_VARIABLE;
 	//Store the line number
 	label->line_number = parser_line_num;
 	//Store what function it's defined in(important for later)
@@ -7443,7 +7445,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			}
 
 			//If we could find it, but it isn't an enum
-			if(enum_record->is_enumeration_member == FALSE){
+			if(enum_record->membership != ENUM_MEMBER){
 				sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", ident_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
@@ -7774,7 +7776,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//The line_number
 	declared_var->line_number = current_line;
 	//Is it global? This speeds up optimization down the line
-	declared_var->is_global = is_global;
+	declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -8233,7 +8235,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
 	//Is it a global var or not? This speeds up optimization
-	declared_var->is_global = is_global;
+	declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
 	//Save the line num
 	declared_var->line_number = current_line;
 
@@ -8513,7 +8515,7 @@ static int8_t check_jump_labels(){
 		}
 
 		//This can also happen - where we have a user trying to jump to a non-label
-		if(label->is_label == FALSE){
+		if(label->membership != LABEL_VARIABLE){
 			sprintf(info, "Variable %s exists but is not a label, so it cannot be jumped to", label->var_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			return FAILURE;

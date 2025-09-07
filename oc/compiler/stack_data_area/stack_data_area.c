@@ -100,9 +100,6 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 	//Get the alignment size
 	u_int32_t alignable_size = base_alignment->type_size;
 
-	//What will the starting address of the new variable be?
-	u_int32_t new_variable_offset = area->total_size;
-
 	//How much padding do we need? Initially we assume none
 	u_int32_t needed_padding = 0;
 
@@ -148,9 +145,6 @@ static void realign_data_area(stack_data_area_t* area){
 
 		//Get the alignment size
 		u_int32_t alignable_size = base_alignment->type_size;
-
-		//What will the starting address of the new variable be?
-		u_int32_t new_variable_offset = area->total_size;
 
 		//How much padding do we need? Initially we assume none
 		u_int32_t needed_padding = 0;
