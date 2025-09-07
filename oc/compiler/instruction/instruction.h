@@ -407,9 +407,6 @@ struct three_addr_var_t{
 	symtab_variable_record_t* related_memory_address;
 	//For memory management
 	three_addr_var_t* next_created;
-	//The related stack data area node. Not all variables have these,
-	//but "spilled" variables and address variables do
-	stack_data_area_node_t* related_node;
 	//What live range is this variable associate with
 	live_range_t* associated_live_range;
 	//What is the stack offset(i.e. %rsp + __) of this variable?

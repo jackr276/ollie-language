@@ -1408,7 +1408,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 	//Now that we have the data area, we'll need to add enough space for the new variable
 	//in the stack data area
-	add_spilled_variable_to_stack(&(spill_range->function_defined_in->data_area), var);
+	add_variable_to_stack(&(spill_range->function_defined_in->data_area), var);
 
 	//Just store the offset in the spill range's offset
 	spill_range->stack_offset = var->stack_offset;
