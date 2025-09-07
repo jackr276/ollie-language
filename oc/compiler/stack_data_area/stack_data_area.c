@@ -81,131 +81,66 @@ void align_stack_data_area(stack_data_area_t* area){
  * variable in here is a multiple of their alignment requirement K
  */
 void add_variable_to_stack(stack_data_area_t* area, void* variable){
-	//We already know it's one of these
-	three_addr_var_t* var = variable;
-
-	//First, let's create what we'll use to store this 
-	stack_data_area_node_t* node = calloc(1, sizeof(stack_data_area_node_t));
-	//Tie this in
-	node->variable = variable;
-
-	//Let's make this a multiple of 4 by first adding three(set the 2 lsb's), and 
-	//then rounding up by anding with a value with the 2 lsb's as 0
-	node->variable_size = (var->type->type_size + 3) & ~0x3;
-
-	//We can now increment the total size here
-	area->total_size += node->variable_size;
-
-	//Once we have all of this, we're able to add this into the stack. We add into the stack
-	//in a priority-queue like way, where the smallest values reside at the top, and the largest
-	//values reside at the bottom. We always start at the top and work our way down
-	stack_data_area_node_t* current = area->highest;
-
-	//Special case - inserting at the head
-	if(current == NULL){
-		//This one is the highest
-		area->highest = node;
-		//No offset - it's the lowest
-		node->offset = 0;
-		//We're done here. No need to calculate offsets because there's only one thing
-		//here
+	//If we already have the variable in here then leave
+	if(does_stack_contain_variable(area, variable) == TRUE){
 		return;
 	}
 
-	//Otherwise, we'll need to do some more complex operations. We'll keep
-	//searching until we get to the place where the node is larger
-	//than the one before it
-	while(current->next != NULL && current->variable_size <= node->variable_size){
-		current = current->next;
-	}
-
-	//When we get down here, we know that our node is smaller than
-	//the current node's size, so we'll want to insert our node *above* the current node
-
-	//Once we get here, there are are three options
-	//This means that we hit the tail, and we're at the very end
-	if(current->next == NULL && current->variable_size <= node->variable_size){
-		//Add this in here at the very end
-		current->next = node;
-		node->previous = current;
-
-		//In this case, recalculate all of the offsets based on node because it's our
-		//very lowest value(0 offset)
-		recalculate_all_offsets(node);
-
-	//This means that we have a new highest
-	} else if(current == area->highest){
-		//Tie it in
-		current->previous = node;
-		node->next = current;
-
-		//Reassign this pointer
-		area->highest = node;
-
-		//Redo all the offsets based on previous
-		recalculate_all_offsets(current);
-
-	//Otherwise we aren't at the very end. We'll insert
-	//the node before the previous
-	} else {
-		//Let's break the chain here
-		current->previous->next = node;
-		node->previous = current->previous;
-		//Now attach it to current
-		node->next = current;
-		current->previous = node;
-
-		//In this case, recalculate all of the offsets based on current
-		//because current comes below node, so we'll need to use it's offset
-		//as a seed value
-		recalculate_all_offsets(current);
-	}
-}
-
-
-/**
- * Add a spilled variable to the stack. Spilled variables
- * always go on top, no matter what
- */
-void add_spilled_variable_to_stack(stack_data_area_t* area, void* variable){
 	//We already know it's one of these
 	three_addr_var_t* var = variable;
 
-	if(does_stack_contain_variable(area, var) == TRUE){
+	/**
+	 * Special case: this is the very first thing that we've added onto 
+	 * the stack. If this is the case, we can add it, update the size,
+	 * and leave
+	 */
+	if(area->variables->current_index == 0){
+		//Add it on
+		dynamic_array_add(area->variables, var);
+
+		//Stack offset for this one is 0
+		var->stack_offset = 0;
+
+		//Add the overall size to the stack
+		area->total_size += var->type->type_size;
+
+		//And we're done so leave out
 		return;
 	}
 
-	
+	/**
+	 * To align new variables that are added onto the stack, we will pad
+	 * their starting addresses as needed to ensure that the starting
+	 * address of the variable is a multiple of alignable type size
+	 */
 
-	//First, let's create what we'll use to store this 
-	stack_data_area_node_t* node = calloc(1, sizeof(stack_data_area_node_t));
-	//Tie this in
-	node->variable = variable;
+	//Get the type that we need to align by for the new var
+	generic_type_t* base_alignment = get_base_alignment_type(var->type);
 
-	//Let's make this a multiple of 4 by first adding three(set the 2 lsb's), and 
-	//then rounding up by anding with a value with the 2 lsb's as 0
-	node->variable_size = (var->type->type_size + 3) & ~0x3;
+	//Get the alignment size
+	u_int32_t alignable_size = base_alignment->type_size;
 
-	//We can now increment the total size here
-	area->total_size += node->variable_size;
+	//What will the starting address of the new variable be?
+	u_int32_t new_variable_offset = area->total_size;
 
-	//Calculate this node's offset
-	if(area->highest != NULL){
-		//Calculate the offset of this one
-		node->offset = area->highest->offset + area->highest->variable_size;
-	} else {
-		//Otherwise this is the highest, so it's 0
-		node->offset = 0;
+	//How much padding do we need? Initially we assume none
+	u_int32_t needed_padding = 0;
+
+	//We can just use the overall data area size for this
+	if(area->total_size % alignable_size != 0){
+		//Grab the needed padding
+		needed_padding = area->total_size % alignable_size;
 	}
 
-	//Store this in the variable too
-	var->stack_offset = node->offset;
-
-	//This is the highest area
-	node->next = area->highest;
+	//This one's stack offset is the original total size plus whatever padding we need
+	var->stack_offset = area->total_size + needed_padding;
 	
-	//This is now the highest on there
-	area->highest = node;
+	//Update the total size of the stack too. The new size is the original size
+	//with the needed padding and the new type's size added onto it
+	area->total_size = area->total_size + needed_padding + var->type->type_size;
+
+	//Finally add this to the array
+	dynamic_array_add(area->variables, var);
 }
 
 
