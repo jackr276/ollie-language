@@ -1603,7 +1603,7 @@ void add_struct_member(generic_type_t* type, void* member_var){
 	symtab_variable_record_t* var = member_var;
 
 	//Mark that this is a struct member
-	var->is_struct_member = TRUE;
+	var->membership = STRUCT_MEMBER;
 
 	//If this is the very first one, then we'll 
 	if(type->internal_types.struct_table->current_index == 0){
@@ -1678,6 +1678,12 @@ void add_struct_member(generic_type_t* type, void* member_var){
  * Add a value to an enumeration's list of values
  */
 u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values){
+	//For the type system
+	symtab_variable_record_t* enum_variable = enum_member;
+
+	//Flag what this is
+	enum_variable->membership = ENUM_MEMBER;
+
 	//Are we using user-defined enum values? If so, we need to check for duplicates
 	//that already exist in the list
 	if(user_defined_values == TRUE){
@@ -1709,6 +1715,9 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 	//Let's extract the union member and variable record for convenience
 	symtab_variable_record_t* record = member_var;
+
+	//Flag what this is
+	record->membership = UNION_MEMBER;
 
 	//TODO may or may not need to check for duplicates in here
 

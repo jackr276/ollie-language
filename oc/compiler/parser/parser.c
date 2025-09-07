@@ -4580,9 +4580,6 @@ static u_int8_t enum_definer(FILE* fl){
 		//to create the record and assign it a type
 		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, STORAGE_CLASS_NORMAL);
 
-		//Once it's been created, mark that it is an enum member
-		member_record->is_enumeration_member = TRUE;
-
 		//Store the line number
 		member_record->line_number = parser_line_num;
 
@@ -5346,7 +5343,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//Let's first construct the variable record
 	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
 	//It is a function parameter
-	param_record->is_function_parameter = TRUE;
+	param_record->membership = FUNCTION_PARAMETER;
 	//We assume that it was initialized
 	param_record->initialized = TRUE;
 	//Add the line number

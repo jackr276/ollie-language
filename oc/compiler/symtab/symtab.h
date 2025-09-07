@@ -68,6 +68,7 @@ typedef enum variable_membership_t {
 	ENUM_MEMBER = 3,
 	GLOBAL_VARIABLE = 4,
 	FUNCTION_PARAMETER = 5,
+	LABEL_VARIABLE = 6,
 } variable_membership_t;
 
 
