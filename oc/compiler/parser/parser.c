@@ -5234,23 +5234,23 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 
 	//Following the valid type specifier declaration, we are required to to see a valid variable. This
 	//takes the form of an ident
-	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it didn't work we fail immediately
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid name given to parameter in function definition", parser_line_num);
 	}
 
 	//Now we must perform all needed duplication checks for the name
 	//Grab this for convenience
-	char* name = ident->string_value.string;
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -5260,11 +5260,11 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -5274,11 +5274,11 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -5313,7 +5313,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//symbol table
 	
 	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
 	//It is a function parameter
 	param_record->is_function_parameter = TRUE;
 	//We assume that it was initialized
@@ -5334,8 +5334,6 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	parameter_decl_node->variable = param_record;
 	//Store the line number
 	parameter_decl_node->line_number = parser_line_num;
-	//Destroy the type specifier node
-	//Destroy the ident node
 
 	//Finally, we'll send this node back
 	return parameter_decl_node;
@@ -5538,12 +5536,15 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	label_stmt->line_number = parser_line_num;
 
 	//Let's see if we can find one
-	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it's bad we'll fail out here
-	if(label_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid identifier given as label ident statement", current_line);
 	}
+
+	//Grab the name out for convenience
+	dynamic_string_t label_name = lookahead.lexeme;
 		
 	//Let's also verify that we have the colon right now
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5552,17 +5553,13 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	if(lookahead.tok != COLON){
 		return print_and_return_error("Colon required after label statement", current_line);
 	}
-	//Otherwise we are all good syntactically here
-
-	//Grab the name out for convenience
-	char* label_name = label_ident->string_value.string;
 
 	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
-	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name);
+	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name.string);
 
 	//If we did find it, that's bad
 	if(found_variable != NULL){
-		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name); 
+		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name.string); 
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(found_variable);
 		num_errors++;
@@ -5571,11 +5568,11 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	}
 
 	//We now need to make sure that it isn't a duplicate
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, label_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, label_name.string);
 
 	//If we did find it, that's bad
 	if(found_type != NULL){
-		sprintf(info, "Identifier %s has already been declared as a type. First declared here: ", label_name); 
+		sprintf(info, "Identifier %s has already been declared as a type. First declared here: ", label_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_type_name(found_type);
 		num_errors++;
@@ -5584,11 +5581,11 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	}
 
 	//We now need to make sure that it isn't a duplicate
-	symtab_function_record_t* found_function = lookup_function(function_symtab, label_name);
+	symtab_function_record_t* found_function = lookup_function(function_symtab, label_name.string);
 
 	//If we did find it, that's bad
 	if(found_function != NULL){
-		sprintf(info, "Identifier %s has already been declared as a function. First declared here: ", label_name); 
+		sprintf(info, "Identifier %s has already been declared as a function. First declared here: ", label_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_function_name(found_function);
 		num_errors++;
@@ -5601,7 +5598,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "label");
 
 	//Now that we know we didn't find it, we'll create it
-	symtab_variable_record_t* label = create_variable_record(label_ident->string_value, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* label = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
 	//Store the type
 	label->type_defined_as = label_type->type;
 	//Store the fact that it is a label
@@ -7390,6 +7387,8 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
 	generic_ast_node_t* switch_compound_statement;
+	//The identifier name - declared here because of strangeness with C case declarations
+	dynamic_string_t ident_name;
 
 	//Remember that we've already seen the first "case" keyword here, so now we need
 	//to consume whatever comes after it(constant or enum value)
@@ -7403,32 +7402,21 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 	switch(lookahead.tok){
 		case IDENT:
-			//Put it back
-			push_back_token(lookahead);
-
-			//Let the subrule handle it
-			generic_ast_node_t* enum_ident_node = identifier(fl, SIDE_TYPE_LEFT);
-
-			//If it's invalid fail out
-			if(enum_ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return enum_ident_node;
-			}
-
 			//Extract the name
-			char* name = enum_ident_node->string_value.string;
+			 ident_name = lookahead.lexeme;
 
 			//If it's an identifier, then it has to be an enum
-			symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, name);
+			symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, ident_name.string);
 
 			//If we somehow couldn't find it
 			if(enum_record == NULL){
-				sprintf(info, "Identifier \"%s\" has never been declared", name);
+				sprintf(info, "Identifier \"%s\" has never been declared", ident_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
 			//If we could find it, but it isn't an enum
 			if(enum_record->is_enumeration_member == FALSE){
-				sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", name);
+				sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", ident_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -7442,9 +7430,6 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 							  switch_stmt_node->inferred_type->type_name.string, enum_record->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
-
-			//Store this for later processing
-			enum_ident_node->variable = enum_record;
 
 			//Grab the value of this case statement
 			case_stmt->constant_value.signed_int_value = enum_record->enum_member_value;
