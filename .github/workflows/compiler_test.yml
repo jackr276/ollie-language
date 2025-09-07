@@ -2,8 +2,7 @@ name: Global compiler test
 
 on:
   push:
-    branches: 
-      - [ "main" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
