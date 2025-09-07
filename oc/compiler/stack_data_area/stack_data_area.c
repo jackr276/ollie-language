@@ -20,7 +20,11 @@
  * Allocate the internal dynamic array in the data area
  */
 void stack_data_area_alloc(stack_data_area_t* area){
+	//Just allocate the dynamic array
+	area->variables = dynamic_array_alloc();
 
+	//Currently the size is 0
+	area->total_size = 0;
 }
 
 
@@ -29,60 +33,15 @@ void stack_data_area_alloc(stack_data_area_t* area){
  * constructs and arrays
  */
 static u_int8_t does_stack_contain_variable(stack_data_area_t* area, three_addr_var_t* var){
-	//Grab the highest node out
-	stack_data_area_node_t* node = area->highest;
-
-	//So long as this isn't null
-	while(node != NULL){
-		//If they're equal give back true
-		if(node->variable == var){
+	//Run through and try to find this
+	for(u_int16_t i = 0; i < area->variables->current_index; i++){
+		if(dynamic_array_get_at(area->variables, i) == var){
 			return TRUE;
 		}
-
-		//Go down the list
-		node = node->next;
 	}
 
+	//Return false if we get here
 	return FALSE;
-}
-
-
-/**
- * Whenever we delete or insert something, we'll need to recompute all of the offsets
- * of anything that is above that node. This function will recompute the offsets
- * of anything above the value passed in as "node"
- */
-static void recalculate_all_offsets(stack_data_area_node_t* node){
-	//Hang onto our current offset. This will initially be whatever this node's offset is plus
-	//it's variable size. So, the *next* node that we encounter will have an offset of current
-	//offset
-	u_int32_t current_offset = node->offset + node->variable_size;
-
-	//Grab the one above this in the stack
-	stack_data_area_node_t* current = node->previous;
-
-	//Hold onto the current var
-	three_addr_var_t* current_var;
-
-	//So long as we don't hit the end here
-	while(current != NULL){
-		//Grab this for convenience
-		current_var = current->variable;
-
-		//Assign the offset
-		current->offset = current_offset;
-
-		//This needs to be recomputed too
-		current_var->stack_offset = current_offset;
-
-		//Now recompute the overall offset
-		current_offset = current_offset + current->variable_size;
-
-		//Now we advance the pointer upwards
-		current = current->previous;
-	}
-
-	//By the time we get out down here, we should have reassessed all of the offsets
 }
 
 
@@ -90,8 +49,8 @@ static void recalculate_all_offsets(stack_data_area_node_t* node){
  * Align the stack data area size to be 16-byte aligned
  */
 void align_stack_data_area(stack_data_area_t* area){
-	//This means there's nothing in it
-	if(area->total_size == 0){
+	//If it already is a perfect multiple of 16, then we're good
+	if(area->total_size % 16 == 0){
 		return;
 	}
 
@@ -365,22 +324,6 @@ void print_stack_data_area(stack_data_area_t* area){
  * Deallocate the internal linked list of the stack data area
  */
 void stack_data_area_dealloc(stack_data_area_t* stack_data_area){
-	//Grab the current node
-	stack_data_area_node_t* current = stack_data_area->highest;
-	//We'll need a temporary holder variable here
-	stack_data_area_node_t* temp;
-
-	//Traverse the linked list and deallocate as we go
-	while(current != NULL){
-		//Hold onto the reference
-		temp = current;
-		//Advance current
-		current = current->next;
-		//Free the temp holder
-		free(temp);
-	}
-
-	//We don't need to deallocate the overall structure because it 
-	//itself is a part of a function record
+	//All we need to do here is deallocate the dynamic array
+	dynamic_array_dealloc(stack_data_area->variables);
 }
-
