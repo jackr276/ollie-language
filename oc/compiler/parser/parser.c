@@ -7631,29 +7631,26 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Let's now check to see if it's mutable or not
 	if(lookahead.tok == MUT){
 		is_mutable = TRUE;
-	} else {
-		//Push the token back
-		push_back_token(lookahead);
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//The last thing before we perform checks is for us to see a valid identifier
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
-
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	//If we get here and it's not an identifier, there is an issue
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid identifier given in declaration", parser_line_num);
 	}
 
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->string_value.string;
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -7663,11 +7660,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -7678,11 +7675,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -7692,11 +7689,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name);
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
 
 	//Fail out if this isn't null
 	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_constant_name(found_const);
@@ -7735,7 +7732,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(ident_node->string_value, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
 	//Store its constant status
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
@@ -8061,13 +8058,9 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Let's now check and see if this is mutable
 	if(lookahead.tok == MUT){
 		is_mutable = TRUE;
-	} else {
-		//Otherwise push this back
-		push_back_token(lookahead);
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
-
-	//We need to see a valid identifier here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it's not an identifier, we fail
 	if(lookahead.tok != IDENT){
@@ -8649,22 +8642,22 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
 
 	//Now we must see a valid identifier as the name
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we have a failure here, we're done for
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid name given as function name", current_line);
 	}
 
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
 	//Grab a reference for convenience
-	char* function_name = ident_node->string_value.string;
+	dynamic_string_t function_name = lookahead.lexeme;
 
 	//Let's now do all of our checks for duplication before we go any further. This can
 	//save us time if it ends up being bad
 	
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
-	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name); 
+	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
 
 	//Fail out if found and it's already been defined
 	if(function_record != NULL && function_record->defined == TRUE){
@@ -8686,7 +8679,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Otherwise we're defining fresh, so all of these checks need to happen
 	} else {
 		//Check for duplicated variables
-		symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name); 
+		symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name.string);
 
 		//Fail out if duplicate is found
 		if(found_variable != NULL){
@@ -8699,7 +8692,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Check for duplicated type names
-		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name); 
+		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name.string);
 
 		//Fail out if duplicate has been found
 		if(found_type != NULL){
@@ -8712,11 +8705,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Let's see if we've already named a constant this
-		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name);
+		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name.string);
 
 		//Fail out if this isn't null
 		if(found_const != NULL){
-			sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name);
+			sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print out the original declaration
 			print_constant_name(found_const);
@@ -8725,7 +8718,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(ident_node->string_value);
+		function_record = create_function_record(function_name);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -8747,7 +8740,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		 * If this is the main function, we will record it as having been called by the operating 
 		 * system
 		 */
-		if(strcmp("main", function_name) == 0){
+		if(strcmp("main", function_name.string) == 0){
 			//It is the main function
 			is_main_function = TRUE;
 		}
@@ -8813,7 +8806,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 			//Let's now compare the types here
 			if(types_assignable(&(func_param->type_defined_as), &(parameter_type)) == NULL){
-				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name.string);
+				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name.string, param_count, func_param->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -8889,7 +8882,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(defining_prev_implicit == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
-			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name.string);
+			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
@@ -8932,7 +8925,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//If we're for some reason defining a previous implicit function
 		if(defining_prev_implicit == TRUE){
-			sprintf(info, "Function \"%s\" was already defined implicitly here:", function_name);
+			sprintf(info, "Function \"%s\" was already defined implicitly here:", function_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
@@ -9034,14 +9027,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
  */
 static u_int8_t replace_statement(FILE* fl){
 	//Lookahead token
-	lexitem_t lookahead;
-
-	//We've already seen the with statement, now we need to see an
-	//identifier
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we failed, we're done here
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to replace statement", parser_line_num);
 		num_errors++;
 		return FAILURE;
@@ -9049,16 +9038,16 @@ static u_int8_t replace_statement(FILE* fl){
 	
 	//Now that we have the ident, we need to make sure that it's not a duplicate
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->string_value.string;
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -9067,11 +9056,11 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -9081,11 +9070,11 @@ static u_int8_t replace_statement(FILE* fl){
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
@@ -9093,11 +9082,11 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name);
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
 
 	//Fail out if this isn't null
 	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_constant_name(found_const);
@@ -9135,7 +9124,7 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Now we're ready for assembly and insertion
-	symtab_constant_record_t* created_const = create_constant_record(ident_node->string_value);
+	symtab_constant_record_t* created_const = create_constant_record(name);
 
 	//Once we've created it, we'll pack it with values
 	created_const->constant_node = constant_node;
