@@ -7660,12 +7660,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Let's get a pointer to the name for convenience
 	char* name = ident_node->string_value.string;
 
-	//Array bounds checking real quick
-	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		return print_and_return_error(info, parser_line_num);
-	}
-
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
 	//Check that it isn't some duplicated function name
@@ -8096,12 +8090,6 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Let's get a pointer to the name for convenience
 	char* name = ident_node->string_value.string;
 
-	//Array bounds checking real quick
-	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		return print_and_return_error(info, parser_line_num);
-	}
-
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
 	//Check that it isn't some duplicated function name
@@ -8306,26 +8294,18 @@ static u_int8_t alias_statement(FILE* fl){
 		return FAILURE;
 	}
 
-	//Otherwise we've made it, so now we need to see a valid identifier
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
+	//Now we need to see an identifier here
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it's bad, we're also done here
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
 
-	//Array bounds checking real quick
-	if(strlen(ident_node->string_value.string) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Type names may only be at most 200 characters long, was given: %s", (ident_node->string_value.string));
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
 	//Grab this out for convenience
-	char* name = ident_node->string_value.string;
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Let's do our last syntax check--the semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8339,11 +8319,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -8353,11 +8333,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -8367,11 +8347,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -8381,7 +8361,7 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//If we get here, we know that it actually worked, so we can create the alias
-	generic_type_t* aliased_type = create_aliased_type(ident_node->string_value, type_spec, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(name, type_spec, parser_line_num);
 
 	//Let's now create the aliased record
 	symtab_type_record_t* aliased_record = create_type_record(aliased_type);
@@ -8692,12 +8672,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
 	//Grab a reference for convenience
 	char* function_name = ident_node->string_value.string;
-
-	//Array bounds checking real quick
-	if(strlen(function_name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Function names may only be at most 200 characters long, was given: %s", function_name);
-		return print_and_return_error(info, parser_line_num);
-	}
 
 	//Let's now do all of our checks for duplication before we go any further. This can
 	//save us time if it ends up being bad
@@ -9089,14 +9063,6 @@ static u_int8_t replace_statement(FILE* fl){
 	//Now that we have the ident, we need to make sure that it's not a duplicate
 	//Let's get a pointer to the name for convenience
 	char* name = ident_node->string_value.string;
-
-	//Array bounds checking real quick
-	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
