@@ -192,24 +192,23 @@ void remove_variable_from_stack(stack_data_area_t* area, void* variable){
 void print_stack_data_area(stack_data_area_t* area){
 	printf("======== Stack Layout ============\n");
 
-	//Easiest case here
-	if(area->highest == NULL){
+	//If it's empty we'll leave
+	if(area->variables->current_index == 0){
 		printf("EMPTY\n");
-	} else {
-		//Otherwise we run through everything
-		stack_data_area_node_t* current = area->highest;
+		printf("======== Stack Layout ============\n");
+		return;
+	}
 
-		while(current != NULL){
-			three_addr_var_t* current_var = current->variable;
-			//We'll take the variable and the size
-			if(current_var->is_temporary == FALSE){
-				printf("%10s\t%8d\t%8d\n", current_var->linked_var->var_name.string, current->variable_size, current_var->stack_offset);
-			} else {
-				printf("temp %d\t%8d\t%8d\n", current_var->temp_var_number, current->variable_size, current_var->stack_offset);
-			}
+	//Otherwise run through everything and print
+	for(u_int16_t i = 0; i < area->variables->current_index; i++){
+		//Grab the variable out
+		three_addr_var_t* variable = dynamic_array_get_at(area->variables, i);
 
-			//Advance the node
-			current = current->next;
+		//We'll take the variable and the size
+		if(variable->is_temporary == FALSE){
+			printf("%10s\t%8d\t%8d\n", variable->linked_var->var_name.string, variable->variable_size, variable->stack_offset);
+		} else {
+			printf("temp %d\t%8d\t%8d\n", variable->temp_var_number, variable->variable_size, variable->stack_offset);
 		}
 	}
 

@@ -308,6 +308,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
+	//Allocate the data area internally
+	stack_data_area_alloc(&(record->data_area));
+
 	//Copy the name over
 	record->func_name = name;
 	//Hash it and store it to avoid to repeated hashing
