@@ -17,6 +17,14 @@
 
 
 /**
+ * Allocate the internal dynamic array in the data area
+ */
+void stack_data_area_alloc(stack_data_area_t* area){
+
+}
+
+
+/**
  * Does the stack already contain this variable? This is important for types like
  * constructs and arrays
  */

@@ -14,42 +14,26 @@
 #define STACK_DATA_AREA_H
 
 #include <sys/types.h>
-
+#include "../dynamic_array/dynamic_array.h"
 
 //An overall structure that holds our stack data area
 typedef struct stack_data_area_t stack_data_area_t;
-//Each node represents the allocation of a certain variable of a certain size
-typedef struct stack_data_area_node_t stack_data_area_node_t;
-
 
 /**
  * A structure that contains an automatically organizing linked
  * list. This linked list contains all of our data
  */
 struct stack_data_area_t{
-	//The head node of the data area.
-	//This will always be the highest(i.e. *highest* offset) node 
-	stack_data_area_node_t* highest;
+	//The array of all variables in the stack currently
+	dynamic_array_t* variables;
 	//The total size of the data area
 	u_int32_t total_size;
 };
 
-
 /**
- * Each individual node contains a reference
- * to a given three address code variable
+ * Allocate the internal dynamic array in the data area
  */
-struct stack_data_area_node_t{
-	//The next node
-	stack_data_area_node_t* next;
-	stack_data_area_node_t* previous;
-	//The variable that this node references
-	void* variable;
-	//The size of the node(may not be the same as the var due to alignment)
-	u_int32_t variable_size;
-	//What is the offset(%rsp + __) for this node
-	u_int32_t offset;
-};
+void stack_data_area_alloc(stack_data_area_t* area);
 
 /**
  * Add a node into the stack data area
