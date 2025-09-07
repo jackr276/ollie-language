@@ -4186,7 +4186,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 }
 
 
-/**
+	/**
  * A construct definer is the definition of a construct. We require all parts of the construct to be defined here.
  * We also allow the potential for aliasing as a different type right off of the bat here. Since this is a compiler-specific
  * rule, we only return success or failer
@@ -4210,12 +4210,11 @@ static u_int8_t struct_definer(FILE* fl){
 	//Set it
 	dynamic_string_set(&type_name, "struct ");
 
-
-	//We are now required to see a valid identifier
-	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
+	//Get the next token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Fail case
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Valid identifier required after construct keyword", parser_line_num);
 		num_errors++;
 		//Destroy the node
@@ -4224,7 +4223,7 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Add the name on the end
-	dynamic_string_concatenate(&type_name, ident->string_value.string);
+	dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 	//Once we have this, the actual node is useless so we'll free it
 
@@ -4394,20 +4393,11 @@ static u_int8_t struct_definer(FILE* fl){
 
 
 /**
- * A union member list is a semicolon separated list of different variables that the union stores
- */
-static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
-	return FALSE;
-}
-
-
-
-/**
  * A union definer allows us to declare a discriminating union datatype
  *
  * NOTE: By the time that we get here, we have already seen the UNION keyword 
  *
- * BNF RULE: <union_definer> ::=  define union <identifier> {<union_member_list>} {as <identifier>}? ;
+ * BNF RULE: <union_definer> ::=  define union <identifier> {{mut}? <identifier>:<type-specifier>} {as <identifier>}? ;
  */
 static u_int8_t union_definer(FILE* fl){
 	//Lookahead token for searching
