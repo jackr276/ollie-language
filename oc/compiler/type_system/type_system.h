@@ -14,9 +14,6 @@
 
 #define MAX_FUNCTION_TYPE_PARAMS 6
 
-//Type names may not exceed 200 characters in length
-#define MAX_TYPE_NAME_LENGTH 200
-
 //The generic global type type
 typedef struct generic_type_t generic_type_t;
 //A function type

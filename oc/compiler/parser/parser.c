@@ -3794,14 +3794,6 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//Grab this for convenience
 	char* name = ident->string_value.string;
 
-	//Array bounds checking real quick
-	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
 	//The field, if we can find it
 	symtab_variable_record_t* duplicate = NULL;
 
@@ -4864,10 +4856,14 @@ static u_int8_t enum_definer(FILE* fl){
 static symtab_type_record_t* type_name(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
-	//A temporary holder for the type name
-	char type_name[MAX_TYPE_NAME_LENGTH];
 	//Hold the record we get
 	symtab_type_record_t* record;
+
+	//Create a dstring for the type name
+	dynamic_string_t type_name;
+
+	//Allocate it
+	dynamic_string_alloc(&type_name);
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4901,35 +4897,27 @@ static symtab_type_record_t* type_name(FILE* fl){
 		//Enumerated type
 		case ENUM:
 			//We know that this keyword is in the name, so we'll add it in
-			strcpy(type_name, "enum ");
+			dynamic_string_set(&type_name, "enum ");
 
-			//It is required that we now see a valid identifier
-			generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
+			//Now we need to see a valid identifier
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 			//If we fail, we'll bail out
-			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			if(lookahead.tok != IDENT){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
 				//It's already an error so just give it back
 				return NULL;
 			}
 
-			//Array bounds checking
-			if(strlen(type_ident->string_value.string) > MAX_TYPE_NAME_LENGTH - 10){
-				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->string_value.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return NULL;
-			}
-
 			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-			strcat(type_name, type_ident->string_value.string);
+			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
+			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name.string);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name);
+				sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -4980,14 +4968,19 @@ static symtab_type_record_t* type_name(FILE* fl){
 			//Once we make it here, we should be all set to get out
 			return record;
 
+		//This is an identifier
+		case IDENT:
+			//Array bounds checking
+			if(strlen(lookahead.lexeme.string) > MAX_TYPE_NAME_LENGTH - 10){
+				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->string_value.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+
 		//Some user defined name
 		default:
-			//Put the token back for the ident rule
-			push_back_token(lookahead);
-
-			//We will let the identifier rule handle it
-			type_ident = identifier(fl, SIDE_TYPE_LEFT);
-
 			//If we fail, we'll bail out
 			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
@@ -4997,14 +4990,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 				return NULL;
 			}
 
-			//Array bounds checking
-			if(strlen(type_ident->string_value.string) > MAX_TYPE_NAME_LENGTH - 10){
-				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->string_value.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return NULL;
-			}
-
+			
 			//Grab a pointer for it for convenience
 			char* temp_name = type_ident->string_value.string;
 
