@@ -4927,38 +4927,30 @@ static symtab_type_record_t* type_name(FILE* fl){
 			//Once we make it here, we should be all set to get out
 			return record;
 
-		//Construct type
+		//Struct type
 		case STRUCT:
-			//We know that this keyword is in the name, so we'll add it in
-			strcpy(type_name, "struct ");
+			//First add the struct into the name
+			dynamic_string_set(&type_name, "struct ");
 
-			//It is required that we now see a valid identifier
-			type_ident = identifier(fl, SIDE_TYPE_LEFT);
+			//We need to see an ident here
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-			//If we fail, we'll bail out
-			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			//If it's not an ident, leave
+			if(lookahead.tok != IDENT){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as struct type name", parser_line_num);
-				//It's already an error so just give it back
-				return NULL;
-			}
-
-			//Array bounds checking
-			if(strlen(type_ident->string_value.string) > MAX_TYPE_NAME_LENGTH - 10){
-				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->string_value.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
+				//Throw an error up
 				return NULL;
 			}
 
 			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-			strcat(type_name, type_ident->string_value.string);
+			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name);
+			record = lookup_type_name_only(type_symtab, type_name.string);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Struct %s was never defined. Types must be defined before use", type_name);
+				sprintf(info, "Struct %s was never defined. Types must be defined before use", type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -4970,36 +4962,12 @@ static symtab_type_record_t* type_name(FILE* fl){
 
 		//This is an identifier
 		case IDENT:
-			//Array bounds checking
-			if(strlen(lookahead.lexeme.string) > MAX_TYPE_NAME_LENGTH - 10){
-				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->string_value.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return NULL;
-			}
-
-
-		//Some user defined name
-		default:
-			//If we fail, we'll bail out
-			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
-				//Error increase here
-				num_errors++;
-				//It's already an error so just give it back
-				return NULL;
-			}
-
-			
-			//Grab a pointer for it for convenience
-			char* temp_name = type_ident->string_value.string;
-
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, temp_name);
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Type %s was never defined. Types must be defined before use", temp_name);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", lookahead.lexeme.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -5014,6 +4982,12 @@ static symtab_type_record_t* type_name(FILE* fl){
 
 			//Once we make it here, we should be all set to get out
 			return true_type;
+
+		//If we hit down here, we have some invalid lexeme that isn't a type name at all
+		default:
+			print_parse_message(PARSE_ERROR, "Type name expected but not found", parser_line_num);
+			num_errors++;
+			return NULL;
 	}
 }
 
