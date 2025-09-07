@@ -2028,7 +2028,7 @@ static void rename_block(basic_block_t* entry){
 			symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
 
 			//Emit a new variable for this one
-			three_addr_var_t* phi_func_param = emit_var(phi_func_var, FALSE);
+			three_addr_var_t* phi_func_param = emit_var(phi_func_var);
 
 			//Emit the name for this variable
 			rhs_new_name(phi_func_param);
@@ -2557,7 +2557,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
 	if(temp_assignment_required == TRUE){
 		//First we'll create the non-temp var here
-		three_addr_var_t* non_temp_var = emit_var(ident_node->variable, FALSE);
+		three_addr_var_t* non_temp_var = emit_var(ident_node->variable);
 
 		//Let's first create the assignment statement
 		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
@@ -2578,7 +2578,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	//hand side of an equation
 	} else {
 		//Create our variable
-		three_addr_var_t* returned_variable = emit_var(ident_node->variable, FALSE);
+		three_addr_var_t* returned_variable = emit_var(ident_node->variable);
 
 		//Give our variable back
 		return returned_variable;
@@ -3459,9 +3459,9 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	symtab_variable_record_t* ternary_variable = create_ternary_variable(ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
 
 	//Let's first create the final result variable here
-	three_addr_var_t* if_result = emit_var(ternary_variable, FALSE);
-	three_addr_var_t* else_result = emit_var(ternary_variable, FALSE);
-	three_addr_var_t* final_result = emit_var(ternary_variable, FALSE);
+	three_addr_var_t* if_result = emit_var(ternary_variable);
+	three_addr_var_t* else_result = emit_var(ternary_variable);
+	three_addr_var_t* final_result = emit_var(ternary_variable);
 
 	//Grab a cursor to the first child
 	generic_ast_node_t* cursor = ternary_operation->first_child;
@@ -3849,7 +3849,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	}
 
 	//We first need to emit the function pointer variable
-	three_addr_var_t* function_pointer_var = emit_var(indirect_function_call_node->variable, FALSE);
+	three_addr_var_t* function_pointer_var = emit_var(indirect_function_call_node->variable);
 
 	//Emit the final call here
 	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
@@ -7120,7 +7120,7 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 		emitted_block = basic_block_alloc(1);
 
 		//Now we emit the variable for the array base address
-		three_addr_var_t* base_addr = emit_var(node->variable, FALSE);
+		three_addr_var_t* base_addr = emit_var(node->variable);
 
 		//The base address here is related to the memory address referenced by the node's variable
 		base_addr->related_memory_address = node->variable;
@@ -7404,7 +7404,7 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 			//Emit the variable. This will act as our base address
-			assignee = emit_var(node->variable, FALSE);
+			assignee = emit_var(node->variable);
 
 			//The assignee is related to the memory address that is the node's variable
 			assignee->related_memory_address = node->variable;
@@ -7421,7 +7421,7 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 		//Otherwise we just have a garden variety variable - no stack allocation required
 		default:
 			//Emit it
-			assignee = emit_var(node->variable, FALSE);
+			assignee = emit_var(node->variable);
 			break;
 	}
 
@@ -7633,7 +7633,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	//Create the stack pointer
 	symtab_variable_record_t* stack_pointer = initialize_stack_pointer(results->type_symtab);
 	//Initialize the variable too
-	stack_pointer_var = emit_var(stack_pointer, FALSE);
+	stack_pointer_var = emit_var(stack_pointer);
 	//Mark it
 	stack_pointer_var->is_stack_pointer = TRUE;
 	//Store the stack pointer
@@ -7642,7 +7642,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	//Create the instruction pointer
 	symtab_variable_record_t* instruction_pointer = initialize_instruction_pointer(results->type_symtab);
 	//Initialize a three addr code var
-	instruction_pointer_var = emit_var(instruction_pointer, FALSE);
+	instruction_pointer_var = emit_var(instruction_pointer);
 	//Store it in the CFG
 	cfg->instruction_pointer = instruction_pointer_var;
 

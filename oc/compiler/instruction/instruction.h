@@ -649,7 +649,7 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
  * Create and return a three address var from an existing variable. If 
  * we are assigning to a variable, that will create a new generation of variable.
 */
-three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label);
+three_addr_var_t* emit_var(symtab_variable_record_t* var);
 
 /**
  * Emit a variable copied from another variable
