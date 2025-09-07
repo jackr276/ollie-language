@@ -4451,8 +4451,6 @@ static u_int8_t union_definer(FILE* fl){
  * BNF Rule: <enum-definer> ::= define enum <identifier> { <identifier> {= <constant>}? {, <identifier>{ = <constant>}?}* } {as <identifier>}?;
  */
 static u_int8_t enum_definer(FILE* fl){
-	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Reserve space for the type name
@@ -4918,7 +4916,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name.string);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -4939,6 +4937,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			//If it's not an ident, leave
 			if(lookahead.tok != IDENT){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as struct type name", parser_line_num);
+				num_errors++;
 				//Throw an error up
 				return NULL;
 			}
@@ -4951,7 +4950,41 @@ static symtab_type_record_t* type_name(FILE* fl){
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Struct %s was never defined. Types must be defined before use", type_name.string);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				//Create and return an error node
+				return NULL;
+			}
+
+			//Once we make it here, we should be all set to get out
+			return record;
+
+		//Union type
+		case UNION:
+			//Add union into the name
+			dynamic_string_set(&type_name, "union ");
+
+			//Now we'll need to see an ident
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//If we don't have one, then we need to fail out
+			if(lookahead.tok != IDENT){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as union type name", parser_line_num);
+				num_errors++;
+				//Send an error up the chain
+				return NULL;
+			}
+
+			//Add the name onto the "union" qualifier
+			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
+
+			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+			record = lookup_type_name_only(type_symtab, type_name.string);
+
+			//If we didn't find it it's an instant fail
+			if(record == NULL){
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
