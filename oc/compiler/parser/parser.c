@@ -3781,10 +3781,10 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 
 	//Otherwise we know that it worked here
 	//Now we need to see a valid ident and check it for duplication
-	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);	
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Let's make sure it actually worked
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as construct member name", parser_line_num);
 		num_errors++;
 		//It's an error, so we'll propogate it up
@@ -3792,14 +3792,14 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//Grab this for convenience
-	char* name = ident->string_value.string;
+	dynamic_string_t name = lookahead.lexeme;
 
 	//The field, if we can find it
 	symtab_variable_record_t* duplicate = NULL;
 
 	//Is this a duplicate? If so, we fail out
-	if((duplicate = get_struct_member(construct, name)) != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
+	if((duplicate = get_struct_member(construct, name.string)) != NULL){
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
@@ -3807,11 +3807,11 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -3854,7 +3854,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record
-	symtab_variable_record_t* member_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
@@ -4091,11 +4091,12 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
+
 	//If we make it here then we know we're good to look for an identifier
-	generic_ast_node_t* identifier_node = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If this is an error, then we're going to fail out
-	if(identifier_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias type", parser_line_num);
 		num_errors++;
 		return FALSE;
@@ -4104,7 +4105,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//We know that it wasn't an error, but now we need to perform duplicate checking
 
 	//Grab this out for convenience
-	char* identifier_name = identifier_node->string_value.string;
+	dynamic_string_t identifier_name = lookahead.lexeme;
 
 	//Let's close the parsing out here - we'll need to see & consume a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4117,11 +4118,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, identifier_name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, identifier_name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", identifier_name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", identifier_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -4131,11 +4132,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, identifier_name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, identifier_name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", identifier_name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", identifier_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -4145,11 +4146,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name.string);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", identifier_name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", identifier_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -4168,7 +4169,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	insert_type(type_symtab, type_record);
 
 	//Now that we've done that part, we also need to create the alias type and insert it
-	generic_type_t* alias_type = create_aliased_type(identifier_node->string_value, function_type, parser_line_num);
+	generic_type_t* alias_type = create_aliased_type(identifier_name, function_type, parser_line_num);
 
 	//Once we've created this, we'll add this into the symtab
 	insert_type(type_symtab, create_type_record(alias_type));
@@ -4305,10 +4306,10 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
 	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
-	generic_ast_node_t* alias_ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If it was invalid
-	if(alias_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	//If it was invalid leave
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4316,7 +4317,7 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Let's grab the actual name out
-	char* alias_name = alias_ident->string_value.string;
+	dynamic_string_t alias_name = lookahead.lexeme;
 
 	//Once we have this, the alias ident is of no use to us
 
@@ -4332,11 +4333,11 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -4346,11 +4347,11 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -4360,11 +4361,11 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -4374,7 +4375,7 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_ident->string_value, struct_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_name, struct_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -4403,17 +4404,17 @@ static u_int8_t union_definer(FILE* fl){
 	//Add the prefix in
 	dynamic_string_set(&union_name, "union ");
 
-	//We now need to see a name for our union type
-	generic_ast_node_t* name = identifier(fl, SIDE_TYPE_LEFT);
+	//Now we need to see an identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If this is an error fail out
-	if(name->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as union name", parser_line_num);
 		return FAILURE;
 	}
 
 	//Add the ident into our overall name
-	dynamic_string_concatenate(&union_name, name->string_value.string);
+	dynamic_string_concatenate(&union_name, lookahead.lexeme.string);
 
 	//Now we'll need to scan through the type database to ensure that this isn't already in there
 	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, union_name.string);
@@ -4464,10 +4465,10 @@ static u_int8_t enum_definer(FILE* fl){
 	dynamic_string_set(&type_name, "enum ");
 
 	//We now need to see a valid identifier to round out the name
-	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Fail case here
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid name given to enum definition", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4475,7 +4476,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now if we get here we know that we found a valid ident, so we'll add it to the name
-	dynamic_string_concatenate(&type_name, ident->string_value.string);
+	dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 	//Now we need to check that this name isn't already currently in use. We only need to check against the
 	//type symtable, because nothing else could have enum in the name
@@ -4748,10 +4749,10 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
 	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
-	generic_ast_node_t* alias_ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it was invalid
-	if(alias_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4759,7 +4760,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Extract the alias name
-	char* alias_name = alias_ident->string_value.string;
+	dynamic_string_t alias_name = lookahead.lexeme;
 
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4773,11 +4774,11 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -4787,11 +4788,11 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -4801,11 +4802,11 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	found_type = lookup_type_name_only(type_symtab, alias_name);
+	found_type = lookup_type_name_only(type_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -4815,7 +4816,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_ident->string_value, enum_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
