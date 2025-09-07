@@ -3880,8 +3880,19 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
 static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
-	//Lookahead token
-	lexitem_t lookahead;
+	//Now we are required to see a curly brace
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail case here
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Otherwise we'll push onto the stack for later matching
+	push_token(grouping_stack, lookahead);
 
 	//Initiate a new variable scope here
 	initialize_variable_scope(variable_symtab);
@@ -3921,16 +3932,13 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
 	//So long as we don't see the end
 	} while (lookahead.tok != R_CURLY);
 
-	//Once we get here, what we know is that lookahead was not a semicolon. We know that it should
-	//be a closing curly brace, so in the interest of better error messages, we'll do a little pre-check
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Construct members must be delimited by ;", parser_line_num);
+	//Check for unamtched curlies
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
 		num_errors++;
+		//Fail out here
 		return FAILURE;
 	}
-
-	//If we get here we know that it's right, but we'll still allow the other rule to handle it
-	push_back_token(lookahead);
 
 	//Once we're done we can escape this scope
 	finalize_variable_scope(variable_symtab);
@@ -4235,20 +4243,6 @@ static u_int8_t struct_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Now we are required to see a curly brace
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Fail case here
-	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
-		num_errors++;
-		//Fail out
-		return FAILURE;
-	}
-
-	//Otherwise we'll push onto the stack for later matching
-	push_token(grouping_stack, lookahead);
-
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
 	generic_type_t* struct_type = create_struct_type(type_name, current_line);
 
@@ -4257,27 +4251,8 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//Automatic fail case here
 	if(success == FAILURE){
-		print_parse_message(PARSE_ERROR, "Invalid construct member list given in construct definition", parser_line_num);
-		//We'll destroy it first
-		return FAILURE;
-	}
-
-	//Otherwise we got past the list, and now we need to see a closing curly
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Bail out if this happens
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Closing curly brace required after member list", parser_line_num);
-		num_errors++;
-		//Fail out here
-		return FAILURE;
-	}
-	
-	//Check for unamtched curlies
-	if(pop_token(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
-		num_errors++;
-		//Fail out here
+		print_parse_message(PARSE_ERROR, "Invalid struct member list given in construct definition", parser_line_num);
+		//Fail out
 		return FAILURE;
 	}
 	
@@ -4386,11 +4361,23 @@ static u_int8_t struct_definer(FILE* fl){
 
 
 /**
+ * Parse and add a union member into our union type
+ *
+ * BNF Rule: <union-member> ::= {mut}? <identifier>:<type-specifier>
+ */
+static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
+
+	//If we make it here then we succeeded os
+	return SUCCESS;
+}
+
+
+/**
  * A union definer allows us to declare a discriminating union datatype
  *
  * NOTE: By the time that we get here, we have already seen the UNION keyword 
  *
- * BNF RULE: <union_definer> ::=  define union <identifier> {{mut}? <identifier>:<type-specifier>} {as <identifier>}? ;
+ * BNF RULE: <union_definer> ::=  define union <identifier> {{<union-member>;}+} {as <identifier>}? ;
  */
 static u_int8_t union_definer(FILE* fl){
 	//Lookahead token for searching
