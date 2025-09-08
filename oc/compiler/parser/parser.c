@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <iso646.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -4624,7 +4625,73 @@ static u_int8_t union_definer(FILE* fl){
 			return FAILURE;
 	}
 
-	//If we made it here we're aliasing. We need to now see an IDENt
+	//If we made it here we're aliasing. We need to now see an IDENT
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it's not an IDENT we're done
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Identifier expected after as keyword", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise we can now extract the name and check for duplication
+	dynamic_string_t alias_name = lookahead.lexeme;
+
+	//Before we do all of the expensive symtab checking, let's just see if the user
+	//forgot a semicolon first. It's fast to check that
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it's not here we're out
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after union definition", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	found_type = lookup_type_name_only(type_symtab, alias_name.string);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+
 
 	//If we get here it worked so
 	return SUCCESS;
