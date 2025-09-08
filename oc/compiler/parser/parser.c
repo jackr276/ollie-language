@@ -3774,14 +3774,9 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//We could first see the mutable keyword, indicating that this field can be changed
 	if(lookahead.tok == MUT){
 		is_mutable = TRUE;
-	} else {
-		//Otherwise put it back
-		push_back_token(lookahead);
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
-
-	//Otherwise we know that it worked here
-	//Now we need to see a valid ident and check it for duplication
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Let's make sure it actually worked
 	if(lookahead.tok != IDENT){
@@ -3795,10 +3790,10 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	dynamic_string_t name = lookahead.lexeme;
 
 	//The field, if we can find it
-	symtab_variable_record_t* duplicate = NULL;
+	symtab_variable_record_t* duplicate = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Is this a duplicate? If so, we fail out
-	if((duplicate = get_struct_member(construct, name.string)) != NULL){
+	if(duplicate != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
@@ -3815,6 +3810,20 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return FAILURE;
+	}
+
+	//Check that it's not a duplicate function
+	symtab_function_record_t* found_function = lookup_function(function_symtab, name.string);
+
+	//Fail out here
+	if(found_function != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_function_name(found_function);
 		num_errors++;
 		//Return a fresh error node
 		return FAILURE;
@@ -4366,6 +4375,36 @@ static u_int8_t struct_definer(FILE* fl){
  * BNF Rule: <union-member> ::= {mut}? <identifier>:<type-specifier>;
  */
 static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
+	//Our lookahead token
+	lexitem_t lookahead;
+	//Is this mutable? By default we assume no
+	u_int8_t is_mutable = 0;
+
+	//Let's fetch the first token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we have the MUT keyword we'll flag that and move along
+	if(lookahead.tok == MUT){
+		is_mutable = TRUE;
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//Once we're here, we need to see an identifier token. If we don't, we'll fail out
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Identifier expected in union member declaration", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise we did find it, so let's grab the name out
+	dynamic_string_t name = lookahead.lexeme;
+
+	//Let's validate that this is not a duplicated name
+	
+
+	//We now need to see a SE
+
 
 	//If we make it here then we succeeded os
 	return SUCCESS;
