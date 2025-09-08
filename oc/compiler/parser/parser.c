@@ -1515,6 +1515,15 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	return struct_access_node;
 }
 
+/**
+ * A union accessor may or may not require us to use the stack.
+ */
+static generic_ast_node_t* union_accessor(FILE* fl, generic_type_t* type, side_type_t side){
+
+	//STUB
+	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+}
+
 
 /**
  * An array accessor represents a request to get something from an array memory region. Like all
@@ -1637,6 +1646,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		case L_BRACKET:
 		case COLON:
 		case DOUBLE_COLON:
+		case DOT:
 		case PLUSPLUS:
 		case MINUSMINUS:
 			//We need to keep going here, so leave
@@ -1654,8 +1664,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		return print_and_return_error("Constants are not assignable", current_line);
 	}
 
-	//Otherwise we at least know that it isn't a constant
-
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
 	//post operation, so we can make the node for it
 	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
@@ -1670,72 +1678,103 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Do any kind of dealiasing that we need to do
 	current_type = dealias_type(current_type);
 
+	//Declare this as our accessor node for all rules
+	generic_ast_node_t* accessor_node = NULL;
+
 	//We assume it's assignable, that will only change if we have a basic type that is 
 	//post inc'd/dec'd
 	postfix_expr_node->is_assignable = ASSIGNABLE;
 
 	//Now we can see as many construct accessor and array accessors as we can take
-	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == DOUBLE_COLON){
-		//Let's see which rule it is
-		//We have an array accessor
-		if(lookahead.tok == L_BRACKET){
-			//Put the token back
-			push_back_token(lookahead);
+	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == DOUBLE_COLON || lookahead.tok == DOT){
+		//Go based on what's in here
+		switch(lookahead.tok){
+			case L_BRACKET:
+				//Put the token back
+				push_back_token(lookahead);
 
-			//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
-			if(current_type->type_class != TYPE_CLASS_ARRAY && current_type->type_class != TYPE_CLASS_POINTER){
-				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				//Print it out
-				print_type_name(lookup_type(type_symtab, current_type));
-				num_errors++;
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-			}
+				//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
+				if(current_type->type_class != TYPE_CLASS_ARRAY && current_type->type_class != TYPE_CLASS_POINTER){
+					sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name.string);
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					//Print it out
+					print_type_name(lookup_type(type_symtab, current_type));
+					num_errors++;
+					return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+				}
 
-			//Let the array accessor handle it
-			generic_ast_node_t* array_acc = array_accessor(fl, side);
-			
-			//Let's see if it actually worked
-			if(array_acc->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Invalid array accessor found in postfix expression", current_line);
-			}
+				//Let the array accessor handle it
+				accessor_node = array_accessor(fl, side);
+				
+				//Let's see if it actually worked
+				if(accessor_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return print_and_return_error("Invalid array accessor found in postfix expression", current_line);
+				}
 
-			//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
-			//node
-			add_child_node(postfix_expr_node, array_acc);
+				//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
+				//node
+				add_child_node(postfix_expr_node, accessor_node);
 
-			//Based on this, the current type is whatever this array contains. We'll also use this for size determinations
-			if(current_type->type_class == TYPE_CLASS_ARRAY){
-				current_type = dealias_type(current_type->internal_types.member_type);
-			} else {
-				//Otherwise we know that it must be a pointer
-				current_type = dealias_type(current_type->internal_types.points_to);
-			}
-			
-			//The current type of any array access will be whatever the derferenced value is
-			array_acc->inferred_type = current_type;
+				//Based on this, the current type is whatever this array contains. We'll also use this for size determinations
+				if(current_type->type_class == TYPE_CLASS_ARRAY){
+					current_type = dealias_type(current_type->internal_types.member_type);
+				} else {
+					//Otherwise we know that it must be a pointer
+					current_type = dealias_type(current_type->internal_types.points_to);
+				}
+				
+				//The current type of any array access will be whatever the derferenced value is
+				accessor_node->inferred_type = current_type;
 
-		//Otherwise we have a construct accessor
-		} else {
-			//Put it back for the rule to deal with
-			push_back_token(lookahead);
+				break;
 
-			//Let's have the rule do it.
-			generic_ast_node_t* struct_access = struct_accessor(fl, current_type, side);
+			//This is a construct accessor
+			case COLON:
+			case DOUBLE_COLON:
+				//Put it back for the rule to deal with
+				push_back_token(lookahead);
 
-			//We have our fail case here
-			if(struct_access->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Invalid construct accessor found in postfix expression", current_line);
-			}
+				//Let's have the rule do it.
+				accessor_node = struct_accessor(fl, current_type, side);
 
-			//Update the current type to be whatever came out of here
-			current_type = struct_access->variable->type_defined_as;
+				//We have our fail case here
+				if(accessor_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return print_and_return_error("Invalid struct accessor found in postfix expression", current_line);
+				}
 
-			//Store the type information here
-			struct_access->inferred_type = current_type;
+				//Update the current type to be whatever came out of here
+				current_type = accessor_node->variable->type_defined_as;
 
-			//Otherwise we know it's good, so we'll add it in as a child
-			add_child_node(postfix_expr_node, struct_access);
+				//Store the type information here
+				accessor_node->inferred_type = current_type;
+
+				//Otherwise we know it's good, so we'll add it in as a child
+				add_child_node(postfix_expr_node, accessor_node);
+				
+				break;
+
+			//And this is a union accessor
+			case DOT:
+				//Let the rule handle it
+				accessor_node = union_accessor(fl, current_type, side);
+
+				//We have our fail case here
+				if(accessor_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return print_and_return_error("Invalid union accessor found in postfix expression", current_line);
+				}
+
+				//Update the current type to be whatever came out of here
+				current_type = accessor_node->variable->type_defined_as;
+
+				//Store the type information here
+				accessor_node->inferred_type = current_type;
+
+				//Otherwise we know it's good, so we'll add it in as a child
+				add_child_node(postfix_expr_node, accessor_node);
+		
+			//We shouldn't ever hit here
+			default:
+				break;
 		}
 		
 		//refresh the lookahead for the next iteration
