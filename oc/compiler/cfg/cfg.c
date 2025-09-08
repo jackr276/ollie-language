@@ -7114,26 +7114,43 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 	//Extract the type info out of here
 	generic_type_t* type = node->variable->type_defined_as;
 
-	//If we have an array, we'll need to decrement the stack
-	if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
-		//If we're doing something like this, we'll actually need to allocate
-		emitted_block = basic_block_alloc(1);
+	//Based on what type of class we have, we may or may not need to use the stack
+	switch(type->type_class){
+		//Union types are a unique case. It's possible that
+		//they don't need to be put on the stack. If they're over
+		//8 bytes, then they do
+		case TYPE_CLASS_UNION:
+			//These don't need to be put onto a stack
+			if(type->type_size <= 8){
+				break;
+			}
+			//Fall through otherwise
 
-		//Now we emit the variable for the array base address
-		three_addr_var_t* base_addr = emit_var(node->variable);
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+			//If we're doing something like this, we'll actually need to allocate
+			emitted_block = basic_block_alloc(1);
 
-		//The base address here is related to the memory address referenced by the node's variable
-		base_addr->related_memory_address = node->variable;
+			//Now we emit the variable for the array base address
+			three_addr_var_t* base_addr = emit_var(node->variable);
 
-		//This var is an assigned variable
-		add_assigned_variable(emitted_block, base_addr);
+			//The base address here is related to the memory address referenced by the node's variable
+			base_addr->related_memory_address = node->variable;
 
-		//Add this variable into the current function's stack. This is what we'll use
-		//to store the address
-		add_variable_to_stack(&(current_function->data_area), base_addr);
+			//This var is an assigned variable
+			add_assigned_variable(emitted_block, base_addr);
 
-		//We'll now emit the actual address calculation using the offset
-		emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, type_symtab), FALSE);
+			//Add this variable into the current function's stack. This is what we'll use
+			//to store the address
+			add_variable_to_stack(&(current_function->data_area), base_addr);
+
+			//We'll now emit the actual address calculation using the offset
+			emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, type_symtab), FALSE);
+			break;
+
+		//Otherwise just leave
+		default:
+			break;
 	}
 
 	//Declare the result package
