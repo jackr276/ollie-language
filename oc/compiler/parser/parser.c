@@ -4363,7 +4363,7 @@ static u_int8_t struct_definer(FILE* fl){
 /**
  * Parse and add a union member into our union type
  *
- * BNF Rule: <union-member> ::= {mut}? <identifier>:<type-specifier>
+ * BNF Rule: <union-member> ::= {mut}? <identifier>:<type-specifier>;
  */
 static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 
@@ -4375,9 +4375,45 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 /**
  * Parse the union member list for a given union type
  *
- * BNF RULE: <union-member-list> ::= { {<union-member>;}+ }
+ * BNF RULE: <union-member-list> ::= { {<union-member>}+ }
  */
 static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
+	//Initialize a new variable scope to help with duplicate checks
+	initialize_variable_scope(variable_symtab);
+
+	//We must first see an L_curly
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it's not a curly we fail
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Left curly required after union name", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise push onto the grouping stack for matching
+	push_token(grouping_stack, lookahead);
+
+	//Now we need to see union members so long as we don't hit the closing R_CURLY
+	do {
+		//Call the helper union member function
+		u_int8_t status = union_member(fl, union_type);
+
+		//If one of them fails, then we're out
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Invalid union member defition", parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//So long as we don't hit the closing curly
+	} while(lookahead.tok != R_CURLY);
+
+	//Before we go, we need to close out that variable scope that we opened above
+	finalize_variable_scope(variable_symtab);
 
 	//If we make it here then we know that it worked
 	return SUCCESS;
