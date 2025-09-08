@@ -1431,7 +1431,8 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 	}
 
 
-
+	//STUB FOR NOW
+	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 }
 
 
@@ -1621,12 +1622,12 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	u_int16_t current_line = parser_line_num;
 
 	//No matter what, we have to first see a valid primary expression
-	generic_ast_node_t* result = primary_expression(fl, side);
+	generic_ast_node_t* primary_expression_node = primary_expression(fl, side);
 
 	//If we fail, then we're bailing out here
-	if(result->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(primary_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//Just return, no need for any errors here
-		return result;
+		return primary_expression_node;
 	}
 
 	//Peek at the next token
@@ -1646,13 +1647,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 			//Push this back
 			push_back_token(lookahead);
 			//Return the result
-			return result;
-	}
-
-	//If we make it down to here, we know that we're trying to access a variable. As such, 
-	//we need to make sure that we don't see a constant here
-	if(result->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		return print_and_return_error("Constants are not assignable", current_line);
+			return primary_expression_node;
 	}
 
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
@@ -1662,10 +1657,11 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	postfix_expr_node->line_number = current_line;
 
 	//This node will always have the primary expression as its first child
-	add_child_node(postfix_expr_node, result);
+	add_child_node(postfix_expr_node, primary_expression_node);
 
 	//Let's grab whatever type that we currently have
-	generic_type_t* current_type = result->inferred_type;
+	generic_type_t* current_type = primary_expression_node->inferred_type;
+
 	//Do any kind of dealiasing that we need to do
 	current_type = dealias_type(current_type);
 
@@ -1694,19 +1690,21 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				//Let's have the rule do it.
 				accessor_node = struct_accessor(fl, current_type, side);
 
-				break;			
+				break;
 			
 			//This is a struct pointer accessor
 			case DOUBLE_COLON:
 				//Let's have the rule do it.
 				accessor_node = struct_pointer_accessor(fl, current_type, side);
 
-				break;			
+				break;
 
 			//And this is a union accessor
 			case DOT:
 				//Let the rule handle it
 				accessor_node = union_accessor(fl, current_type, side);
+
+				break;
 
 			//We shouldn't ever hit here, but if we do then leave
 			default:
@@ -1740,9 +1738,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		//Assign the type
 		postfix_expr_node->inferred_type = return_type;
 		//Assign the variable
-		postfix_expr_node->variable = result->variable;
+		postfix_expr_node->variable = primary_expression_node->variable;
 		//This was assigned to
-		result->variable->assigned_to = TRUE;
+		primary_expression_node->variable->assigned_to = TRUE;
 		//And we'll give back what we had constructed so far
 		return postfix_expr_node;
 	}
@@ -1776,7 +1774,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	postfix_expr_node->inferred_type = return_type;
 
 	//Carry through
-	postfix_expr_node->variable = result->variable;
+	postfix_expr_node->variable = primary_expression_node->variable;
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;
