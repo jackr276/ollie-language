@@ -4197,7 +4197,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 }
 
 
-	/**
+/**
  * A construct definer is the definition of a construct. We require all parts of the construct to be defined here.
  * We also allow the potential for aliasing as a different type right off of the bat here. Since this is a compiler-specific
  * rule, we only return success or failer
@@ -4617,7 +4617,7 @@ static u_int8_t union_definer(FILE* fl){
 		case SEMICOLON:
 			return SUCCESS;
 		//More to do
-		case ALIAS:
+		case AS:
 			break;
 		default:
 			print_parse_message(PARSE_ERROR, "AS keyword or semicolon expected after union definition", parser_line_num);
@@ -4691,7 +4691,11 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
+	//Let's construct the final alias here
+	generic_type_t* alias_type = create_aliased_type(alias_name, union_type, parser_line_num);
 
+	//Add it into the type symtab
+	insert_type(type_symtab, create_type_record(alias_type));
 
 	//If we get here it worked so
 	return SUCCESS;
