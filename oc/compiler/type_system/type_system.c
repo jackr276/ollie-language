@@ -1719,8 +1719,6 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 	//Flag what this is
 	record->membership = UNION_MEMBER;
 
-	//TODO may or may not need to check for duplicates in here
-
 	//Add this in
 	dynamic_array_add(union_type->internal_types.union_table, member_var);
 

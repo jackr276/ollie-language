@@ -11,7 +11,6 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
-#include <execution>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -4451,9 +4450,36 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 		return FAILURE;
 	}
 
+	//Now we need to see a valid type-specifier
+	generic_type_t* type = type_specifier(fl);
 
+	//If this is NULL we've failed
+	if(type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid type given to union type", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
 
-	//If we make it here then we succeeded os
+	//Now that we have the type as well, we can finally see the semicolon to close it off
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail out here if we don't have it
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after union member declaration", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Finally we can create our member
+	symtab_variable_record_t* union_member = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	//Give it its type
+	union_member->type_defined_as = type;
+	//Store the mutability
+	union_member->is_mutable = is_mutable;
+	//And we'll let the helper add it into the union type
+	add_union_member(union_type, union_member);
+
+	//If we make it here then we succeeded
 	return SUCCESS;
 }
 
@@ -4480,8 +4506,14 @@ static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
 	//Otherwise push onto the grouping stack for matching
 	push_token(grouping_stack, lookahead);
 
+	//Refresh the token once
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
 	//Now we need to see union members so long as we don't hit the closing R_CURLY
 	do {
+		//Push the token back
+		push_back_token(lookahead);
+
 		//Call the helper union member function
 		u_int8_t status = union_member(fl, union_type);
 
@@ -4497,6 +4529,14 @@ static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
 
 		//So long as we don't hit the closing curly
 	} while(lookahead.tok != R_CURLY);
+
+	//Once we get down here then we know that we've got an R_CURLY. Let's ensure that we have a grouping
+	//stack match
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
 
 	//Before we go, we need to close out that variable scope that we opened above
 	finalize_variable_scope(variable_symtab);
