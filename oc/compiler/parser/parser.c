@@ -4594,13 +4594,40 @@ static u_int8_t union_definer(FILE* fl){
 
 	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
 	//and let it handle everything else
+	u_int8_t status = union_member_list(fl, union_type);
 
+	//If this fails then we're done
+	if(status == FAILURE){
+		return FAILURE;
+	}
 
+	//Otherwise we're set, so we can now create the union type record
+	symtab_type_record_t* type_record = create_type_record(union_type);
 
+	//Add it into the type symtab
+	insert_type(type_symtab, type_record);
+
+	//Now let's see what we have at the end. We could either see a semicolon
+	//or an immediate alias statement
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Switch based on what we have
+	switch(lookahead.tok){
+		case SEMICOLON:
+			return SUCCESS;
+		//More to do
+		case ALIAS:
+			break;
+		default:
+			print_parse_message(PARSE_ERROR, "AS keyword or semicolon expected after union definition", parser_line_num);
+			num_errors++;
+			return FAILURE;
+	}
+
+	//If we made it here we're aliasing. We need to now see an IDENt
 
 	//If we get here it worked so
-	//TODO just fail out for now
-	return FAILURE;
+	return SUCCESS;
 }
 
 
