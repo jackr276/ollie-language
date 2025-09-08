@@ -208,6 +208,8 @@ variable_size_t select_constant_size(three_addr_const_t* constant){
 
 /**
  * Select the size based only on a type
+ *
+ * TODO NEEDS REWORK
  */
 variable_size_t select_type_size(generic_type_t* type){
 	//What the size will be

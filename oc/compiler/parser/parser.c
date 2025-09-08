@@ -8692,16 +8692,14 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 	//rules must account for that
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//We have a declare statement
-	if(lookahead.tok == DECLARE){
-		return declare_statement(fl, is_global);
-	//We have a let statement
-	} else if(lookahead.tok == LET){
-		return let_statement(fl, is_global);
-	//Otherwise we have some weird error here
-	} else {
-		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
-		return print_and_return_error(info, parser_line_num);
+	switch(lookahead.tok){
+		case DECLARE:
+			return declare_statement(fl, is_global);
+		case LET:	
+			return let_statement(fl, is_global);
+		default:
+			sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
 	}
 }
 
