@@ -1406,6 +1406,34 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 }
 
+/**
+ * A struct pointer accessor is the exact same as a struct accessor, it just 
+ * requires that we dereference the struct beforehand
+ */
+static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
+	//Grab out whatever the dealiased version of this type is
+	current_type = dealias_type(current_type);
+
+	//We need to specifically see a pointer to a struct for the current type
+	//If it's something else, we fail out here
+	if(current_type->type_class != TYPE_CLASS_POINTER){
+		sprintf(info, "Type \"%s\" cannot be accessed with the :: operator", current_type->type_name.string);
+		return print_and_return_error(info, PARSE_ERROR);
+	}
+
+	//We can now pick out what type we're referencing(should be construct)
+	generic_type_t* struct_type = current_type->internal_types.points_to;
+
+	//Now we know that its a pointer, but what does it point to?
+	if(struct_type->type_class != TYPE_CLASS_STRUCT){
+		sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the :: operator", struct_type->type_name.string);
+		return print_and_return_error(info, PARSE_ERROR);
+	}
+
+
+
+}
+
 
 /**
  * A construct accessor is used to access a construct either on the heap of or on the stack.
@@ -1416,8 +1444,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  *
  * We will expect to see the => or : here
  *
- * BNF Rule: <struct-accessor> ::= => <variable-identifier> 
- * 								    | : <variable-identifier>
+ * BNF Rule: <struct-accessor> ::= : <variable-identifier> 
  */
 static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
 	//Freeze the current line
@@ -1425,61 +1452,18 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	//The lookahead token
 	lexitem_t lookahead;
 
-	//We'll first grab whatever token that we have here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_ACCESSOR, side);
 	//Add the line number
 	struct_access_node->line_number = current_line;
 
-	//Put the token in to show what we have
-	struct_access_node->unary_operator = lookahead.tok;
-
 	//Grab a convenient reference to the type that we're working with
-	generic_type_t* working_type = dealias_type(current_type);
+	current_type = dealias_type(current_type);
 
-	//What is the type that we're referencing here
-	generic_type_t* referenced_type;
-
-	//If we have a =>, we need to have seen a pointer to a struct
-	if(lookahead.tok == DOUBLE_COLON){
-		//We need to specifically see a pointer to a struct for the current type
-		//If it's something else, we fail out here
-		if(working_type->type_class != TYPE_CLASS_POINTER){
-			sprintf(info, "Type \"%s\" cannot be accessed with the :: operator. First defined here:", working_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, working_type));
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-		}
-
-		//We can now pick out what type we're referencing(should be construct)
-		referenced_type = working_type->internal_types.points_to;
-
-		//Now we know that its a pointer, but what does it point to?
-		if(referenced_type->type_class != TYPE_CLASS_STRUCT){
-			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the :: operator. First defined here:", referenced_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, referenced_type));
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-		}
-
-	//Otherwise we know that we have some kind of non-pointer here(or so we hope)
-	} else {
-		//We need to specifically see a struct here
-		if(working_type->type_class != TYPE_CLASS_STRUCT){
-			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, working_type));
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-		}
-
-		//If we make it here we know that working type is a struct
-		//We'll assign here for convenience
-		referenced_type = working_type;
+	//We need to specifically see a struct here. If we don't then we leave
+	if(current_type->type_class != TYPE_CLASS_STRUCT){
+		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we are required to see a valid variable identifier.
@@ -1494,11 +1478,11 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	char* member_name = lookahead.lexeme.string;
 
 	//Let's see if we can look this up inside of the type
-	symtab_variable_record_t* var_record = get_struct_member(referenced_type, member_name);
+	symtab_variable_record_t* var_record = get_struct_member(current_type, member_name);
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, referenced_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 	
@@ -1509,11 +1493,12 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	struct_access_node->variable = var_record;
 
 	//Store the type
-	struct_access_node->inferred_type = working_type;
+	struct_access_node->inferred_type = var_record->type_defined_as;
 
 	//And now we're all done, so we'll just give back the root reference
 	return struct_access_node;
 }
+
 
 /**
  * Access a member inside of a union node
@@ -1542,7 +1527,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 
 	//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
 	if(type->type_class != TYPE_CLASS_ARRAY && type->type_class != TYPE_CLASS_POINTER){
-		sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", type->type_name.string);
+		sprintf(info, "Type \"%s\" is not subscriptable", type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1713,8 +1698,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 			
 			//This is a struct pointer accessor
 			case DOUBLE_COLON:
+				//Let's have the rule do it.
+				accessor_node = struct_pointer_accessor(fl, current_type, side);
 
-
+				break;			
 
 			//And this is a union accessor
 			case DOT:
