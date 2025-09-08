@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <execution>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -4401,9 +4402,55 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 	dynamic_string_t name = lookahead.lexeme;
 
 	//Let's validate that this is not a duplicated name
-	
+	symtab_variable_record_t* duplicate = lookup_variable_local_scope(variable_symtab, name.string);
 
-	//We now need to see a SE
+	//Is this a duplicate? If so, we fail out
+	if(duplicate != NULL){
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, union_type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(duplicate);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return FAILURE;
+	}
+
+	//Check that it's not a duplicate function
+	symtab_function_record_t* found_function = lookup_function(function_symtab, name.string);
+
+	//Fail out here
+	if(found_function != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_function_name(found_function);
+		num_errors++;
+		//Return a fresh error node
+		return FAILURE;
+	}
+
+	//Now that we know it's all good, we can keep parsing. We next need to see a colon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail out if we don't have it
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required after identifier in union member definition", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
 
 
 	//If we make it here then we succeeded os
