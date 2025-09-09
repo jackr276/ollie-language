@@ -2150,17 +2150,37 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
  * form of address computations
  */
 static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+	//We assume this is the true base address
+	three_addr_var_t* true_base_address = base_addr;
+
+	//If the base address is being derefenced, we need to account for that here
+	if(base_addr->indirection_level > 0){
+		//Emit a temp assignment operation
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(base_addr->type), base_addr);
+		//Mark its branch ending status
+		temp_assignment->is_branch_ending = is_branch_ending;
+
+		//Add this into the block
+		add_statement(basic_block, temp_assignment);
+
+		//The old base address counts as used
+		add_used_variable(basic_block, base_addr);
+
+		//The true base address is now this one's assignee
+		true_base_address = temp_assignment->assignee;
+	}
+
 	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(base_addr->type);
+	three_addr_var_t* assignee = emit_temp_var(true_base_address->type);
 
 	//If the base addr is not temporary, this counts as a read
-	add_used_variable(basic_block, base_addr);
+	add_used_variable(basic_block, true_base_address);
 
 	//If the offset is not temporary, it also counts as used
 	add_used_variable(basic_block, offset);
 
 	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_lea_instruction(assignee, base_addr, offset, base_type->type_size);
+	instruction_t* stmt = emit_lea_instruction(assignee, true_base_address, offset, base_type->type_size);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2193,7 +2213,7 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 		//The old base address counts as used
 		add_used_variable(basic_block, base_addr);
 
-		//THe true base address is now this one's assignee
+		//The true base address is now this one's assignee
 		true_base_address = temp_assignment->assignee;
 	}
 
