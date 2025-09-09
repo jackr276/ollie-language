@@ -1758,7 +1758,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 		//We have our fail case here
 		if(accessor_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid struct accessor found in postfix expression", current_line);
+			return print_and_return_error("Invalid accessor found in postfix expression", current_line);
 		}
 
 		//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
