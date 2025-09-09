@@ -1416,6 +1416,80 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  *
  * We will expect to see the => or : here
  *
+ * BNF Rule: <struct-pointer-accessor> ::= :: <variable-identifier> 
+ */
+static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
+	//Freeze the current line
+	u_int16_t current_line = parser_line_num;
+	//The lookahead token
+	lexitem_t lookahead;
+
+	//Otherwise we'll now make the node here
+	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, side);
+	//Add the line number
+	struct_pointer_access_node->line_number = current_line;
+
+	//Grab a convenient reference to the type that we're working with
+	current_type = dealias_type(current_type);
+
+	//If this is not a pointer, then we can't use ::
+	if(current_type->type_class != TYPE_CLASS_POINTER){
+		sprintf(info, "Type \"%s\" is not a pointer to a struct and cannot be accessed with the : operator.", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Otherwise, we can symbolically dereference here and carry on
+	current_type = current_type->internal_types.points_to;
+
+	//We need to specifically see a struct here. If we don't then we leave
+	if(current_type->type_class != TYPE_CLASS_STRUCT){
+		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now we are required to see a valid variable identifier.
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//For now we're just doing error checking
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Struct accessor could not find valid identifier", current_line);
+	}
+
+	//Grab this for nicety
+	char* member_name = lookahead.lexeme.string;
+
+	//Let's see if we can look this up inside of the type
+	symtab_variable_record_t* var_record = get_struct_member(current_type, member_name);
+
+	//If we can't find it we're out
+	if(var_record == NULL){
+		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+	
+	//Add the variable record into the node
+	struct_pointer_access_node->is_assignable = TRUE;
+
+	//Store the variable in here
+	struct_pointer_access_node->variable = var_record;
+
+	//Store the type
+	struct_pointer_access_node->inferred_type = var_record->type_defined_as;
+
+	//And now we're all done, so we'll just give back the root reference
+	return struct_pointer_access_node;
+}
+
+
+/**
+ * A construct accessor is used to access a construct either on the heap of or on the stack.
+ * Like all rules, it will return a reference to the root node of the tree that it created
+ *
+ * A constructor accessor node will be a subtree with the parent holding the actual operator
+ * and its child holding the variable identifier
+ *
+ * We will expect to see the => or : here
+ *
  * BNF Rule: <struct-accessor> ::= : <variable-identifier> 
  */
 static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
