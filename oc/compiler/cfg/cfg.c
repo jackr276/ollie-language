@@ -2177,6 +2177,26 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
  * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
  */
 static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+	//We assume this is the true base address
+	three_addr_var_t* true_base_address = base_addr;
+
+	//If the base address is being derefenced, we need to account for that here
+	if(base_addr->indirection_level > 0){
+		//Emit a temp assignment operation
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(base_addr->type), base_addr);
+		//Mark its branch ending status
+		temp_assignment->is_branch_ending = is_branch_ending;
+
+		//Add this into the block
+		add_statement(basic_block, temp_assignment);
+
+		//The old base address counts as used
+		add_used_variable(basic_block, base_addr);
+
+		//THe true base address is now this one's assignee
+		true_base_address = temp_assignment->assignee;
+	}
+
 	//We'll need the size to multiply by
 	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(base_type->type_size, type_symtab);
 
@@ -2202,10 +2222,10 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 	add_used_variable(basic_block, offset);
 
 	//Once we have the total offset, we add it to the base address
-	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), base_addr, PLUS, total_offset);
+	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), true_base_address, PLUS, total_offset);
 	
 	//if the base address is not temporary, it also counts as used
-	add_used_variable(basic_block, base_addr);
+	add_used_variable(basic_block, true_base_address);
 
 	//Add this into the block
 	add_statement(basic_block, result);
@@ -2219,14 +2239,34 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
  * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
  */
 static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, u_int32_t offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+	//We assume this is the true base address
+	three_addr_var_t* true_base_address = base_addr;
+
+	//If the base address is being derefenced, we need to account for that here
+	if(base_addr->indirection_level > 0){
+		//Emit a temp assignment operation
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(base_addr->type), base_addr);
+		//Mark its branch ending status
+		temp_assignment->is_branch_ending = is_branch_ending;
+
+		//Add this into the block
+		add_statement(basic_block, temp_assignment);
+
+		//The old base address counts as used
+		add_used_variable(basic_block, base_addr);
+
+		//THe true base address is now this one's assignee
+		true_base_address = temp_assignment->assignee;
+	}
+
 	//We can directly compute here
 	u_int32_t total_offset = offset * base_type->type_size;
 
 	//Once we have the total offset, we add it to the base address
-	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), base_addr, PLUS, emit_int_constant_direct(total_offset, type_symtab));
+	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), true_base_address, PLUS, emit_int_constant_direct(total_offset, type_symtab));
 	
 	//if the base address is not temporary, it also counts as used
-	add_used_variable(basic_block, base_addr);
+	add_used_variable(basic_block, true_base_address);
 
 	//Add this into the block
 	add_statement(basic_block, result);
