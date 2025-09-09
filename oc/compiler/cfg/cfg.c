@@ -2966,8 +2966,14 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	//when we dereference
 	generic_type_t* current_type = current_var->type;
 
+	//Another holder
+	three_addr_var_t* dereferenced = NULL;
+	three_addr_var_t* struct_address = NULL;
+	three_addr_const_t* struct_offset = NULL;
+
 	//A generic holder for our variables
 	symtab_variable_record_t* variable = NULL;
+	symtab_variable_record_t* member = NULL;
 
 	//We want the current, top level memory address that we are trying to track stored here. Be that
 	//a struct, pointer or array
@@ -3072,32 +3078,107 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 				break;
 
+			//A struct pointer accessor does essentially the
+			//same thing as a regular struct accessor, with a dereference
+			//first
+			case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
+				//We need to first dereference this
+				dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.points_to, related_memory_address);
+
+				//Assign temp to be the current address
+				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+
+				//The dereferenced variable here is used
+				add_used_variable(current, dereferenced);
+
+				//Add it into the block
+				add_statement(current, assignment);
+
+				//Reassign what current address really is
+				current_address = assignment->assignee;
+
+				//Dereference the current type
+				current_type = current_type->internal_types.points_to;	
+
+				//What we'll do first is grab the associated fields that we need out
+				variable = cursor->variable;
+
+				//Now we'll grab the associated nstruct record
+				member = get_struct_member(current_type, variable->var_name.string);
+
+				//The constant that represents the offset
+				struct_offset = emit_int_constant_direct(member->struct_offset, type_symtab);
+
+				//This is now the member's type
+				current_type = member->type_defined_as;
+
+				//If the current address is NULL, we'll use the current var. Otherwise, we use the address
+				//we've already gotten
+				if(current_address == NULL){
+					struct_address = emit_struct_address_calculation(current, current_type, current_var, struct_offset, is_branch_ending);
+				} else {
+					struct_address = emit_struct_address_calculation(basic_block, current_type, current_address, struct_offset, is_branch_ending);
+				}
+
+				//Do we need to do more memory work? We can tell if the array accessor node is next
+				if(cursor->next_sibling == NULL){
+					//We're using indirection, address is being wiped out
+					current_address = NULL;
+
+					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
+					if(postfix_expr_side == SIDE_TYPE_LEFT){
+						//Emit the indirection for this one
+						current_var = emit_pointer_indirection(current, struct_address, current_type, related_memory_address);
+						//It's a write
+						current_var->access_type = MEMORY_ACCESS_WRITE;
+					
+					//Otherwise we're dealing with a read
+					} else {
+						//Still emit the memory code
+						current_var = emit_pointer_indirection(current, struct_address, current_type, related_memory_address);
+						//It's a read
+						current_var->access_type = MEMORY_ACCESS_READ;
+
+						//We will perform the deref here, as we can't do it in the lea 
+						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+
+						//Is this branch ending?
+						deref_stmt->is_branch_ending = is_branch_ending;
+						//And add it in
+						add_statement(current, deref_stmt);
+
+						//Update the current bar too
+						current_var = deref_stmt->assignee;
+					}
+
+				//Otherwise, our current var is this address
+				} else {
+					current_var = struct_address;
+				}
+
+				break;
+
 			//A struct accessor
 			case AST_NODE_TYPE_STRUCT_ACCESSOR:
 				//What we'll do first is grab the associated fields that we need out
 				variable = cursor->variable;
 
 				//Now we'll grab the associated nstruct record
-				symtab_variable_record_t* member = get_struct_member(current_type, variable->var_name.string);
-
-				//Save this for down the road
-				generic_type_t* struct_type = current_type;
+				member = get_struct_member(current_type, variable->var_name.string);
 
 				//The constant that represents the offset
-				three_addr_const_t* struct_offset = emit_int_constant_direct(member->struct_offset, type_symtab);
+				struct_offset = emit_int_constant_direct(member->struct_offset, type_symtab);
 
 				//This is now the member's type
 				current_type = member->type_defined_as;
 
-				//Let's hold onto the address
-				three_addr_var_t* struct_address;
 
 				//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 				//we've already gotten
 				if(current_address == NULL){
-					struct_address = emit_struct_address_calculation(current, struct_type, current_var, struct_offset, is_branch_ending);
+					struct_address = emit_struct_address_calculation(current, current_type, current_var, struct_offset, is_branch_ending);
 				} else {
-					struct_address = emit_struct_address_calculation(basic_block, struct_type, current_address, struct_offset, is_branch_ending);
+					struct_address = emit_struct_address_calculation(basic_block, current_type, current_address, struct_offset, is_branch_ending);
 				}
 
 				//Do we need to do more memory work? We can tell if the array accessor node is next
