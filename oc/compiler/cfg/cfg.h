@@ -178,7 +178,6 @@ void delete_statement(instruction_t* stmt);
  */
 void add_successor(basic_block_t* target, basic_block_t* successor);
 
-
 /**
  * Add a predecessor to the block
  */
