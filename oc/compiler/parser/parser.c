@@ -1408,50 +1408,6 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 
 /**
- * Emit a direct pointer dererefence subtree. This is a helper function that is used for struct pointer
- * dereferencing
- */
-static generic_ast_node_t* emit_direct_pointer_dereference(generic_ast_node_t* primary_expression_node, side_type_t side){
-	//Grab the current type out
-	generic_type_t* current_type = dealias_type(primary_expression_node->inferred_type);
-
-	//We need to specifically see a pointer to a struct for the current type
-	//If it's something else, we fail out here
-	if(current_type->type_class != TYPE_CLASS_POINTER){
-		sprintf(info, "Type \"%s\" cannot be accessed with the :: operator", current_type->type_name.string);
-		return print_and_return_error(info, PARSE_ERROR);
-	}
-
-	//We now need to dereference our primary expression with a unary expression
-	generic_ast_node_t* unary_operator = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
-
-	//The operator is *
-	unary_operator->unary_operator = STAR;
-	
-	//Allocate the overall unary expression node
-	generic_ast_node_t* unary_expression_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
-
-	//The unary operator is the first child
-	add_child_node(unary_expression_node, unary_operator);
-
-	//The second child is the primary expression
-	add_child_node(unary_expression_node, primary_expression_node);
-
-	//Copy the variable over
-	unary_expression_node->variable = primary_expression_node->variable;
-
-	//The new current type is going to be the dereferenced type
-	current_type = current_type->internal_types.points_to;
-
-	//Now we can give this type to the unary expression node
-	unary_expression_node->inferred_type = current_type;
-
-	//Give back the unary expression node
-	return unary_expression_node;
-}
-
-
-/**
  * A construct accessor is used to access a construct either on the heap of or on the stack.
  * Like all rules, it will return a reference to the root node of the tree that it created
  *
@@ -1546,9 +1502,6 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 		sprintf(info, "Type \"%s\" is not subscriptable", type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
-
-	//Otherwise it all went well, so we'll push this onto the stack
-	push_token(grouping_stack, lookahead);
 
 	//Now we are required to see a valid constant expression representing what
 	//the actual index is.
@@ -1680,7 +1633,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Pointer dereference subtree, only used for one rule but declared up here
 	generic_ast_node_t* pointer_dereference_op;
 
-	//Declare this as our accessor node for all rules
+	//Add in the first child which is the primary expression
+	add_child_node(postfix_expr_node, primary_expression_node);
+
+	//The accessor node for each go around
 	generic_ast_node_t* accessor_node = NULL;
 
 	//We assume it's assignable, that will only change if we have a basic type that is 
@@ -1695,19 +1651,13 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				//We'll push this onto the grouping stack for later matching
 				push_token(grouping_stack, lookahead);
 
-				//Add in the first child which is the primary expression
-				add_child_node(postfix_expr_node, primary_expression_node);
-
 				//Let the array accessor handle it
 				accessor_node = array_accessor(fl, current_type, side);
-				
+
 				break;
 
 			//A raw construct accessor, not syntactic sugar for the deref operator
 			case COLON:
-				//Add in the first child which is the primary expression
-				add_child_node(postfix_expr_node, primary_expression_node);
-
 				//Let's have the rule do it.
 				accessor_node = struct_accessor(fl, current_type, side);
 
@@ -1715,25 +1665,13 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 			
 			//This is a struct pointer accessor
 			case DOUBLE_COLON:
-				//We first need to emit the pointer dereference here
-				pointer_dereference_op = emit_direct_pointer_dereference(primary_expression_node, side);
-
-				//Once we have that done, it's type is the current type
-				current_type = pointer_dereference_op->inferred_type;
-
-				//And it is the first child of the postfix expression
-				add_child_node(postfix_expr_node, pointer_dereference_op);
-				
 				//Let's have the rule do it.
-				accessor_node = struct_accessor(fl, current_type, side);
+				accessor_node = struct_pointer_accessor(fl, current_type, side);
 
 				break;
 
 			//And this is a union accessor
 			case DOT:
-				//Add in the first child which is the primary expression
-				add_child_node(postfix_expr_node, primary_expression_node);
-
 				//Let the rule handle it
 				accessor_node = union_accessor(fl, current_type, side);
 
@@ -1755,7 +1693,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 		//The type is just this one's inferred type
 		current_type = accessor_node->inferred_type;
-		
+
 		//refresh the lookahead for the next iteration
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
@@ -1812,7 +1750,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Now that we're done, we can get out
 	return postfix_expr_node;
 }
-
 
 
 /**
