@@ -2240,14 +2240,34 @@ static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t*
  * Emit a struct access lea statement
  */
 static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
+	//We assume this is the true base address
+	three_addr_var_t* true_base_address = base_addr;
+
+	//If the base address is being derefenced, we need to account for that here
+	if(base_addr->indirection_level > 0){
+		//Emit a temp assignment operation
+		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(base_addr->type), base_addr);
+		//Mark its branch ending status
+		temp_assignment->is_branch_ending = is_branch_ending;
+
+		//Add this into the block
+		add_statement(basic_block, temp_assignment);
+
+		//The old base address counts as used
+		add_used_variable(basic_block, base_addr);
+
+		//THe true base address is now this one's assignee
+		true_base_address = temp_assignment->assignee;
+	}
+
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(struct_type);
 
 	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, base_addr, PLUS, offset);
+	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, true_base_address, PLUS, offset);
 
-	//If the base addr is not temporary, this counts as a read
-	add_used_variable(basic_block, base_addr);
+	//The true base address was used here
+	add_used_variable(basic_block, true_base_address);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -3171,7 +3191,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 				//This is now the member's type
 				current_type = member->type_defined_as;
-
 
 				//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 				//we've already gotten
