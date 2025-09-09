@@ -3189,9 +3189,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				//The constant that represents the offset
 				struct_offset = emit_int_constant_direct(member->struct_offset, type_symtab);
 
-				//This is now the member's type
-				current_type = member->type_defined_as;
-
 				//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 				//we've already gotten
 				if(current_address == NULL){
@@ -3199,6 +3196,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				} else {
 					struct_address = emit_struct_address_calculation(basic_block, current_type, current_address, struct_offset, is_branch_ending);
 				}
+
+				//This is now the member's type
+				current_type = member->type_defined_as;
 
 				//Do we need to do more memory work? We can tell if the array accessor node is next
 				if(cursor->next_sibling == NULL){
@@ -3249,9 +3249,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				//The constant that represents the offset
 				struct_offset = emit_int_constant_direct(member->struct_offset, type_symtab);
 
-				//This is now the member's type
-				current_type = member->type_defined_as;
-
 				//If the current address is NULL, we'll use the current var. Otherwise, we use the address
 				//we've already gotten
 				if(current_address == NULL){
@@ -3259,6 +3256,9 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				} else {
 					struct_address = emit_struct_address_calculation(basic_block, current_type, current_address, struct_offset, is_branch_ending);
 				}
+
+				//This is now the member's type
+				current_type = member->type_defined_as;
 
 				//Do we need to do more memory work? We can tell if the array accessor node is next
 				if(cursor->next_sibling == NULL){
