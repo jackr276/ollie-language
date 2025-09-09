@@ -1407,12 +1407,15 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 }
 
 /**
+ */
+
+/**
  * A struct pointer accessor is the exact same as a struct accessor, it just 
  * requires that we dereference the struct beforehand
  */
-static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
-	//Grab out whatever the dealiased version of this type is
-	current_type = dealias_type(current_type);
+static generic_ast_node_t* emit_direct_pointer_derference(FILE* fl, generic_ast_node_t** primary_expression_node, side_type_t side){
+	//Grab the current type out
+	generic_type_t* current_type = dealias_type((*primary_expression_node)->inferred_type);
 
 	//We need to specifically see a pointer to a struct for the current type
 	//If it's something else, we fail out here
@@ -1421,8 +1424,29 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 		return print_and_return_error(info, PARSE_ERROR);
 	}
 
-	//We can now pick out what type we're referencing(should be construct)
-	generic_type_t* struct_type = current_type->internal_types.points_to;
+	//We now need to dereference our primary expression with a unary expression
+	generic_ast_node_t* unary_operator = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
+
+	//The operator is *
+	unary_operator->unary_operator = STAR;
+	
+	//Allocate the overall unary expression node
+	generic_ast_node_t* unary_expression_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
+
+	//The unary operator is the first child
+	add_child_node(unary_expression_node, unary_operator);
+
+	//The second child is the primary expression
+	add_child_node(unary_expression_node, *primary_expression_node);
+
+	//Copy the variable over
+	unary_expression_node->variable = (*primary_expression_node)->variable;
+
+	//The new current type is going to be the dereferenced type
+	current_type = current_type->internal_types.points_to;
+
+	//Now we can give this type to the unary expression node
+	unary_expression_node->inferred_type = current_type;
 
 	//Now we know that its a pointer, but what does it point to?
 	if(struct_type->type_class != TYPE_CLASS_STRUCT){
@@ -1655,9 +1679,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
 	//Add the line number
 	postfix_expr_node->line_number = current_line;
-
-	//This node will always have the primary expression as its first child
-	add_child_node(postfix_expr_node, primary_expression_node);
 
 	//Let's grab whatever type that we currently have
 	generic_type_t* current_type = primary_expression_node->inferred_type;
