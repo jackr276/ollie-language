@@ -27,8 +27,11 @@ pub fn struct_testing(arg:i32, argv:char**) -> i32{
 	//Try to postdec
 	structure:ch--;
 
+	//Regular postdec for a var
+	arg++;
+
 	//So it isn't optimized away
-	ret structure:x[2];
+	ret structure:x[2] + arg;
 }
 
 

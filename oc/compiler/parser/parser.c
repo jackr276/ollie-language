@@ -1548,6 +1548,8 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 
 /**
  * Access a member inside of a union node
+ *
+ * BNF RULE: <union-accessor> ::= .<identifier>
  */
 static generic_ast_node_t* union_accessor(FILE* fl, generic_type_t* type, side_type_t side){
 
@@ -1806,6 +1808,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	if(return_type->type_class == TYPE_CLASS_BASIC){
 		postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
 	}
+
+	//TODO THIS IS BROKEN
 
 	//Otherwise if we get here we know that we either have post inc or dec
 	//Create the unary operator node
