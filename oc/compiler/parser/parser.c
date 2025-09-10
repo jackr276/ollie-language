@@ -1704,9 +1704,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Do any kind of dealiasing that we need to do
 	current_type = dealias_type(current_type);
 
-	//Pointer dereference subtree, only used for one rule but declared up here
-	generic_ast_node_t* pointer_dereference_op;
-
 	//Add in the first child which is the primary expression
 	add_child_node(postfix_expr_node, primary_expression_node);
 
@@ -1777,17 +1774,22 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 	//Now once we get here, we know that we have something that isn't one of accessor rules
 	//It could however be postinc/postdec. Let's first see if it isn't
-	if(lookahead.tok != PLUSPLUS && lookahead.tok != MINUSMINUS){
-		//Put the token back
-		push_back_token(lookahead);
-		//Assign the type
-		postfix_expr_node->inferred_type = return_type;
-		//Assign the variable
-		postfix_expr_node->variable = primary_expression_node->variable;
-		//This was assigned to
-		primary_expression_node->variable->assigned_to = TRUE;
-		//And we'll give back what we had constructed so far
-		return postfix_expr_node;
+	switch(lookahead.tok){
+		case PLUSPLUS:
+		case MINUSMINUS:
+			break;
+		//If it's not that, then we're done here and we can leave
+		default:
+			//Put the token back
+			push_back_token(lookahead);
+			//Assign the type
+			postfix_expr_node->inferred_type = return_type;
+			//Assign the variable
+			postfix_expr_node->variable = primary_expression_node->variable;
+			//This was assigned to
+			primary_expression_node->variable->assigned_to = TRUE;
+			//And we'll give back what we had constructed so far
+			return postfix_expr_node;
 	}
 
 	//Let's see if it's valid
