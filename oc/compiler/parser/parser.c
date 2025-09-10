@@ -1550,8 +1550,30 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
  * Access a member inside of a union node
  *
  * BNF RULE: <union-accessor> ::= .<identifier>
+ *
+ * REMEMBER: BY the time we get here, we have already seen the "." token
  */
 static generic_ast_node_t* union_accessor(FILE* fl, generic_type_t* type, side_type_t side){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//If this is not a union type, it immediately cannot be correct
+	if(type->type_class != TYPE_CLASS_UNION){
+		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the . operator", type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Following this, we need to see an identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If this is not an identifier, we fail out
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Identifier required after the . operator", parser_line_num);
+	}
+
+	//Following this, we need to look and see if this identifier is indeed a type of this union
+	
+
 
 	//STUB
 	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);

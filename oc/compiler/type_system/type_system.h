@@ -271,6 +271,11 @@ void finalize_struct_alignment(generic_type_t* type);
 void* get_struct_member(generic_type_t* structure, char* name);
 
 /**
+ * Does this union contain said member? Return the variable if yes, NULL if not
+ */
+void* get_union_member(generic_type_t* union_type, char* name);
+
+/**
  * Dynamically allocate and create an array type
  */
 generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members);

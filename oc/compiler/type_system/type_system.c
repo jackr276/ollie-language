@@ -1592,6 +1592,33 @@ void* get_struct_member(generic_type_t* structure, char* name){
 
 
 /**
+ * Does this union contain said member? Return the variable if yes, NULL if not
+ */
+void* get_union_member(generic_type_t* union_type, char* name){
+	//The current variable that we have
+	symtab_variable_record_t* var;
+
+	//Extract for convenience
+	dynamic_array_t* union_table = union_type->internal_types.union_table;
+
+	//Run through everything here
+	for(u_int16_t _ = 0; _ < union_table->current_index; _++){
+		//Grab the variable out
+		var = dynamic_array_get_at(union_table, _);
+
+		//Now we'll do a simple comparison. If they match, we're set
+		if(strcmp(var->var_name.string, name) == 0){
+			//Return the whole record if we find it
+			return var;
+		}
+	}
+
+	//Otherwise if we get down here, it didn't work
+	return NULL;
+}
+
+
+/**
  * Add a value to a struct type. The void* here is a 
  * symtab variable record
  *
