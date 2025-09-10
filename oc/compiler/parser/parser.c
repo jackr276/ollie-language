@@ -1572,11 +1572,24 @@ static generic_ast_node_t* union_accessor(FILE* fl, generic_type_t* type, side_t
 	}
 
 	//Following this, we need to look and see if this identifier is indeed a type of this union
-	
+	symtab_variable_record_t* union_variable = get_union_member(type, lookahead.lexeme.string);
 
+	//If this is NULL, it means that the var is not present and therefore this is incorrect
+	if(union_variable == NULL){
+		sprintf(info, "Variable %s is not a member of type %s\n", lookahead.lexeme.string, type->type_name.string); 
+		return print_and_return_error(info, parser_line_num);
+	}
 
-	//STUB
-	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+	//Otherwise if we get here, we know that we do indeed have the needed union type. We can now go 
+	//ahead with constructing the accessor
+	generic_ast_node_t* union_accessor = ast_node_alloc(AST_NODE_TYPE_UNION_ACCESSOR, side);
+
+	//Let's now populate with the appropriate variable and type
+	union_accessor->variable = union_variable;
+	union_accessor->inferred_type = union_variable->type_defined_as;
+
+	//And give this back
+	return union_accessor;
 }
 
 
