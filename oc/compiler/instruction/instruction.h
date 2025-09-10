@@ -403,8 +403,6 @@ struct three_addr_var_t{
 	symtab_function_record_t* linked_function;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
-	//What is this related to the writing of?
-	symtab_variable_record_t* related_memory_address;
 	//For memory management
 	three_addr_var_t* next_created;
 	//What live range is this variable associate with
