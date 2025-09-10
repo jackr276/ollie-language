@@ -1,8 +1,10 @@
 /**
-* This program is made for the purposes of testing arrays
+* Author: Jack Robbins
+* 
+* Test handling of postinc/postdec
 */
 
-pub fn main(arg:i32, argv:char**) -> i32{
+pub fn struct_testing(arg:i32, argv:char**) -> i32{
 	/**
 	* Size should be: 1 + 3 pad + 320 + 1 + 3 pad + 4
 	*/
@@ -22,6 +24,20 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	structure:lch := 'b';
 	structure:y := 5;
 
+	//Try to postdec
+	structure:ch--;
+
 	//So it isn't optimized away
 	ret structure:x[2];
+}
+
+
+pub fn main() -> i32 {
+	//The compiler should detect and count the number
+	//in the array initializer list.
+	let mut arr:i32[] := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+	arr[3]++;
+
+	ret arr[3];
 }
