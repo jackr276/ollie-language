@@ -265,8 +265,8 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 
 	//Switch based on the type to determine this
 	switch(type->type_class){
+		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_ARRAY:
-			return FALSE;
 		case TYPE_CLASS_STRUCT:
 			return FALSE;
 		case TYPE_CLASS_POINTER:
@@ -1207,9 +1207,18 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 	//Deconstructed basic type(since we'll be using it so much)
 	Token basic_type;
 
-	//Function signatures are never valid for any binary operations
-	if(type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
-		return FALSE;
+	//Let's first check if we have any in a
+	//series of types that never make sense for any unary operation
+	switch (type->type_class) {
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			return FALSE;
+
+		//Otherwise we'll just bail out of here
+		default:
+			break;
 	}
 
 
@@ -1320,11 +1329,6 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
 		case PLUS:
-			//This doesn't work on arrays or constructs
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
-				return FALSE;
-			}
-
 			//This also doesn't work for void types
 			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
@@ -1341,11 +1345,6 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		 * 		int - int* is not good
 		 */
 		case MINUS:
-			//This doesn't work on arrays or constructs
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
-				return FALSE;
-			}
-
 			//This also doesn't work for void types
 			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
@@ -1549,6 +1548,9 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number){
 	//Dynamically allocate the union type
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//Store that this is a union
+	type->type_class = TYPE_CLASS_UNION;
 
 	//Move the name over
 	type->type_name = type_name;
