@@ -3042,6 +3042,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 	//Another holder
 	three_addr_var_t* dereferenced = NULL;
+	three_addr_var_t* union_address = NULL;
 	three_addr_var_t* struct_address = NULL;
 	three_addr_const_t* struct_offset = NULL;
 
@@ -3060,13 +3061,52 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//to speak of. The union type just changes what value we get out of the
 			//union
 			case AST_NODE_TYPE_UNION_ACCESSOR:
+				//Set the current address
+				union_address = current_var;
+
+				//Set what the current type is
+				current_type = cursor->inferred_type;
+
+				//Now based on what side we're on, we'll emit the appropriate indirection
+				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
+				//we're done here. We'll emit our memory code and leave this part of the loop
+				if(cursor->next_sibling == NULL){
+					//We're using indirection, address is being wiped out
+					current_address = NULL;
+
+					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
+					if(postfix_expr_side == SIDE_TYPE_LEFT){
+						//Emit the indirection for this one
+						current_var = emit_pointer_indirection(current, union_address, current_type);
+						//It's a write
+						current_var->access_type = MEMORY_ACCESS_WRITE;
+
+					//Otherwise we're dealing with a read
+					} else {
+						//Still emit the memory code
+						current_var = emit_pointer_indirection(current, union_address, current_type);
+						//It's a read
+						current_var->access_type = MEMORY_ACCESS_READ;
+
+						//We will perform the deref here, as we can't do it in the lea 
+						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+
+						//Is this branch ending?
+						deref_stmt->is_branch_ending = is_branch_ending;
+						//And add it in
+						add_statement(current, deref_stmt);
+
+						//Update the current bar too
+						current_var = deref_stmt->assignee;
+					}
+
+				} else {
+					//Otherwise, the current var is the address
+					current_var = union_address;
+				}
+
 				break;
 				
-				
-				
-				
-
-
 			//Array access
 			case AST_NODE_TYPE_ARRAY_ACCESSOR:
 				//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
@@ -7268,7 +7308,7 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 
 	//Based on what type of class we have, we may or may not need to use the stack
 	switch(type->type_class){
-		//These are all stored on the stack
+		//These are always on the stack
 		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:

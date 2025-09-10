@@ -5,6 +5,7 @@
 
 //Declare the union type
 define union my_union {
+	mut arr:i32[5];
 	mut x:i32;
 	mut y:i16;
 	mut ch:char;
