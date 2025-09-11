@@ -5568,23 +5568,9 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//Lookahead token
 	lexitem_t lookahead;
 
-	//Let's first create the top level node here
-	generic_ast_node_t* parameter_decl_node;
-
 	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
-	//Is this parameter constant? If so we'll just set a flag for later
-	if(lookahead.tok == DOTDOTDOT){
-		//This is a special elaborative param
-		parameter_decl_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM, SIDE_TYPE_LEFT);
-		//We're done here
-		return parameter_decl_node;
-	} else {
-		//Otherwise we have a regular param node
-		parameter_decl_node = ast_node_alloc(AST_NODE_TYPE_PARAM_DECL, SIDE_TYPE_LEFT);
-	}
-
 	if(lookahead.tok == MUT){
 		is_mut = TRUE;
 	} else {
@@ -5690,11 +5676,6 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
 
-	//We'll also save the associated record in the node
-	parameter_decl_node->variable = param_record;
-	//Store the line number
-	parameter_decl_node->line_number = parser_line_num;
-
 	//Finally, we'll send this node back
 	return parameter_decl_node;
 }
@@ -5707,7 +5688,7 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
  *
  * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
  */
-static generic_ast_node_t* parameter_list(FILE* fl){
+static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature, u_int8_t defining_predeclared_function){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -8940,9 +8921,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= func {:static}? <identifer> ({<parameter-list> | void}?) -> <type-specifier>{; | <compound-statement>}
- *
- * REMEMBER: By the time we get here, we've already seen the func keyword
+ * BNF Rule: <function-definition> ::= {pub}? fn <identifer> ({<parameter-list> | void}?) -> <type-specifier>{; | <compound-statement>}
  */
 static generic_ast_node_t* function_definition(FILE* fl){
 	//Freeze the line number
@@ -9077,8 +9056,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		function_record = create_function_record(function_name);
 		//Associate this with the function node
 		function_node->func_record = function_record;
-		//Set first thing
-		function_record->number_of_params = 0;
+		//Store this for printing
 		function_record->line_number = current_line;
 		//Create the call graph node
 		function_record->call_graph_node = create_call_graph_node(function_record);
@@ -9102,31 +9080,30 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 	}
 
+	//Here is the signature type
+	generic_type_t* function_signature;
+
+	//If we're not defining a predeclared function, we need to make the signature ourselves
+	if(definining_predeclared_function == FALSE){
+		function_signature = create_function_pointer_type(parser_line_num);
+	} else {
+		function_signature = function_record->signature;
+	}
+
+	//We'll need to initialize a new variable scope here. This variable scope is designed
+	//so that we include the function parameters in it. We need to remember to close
+	//this once we leave
+	initialize_variable_scope(variable_symtab);
+
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	generic_ast_node_t* param_list_node = parameter_list(fl);
+	u_int8_t status = parameter_list(fl, function_signature, definining_predeclared_function);
 
-	//We have a bad parameter list
-	if(param_list_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid parameter list given in function declaration", current_line);
-		num_errors++;
-		//It's already an error, so just send it back up
-		return param_list_node;
+	//We have a bad parameter list, we just fail out
+	if(status == FAILURE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-
-	//If we have more than the allowed number of parameters, we fail out
-	if(param_list_node->num_params > 6){
-		return print_and_return_error("Ollie allows only 6 parameters per function", parser_line_num);
-	}
-
-	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
-	//now parse the param_list and store records to it	
-	//Let's first add the param list in as a child
-	
-	//Let's now iterate over the parameter list and add the parameter records into the function 
-	//record for ease of access later
-	generic_ast_node_t* param_list_cursor = param_list_node->first_child;
 
 	//If we are defining a previously implicit function, we'll need to check the types & order
 	if(definining_predeclared_function == TRUE){
@@ -9278,6 +9255,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//This function was not defined
 		function_record->defined = FALSE;
 
+		//Close the variable scope that we opened for the parameter list
+		finalize_variable_scope(variable_symtab);
+
 		//Remove the nesting level now that we're not in a function
 		pop_nesting_level(nesting_stack);
 		
@@ -9347,6 +9327,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//Store the line number
 	function_node->line_number = current_line;
+
+	//Close the variable scope that we opened for the parameter list
+	finalize_variable_scope(variable_symtab);
 
 	//Remove the nesting level now that we're not in a function
 	pop_nesting_level(nesting_stack);
