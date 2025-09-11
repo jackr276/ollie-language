@@ -5554,257 +5554,6 @@ static generic_type_t* type_specifier(FILE* fl){
 
 
 /**
- * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
- * top lexical scope for the function itself. Like all rules, it returns a reference to the
- * root of the subtree that it creates
- *
- * This rule will return a symtab variable record that represents the parameter it made. If will return
- * NULL if an error occurs
- *
- * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
- */
-static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
-	//Is it mutable?
-	u_int8_t is_mut = FALSE;
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//Now we can optionally see the constant keyword here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//Is it mutable?
-	if(lookahead.tok == MUT){
-		is_mut = TRUE;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
-
-	//If it didn't work we fail immediately
-	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Now we must perform all needed duplication checks for the name
-	//Grab this for convenience
-	dynamic_string_t name = lookahead.lexeme;
-
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Return NULL to signify failure
-		return NULL;
-	}
-
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Return NULL to signify failure
-		return NULL;
-	}
-
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
-
-	//Fail out here
-	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Return NULL to signify failure
-		return NULL;
-	}
-
-	//Now we need to see a colon
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If it isn't a colon, we're out
-	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
-		num_errors++;
-		//Return NULL to signify failure
-		return NULL;
-	}
-
-	//We are now required to see a valid type specifier node
-	generic_type_t* type = type_specifier(fl);
-	
-	//If the node fails, we'll just send the error up the chain
-	if(type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
-		num_errors++;
-		//It's already an error, just propogate it up
-		return NULL;
-	}
-
-	//Once we get here, we have actually seen an entire valid parameter 
-	//declaration. It is now incumbent on us to store it in the variable 
-	//symbol table
-	
-	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
-	//It is a function parameter
-	param_record->membership = FUNCTION_PARAMETER;
-	//We assume that it was initialized
-	param_record->initialized = TRUE;
-	//Add the line number
-	param_record->line_number = parser_line_num;
-	//If it is mutable
-	param_record->is_mutable = is_mut;
-	//Store the type as well, very important
-	param_record->type_defined_as = type;
-	//Store the current parameter number of it
-	param_record->function_parameter_order = current_parameter_number;
-
-	//We've now built up our param record, so we'll give add it to the symtab
-	insert_variable(variable_symtab, param_record);
-
-	//Give the variable back
-	return param_record;
-}
-
-
-/**
- * A paramater list will handle all of the parameters in a function definition. It is important
- * to note that a parameter list may very well be empty, and that this rule will handle that case.
- * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
- *
- * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
- */
-static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature, u_int8_t defining_predeclared_function){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//Now we need to see a valid parentheis
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we didn't find it, no point in going further
-	if(lookahead.tok != L_PAREN){
-		return print_and_return_error("Left parenthesis expected before parameter list", parser_line_num);
-	}
-
-	//Otherwise, we'll push this onto the list to check for later
-	push_token(grouping_stack, lookahead);
-
-	//Let's now create the parameter list node
-	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_TYPE_PARAM_LIST, SIDE_TYPE_LEFT);
-	//Initially no params
-	param_list_node->num_params = 0;
-
-	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
-	//done here and we'll just return an empty list
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	switch(lookahead.tok){
-		//If we see an R_PAREN immediately, we can check and leave
-		case R_PAREN:
-			//If we have a mismatch, we can return these
-			if(pop_token(grouping_stack).tok != L_PAREN){
-				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-			}
-
-			//Otherwise we're fine, so return the list node
-			return param_list_node;
-
-		//This is a possibility, we could see (void) as a valid declaration of no parameters
-		case VOID:
-			//We now need to see a closing R_PAREN
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-			//Fail out if we don't see this
-			if(lookahead.tok != R_PAREN){
-				return print_and_return_error("Closing parenthesis expected after void parameter list declaration", parser_line_num);
-			}
-
-			//Also check for grouping
-			if(pop_token(grouping_stack).tok != L_PAREN){
-				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-			}
-
-			//Give back the paremeter list node
-			return param_list_node;
-			
-		//By default just put it back and get out
-		default:
-			push_back_token(lookahead);
-			break;
-	}
-
-	//Start off at 1 
-	u_int8_t function_parameter_number = 1;
-
-	//We'll keep going as long as we see more commas
-	do{
-		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl, function_parameter_number);
-
-		//It's invalid, we'll just send it up the chain
-		if(param_decl->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//It's already an error so send it on up
-			return param_decl;
-		}
-
-		//Let's see if we have a special parameter elaboration type here
-		if(param_decl->ast_node_type == AST_NODE_TYPE_ELABORATIVE_PARAM){
-			//Add it as a child node
-			add_child_node(param_list_node, param_decl);
-
-			//Now we'll return the entire thing
-			param_list_node->line_number = parser_line_num;
-			return param_list_node;
-		}
-
-		//Add this in as a child node
-		add_child_node(param_list_node, param_decl);
-
-		//Otherwise it was valid, so we've seen one more parameter
-		param_list_node->num_params++;
-
-		//Increment this
-		function_parameter_number++;
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//We keep going as long as we see commas
-	} while(lookahead.tok == COMMA);
-
-	//Once we reach here, we need to check for the R_PAREN
-	if(lookahead.tok != R_PAREN){
-		return print_and_return_error("Closing parenthesis expected after parameter list", parser_line_num);
-	}
-
-	//Otherwise it worked, so we need to check matching
-	if(pop_token(grouping_stack).tok != L_PAREN){
-		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-	}
-
-	//Store the line number
-	param_list_node->line_number = parser_line_num;
-
-	//Now we're done here, so we'll just give the root node back
-	return param_list_node;
-}
-
-
-/**
  * An expression statement can optionally have an expression in it. Like all rules, it returns 
  * a reference to the root of the subtree it creates
  *
@@ -8912,6 +8661,251 @@ static u_int8_t validate_main_function(generic_type_t* type){
 
 	//If we make it here, then we know it's true
 	return TRUE;
+}
+
+
+/**
+ * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
+ * top lexical scope for the function itself. Like all rules, it returns a reference to the
+ * root of the subtree that it creates
+ *
+ * This rule will return a symtab variable record that represents the parameter it made. If will return
+ * NULL if an error occurs
+ *
+ * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
+ */
+static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
+	//Is it mutable?
+	u_int8_t is_mut = FALSE;
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Now we can optionally see the constant keyword here
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	//Is it mutable?
+	if(lookahead.tok == MUT){
+		is_mut = TRUE;
+		//Refresh token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//If it didn't work we fail immediately
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Now we must perform all needed duplication checks for the name
+	//Grab this for convenience
+	dynamic_string_t name = lookahead.lexeme;
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Return NULL to signify failure
+		return NULL;
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Return NULL to signify failure
+		return NULL;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
+
+	//Fail out here
+	if(found_type != NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return NULL to signify failure
+		return NULL;
+	}
+
+	//Now we need to see a colon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it isn't a colon, we're out
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
+		num_errors++;
+		//Return NULL to signify failure
+		return NULL;
+	}
+
+	//We are now required to see a valid type specifier node
+	generic_type_t* type = type_specifier(fl);
+	
+	//If the node fails, we'll just send the error up the chain
+	if(type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
+		num_errors++;
+		//It's already an error, just propogate it up
+		return NULL;
+	}
+
+	//Once we get here, we have actually seen an entire valid parameter 
+	//declaration. It is now incumbent on us to store it in the variable 
+	//symbol table
+	
+	//Let's first construct the variable record
+	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	//It is a function parameter
+	param_record->membership = FUNCTION_PARAMETER;
+	//We assume that it was initialized
+	param_record->initialized = TRUE;
+	//Add the line number
+	param_record->line_number = parser_line_num;
+	//If it is mutable
+	param_record->is_mutable = is_mut;
+	//Store the type as well, very important
+	param_record->type_defined_as = type;
+	//Store the current parameter number of it
+	param_record->function_parameter_order = current_parameter_number;
+
+	//We've now built up our param record, so we'll give add it to the symtab
+	insert_variable(variable_symtab, param_record);
+
+	//Give the variable back
+	return param_record;
+}
+
+
+/**
+ * A paramater list will handle all of the parameters in a function definition. It is important
+ * to note that a parameter list may very well be empty, and that this rule will handle that case.
+ * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
+ *
+ * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
+ */
+static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature, u_int8_t defining_predeclared_function){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Now we need to see a valid parentheis
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we didn't find it, no point in going further
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise, we'll push this onto the list to check for later
+	push_token(grouping_stack, lookahead);
+
+	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
+	//done here and we'll just return an empty list
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	switch(lookahead.tok){
+		//If we see an R_PAREN immediately, we can check and leave
+		case R_PAREN:
+			//If we have a mismatch, we can return these
+			if(pop_token(grouping_stack).tok != L_PAREN){
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Otherwise we're fine, so return the list node
+			return SUCCESS;
+
+		//This is a possibility, we could see (void) as a valid declaration of no parameters
+		case VOID:
+			//We now need to see a closing R_PAREN
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//Fail out if we don't see this
+			if(lookahead.tok != R_PAREN){
+				return print_and_return_error("Closing parenthesis expected after void parameter list declaration", parser_line_num);
+			}
+
+			//Also check for grouping
+			if(pop_token(grouping_stack).tok != L_PAREN){
+				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			//Give back the paremeter list node
+			return param_list_node;
+			
+		//By default just put it back and get out
+		default:
+			push_back_token(lookahead);
+			break;
+	}
+
+	//Start off at 1 
+	u_int8_t function_parameter_number = 1;
+
+	//We'll keep going as long as we see more commas
+	do{
+		//We must first see a valid parameter declaration
+		generic_ast_node_t* param_decl = parameter_declaration(fl, function_parameter_number);
+
+		//It's invalid, we'll just send it up the chain
+		if(param_decl->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			//It's already an error so send it on up
+			return param_decl;
+		}
+
+		//Let's see if we have a special parameter elaboration type here
+		if(param_decl->ast_node_type == AST_NODE_TYPE_ELABORATIVE_PARAM){
+			//Add it as a child node
+			add_child_node(param_list_node, param_decl);
+
+			//Now we'll return the entire thing
+			param_list_node->line_number = parser_line_num;
+			return param_list_node;
+		}
+
+		//Increment this
+		function_parameter_number++;
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We keep going as long as we see commas
+	} while(lookahead.tok == COMMA);
+
+	//Once we reach here, we need to check for the R_PAREN
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Closing parenthesis expected after parameter list", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise it worked, so we need to check matching
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//If we make it down here then this all worked, so
+	return SUCCESS;
 }
 
 

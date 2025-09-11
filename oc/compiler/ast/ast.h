@@ -141,8 +141,6 @@ struct generic_ast_node_t{
 	side_type_t side;
 	//What kind of node is it?
 	ast_node_type_t ast_node_type;
-	//The number of parameters
-	u_int8_t num_params;
 	//The type address specifier - for types
 	address_specifier_type_t address_type;
 };
