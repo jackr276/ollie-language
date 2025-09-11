@@ -5558,11 +5558,12 @@ static generic_type_t* type_specifier(FILE* fl){
  * top lexical scope for the function itself. Like all rules, it returns a reference to the
  * root of the subtree that it creates
  *
- * NOTE: An identifier may or may not be required based on the type of parameter declaration that we have
+ * This rule will return a symtab variable record that represents the parameter it made. If will return
+ * NULL if an error occurs
  *
  * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
  */
-static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
+static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
 	//Is it mutable?
 	u_int8_t is_mut = FALSE;
 	//Lookahead token
@@ -5571,20 +5572,18 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
+	//Is it mutable?
 	if(lookahead.tok == MUT){
 		is_mut = TRUE;
-	} else {
-		//Put it back and move on
-		push_back_token(lookahead);
+		//Refresh token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
-
-	//Following the valid type specifier declaration, we are required to to see a valid variable. This
-	//takes the form of an ident
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it didn't work we fail immediately
 	if(lookahead.tok != IDENT){
-		return print_and_return_error("Invalid name given to parameter in function definition", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
+		num_errors++;
+		return NULL;
 	}
 
 	//Now we must perform all needed duplication checks for the name
@@ -5601,8 +5600,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		//Also print out the function declaration
 		print_function_name(found_func);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		//Return NULL to signify failure
+		return NULL;
 	}
 
 	//Check that it isn't some duplicated variable name
@@ -5615,8 +5614,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		//Also print out the original declaration
 		print_variable_name(found_var);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		//Return NULL to signify failure
+		return NULL;
 	}
 
 	//Finally check that it isn't a duplicated type name
@@ -5629,8 +5628,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 		//Also print out the original declaration
 		print_type_name(found_type);
 		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		//Return NULL to signify failure
+		return NULL;
 	}
 
 	//Now we need to see a colon
@@ -5640,7 +5639,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	if(lookahead.tok != COLON){
 		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
 		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		//Return NULL to signify failure
+		return NULL;
 	}
 
 	//We are now required to see a valid type specifier node
@@ -5648,10 +5648,10 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	
 	//If the node fails, we'll just send the error up the chain
 	if(type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier gien to function parameter", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
 		num_errors++;
 		//It's already an error, just propogate it up
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return NULL;
 	}
 
 	//Once we get here, we have actually seen an entire valid parameter 
@@ -5676,8 +5676,8 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
 
-	//Finally, we'll send this node back
-	return parameter_decl_node;
+	//Give the variable back
+	return param_record;
 }
 
 
