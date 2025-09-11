@@ -8949,8 +8949,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//Are we defining something that's already been defined implicitly?
-	u_int8_t defining_prev_implicit = FALSE;
+	//Have we predeclared this function
+	u_int8_t definining_predeclared_function = FALSE;
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
 	//Is this function public or private? Unless explicitly stated, all functions are private
@@ -9011,9 +9011,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Grab a reference for convenience
 	dynamic_string_t function_name = lookahead.lexeme;
 
-	//Let's now do all of our checks for duplication before we go any further. This can
-	//save us time if it ends up being bad
-	
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
 	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
 
@@ -9025,12 +9022,13 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		num_errors++;
 		//Create and return an error node
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
 	//This is our interesting case. The function has been defined implicitly, and now we're trying to define it
 	//explicitly. We don't need to do any other checks if this is the case
-	} else if(function_record != NULL && function_record->defined == FALSE){
+	if(function_record != NULL && function_record->defined == FALSE){
 		//Flag this
-		defining_prev_implicit = TRUE;
+		definining_predeclared_function = TRUE;
 		//Set this as well
 		current_function = function_record;
 
@@ -9104,10 +9102,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 	}
 
-	//We initialize this scope automatically, even if there is no param list.
-	//It will just be empty if this is the case, no big issue
-	initialize_variable_scope(variable_symtab);
-
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
@@ -9135,7 +9129,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	generic_ast_node_t* param_list_cursor = param_list_node->first_child;
 
 	//If we are defining a previously implicit function, we'll need to check the types & order
-	if(defining_prev_implicit == TRUE){
+	if(definining_predeclared_function == TRUE){
 		//How many params do we have
 		u_int8_t param_count = 0;
 		//The internal function record param
@@ -9238,7 +9232,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	generic_type_t* type = dealias_type(return_type);
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
-	if(defining_prev_implicit == TRUE){
+	if(definining_predeclared_function == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
@@ -9275,24 +9269,12 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	if(lookahead.tok == SEMICOLON){
 		//The main function may not be defined implicitly
 		if(is_main_function == TRUE){
-			print_parse_message(PARSE_ERROR, "The main function may not be defined implicitly. Implicit definition here:", parser_line_num);
+			print_parse_message(PARSE_ERROR, "The main function may not be predeclared. Predeclarative definition here:", parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
-		//If we're for some reason defining a previous implicit function
-		if(defining_prev_implicit == TRUE){
-			sprintf(info, "Function \"%s\" was already defined implicitly here:", function_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_function_name(function_record);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		//Finalize the variable scope
-		finalize_variable_scope(variable_symtab);
-		
 		//This function was not defined
 		function_record->defined = FALSE;
 
@@ -9301,78 +9283,76 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		
 		//Return NULL here
 		return NULL;
+	}
+
+	//Otherwise if we make it here then we know that we're doing the full declaration
+
+	//Put it back
+	push_back_token(lookahead);
+
+	//Some housekeeping, if there were previously deferred statements, we want them out
+	deferred_stmts_node = NULL;
+
+	//We are finally required to see a valid compound statement
+	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+
+	//If this fails we'll just pass it through
+	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return compound_stmt_node;
+	}
+
+	//This function was defined
+	function_record->defined = TRUE;
+
+	//Where was this function defined
+	function_record->line_number = current_line;
+
+	//If this function is a void return type, we need to manually insert
+	//a ret statement at the very end, if there isn't one already
+	//Let's drill down to the very end
+	generic_ast_node_t* cursor = compound_stmt_node->first_child;
+
+	//We could have an entirely null function body
+	if(cursor != NULL){
+		//So long as we don't see ret statements here, we keep going
+		while(cursor->next_sibling != NULL && cursor->ast_node_type != AST_NODE_TYPE_RET_STMT){
+			//Advance
+			cursor = cursor->next_sibling;
+		}
+
+		//If we get here we know that it worked, so we'll add it in as a child
+		add_child_node(function_node, compound_stmt_node);
+	
+		//We now need to check and see if our jump statements are actually valid
+		if(check_jump_labels() == FAILURE){
+			//If this fails, we fail out here too
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
 
 	} else {
-		//Put it back
-		push_back_token(lookahead);
-
-		//Some housekeeping, if there were previously deferred statements, we want them out
-		deferred_stmts_node = NULL;
-
-		//We are finally required to see a valid compound statement
-		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
-
-		//If this fails we'll just pass it through
-		if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return compound_stmt_node;
-		}
-	
-		//This function was defined
-		function_record->defined = TRUE;
-
-		//Where was this function defined
-		function_record->line_number = current_line;
-
-		//If this function is a void return type, we need to manually insert
-		//a ret statement at the very end, if there isn't one already
-		//Let's drill down to the very end
-		generic_ast_node_t* cursor = compound_stmt_node->first_child;
-
-		//We could have an entirely null function body
-		if(cursor != NULL){
-			//So long as we don't see ret statements here, we keep going
-			while(cursor->next_sibling != NULL && cursor->ast_node_type != AST_NODE_TYPE_RET_STMT){
-				//Advance
-				cursor = cursor->next_sibling;
-			}
-
-			//If we get here we know that it worked, so we'll add it in as a child
-			add_child_node(function_node, compound_stmt_node);
-		
-			//We now need to check and see if our jump statements are actually valid
-			if(check_jump_labels() == FAILURE){
-				//If this fails, we fail out here too
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-			}
-
-		} else {
-			sprintf(info, "Function %s has no body", function_record->func_name.string);
-			print_parse_message(WARNING, info, parser_line_num);
-		}
-
-		//If this is the main funcition, it has been called implicitly
-		if(is_main_function == TRUE){
-			//Mark that it's been called
-			function_record->called = TRUE;
-			//Call it
-			call_function(os, function_record->call_graph_node);
-		}
-		
-		//Finalize the variable scope for the parameter list
-		finalize_variable_scope(variable_symtab);
-
-		//We're done with this, so destroy it
-		heap_queue_dealloc(current_function_jump_statements);
-
-		//Store the line number
-		function_node->line_number = current_line;
-
-		//Remove the nesting level now that we're not in a function
-		pop_nesting_level(nesting_stack);
-
-		//All good so we can get out
-		return function_node;
+		sprintf(info, "Function %s has no body", function_record->func_name.string);
+		print_parse_message(WARNING, info, parser_line_num);
 	}
+
+	//If this is the main funcition, it has been called implicitly
+	if(is_main_function == TRUE){
+		//Mark that it's been called
+		function_record->called = TRUE;
+		//Call it
+		call_function(os, function_record->call_graph_node);
+	}
+	
+	//We're done with this, so destroy it
+	heap_queue_dealloc(current_function_jump_statements);
+
+	//Store the line number
+	function_node->line_number = current_line;
+
+	//Remove the nesting level now that we're not in a function
+	pop_nesting_level(nesting_stack);
+
+	//All good so we can get out
+	return function_node;
 }
 
 
