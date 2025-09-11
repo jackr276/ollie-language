@@ -8840,16 +8840,20 @@ static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature, u_i
 
 			//Fail out if we don't see this
 			if(lookahead.tok != R_PAREN){
-				return print_and_return_error("Closing parenthesis expected after void parameter list declaration", parser_line_num);
+				print_parse_message(PARSE_ERROR, "Closing parenthesis expected after void parameter list declaration", parser_line_num);
+				num_errors++;
+				return FAILURE;
 			}
 
 			//Also check for grouping
 			if(pop_token(grouping_stack).tok != L_PAREN){
-				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				num_errors++;
+				return FAILURE;
 			}
 
 			//Give back the paremeter list node
-			return param_list_node;
+			return SUCCESS;
 			
 		//By default just put it back and get out
 		default:
@@ -8863,22 +8867,13 @@ static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature, u_i
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl, function_parameter_number);
+		symtab_variable_record_t* parameter = parameter_declaration(fl, function_parameter_number);
 
 		//It's invalid, we'll just send it up the chain
-		if(param_decl->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//It's already an error so send it on up
-			return param_decl;
-		}
-
-		//Let's see if we have a special parameter elaboration type here
-		if(param_decl->ast_node_type == AST_NODE_TYPE_ELABORATIVE_PARAM){
-			//Add it as a child node
-			add_child_node(param_list_node, param_decl);
-
-			//Now we'll return the entire thing
-			param_list_node->line_number = parser_line_num;
-			return param_list_node;
+		if(parameter == NULL){
+			print_parse_message(PARSE_ERROR, "Invalid paremeter declaration found in parameter list", parser_line_num);
+			num_errors++;
+			return NULL;;
 		}
 
 		//Increment this
@@ -9098,88 +9093,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	if(status == FAILURE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-
-	//If we are defining a previously implicit function, we'll need to check the types & order
-	if(definining_predeclared_function == TRUE){
-		//How many params do we have
-		u_int8_t param_count = 0;
-		//The internal function record param
-		symtab_variable_record_t* func_param;
-		//Grab the function signature out for processing
-		function_type_t* function_signature_type = function_record->signature->internal_types.function_type;
-
-		//So long as this isn't null
-		while(param_list_cursor != NULL){
-			//If at any point this is more than the number of parameters this function is meant to have,
-			//we bail
-			if(param_count > function_signature_type->num_params){
-				sprintf(info, "Function \"%s\" was defined implicitly to only have %d parameters. First defined here:", function_record->func_name.string, function_record->number_of_params);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				//Print the function out too
-				print_function_name(function_record);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-			}
-
-			//Extract the cursor variable for this one
-			func_param = param_list_cursor->variable;
-
-			//Grab the type out for validation 
-			generic_type_t* parameter_type = function_signature_type->parameters[param_count].parameter_type;
-
-			//Let's now compare the types here
-			if(types_assignable(&(func_param->type_defined_as), &(parameter_type)) == NULL){
-				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name.string, param_count, func_param->type_defined_as->type_name.string);
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//Otherwise it's fine, so we'll overwrite the entire thing in the record
-			function_record->func_params[param_count] = param_list_cursor->variable;
-
-			//Advance this
-			param_list_cursor = param_list_cursor->next_sibling;
-			//One more param
-			param_count++;
-		}
-
-	//Otherwise we are defining from scratch here
-	} else {
-		//Grab this out for convenience
-		generic_type_t* function_signature = create_function_pointer_type(parser_line_num);
-
-		//So long as this is not null
-		while(param_list_cursor != NULL){
-			//The variable record for this param node
-			symtab_variable_record_t* param_rec = param_list_cursor->variable;
-
-			//We'll add it in as a reference to the function
-			function_record->func_params[function_record->number_of_params] = param_rec;
-			
-			//Store this into the function signature as well
-			function_signature->internal_types.function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
-			function_signature->internal_types.function_type->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
-
-			//Increment the parameter count
-			(function_record->number_of_params)++;
-
-			//Set the associated function record
-			param_rec->function_declared_in = function_record;
-
-			//Push the cursor up by 1
-			param_list_cursor = param_list_cursor->next_sibling;
-		}
-
-		//Copy this over for later
-		function_signature->internal_types.function_type->num_params = function_record->number_of_params;
-
-		//Store whether or not this function is public
-		function_signature->internal_types.function_type->is_public = is_public;
-
-		//Store this in here
-		function_record->signature = function_signature;
-	}
-
-	//Once we get down here, the entire parameter list has been stored properly
 
 	//Semantics here, we now must see a valid arrow symbol
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
