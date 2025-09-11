@@ -36,8 +36,6 @@ typedef enum {
 	ASM_STATEMENT,
 	IF,
 	REPLACE,
-	//For expansion of func params
-	DOTDOTDOT,
 	//For preprocessor sections
 	DEPENDENCIES,
 	ELSE,

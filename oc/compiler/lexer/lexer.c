@@ -546,25 +546,6 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 							//We are not in an int
 							current_state = IN_FLOAT;
 
-						} else if(ch2 == '.'){
-							//Let's see if ch3 is '.'
-							char ch3 = get_next_char(fl);
-							//We have a DOTDOTDOT
-							if(ch3 == '.'){
-								lex_item.tok = DOTDOTDOT;
-								lex_item.line_num = line_num;
-								//Give it back
-								return lex_item;
-							}
-
-							//Otherwise, we'll put them both back
-							fseek(fl, -2, SEEK_CUR);
-
-							//And return a DOT
-							lex_item.tok = DOT;	
-							lex_item.line_num = line_num;
-							return lex_item;
-
 						} else {
 							//Put back ch2
 							put_back_char(fl);
