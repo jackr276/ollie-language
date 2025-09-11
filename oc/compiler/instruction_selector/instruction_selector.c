@@ -1676,9 +1676,6 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 		//Does this adhere to the same type as reg1? It must, so if it does not we will force it
 		//to 
 		if(is_type_conversion_needed(instruction->address_calc_reg1->type, addresss_calc_reg2->type) == TRUE){
-			//printf("Converting to type is: %s\n", instruction->address_calc_reg1->type->type_name);
-			//printf("Converting from type is: %s\n", addresss_calc_reg2->type->type_name);
-
 			//Let the helper deal with it
 			addresss_calc_reg2 = handle_converting_move_operation(instruction, addresss_calc_reg2, instruction->address_calc_reg1->type);
 		}

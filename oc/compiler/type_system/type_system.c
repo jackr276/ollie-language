@@ -24,6 +24,7 @@ u_int8_t is_memory_address_type(generic_type_t* type){
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
 			return TRUE;
 		default:
 			return FALSE;
@@ -195,6 +196,7 @@ u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
 			return TRUE;
 
 		//Some more exploration needed here
